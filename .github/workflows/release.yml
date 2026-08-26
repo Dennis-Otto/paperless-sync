@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Check out default branch
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
@@ -51,7 +51,7 @@ jobs:
         run: test "${GITHUB_REF_NAME}" = "${DEFAULT_BRANCH}"
 
       - name: Set up PHP 8.2
-        uses: shivammathur/setup-php@cf4cade2721270509d5b1c766ab3549210a39a2a # v2.33.0
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.2'
           extensions: dom, libxml, mbstring
@@ -79,7 +79,7 @@ jobs:
           composer psalm
 
       - name: Scan Git history and working tree for secrets
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -138,6 +138,27 @@ jobs:
           # shellcheck disable=SC2016
           php -r '$document = new DOMDocument(); $document->load("appinfo/info.xml"); exit($document->schemaValidate(getenv("RUNNER_TEMP") . "/nextcloud-app-info.xsd") ? 0 : 1);'
 
+      - name: Create local release commit
+        shell: bash
+        env:
+          MODE: ${{ steps.version.outputs.mode }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if test "${MODE}" = "new"; then
+            git add appinfo/info.xml CHANGELOG.md
+            git commit --signoff \
+              --message "chore: release v${VERSION}" \
+              --message "Release-run: ${GITHUB_RUN_ID}"
+          fi
+
+          git diff --quiet
+          git diff --cached --quiet
+          test "$(php scripts/release-version.php check)" = "${VERSION}"
+
       - name: Install verified Krankerl package builder
         shell: bash
         run: |
@@ -150,6 +171,9 @@ jobs:
 
       - name: Build app archive
         run: krankerl package
+
+      - name: Verify unsigned production package
+        run: composer package:check
 
       - name: Prepare private key and verified signing tools
         shell: bash
@@ -194,23 +218,18 @@ jobs:
           tar --create --gzip --file "${ARCHIVE}" \
             --directory "${SIGNING_DIR}" "${APP_ID}"
 
-      - name: Commit version and push atomic tag
+      - name: Verify signed production package
+        run: bash scripts/check-package.sh "build/artifacts/${APP_ID}.tar.gz" signed
+
+      - name: Tag and push release atomically
         shell: bash
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          MODE: ${{ steps.version.outputs.mode }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          if test "${MODE}" = "new"; then
-            git add appinfo/info.xml CHANGELOG.md
-            git commit --signoff \
-              --message "chore: release v${VERSION}" \
-              --message "Release-run: ${GITHUB_RUN_ID}"
-          fi
+          git diff --quiet
+          git diff --cached --quiet
 
           if git show-ref --verify --quiet "refs/tags/v${VERSION}"; then
             test "$(git rev-parse "v${VERSION}^{commit}")" = "$(git rev-parse HEAD)"

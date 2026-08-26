@@ -1,5 +1,9 @@
 # Paperless Sync
 
+[![CI](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml)
+[![Docker E2E](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml)
+[![Secret scan](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml)
+
 Paperless Sync is a native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can optionally submit files from a Nextcloud inbox to Paperless.
 
 Paperless remains the source of truth. Nextcloud provides convenient access through Files, desktop and mobile clients, sharing, and its viewer.
@@ -74,9 +78,21 @@ Moving Paperless documents to its trash can be mirrored into the configured `_Ge
 
 The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval is enforced by the app; each run limits modifications to the configured batch size.
 
+## Testing
+
+Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, inbox success and failure, dry-run behavior, and release version management.
+
+The Docker end-to-end suite mounts this checkout into real Nextcloud containers and uses a deterministic Paperless API mock:
+
+```bash
+bash tests/e2e/run.sh
+```
+
+CI runs the suite against Nextcloud 33 and the current stable Nextcloud 34 release. See [`tests/e2e/README.md`](tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
+
 ## Development
 
-Requirements: PHP 8.2+, Composer, and a Nextcloud 33 development instance.
+Requirements: PHP 8.2+, Composer, Node.js, Docker, Krankerl, and a Nextcloud 33+ development instance.
 
 ```bash
 composer install
@@ -86,13 +102,16 @@ composer test
 composer cs:check
 composer psalm
 composer version:check
+bash tests/e2e/run.sh
+krankerl package
+composer package:check
 ```
 
 The app ID is `paperless_sync` and the PHP namespace is `OCA\\PaperlessSync`.
 
 ## Release process
 
-The **Release** GitHub workflow accepts `patch`, `minor`, or `major`. It validates the project, updates every versioned location, builds and signs the archive, commits the release version with a DCO sign-off, creates the GitHub release, and publishes it to the Nextcloud App Store.
+The **Release** GitHub workflow accepts `patch`, `minor`, or `major`. It validates the project, updates every versioned location, creates a local DCO release commit, builds and verifies the unsigned archive from that exact commit, signs and verifies it, and only then atomically pushes the release commit and tag. Finally, it creates or repairs the GitHub release and publishes the signed archive to the Nextcloud App Store.
 
 Private signing material and App Store credentials exist only as protected GitHub environment secrets and are never committed.
 

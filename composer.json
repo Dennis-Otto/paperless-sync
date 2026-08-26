@@ -23,6 +23,7 @@
 		"vimeo/psalm": "^6.0"
 	},
 	"scripts": {
+		"package:check": "bash scripts/check-package.sh",
 		"lint": "find appinfo lib scripts templates tests -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l",
 		"cs:check": "php-cs-fixer fix --dry-run --diff",
 		"cs:fix": "php-cs-fixer fix",
