@@ -1,0 +1,247 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Dennis Otto
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+.paperless-sync-settings {
+	max-width: 980px;
+	padding-bottom: 80px;
+}
+
+.paperless-sync-hero {
+	display: flex;
+	gap: 18px;
+	align-items: center;
+	margin: 8px 0 24px;
+}
+
+.paperless-sync-hero h2 {
+	margin: 0 0 4px;
+	font-size: 28px;
+}
+
+.paperless-sync-hero p,
+.paperless-sync-card-heading p {
+	margin: 0;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-status-card {
+	display: grid;
+	grid-template-columns: 1fr 1fr auto;
+	gap: 18px;
+	align-items: center;
+	padding: 18px 20px;
+	margin-bottom: 18px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-element) 9%, var(--color-main-background)), var(--color-main-background));
+}
+
+.paperless-sync-status-card > div {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.paperless-sync-status-label {
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-card {
+	margin: 18px 0;
+	padding: 22px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+	box-shadow: 0 2px 10px color-mix(in srgb, var(--color-box-shadow) 35%, transparent);
+}
+
+.paperless-sync-card--danger {
+	border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-border));
+}
+
+.paperless-sync-card-heading {
+	display: flex;
+	justify-content: space-between;
+	gap: 20px;
+	align-items: flex-start;
+	margin-bottom: 20px;
+}
+
+.paperless-sync-card-heading > div {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+}
+
+.paperless-sync-card-heading h3 {
+	margin: 0;
+	font-size: 19px;
+}
+
+.paperless-sync-card-heading p {
+	max-width: 430px;
+	text-align: right;
+}
+
+.paperless-sync-step {
+	display: inline-flex;
+	width: 28px;
+	height: 28px;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background: var(--color-primary-element);
+	color: var(--color-primary-element-text);
+	font-weight: 700;
+}
+
+.paperless-sync-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px 20px;
+}
+
+.paperless-sync-field {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	font-weight: 600;
+}
+
+.paperless-sync-field--wide {
+	grid-column: 1 / -1;
+}
+
+.paperless-sync-field input,
+.paperless-sync-field select {
+	width: 100%;
+	max-width: none;
+	box-sizing: border-box;
+	font-weight: 400;
+}
+
+.paperless-sync-switches {
+	display: grid;
+	gap: 12px;
+	margin: 14px 0;
+}
+
+.paperless-sync-switches--inline {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.paperless-sync-switches label {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+}
+
+.paperless-sync-danger-toggle {
+	font-weight: 700;
+	color: var(--color-error-text);
+}
+
+.paperless-sync-advanced summary {
+	cursor: pointer;
+	font-size: 17px;
+	font-weight: 600;
+}
+
+.paperless-sync-advanced[open] summary {
+	margin-bottom: 18px;
+}
+
+.paperless-sync-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	position: sticky;
+	bottom: 12px;
+	z-index: 2;
+	padding: 14px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: color-mix(in srgb, var(--color-main-background) 94%, transparent);
+	backdrop-filter: blur(12px);
+}
+
+.paperless-sync-reset {
+	margin-left: auto;
+}
+
+.paperless-sync-message {
+	min-height: 22px;
+	margin: 16px 0;
+	font-weight: 600;
+}
+
+.paperless-sync-message--success {
+	color: var(--color-success-text);
+}
+
+.paperless-sync-message--error {
+	color: var(--color-error-text);
+}
+
+.paperless-sync-report {
+	padding: 22px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-background-dark);
+}
+
+.paperless-sync-report-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+	gap: 10px;
+	margin: 14px 0;
+}
+
+.paperless-sync-report-summary > div {
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+	border-radius: var(--border-radius);
+	background: var(--color-main-background);
+}
+
+.paperless-sync-report-summary strong {
+	font-size: 21px;
+}
+
+.paperless-sync-report-summary span {
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-report pre {
+	max-height: 320px;
+	overflow: auto;
+	padding: 12px;
+	white-space: pre-wrap;
+	border-radius: var(--border-radius);
+	background: var(--color-main-background);
+}
+
+@media (max-width: 700px) {
+	.paperless-sync-grid,
+	.paperless-sync-switches--inline,
+	.paperless-sync-status-card {
+		grid-template-columns: 1fr;
+	}
+
+	.paperless-sync-card-heading {
+		flex-direction: column;
+	}
+
+	.paperless-sync-card-heading p {
+		text-align: left;
+	}
+
+	.paperless-sync-reset {
+		margin-left: 0;
+	}
+}

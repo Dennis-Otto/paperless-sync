@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>paperless_sync</id>
+	<name>Paperless Sync</name>
+	<summary>Synchronize finalized Paperless-ngx documents into a structured Nextcloud archive</summary>
+	<summary lang="de">Fertig bearbeitete Paperless-ngx-Dokumente in ein strukturiertes Nextcloud-Archiv synchronisieren</summary>
+	<description><![CDATA[
+### A native bridge between Paperless-ngx and Nextcloud
+
+Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextcloud folder structure. Paperless remains the authoritative document archive while Nextcloud provides familiar access through Files, desktop sync, mobile apps, sharing, and its built-in viewer.
+
+### Structured, automatic, and reversible
+
+- Exports archive PDFs or original files through the Paperless API
+- Builds a configurable hierarchy from correspondent, document type, date, title, and document ID
+- Moves or renames files when Paperless metadata changes
+- Skips Paperless inbox documents until they are finalized and removes previously mirrored copies when an exclusion tag is added
+- Imports files from a configurable Nextcloud inbox into Paperless
+- Mirrors the Paperless trash into a dedicated Nextcloud folder
+- Optionally removes files after they are permanently deleted from Paperless
+- Removes empty archive folders after moves and deletions
+- Runs through native Nextcloud background jobs with resumable state
+
+### Safe by default
+
+Synchronization is disabled until an administrator completes and validates the configuration. Permanent deletion is an explicit opt-in and can be protected by multiple missing-document confirmations. A dry-run previews changes without modifying files.
+
+The Paperless API token is stored server-side in Nextcloud's credentials manager and is never returned to the browser. The app operates directly through Nextcloud's filesystem API, so no Nextcloud password or WebDAV credential is required.
+
+### Requirements
+
+- Nextcloud 33 to 35 with reliable cron background jobs
+- A reachable Paperless-ngx instance with API access
+- A dedicated Paperless service account with only the permissions needed for the enabled features
+
+Paperless Sync is independent from Paperless Unified Search. Both apps understand stable document markers such as `[P123]` and can be installed separately.
+]]></description>
+	<description lang="de"><![CDATA[
+### Die native Brücke zwischen Paperless-ngx und Nextcloud
+
+Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesbare Nextcloud-Ordnerstruktur. Paperless bleibt das maßgebliche Dokumentenarchiv, während Nextcloud den vertrauten Zugriff über Dateien, Desktop-Synchronisation, mobile Apps, Freigaben und den integrierten Viewer ermöglicht.
+
+### Strukturiert, automatisch und nachvollziehbar
+
+- Exportiert Archiv-PDFs oder Originaldateien über die Paperless-API
+- Erstellt eine konfigurierbare Hierarchie aus Korrespondent, Dokumenttyp, Datum, Titel und Dokument-ID
+- Verschiebt oder benennt Dateien um, wenn sich Paperless-Metadaten ändern
+- Überspringt Dokumente im Paperless-Posteingang bis zur Fertigstellung und entfernt bereits gespiegelte Kopien, wenn ein Ausschluss-Tag gesetzt wird
+- Importiert Dateien aus einem konfigurierbaren Nextcloud-Eingang in Paperless
+- Spiegelt den Paperless-Papierkorb in einen eigenen Nextcloud-Ordner
+- Kann Dateien nach dem endgültigen Löschen in Paperless ebenfalls endgültig entfernen
+- Entfernt leere Archivordner nach Verschiebungen und Löschungen
+- Verwendet native Nextcloud-Hintergrundjobs und einen wiederaufnehmbaren Synchronisationszustand
+
+### Standardmäßig sicher
+
+Die Synchronisation bleibt deaktiviert, bis ein Administrator die Konfiguration vollständig geprüft und gespeichert hat. Endgültiges Löschen muss ausdrücklich aktiviert werden und kann mehrere Bestätigungsläufe abwarten. Ein Testlauf zeigt geplante Änderungen an, ohne Dateien zu verändern.
+
+Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanager von Nextcloud und wird niemals an den Browser zurückgegeben. Die App arbeitet direkt mit der Nextcloud-Dateisystem-API; ein Nextcloud-Passwort oder WebDAV-Zugang ist nicht erforderlich.
+
+### Voraussetzungen
+
+- Nextcloud 33 bis 35 mit zuverlässig laufenden Cron-Hintergrundjobs
+- Eine erreichbare Paperless-ngx-Instanz mit API-Zugriff
+- Ein eigener Paperless-Dienstbenutzer mit ausschließlich den für die aktivierten Funktionen benötigten Rechten
+
+Paperless Sync ist unabhängig von Paperless Unified Search. Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
+]]></description>
+	<version>0.1.0</version>
+	<licence>AGPL-3.0-or-later</licence>
+	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
+	<namespace>PaperlessSync</namespace>
+	<documentation>
+		<user>https://github.com/Dennis-Otto/paperless-sync#usage</user>
+		<admin>https://github.com/Dennis-Otto/paperless-sync#configuration</admin>
+		<developer>https://github.com/Dennis-Otto/paperless-sync#development</developer>
+	</documentation>
+	<category>integration</category>
+	<category>files</category>
+	<website>https://github.com/Dennis-Otto/paperless-sync</website>
+	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
+	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.0/screenshots/01-admin-settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.0/screenshots/02-structured-archive.png</screenshot>
+	<dependencies>
+		<php min-version="8.2"/>
+		<nextcloud min-version="33" max-version="35"/>
+	</dependencies>
+	<background-jobs>
+		<job>OCA\PaperlessSync\Cron\SyncJob</job>
+	</background-jobs>
+	<settings>
+		<admin>OCA\PaperlessSync\Settings\AdminSettings</admin>
+		<admin-section>OCA\PaperlessSync\Settings\AdminSection</admin-section>
+	</settings>
+</info>

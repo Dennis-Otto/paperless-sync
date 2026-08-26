@@ -1,0 +1,43 @@
+{
+	"name": "dennis-otto/paperless-sync",
+	"description": "Native Nextcloud synchronization for Paperless-ngx documents",
+	"type": "nextcloud-app",
+	"license": "AGPL-3.0-or-later",
+	"autoload": {
+		"psr-4": {
+			"OCA\\PaperlessSync\\": "lib/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\PaperlessSync\\Tests\\": "tests/"
+		}
+	},
+	"require": {
+		"php": "^8.2"
+	},
+	"require-dev": {
+		"nextcloud/coding-standard": "^1.2",
+		"nextcloud/ocp": "^33.0",
+		"phpunit/phpunit": "^10.5",
+		"vimeo/psalm": "^6.0"
+	},
+	"scripts": {
+		"lint": "find appinfo lib scripts templates tests -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l",
+		"cs:check": "php-cs-fixer fix --dry-run --diff",
+		"cs:fix": "php-cs-fixer fix",
+		"l10n:check": "node scripts/check-l10n.mjs",
+		"psalm": "psalm --threads=1 --no-cache",
+		"test": "phpunit",
+		"version:check": "php scripts/release-version.php check"
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/installers": true
+		},
+		"platform": {
+			"php": "8.2.27"
+		},
+		"sort-packages": true
+	}
+}
