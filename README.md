@@ -3,6 +3,7 @@
 [![CI](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml)
 [![Docker E2E](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml)
 [![Secret scan](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Dennis-Otto/paperless-sync/badge)](https://scorecard.dev/viewer/?uri=github.com/Dennis-Otto/paperless-sync)
 
 Paperless Sync is a native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can optionally submit files from a Nextcloud inbox to Paperless.
 
@@ -111,11 +112,13 @@ The app ID is `paperless_sync` and the PHP namespace is `OCA\\PaperlessSync`.
 
 ## Release process
 
-The protected `main` branch accepts changes only through pull requests after CI, Docker E2E, and secret scanning succeed. Dependabot checks Composer, GitHub Actions, and Docker Compose weekly. Grouped patch and minor updates are queued for automatic squash merge only after those protected checks pass; major updates remain manual. Dependency maintenance never starts a release.
+The protected `main` branch accepts changes only through pull requests after CI, dependency review, Docker E2E, and secret scanning succeed. Dependabot checks Composer, GitHub Actions, and Docker Compose weekly. Grouped patch and minor updates are queued for automatic squash merge only after those protected checks pass; major updates remain manual. Dependency maintenance never starts a release.
 
-The manually dispatched **Release** workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request, explicitly starts every required check, and waits for GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, tagged, published as a GitHub release, and submitted to the Nextcloud App Store.
+The manually dispatched **Release** workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request, explicitly starts every required check, and waits for GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, supplied with a GitHub build-provenance attestation, tagged, published as a GitHub release, and submitted to the Nextcloud App Store.
 
 An interrupted run resumes an existing release branch, merged release PR, tag, or incomplete GitHub release instead of incrementing again.
+
+Dependency Review blocks newly introduced vulnerable or unapproved dependencies. OpenSSF Scorecard audits the repository's supply-chain security every week.
 
 Private signing material and App Store credentials exist only as protected GitHub environment secrets and are never committed.
 
