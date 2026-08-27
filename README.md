@@ -111,7 +111,11 @@ The app ID is `paperless_sync` and the PHP namespace is `OCA\\PaperlessSync`.
 
 ## Release process
 
-The **Release** GitHub workflow accepts `patch`, `minor`, or `major`. It validates the project, updates every versioned location, creates a local DCO release commit, builds and verifies the unsigned archive from that exact commit, signs and verifies it, and only then atomically pushes the release commit and tag. Finally, it creates or repairs the GitHub release and publishes the signed archive to the Nextcloud App Store.
+The protected `main` branch accepts changes only through pull requests after CI, Docker E2E, and secret scanning succeed. Dependabot checks Composer, GitHub Actions, and Docker Compose weekly. Grouped patch and minor updates are queued for automatic squash merge only after those protected checks pass; major updates remain manual. Dependency maintenance never starts a release.
+
+The manually dispatched **Release** workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request, explicitly starts every required check, and waits for GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, tagged, published as a GitHub release, and submitted to the Nextcloud App Store.
+
+An interrupted run resumes an existing release branch, merged release PR, tag, or incomplete GitHub release instead of incrementing again.
 
 Private signing material and App Store credentials exist only as protected GitHub environment secrets and are never committed.
 
