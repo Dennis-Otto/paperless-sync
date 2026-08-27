@@ -116,9 +116,11 @@ The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psa
 
 The protected `main` branch accepts changes only through pull requests after CI, dependency review, Docker E2E, CodeQL, SBOM generation, and secret scanning succeed. Dependabot checks Composer, GitHub Actions, and Docker Compose weekly. Grouped patch and minor updates are queued for automatic squash merge only after those protected checks pass; Nextcloud major compatibility changes and releases remain manual. Dependency maintenance never starts a release.
 
-The manually dispatched **Release** workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request, explicitly starts every required check, and waits for GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, supplied with a detached signature, SPDX SBOM, and public Sigstore provenance, tagged, published as a GitHub release with every verification asset, and submitted to the Nextcloud App Store.
+The manually dispatched **Release** workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request through a repository-scoped GitHub App, and waits for every required pull-request check and GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, supplied with a detached signature, SPDX SBOM, and public Sigstore provenance, tagged, published as a GitHub release with every verification asset, and submitted to the Nextcloud App Store.
 
 An interrupted run resumes an existing release branch, merged release PR, tag, or incomplete GitHub release instead of incrementing again.
+
+Release pull requests use a short-lived GitHub App installation token limited to the current repository and to `Contents` and `Pull requests` write access. The token is revoked when the job finishes. The App client ID is stored as the `RELEASE_AUTOMATION_CLIENT_ID` repository variable; its private key is stored only as the protected `RELEASE_AUTOMATION_PRIVATE_KEY` environment secret.
 
 Dependency Review blocks newly introduced vulnerable or unapproved dependencies. OpenSSF Scorecard audits the repository's supply-chain security every week.
 
