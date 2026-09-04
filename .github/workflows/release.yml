@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       increment:
-        description: Semantic version increment
+        description: Semantic version increment after the initial release
         required: true
         default: patch
         type: choice
@@ -116,25 +116,40 @@ jobs:
             --json number \
             --jq '.[0].number // empty')"
 
+          CURRENT_RELEASE_EXISTS='false'
           if gh release view "v${CURRENT_VERSION}" --json assets --jq '.assets[].name' 2>/dev/null \
             | grep --fixed-strings --line-regexp "${ASSET_NAME}" >/dev/null; then
-            VERSION="$(php scripts/release-version.php next "${INCREMENT}")"
-            MODE='new'
-          elif [[ -n "${MERGED_CURRENT}" ]]; then
-            VERSION="${CURRENT_VERSION}"
-            MODE='resume'
-          elif awk '
+            CURRENT_RELEASE_EXISTS='true'
+          fi
+
+          CURRENT_RELEASE_PR_MERGED='false'
+          if [[ -n "${MERGED_CURRENT}" ]]; then
+            CURRENT_RELEASE_PR_MERGED='true'
+          fi
+
+          ANY_RELEASE_EXISTS="$(gh release list \
+            --limit 1 \
+            --json tagName \
+            --jq 'if length > 0 then "true" else "false" end')"
+
+          HAS_UNRELEASED_NOTES='false'
+          if awk '
             /^## Unreleased$/ { unreleased = 1; next }
             /^## / { unreleased = 0 }
             unreleased && /^- / { found = 1 }
             END { exit found ? 0 : 1 }
           ' CHANGELOG.md; then
-            VERSION="$(php scripts/release-version.php next "${INCREMENT}")"
-            MODE='new'
-          else
-            VERSION="${CURRENT_VERSION}"
-            MODE='resume'
+            HAS_UNRELEASED_NOTES='true'
           fi
+
+          PLAN="$(php scripts/release-version.php plan \
+            "${INCREMENT}" \
+            "${CURRENT_RELEASE_EXISTS}" \
+            "${CURRENT_RELEASE_PR_MERGED}" \
+            "${ANY_RELEASE_EXISTS}" \
+            "${HAS_UNRELEASED_NOTES}")"
+          VERSION="$(jq --exit-status --raw-output '.version' <<< "${PLAN}")"
+          MODE="$(jq --exit-status --raw-output '.mode' <<< "${PLAN}")"
 
           {
             echo "version=${VERSION}"

@@ -52,6 +52,46 @@ final class ReleaseVersionManagerTest extends TestCase {
 		self::assertSame('1.2.4', $manager->nextVersion('1.2.3', 'patch'));
 	}
 
+	public function testInitialReleaseKeepsConfiguredVersion(): void {
+		$manager = new ReleaseVersionManager(
+			$this->createFixture('- Prepare the initial publication.', '0.1.0'),
+		);
+
+		self::assertSame(
+			['version' => '0.1.0', 'mode' => 'resume'],
+			$manager->releasePlan(
+				increment: 'patch',
+				currentReleaseExists: false,
+				currentReleasePullRequestMerged: false,
+				anyReleaseExists: false,
+				hasUnreleasedNotes: true,
+			),
+		);
+	}
+
+	public function testReleasePlanPreservesExistingReleaseBehaviour(): void {
+		$manager = new ReleaseVersionManager(
+			$this->createFixture('- Prepare a later publication.'),
+		);
+
+		self::assertSame(
+			['version' => '1.2.4', 'mode' => 'new'],
+			$manager->releasePlan('patch', true, false, true, true),
+		);
+		self::assertSame(
+			['version' => '1.2.3', 'mode' => 'resume'],
+			$manager->releasePlan('patch', false, true, true, true),
+		);
+		self::assertSame(
+			['version' => '1.3.0', 'mode' => 'new'],
+			$manager->releasePlan('minor', false, false, true, true),
+		);
+		self::assertSame(
+			['version' => '1.2.3', 'mode' => 'resume'],
+			$manager->releasePlan('patch', false, false, true, false),
+		);
+	}
+
 	public function testBumpSupportsEverySemanticIncrement(): void {
 		foreach (['major' => '2.0.0', 'minor' => '1.3.0', 'patch' => '1.2.4'] as $increment => $expected) {
 			$manager = new ReleaseVersionManager($this->createFixture("- Prepare a {$increment} release."));
@@ -81,7 +121,7 @@ final class ReleaseVersionManagerTest extends TestCase {
 		$manager->bump('patch', '2026-08-26');
 	}
 
-	private function createFixture(string $unreleasedNotes): string {
+	private function createFixture(string $unreleasedNotes, string $version = '1.2.3'): string {
 		$root = sys_get_temp_dir() . '/paperless-sync-release-' . bin2hex(random_bytes(8));
 		$this->temporaryRoots[] = $root;
 		mkdir($root . '/appinfo', 0700, true);
@@ -89,11 +129,11 @@ final class ReleaseVersionManagerTest extends TestCase {
 
 		file_put_contents(
 			$root . '/appinfo/info.xml',
-			"<info>\n\t<version>1.2.3</version>\n\t<screenshot>https://example.test/v1.2.3/screenshots/app.png</screenshot>\n</info>\n",
+			"<info>\n\t<version>{$version}</version>\n\t<screenshot>https://example.test/v{$version}/screenshots/app.png</screenshot>\n</info>\n",
 		);
 		file_put_contents(
 			$root . '/CHANGELOG.md',
-			"# Changelog\n\n## Unreleased\n\n{$unreleasedNotes}\n\n## 1.2.3 - 2026-08-25\n\n- Previous release.\n",
+			"# Changelog\n\n## Unreleased\n\n{$unreleasedNotes}\n\n## {$version} - 2026-08-25\n\n- Previous release.\n",
 		);
 		file_put_contents(
 			$root . '/lib/AppInfo/AppConstants.php',
