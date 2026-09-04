@@ -4,6 +4,7 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Publish the configured app version unchanged for the first GitHub release.
 - Move release commits before reproducible packaging while keeping commit and tag publication atomic.
 - Pin checkout, PHP setup, and Gitleaks actions to immutable Node 24-compatible revisions.
 - Verify DCO sign-offs, translations, dependencies, app metadata, and production-package boundaries automatically.

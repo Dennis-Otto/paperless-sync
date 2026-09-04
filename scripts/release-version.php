@@ -28,6 +28,13 @@ foreach ($arguments as $index => $argument) {
 $arguments = array_values($arguments);
 $command = $arguments[0] ?? '';
 $manager = new ReleaseVersionManager(rtrim($root, '/'));
+$parseBoolean = static function (string $value, string $name): bool {
+	return match ($value) {
+		'true' => true,
+		'false' => false,
+		default => throw new RuntimeException("{$name} must be true or false."),
+	};
+};
 
 try {
 	switch ($command) {
@@ -40,6 +47,16 @@ try {
 		case 'next':
 			echo $manager->nextVersion($manager->check(), $arguments[1] ?? '') . "\n";
 			break;
+		case 'plan':
+			$plan = $manager->releasePlan(
+				increment: $arguments[1] ?? '',
+				currentReleaseExists: $parseBoolean($arguments[2] ?? '', 'current-release-exists'),
+				currentReleasePullRequestMerged: $parseBoolean($arguments[3] ?? '', 'current-release-pr-merged'),
+				anyReleaseExists: $parseBoolean($arguments[4] ?? '', 'any-release-exists'),
+				hasUnreleasedNotes: $parseBoolean($arguments[5] ?? '', 'has-unreleased-notes'),
+			);
+			echo json_encode($plan, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
+			break;
 		case 'bump':
 			echo $manager->bump($arguments[1] ?? '', $date) . "\n";
 			break;
@@ -48,7 +65,7 @@ try {
 			break;
 		default:
 			throw new RuntimeException(
-				'Usage: release-version.php current|check|next <patch|minor|major>|bump <patch|minor|major>|notes [version]',
+				'Usage: release-version.php current|check|next <increment>|plan <increment> <current-release-exists> <current-release-pr-merged> <any-release-exists> <has-unreleased-notes>|bump <increment>|notes [version]',
 			);
 	}
 } catch (Throwable $exception) {

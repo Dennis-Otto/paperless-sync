@@ -106,6 +106,36 @@ final class ReleaseVersionManager {
 		return "{$major}.{$minor}.{$patch}";
 	}
 
+	/** @return array{version: string, mode: 'new'|'resume'} */
+	public function releasePlan(
+		string $increment,
+		bool $currentReleaseExists,
+		bool $currentReleasePullRequestMerged,
+		bool $anyReleaseExists,
+		bool $hasUnreleasedNotes,
+	): array {
+		$currentVersion = $this->check();
+
+		if ($currentReleaseExists) {
+			return [
+				'version' => $this->nextVersion($currentVersion, $increment),
+				'mode' => 'new',
+			];
+		}
+
+		if ($currentReleasePullRequestMerged || !$anyReleaseExists || !$hasUnreleasedNotes) {
+			return [
+				'version' => $currentVersion,
+				'mode' => 'resume',
+			];
+		}
+
+		return [
+			'version' => $this->nextVersion($currentVersion, $increment),
+			'mode' => 'new',
+		];
+	}
+
 	public function bump(string $increment, string $date): string {
 		$currentVersion = $this->check();
 		$newVersion = $this->nextVersion($currentVersion, $increment);
