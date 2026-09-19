@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.1 - 2026-09-19
+
 - Publish checked, signed Nextcloud maintenance releases automatically after merged Dependabot updates.
 - Generate categorized release notes, with an optional maintainer introduction for manual releases.
 - Require successful PR and main checks on the exact release commit, without cancelling other CI runs.
@@ -22,6 +24,21 @@ All notable changes to this project are documented in this file.
 - Add CodeQL analysis and continuous SPDX SBOM generation.
 - Publish detached signatures, SBOMs, and public Sigstore provenance with releases.
 - Document project governance, conduct, and support.
+
+<!-- Release notes generated using configuration in .github/release.yml at 5ce005ddfe9a014e551056f4192fc986de9862ca -->
+
+### What's Changed
+### Dependencies
+* chore(deps): Bump nextcloud from 33.0.8-apache to 33.0.8-apache in /tests/e2e by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/12
+* chore(deps-dev): Bump the composer-routine group with 2 updates by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/14
+* chore(deps): Bump the actions-routine group with 3 updates by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/15
+* chore(deps): Bump nextcloud from 33.0.8-apache to 33.0.9-apache in /tests/e2e in the containers-routine group by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/16
+* chore(deps): Bump python from 3.14-alpine to 3.14-alpine in /tests/e2e by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/13
+### Other changes
+* ci: automate protected dependency releases and recover publication by @Dennis-Otto in https://github.com/Dennis-Otto/paperless-sync/pull/17
+
+
+**Full Changelog**: https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.0...v0.1.1
 
 ## 0.1.0 - 2026-08-26
 
