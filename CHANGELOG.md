@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+- Publish checked, signed Nextcloud maintenance releases automatically after merged Dependabot updates.
+- Generate categorized release notes, with an optional maintainer introduction for manual releases.
+- Require successful PR and main checks on the exact release commit, without cancelling other CI runs.
+- Resume interrupted GitHub and App Store publication without duplicate versions or replacing public assets.
+
 - Publish the configured app version unchanged for the first GitHub release.
 - Move release commits before reproducible packaging while keeping commit and tag publication atomic.
 - Pin checkout, PHP setup, and Gitleaks actions to immutable Node 24-compatible revisions.
@@ -13,7 +18,7 @@ All notable changes to this project are documented in this file.
 - Exercise dry-run, export, metadata moves, exclusions, trash, guarded deletion, inbox success and failure, pruning, permissions, and background-job registration.
 - Expand contribution, security, testing, release, and manual acceptance documentation.
 - Protect `main` behind required CI, E2E, secret-scan, linear-history, and pull-request rules, including release version commits.
-- Add weekly grouped Dependabot updates with protected automatic squash merges for patch and minor changes while keeping major updates and releases manual.
+- Add weekly grouped Dependabot updates with protected automatic squash merges for patch and minor changes while keeping major updates subject to maintainer approval.
 - Add CodeQL analysis and continuous SPDX SBOM generation.
 - Publish detached signatures, SBOMs, and public Sigstore provenance with releases.
 - Document project governance, conduct, and support.

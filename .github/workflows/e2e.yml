@@ -11,12 +11,8 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: e2e-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  nextcloud:
+  nextcloud-version:
     name: Nextcloud ${{ matrix.nextcloud }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -38,3 +34,14 @@ jobs:
 
       - name: Run Paperless Sync end-to-end tests
         run: bash tests/e2e/run.sh
+
+  nextcloud:
+    name: nextcloud
+    if: always()
+    needs:
+      - nextcloud-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every supported Nextcloud version to pass
+        run: test "${{ needs.nextcloud-version.result }}" = success

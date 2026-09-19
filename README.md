@@ -114,19 +114,13 @@ The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psa
 
 ## Release process
 
-The protected `main` branch accepts changes only through pull requests after CI, dependency review, Docker E2E, CodeQL, SBOM generation, and secret scanning succeed. Dependabot checks Composer, GitHub Actions, and Docker Compose weekly. Grouped patch and minor updates are queued for automatic squash merge only after those protected checks pass; Nextcloud major compatibility changes and releases remain manual. Dependency maintenance never starts a release.
+The protected `main` branch requires CI, Docker E2E, Dependency Review, CodeQL, SBOM generation and secret scanning. Dependabot checks dependencies weekly; grouped patch and minor updates merge after successful checks. Major dependency updates require a maintainer merge.
 
-The first manually dispatched **Release** workflow publishes the version already configured in `appinfo/info.xml` without incrementing it. This keeps the initial GitHub and App Store publication at `v0.1.0`, regardless of the selected increment.
+Merged Dependabot updates automatically produce a checked, signed **app patch release**, including GitHub assets and Nextcloud App Store publication. A scheduled reconciliation catches suppressed events and resumes interrupted releases without duplicate versions. Manual releases support `patch`, `minor`, `major`, and an optional introduction above the generated changelog.
 
-For later releases, the workflow accepts `patch`, `minor`, or `major`. It validates the project, prepares a signed-off version commit on `release/vX.Y.Z`, opens a protected pull request through a repository-scoped GitHub App, and waits for every required pull-request check and GitHub auto-merge. Only the exact merged commit is then built, package-checked, signed, supplied with a detached signature, SPDX SBOM, and public Sigstore provenance, tagged, published as a GitHub release with every verification asset, and submitted to the Nextcloud App Store.
+Release version PRs use verified GitHub App commits and normal branch protection. All PR checks and all checks on the exact merged main commit must pass before publication. Signing, detached signatures, SPDX SBOMs and public Sigstore provenance are preserved. Release secrets are restricted to the `main`-only `release` environment.
 
-An interrupted run resumes an existing release branch, merged release PR, tag, or incomplete GitHub release instead of incrementing again.
-
-Release pull requests use a short-lived GitHub App installation token limited to the current repository and to `Contents` and `Pull requests` write access. The token is revoked when the job finishes. The App client ID is stored as the `RELEASE_AUTOMATION_CLIENT_ID` repository variable; its private key is stored only as the protected `RELEASE_AUTOMATION_PRIVATE_KEY` environment secret.
-
-Dependency Review blocks newly introduced vulnerable or unapproved dependencies. OpenSSF Scorecard audits the repository's supply-chain security every week.
-
-Private signing material and App Store credentials exist only as protected GitHub environment secrets and are never committed.
+See [the release guide](docs/releases.md) for configuration, changelogs, safeguards and recovery. Run the release regression tests with `python3 -m unittest discover -s tests/release -v`.
 
 Project decisions and support expectations are documented in [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
