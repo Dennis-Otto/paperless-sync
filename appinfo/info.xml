@@ -67,7 +67,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
 ]]></description>
-	<version>0.1.1</version>
+	<version>0.1.2</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -81,8 +81,8 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<website>https://github.com/Dennis-Otto/paperless-sync</website>
 	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.1/screenshots/01-admin-settings.png</screenshot>
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.1/screenshots/02-structured-archive.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.2/screenshots/01-admin-settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.2/screenshots/02-structured-archive.png</screenshot>
 	<dependencies>
 		<php min-version="8.2"/>
 		<nextcloud min-version="33" max-version="35"/>
