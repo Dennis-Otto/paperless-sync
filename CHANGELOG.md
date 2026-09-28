@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.3 - 2026-09-28
+
+<!-- Release notes generated using configuration in .github/release.yml at 2f7471bc9b6964221eefe90c1b076351081b9b6b -->
+
+### What's Changed
+### Dependencies
+* chore(deps-dev): Bump vimeo/psalm from 6.17.2 to 6.18.1 in the composer-routine group by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/23
+* chore(deps): Bump the actions-routine group with 3 updates by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/24
+* chore(deps): Bump nextcloud from 33.0.9-apache to 33.0.9-apache in /tests/e2e by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/26
+
+
+**Full Changelog**: https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.2...v0.1.3
+
 ## 0.1.2 - 2026-09-21
 
 <!-- Release notes generated using configuration in .github/release.yml at eb19bcabfbee4d333095f5cee134a20c2d3ee84c -->
