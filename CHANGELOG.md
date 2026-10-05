@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.4 - 2026-10-05
+
+<!-- Release notes generated using configuration in .github/release.yml at 603966a71d3d95695c17c4b8e589444bab7f9fd8 -->
+
+### What's Changed
+### Dependencies
+* chore(deps-dev): Bump vimeo/psalm from 6.18.1 to 6.19.1 in the composer-routine group by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/28
+
+
+**Full Changelog**: https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.3...v0.1.4
+
 ## 0.1.3 - 2026-09-28
 
 <!-- Release notes generated using configuration in .github/release.yml at 2f7471bc9b6964221eefe90c1b076351081b9b6b -->
