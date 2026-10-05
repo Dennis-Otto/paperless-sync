@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## 0.1.5 - 2026-10-05
+
+<!-- Release notes generated using configuration in .github/release.yml at 0215bf94461794ed1f345e856d14bb1946cbd5cf -->
+
+### What's Changed
+### Dependencies
+* chore(deps): Bump anchore/sbom-action from 0.24.2 to 0.24.3 in the actions-routine group by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/30
+* chore(deps): Bump nextcloud from 33.0.9-apache to 33.0.9-apache in /tests/e2e by @dependabot[bot] in https://github.com/Dennis-Otto/paperless-sync/pull/31
+
+
+**Full Changelog**: https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.4...v0.1.5
+
 ## 0.1.4 - 2026-10-05
 
 <!-- Release notes generated using configuration in .github/release.yml at 603966a71d3d95695c17c4b8e589444bab7f9fd8 -->
