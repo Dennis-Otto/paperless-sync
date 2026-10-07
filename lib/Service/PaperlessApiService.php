@@ -13,6 +13,7 @@ use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\ITempManager;
 use RuntimeException;
 use UnexpectedValueException;
 
@@ -24,6 +25,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	public function __construct(
 		private ConfigService $configService,
 		IClientService $clientService,
+		private ITempManager $tempManager,
 	) {
 		$this->client = $clientService->newClient();
 	}
@@ -77,7 +79,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if (!is_resource($sink)) {
 			throw new UnexpectedValueException('A writable download stream is required.');
 		}
-		$temporaryPath = tempnam(sys_get_temp_dir(), 'paperless-sync-');
+		$temporaryPath = $this->tempManager->getTemporaryFile();
 		if ($temporaryPath === false) {
 			throw new RuntimeException('Could not create a temporary Paperless download file.');
 		}

@@ -176,9 +176,12 @@ final class SyncService {
 					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
 					++$report->moved;
 				} else {
-					$stream = tmpfile();
+					$stream = fopen('php://temp', 'w+b');
 					if (!is_resource($stream)) {
+						// @codeCoverageIgnoreStart
+						// PHP opens php://temp in memory, so this fails only when memory runs out, which ends the request first.
 						throw new RuntimeException('Could not create a temporary document stream.');
+						// @codeCoverageIgnoreEnd
 					}
 					try {
 						$this->paperless->downloadDocument($documentId, $useOriginal, $stream);
