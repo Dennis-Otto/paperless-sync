@@ -16,6 +16,16 @@ Paperless remains the source of truth. Nextcloud provides convenient access thro
 
 <sub>💛 If Paperless Sync is useful to you, you can [support its development](https://github.com/sponsors/Dennis-Otto).</sub>
 
+[Quick start](#quick-start) · [Architecture](docs/architecture.md) · [Security design](docs/security.md) · [Roadmap](docs/roadmap.md) · [Releases](docs/releases.md) · [Changelog](CHANGELOG.md)
+
+## Quick start
+
+1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
+2. In Paperless-ngx, create a dedicated account with view and download access to the documents to mirror, and an API token for it.
+3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud.
+4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
+5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
+
 ## Features
 
 - Native Nextcloud filesystem operations without WebDAV credentials
