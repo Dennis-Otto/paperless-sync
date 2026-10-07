@@ -10,6 +10,7 @@ Run this matrix in an isolated Nextcloud/Paperless lab before a release that cha
 | Metadata | Title, correspondent, document type, storage path, and date changes move the existing file without leaving duplicate or empty paths. |
 | Exclusions | Paperless inbox and configured exclusion tags prevent export and remove an existing synchronized copy. |
 | Trash | Moving a document to the Paperless trash moves the Nextcloud copy to the configured deleted folder; restoring it moves the same file back. |
+| Missing documents | A document that disappears from Paperless without passing through its trash moves the Nextcloud copy to the deleted folder after the configured number of complete scans, also when a run reaches its batch size first: the copy then moves in a later run. |
 | Permanent deletion | No Nextcloud file is permanently deleted before the configured number of complete missing-document scans. Direct deletion remains blocked unless explicitly enabled. |
 | Inbox import | Recursive import submits each source once, keeps it while the task is pending, removes it after success, and moves failures plus diagnostics to the error folder. |
 | Conflicts | `skip` preserves an unrelated Nextcloud file and reports the conflict; `replace` changes only the managed destination. |

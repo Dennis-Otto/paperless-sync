@@ -694,10 +694,106 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents = [];
 		$this->storage->files = [];
 
-		$this->service->run();
+		$report = $this->service->run();
 
+		self::assertSame(0, $report->movedToTrash);
 		self::assertSame([], $this->storage->prunes);
 		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path'], 'Nothing was moved, so the state keeps the path.');
+	}
+
+	public function testMissingDocumentWithoutAFileTakesNoPlaceInTheBatch(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->configService->save(['batch_size' => 1]);
+		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->movedToTrash);
+		self::assertSame(0, $report->skipped);
+		self::assertSame([$this->deletedToday(124) => '%PDF-content'], $this->storage->files);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+	}
+
+	public function testMissingDocumentThatWasNeverExportedIsOnlyMarked(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(0, $report->movedToTrash);
+		self::assertSame(0, $report->errors);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertArrayNotHasKey('path', $this->state->exports[123], 'A folder of the deleted folder must not become the path of the document.');
+	}
+
+	public function testDryRunReportsNoMoveOfAMissingDocumentWithoutAFile(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->storage->files = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->movedToTrash);
+	}
+
+	public function testMoveOfAMissingDocumentWaitsWhenTheBatchIsFull(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->documents = [$this->document(124)];
+		$this->paperless->contents[124] = '%PDF-124';
+
+		$first = $this->service->run();
+
+		self::assertSame(1, $first->exported);
+		self::assertSame(1, $first->skipped);
+		self::assertSame(0, $first->movedToTrash);
+		self::assertSame('%PDF-content', $this->storage->files[self::EXPORTED_PATH]);
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+
+		$second = $this->service->run();
+
+		self::assertSame(1, $second->movedToTrash);
+		self::assertArrayNotHasKey(self::EXPORTED_PATH, $this->storage->files);
+		self::assertSame('%PDF-content', $this->storage->files[$this->deletedToday()]);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertSame($this->deletedToday(), $this->state->exports[123]['path']);
+	}
+
+	public function testFailedMoveOfAMissingDocumentIsReportedAndRetried(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'conflict_mode' => 'skip']);
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->storage->files[$this->deletedToday()] = 'a file of the user';
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: Missing P123: conflict'], $report->actions);
+		self::assertSame(1, $report->movedToTrash, 'The other missing document still moves.');
+		self::assertSame('%PDF-content', $this->storage->files[$this->deletedToday(124)]);
+		self::assertSame('%PDF-content', $this->storage->files[self::EXPORTED_PATH]);
+		self::assertSame('a file of the user', $this->storage->files[$this->deletedToday()]);
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		self::assertSame('conflict', $this->state->exports[123]['last_error']);
+		self::assertSame('completed-with-errors', $this->settings['status_last_state']);
+
+		unset($this->storage->files[$this->deletedToday()]);
+		$retried = $this->service->run();
+
+		self::assertSame(1, $retried->movedToTrash);
+		self::assertSame('%PDF-content', $this->storage->files[$this->deletedToday()]);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertNull($this->state->exports[123]['last_error']);
 	}
 
 	public function testDryRunReportsTheMoveOfAMissingDocument(): void {
@@ -737,6 +833,33 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $report->permanentlyDeleted);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertArrayHasKey(123, $this->state->exports);
+	}
+
+	public function testFailedPermanentDeletionIsReported(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->storage->deleteException = new RuntimeException('File is locked');
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: Missing P123: File is locked'], $report->actions);
+		self::assertSame(0, $report->permanentlyDeleted);
+		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
+		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
+	}
+
+	public function testMissingDocumentWithoutAFileIsForgottenWithoutADeletion(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
+		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(0, $report->permanentlyDeleted);
+		self::assertSame(0, $report->errors);
+		self::assertSame([], $this->state->exports);
 	}
 
 	public function testPermanentDeletionWaitsWhenTheBatchIsFull(): void {
@@ -827,6 +950,11 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documentTypes = ['7' => 'Rechnung'];
 
 		return $this->service->run();
+	}
+
+	/** The path of the copy of a document that a run of today moves to the deleted folder. */
+	private function deletedToday(int $id = 123): string {
+		return self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
 	private function trashDocument(): void {

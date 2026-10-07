@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use InvalidArgumentException;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use RuntimeException;
@@ -32,6 +33,7 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function exists(string $userId, string $path): bool {
+		$this->requirePath($path);
 		return array_key_exists($path, $this->files);
 	}
 
@@ -45,6 +47,8 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function move(string $userId, string $source, string $destination, string $conflictMode): bool {
+		$this->requirePath($source);
+		$this->requirePath($destination);
 		if ($this->moveException !== null) {
 			throw $this->moveException;
 		}
@@ -60,6 +64,7 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function delete(string $userId, string $path): void {
+		$this->requirePath($path);
 		if ($this->deleteException !== null) {
 			throw $this->deleteException;
 		}
@@ -98,5 +103,12 @@ final class TestStorage implements NextcloudStorageInterface {
 	public function pruneEmptyParents(string $userId, string $filePath, string $stopAt): int {
 		$this->prunes[] = [$filePath, $stopAt];
 		return 1;
+	}
+
+	/** Like the Nextcloud storage, which normalizes every path, refuse an empty one. */
+	private function requirePath(string $path): void {
+		if ($path === '') {
+			throw new InvalidArgumentException('A relative folder path is required.');
+		}
 	}
 }
