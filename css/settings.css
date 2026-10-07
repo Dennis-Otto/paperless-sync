@@ -226,6 +226,12 @@
 	background: var(--color-main-background);
 }
 
+/* The list of changes scrolls, so it takes the keyboard focus and shows it. */
+.paperless-sync-report pre:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
+}
+
 @media (max-width: 700px) {
 	.paperless-sync-grid,
 	.paperless-sync-switches--inline,

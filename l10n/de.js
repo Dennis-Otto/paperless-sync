@@ -58,6 +58,7 @@ OC.L10N.register(
 		"Synchronize now": "Jetzt synchronisieren",
 		"Disconnect": "Trennen",
 		"Run report": "Laufbericht",
+		"File changes of the run": "Dateiänderungen des Laufs",
 		"Exported": "Exportiert",
 		"Moved": "Verschoben",
 		"Moved to trash": "In Gelöscht verschoben",
