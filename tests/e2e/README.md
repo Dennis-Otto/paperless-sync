@@ -1,6 +1,6 @@
 # Docker end-to-end tests
 
-The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock. CI runs the same scenario against the minimum supported Nextcloud 33 release and the current stable Nextcloud 34 release.
+The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock. CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`; set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
 
 Run locally:
 
