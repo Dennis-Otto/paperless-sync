@@ -1,0 +1,28 @@
+# The area labels of pull requests by the files they change, for the Area labels
+# workflow; each label is an area of .github/labels.toml.
+"area: settings":
+  - changed-files:
+      - any-glob-to-any-file:
+          - lib/Controller/SettingsController.php
+          - lib/Settings/**
+          - lib/Service/ConfigService.php
+          - lib/Model/SyncConfig.php
+          - js/settings.js
+          - css/settings.css
+          - templates/settings.php
+          - tests/Unit/Controller/SettingsController*
+"area: archive":
+  - changed-files:
+      - any-glob-to-any-file:
+          - lib/Service/PathTemplateService.php
+          - lib/Service/NextcloudStorage*.php
+          - tests/Unit/PathTemplateServiceTest.php
+"area: runs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - lib/Cron/**
+          - lib/Controller/SyncController.php
+          - lib/Service/StatusService.php
+          - lib/Service/SyncStateRepository*.php
+          - lib/Model/SyncReport.php
+          - tests/Unit/Controller/SyncController*
