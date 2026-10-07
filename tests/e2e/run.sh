@@ -144,6 +144,21 @@ for attribute in \
 	fi
 done
 
+# The navigation of the administration settings lists the app's own section on
+# every page (Dennis-Otto/paperless-unified-search#25): Nextcloud 33 as links,
+# Nextcloud 34 in the initial state settings-sections.
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--output "${TMP_DIR}/admin-overview.html" \
+	"${BASE_URL}/index.php/settings/admin/overview"
+SECTIONS="$(grep --only-matching 'id="initial-state-settings-sections" value="[^"]*"' \
+	"${TMP_DIR}/admin-overview.html" | sed 's/.*value="//; s/"$//' | base64 --decode || true)"
+if ! grep --fixed-strings '/settings/admin/paperless_sync"' "${TMP_DIR}/admin-overview.html" >/dev/null &&
+	! grep --fixed-strings '"id":"paperless_sync"' <<<"${SECTIONS}" >/dev/null; then
+	echo "The navigation of the administration settings lists no Paperless Sync section." >&2
+	exit 1
+fi
+
 # Nextcloud loads the routes of appinfo/routes.php only for apps that are already
 # loaded. The app's attribute routes exist without that, as in a PHP script
 # (Dennis-Otto/paperless-unified-search#25). Scripts link through index.php.
