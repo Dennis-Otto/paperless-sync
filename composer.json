@@ -30,7 +30,7 @@
 		"l10n:check": "node scripts/check-l10n.mjs",
 		"psalm": "psalm --threads=1 --no-cache",
 		"test": "phpunit",
-		"version:check": "php scripts/release-version.php check"
+		"check": "bash scripts/check.sh"
 	},
 	"config": {
 		"allow-plugins": {

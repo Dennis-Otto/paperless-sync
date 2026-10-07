@@ -7,6 +7,7 @@
 [![SBOM](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Dennis-Otto/paperless-sync/badge)](https://scorecard.dev/viewer/?uri=github.com/Dennis-Otto/paperless-sync)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15277/badge)](https://www.bestpractices.dev/projects/15277)
+[![REUSE](https://api.reuse.software/badge/github.com/Dennis-Otto/paperless-sync)](https://api.reuse.software/info/github.com/Dennis-Otto/paperless-sync)
 [![Sponsor](https://img.shields.io/badge/sponsor-%E2%99%A5-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Dennis-Otto)
 
 Paperless Sync is a native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can optionally submit files from a Nextcloud inbox to Paperless.
@@ -95,36 +96,27 @@ The Docker end-to-end suite mounts this checkout into real Nextcloud containers 
 bash tests/e2e/run.sh
 ```
 
-CI runs the suite against Nextcloud 33 and the current stable Nextcloud 34 release. See [`tests/e2e/README.md`](tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
+CI runs the suite against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`. See [`tests/e2e/README.md`](tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
 
 ## Development
 
-Requirements: PHP 8.2+, Composer, Node.js, Docker, Krankerl, and a Nextcloud 33+ development instance.
+Requirements: PHP 8.2+, Composer, Node.js and Docker; the dev container in `.devcontainer/` has them ready.
 
 ```bash
 composer install
-composer lint
-composer l10n:check
-composer test
-composer cs:check
-composer psalm
-composer version:check
+bash scripts/check.sh
 bash tests/e2e/run.sh
-krankerl package
-composer package:check
 ```
+
+`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds with `scripts/check-package.sh`, and the JavaScript and the translations (`scripts/check-project.sh`).
 
 The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psalm analyzes the PHP code, CodeQL scans the JavaScript, and the SBOM workflow continuously inventories dependencies.
 
 ## Release process
 
-The protected `main` branch requires CI, Docker E2E, Dependency Review, CodeQL, SBOM generation and secret scanning. Dependabot checks dependencies weekly; grouped patch and minor updates merge after successful checks. Major dependency updates require a maintainer merge.
+The protected `main` branch requires the checks of the CI, the Docker end-to-end tests against every supported Nextcloud version, the dependency review, CodeQL, the secret scan, the licenses of every file (REUSE), the sign-off of every commit and a Conventional Commit title. Dependabot keeps the dependencies current; routine updates merge on their own once every check passes.
 
-Merged Dependabot updates automatically produce a checked, signed **app patch release**, including GitHub assets and Nextcloud App Store publication. A scheduled reconciliation catches suppressed events and resumes interrupted releases without duplicate versions. Manual releases support `patch`, `minor`, `major`, and an optional introduction above the generated changelog.
-
-Release version PRs use verified GitHub App commits and normal branch protection. All PR checks and all checks on the exact merged main commit must pass before publication. Signing, detached signatures, SPDX SBOMs and public Sigstore provenance are preserved. Release secrets are restricted to the `main`-only `release` environment.
-
-See [the release guide](docs/releases.md) for configuration, changelogs, safeguards and recovery. Run the release regression tests with `python3 -m unittest discover -s tests/release -v`.
+The release bot keeps a pull request for the next release. Its version follows from the titles of the merged pull requests, and what they wrote under *Unreleased* in `CHANGELOG.md` becomes its notes. Merging it publishes the release: the package, checked before and after signing with the app's certificate, its detached signature, an SPDX SBOM and signed build provenance, then the same package in the Nextcloud App Store, verified afterwards as users can verify it. See [the release guide](docs/releases.md).
 
 Project decisions and support expectations are documented in [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
