@@ -1,6 +1,6 @@
 # Docker end-to-end tests
 
-The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock. CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`; set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
+The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock. CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and every week against [the coming Nextcloud](#the-coming-nextcloud); set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
 
 Run locally:
 
@@ -27,5 +27,23 @@ Optional environment variables:
 - `E2E_PROJECT_NAME`: Compose project name, default `paperless_sync_e2e`
 - `NEXTCLOUD_IMAGE`: pinned Nextcloud image override
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
+- `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 
 All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact.
+
+## The coming Nextcloud
+
+Every Monday, and when started by hand, the workflow also runs the suite against the coming Nextcloud:
+
+```bash
+bash tests/e2e/canary.sh
+```
+
+The coming Nextcloud is the newest beta or release candidate of the next major version while Nextcloud publishes one, in `https://download.nextcloud.com/server/prereleases/`, and otherwise the daily build of its master branch, `https://download.nextcloud.com/server/daily/latest-master.tar.bz2`. Nextcloud no longer publishes Docker images of betas and release candidates, so the script checks the signature of the package against the release key of Nextcloud, as the official image does, and puts its code into the image of the newest release, `nextcloud:apache`, which keeps its PHP, Apache and start script. The suite enables the app with `--force`, as `max-version` of `appinfo/info.xml` doesn't name that version yet; the upstream bot raises `max-version` once Nextcloud releases the version.
+
+The canary is no required check and blocks nothing. When it fails, it opens the issue *The coming Nextcloud breaks the app* with a link to the run, adds every further failed run to it, and closes it once the tests pass again.
+
+Optional environment variables, besides those of `run.sh`:
+
+- `CANARY_BASE_IMAGE`: the image whose code the coming Nextcloud replaces, default `nextcloud:apache`
+- `CANARY_IMAGE`: the local image the script builds, default `paperless-sync-e2e:coming`
