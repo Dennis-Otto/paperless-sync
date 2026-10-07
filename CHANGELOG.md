@@ -13,6 +13,14 @@ All notable changes to this project are documented in this file.
 - A document in the Paperless trash that was never exported no longer causes an error in every run.
 - With the trash behavior *Keep archive file in place*, a dry run no longer reports and counts a move to the trash that the real run doesn't make.
 
+## [0.1.7](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.6...v0.1.7) (2026-10-07)
+
+
+### Bug fixes
+
+* count and record a trashed document only when its copy moves ([#49](https://github.com/Dennis-Otto/paperless-sync/issues/49)) ([b52c2ab](https://github.com/Dennis-Otto/paperless-sync/commit/b52c2ab63cce9ee5b2932a6750ec01421e815079))
+* move the copy of a deleted document also when the run is full ([#47](https://github.com/Dennis-Otto/paperless-sync/issues/47)) ([c063f55](https://github.com/Dennis-Otto/paperless-sync/commit/c063f5529a23faf1afd76afa9d39cf2ae52b0211))
+
 ## 0.1.6 - 2026-10-07
 
 ### Fixed
