@@ -1,8 +1,8 @@
 # The answers of the blueprint (https://github.com/Dennis-Otto/repo-blueprint);
 # `copier update` reads them to bring the repository up to the latest release.
 # Change them only with `copier update --data name=value`.
-_commit: v0.2.0-10-g2e5056c
-_src_path: /blueprint
+_commit: v0.3.1
+_src_path: https://github.com/Dennis-Otto/repo-blueprint.git
 author: Dennis Otto
 copyright: 2026 Dennis Otto
 description: Native Nextcloud synchronization for Paperless-ngx documents
@@ -17,5 +17,6 @@ owner: Dennis-Otto
 project_name: Paperless Sync
 project_slug: paperless-sync
 project_type: nextcloud-app
+sample_code: false
 sponsor: Dennis-Otto
 topics: document-management, nextcloud, paperless-ngx, php, synchronization

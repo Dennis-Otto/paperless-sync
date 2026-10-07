@@ -52,6 +52,22 @@ updates:
       prefix: chore
       include: scope
 
+  # The Features of the dev container, locked in .devcontainer/devcontainer-lock.json.
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule:
+      interval: monthly
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
+    groups:
+      dev-container-features:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: chore
+      include: scope
+
   - package-ecosystem: composer
     directory: /
     schedule:
@@ -69,10 +85,20 @@ updates:
         update-types:
           - minor
           - patch
+      composer-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
     commit-message:
       prefix: fix
       prefix-development: chore
       include: scope
+    ignore:
+      # The public API of Nextcloud follows the min-version of appinfo/info.xml.
+      - dependency-name: nextcloud/ocp
+        update-types:
+          - version-update:semver-major
 
   # The containers of the end-to-end tests: the Nextcloud versions they run against
   # follow min-version and max-version of appinfo/info.xml, so their major versions
