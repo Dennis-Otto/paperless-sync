@@ -120,7 +120,13 @@ for user in sync-target e2e-other; do
 		php occ user:add --password-from-env "${user}" >/dev/null
 done
 
-occ app:enable paperless_sync >/dev/null
+# The coming Nextcloud of canary.sh is newer than max-version of appinfo/info.xml:
+# --force enables the app there anyway, without making it compatible.
+enable_options=()
+if [[ "${E2E_IGNORE_MAX_VERSION:-0}" == "1" ]]; then
+	enable_options+=(--force)
+fi
+occ app:enable "${enable_options[@]}" paperless_sync >/dev/null
 occ router:list \
 	| grep --fixed-strings 'paperless_sync.settings.save' \
 	| grep --fixed-strings '/apps/paperless_sync/settings' >/dev/null
