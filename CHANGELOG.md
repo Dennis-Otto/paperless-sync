@@ -9,6 +9,9 @@ All notable changes to this project are documented in this file.
 - The copy of a document that disappeared from Paperless now moves to the deleted folder after the confirmation runs also when a run reaches its batch size first: it waits for the next run. Before, it stayed where it was for good.
 - *Moved to trash* and *Deleted* in the summary of a run count only copies that were really moved or deleted, no longer documents whose copy was already gone.
 - A copy of a missing document that cannot be moved or deleted is reported as an error of that document, and the run carries on with the others. Before, the whole run failed.
+- A document in the Paperless trash whose copy is already gone no longer counts as *Moved to trash* in every run, and the path recorded for its copy no longer grows by one more deleted folder and date in each run.
+- A document in the Paperless trash that was never exported no longer causes an error in every run.
+- With the trash behavior *Keep archive file in place*, a dry run no longer reports and counts a move to the trash that the real run doesn't make.
 
 ## 0.1.6 - 2026-10-07
 

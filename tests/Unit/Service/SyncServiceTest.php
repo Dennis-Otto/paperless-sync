@@ -625,6 +625,80 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(strtotime('2026-08-27T08:00:00+02:00'), $this->state->exports[123]['trash_date']);
 	}
 
+	public function testDryRunReportsNothingWhenTheKeepPolicyLeavesTheCopyInPlace(): void {
+		$this->configService->save(['trash_mode' => 'keep']);
+		$this->exportDocument();
+		$this->trashDocument();
+
+		$report = $this->service->run(true);
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->movedToTrash);
+		self::assertSame('active', $this->state->exports[123]['state']);
+	}
+
+	public function testTrashedDocumentWithoutAFileIsOnlyMarked(): void {
+		$this->exportDocument();
+		$this->trashDocument();
+		$this->storage->files = [];
+
+		$first = $this->service->run();
+
+		self::assertSame(0, $first->movedToTrash);
+		self::assertSame([], $this->storage->prunes);
+		self::assertSame('trash', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path'], 'Nothing was moved, so the state keeps the path.');
+
+		$second = $this->service->run();
+
+		self::assertSame(0, $second->movedToTrash);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path'], 'The path must not grow by a deleted folder in every run.');
+	}
+
+	public function testTrashedDocumentWithoutAFileTakesNoPlaceInTheBatch(): void {
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->configService->save(['batch_size' => 1]);
+		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->paperless->trash = array_map(
+			static fn (array $document): array => $document + ['deleted_at' => '2026-08-27T08:00:00+02:00'],
+			$this->paperless->documents,
+		);
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->movedToTrash);
+		self::assertSame(0, $report->skipped);
+		self::assertSame([$this->trashFolderPath(124) => '%PDF-content'], $this->storage->files);
+		self::assertSame('trash', $this->state->exports[123]['state']);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+	}
+
+	public function testDryRunReportsNoMoveToTheTrashFolderWithoutAFile(): void {
+		$this->exportDocument();
+		$this->trashDocument();
+		$this->storage->files = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->movedToTrash);
+	}
+
+	public function testTrashedDocumentThatWasNeverExportedIsOnlyMarked(): void {
+		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
+		$this->exportDocument();
+		$this->trashDocument();
+
+		$report = $this->service->run();
+
+		self::assertSame(0, $report->errors);
+		self::assertSame(0, $report->movedToTrash);
+		self::assertSame('trash', $this->state->exports[123]['state']);
+		self::assertNull($this->state->exports[123]['last_error']);
+		self::assertArrayNotHasKey('path', $this->state->exports[123], 'A folder of the deleted folder must not become the path of the document.');
+	}
+
 	/** @return array<string, array{mixed}> */
 	public static function unreadableDeletionDates(): array {
 		return [
@@ -955,6 +1029,11 @@ final class SyncServiceTest extends TestCase {
 	/** The path of the copy of a document that a run of today moves to the deleted folder. */
 	private function deletedToday(int $id = 123): string {
 		return self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
+	}
+
+	/** The path of the copy of a document that Paperless moved to its trash on 2026-08-27. */
+	private function trashFolderPath(int $id = 123): string {
+		return self::ARCHIVE . "/_Gelöscht/2026-08-27/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
 	private function trashDocument(): void {

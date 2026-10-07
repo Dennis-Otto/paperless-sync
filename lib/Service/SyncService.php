@@ -232,7 +232,8 @@ final class SyncService {
 			}
 			try {
 				$oldPath = (string)($entry['path'] ?? '');
-				if (($entry['state'] ?? '') === 'trash' && $oldPath !== '' && $this->storage->exists($config->targetUser, $oldPath)) {
+				$exists = $this->copyExists($config, $oldPath);
+				if (($entry['state'] ?? '') === 'trash' && $exists) {
 					++$report->unchanged;
 					if (!$report->dryRun) {
 						$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0, 'last_seen' => time(), 'last_error' => null]);
@@ -240,33 +241,31 @@ final class SyncService {
 					continue;
 				}
 				$deletedAt = $this->timestamp($document['deleted_at'] ?? null);
-				$target = $config->trashMode === 'move' ? $this->deletedPath($config, $oldPath, $archiveRoot, $deletedAt) : $oldPath;
-				if ($config->trashMode === 'move' && $changes >= $config->batchSize) {
-					++$report->skipped;
-					continue;
-				}
-				if ($report->dryRun) {
-					$report->action("TRASH P{$documentId}: {$target}");
-					++$report->movedToTrash;
-					++$changes;
-					continue;
-				}
-				if ($config->trashMode === 'move' && $oldPath !== $target) {
-					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
-					++$report->movedToTrash;
-					++$changes;
-					if ($config->pruneEmptyFolders) {
-						$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
+				$values = ['state' => 'trash', 'missing_runs' => 0, 'last_seen' => time(), 'trash_date' => $deletedAt, 'last_error' => null];
+				// Only a copy that is still there moves and counts, as for missing documents. The keep
+				// policy and a copy that is gone, or was never exported, only mark the document.
+				if ($config->trashMode === 'move' && $exists) {
+					if ($changes >= $config->batchSize) {
+						++$report->skipped;
+						continue;
+					}
+					$target = $this->deletedPath($config, $oldPath, $archiveRoot, $deletedAt);
+					if ($report->dryRun) {
+						$report->action("TRASH P{$documentId}: {$target}");
+						++$report->movedToTrash;
+						++$changes;
+					} elseif ($this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode)) {
+						$values['path'] = $target;
+						if ($config->pruneEmptyFolders) {
+							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
+						}
+						++$report->movedToTrash;
+						++$changes;
 					}
 				}
-				$this->state->saveExport($config->targetUser, $documentId, [
-					'path' => $target,
-					'state' => 'trash',
-					'missing_runs' => 0,
-					'last_seen' => time(),
-					'trash_date' => $deletedAt,
-					'last_error' => null,
-				]);
+				if (!$report->dryRun) {
+					$this->state->saveExport($config->targetUser, $documentId, $values);
+				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
 				$report->error("Trash P{$documentId}: {$error}");
