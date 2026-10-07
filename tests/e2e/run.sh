@@ -128,6 +128,38 @@ occ background-job:list | grep --fixed-strings 'OCA\PaperlessSync\Cron\SyncJob' 
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
 
+# The administration settings render the form with all of its routes.
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--output "${TMP_DIR}/admin-settings.html" \
+	"${BASE_URL}/index.php/settings/admin/paperless_sync"
+for attribute in \
+	'data-save-url="/apps/paperless_sync/settings"' \
+	'data-reset-url="/apps/paperless_sync/settings"' \
+	'data-run-url="/apps/paperless_sync/sync/run"' \
+	'data-status-url="/apps/paperless_sync/sync/status"'; do
+	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
+		echo "The administration settings render no ${attribute}." >&2
+		exit 1
+	fi
+done
+
+# Nextcloud loads the routes of appinfo/routes.php only for apps that are already
+# loaded. The app's attribute routes exist without that, as in a PHP script
+# (Dennis-Otto/paperless-unified-search#25). Scripts link through index.php.
+# shellcheck disable=SC2016
+ROUTES="$("${COMPOSE[@]}" exec -T --user www-data nextcloud php -r '
+	require "/var/www/html/lib/base.php";
+	$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
+	foreach (["settings.save", "settings.reset", "sync.run", "sync.status"] as $route) {
+		echo "route=", $urls->linkToRoute("paperless_sync." . $route), "\n";
+	}
+' 2>/dev/null | grep '^route=' | sed 's#^route=/index.php/#route=/#' | tr '\n' ' ')"
+EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
+if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
+	echo "The routes are missing before the app is loaded: ${ROUTES}" >&2
+	exit 1
+fi
 
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
