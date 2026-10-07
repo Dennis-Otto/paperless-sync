@@ -15,6 +15,9 @@ BASE_URL="http://127.0.0.1:${E2E_PORT}"
 DAV_BASE="${BASE_URL}/remote.php/dav/files"
 TMP_DIR="$(mktemp -d)"
 COMPOSE=("${DOCKER_BIN}" compose --project-name "${PROJECT_NAME}" --file "${SCRIPT_DIR}/compose.yaml")
+# The browser of the accessibility check. Keep its version equal to playwright-core in
+# package.json; scripts/check-project.sh compares them.
+PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27"
 
 export E2E_PORT
 
@@ -49,6 +52,20 @@ control() {
 	path="$1"
 	"${COMPOSE[@]}" exec -T paperless-mock python -c \
 		"import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8080${path}', method='POST')).read()"
+}
+
+# axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
+# network of the Compose project. The files of the check reach the browser through
+# standard input, so that npm leaves nothing in the checkout.
+accessibility() {
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs \
+		| "${DOCKER_BIN}" run --rm --interactive \
+			--network "${PROJECT_NAME}_default" \
+			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
+			--env E2E_USER=e2e-admin \
+			--env "E2E_PASSWORD=${PASSWORD}" \
+			"${PLAYWRIGHT_IMAGE}" \
+			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs'
 }
 
 sync_run() {
@@ -113,6 +130,8 @@ if ! occ status --output=json 2>/dev/null | grep --fixed-strings '"installed":tr
 		--admin-pass="${PASSWORD}" >/dev/null
 fi
 occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
+# The browser of the accessibility check reaches Nextcloud by its name in the network.
+occ config:system:set trusted_domains 2 --value=nextcloud >/dev/null
 occ config:system:set allow_local_remote_servers --type=boolean --value=true >/dev/null
 
 for user in sync-target e2e-other; do
@@ -131,6 +150,8 @@ occ router:list \
 	| grep --fixed-strings 'paperless_sync.settings.save' \
 	| grep --fixed-strings '/apps/paperless_sync/settings' >/dev/null
 occ background-job:list | grep --fixed-strings 'OCA\PaperlessSync\Cron\SyncJob' >/dev/null
+# The first-run wizard would cover the pages that the accessibility check opens.
+occ app:disable firstrunwizard >/dev/null 2>&1 || true
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
 
@@ -301,7 +322,12 @@ assert_json status "${TMP_DIR}/status.json"
 	> "${TMP_DIR}/mock-final.json"
 assert_json mock-final "${TMP_DIR}/mock-final.json"
 
+# The administration settings and the report of a dry-run over a larger archive meet
+# WCAG 2.1 AA.
+control /control/scenario/archive >/dev/null
+accessibility
+
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
 
-echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure, pruning, and access isolation.'
+echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure, pruning, access isolation, and accessibility.'

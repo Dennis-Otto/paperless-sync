@@ -48,6 +48,12 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
     }
 
 
+def archived_letter(number):
+    letter = document(f"Archived letter {number}")
+    letter["id"] = 1000 + number
+    return letter
+
+
 def scenario_documents():
     scenario = STATE["scenario"]
     if scenario == "active":
@@ -62,6 +68,9 @@ def scenario_documents():
         return [], [trashed]
     if scenario == "empty":
         return [], []
+    if scenario == "archive":
+        # A larger archive, whose dry-run lists more changes than the report shows at once.
+        return [archived_letter(number) for number in range(1, 41)], []
     raise ValueError(f"Unknown scenario: {scenario}")
 
 
@@ -115,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "empty"}:
+            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive"}:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:

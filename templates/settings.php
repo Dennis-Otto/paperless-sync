@@ -214,6 +214,6 @@ $status = $_['status'];
 	<div id="paperless-sync-report" class="paperless-sync-report" hidden>
 		<h3><?php p($l->t('Run report')); ?></h3>
 		<div id="paperless-sync-report-summary" class="paperless-sync-report-summary"></div>
-		<pre id="paperless-sync-report-actions"></pre>
+		<pre id="paperless-sync-report-actions" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>"></pre>
 	</div>
 </div>
