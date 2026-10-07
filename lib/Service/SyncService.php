@@ -292,45 +292,70 @@ final class SyncService {
 				continue;
 			}
 
-			$canDelete = $config->permanentDelete && ($state === 'trash' || $config->allowDirectDelete);
-			if ($canDelete) {
-				if ($changes >= $config->batchSize) {
-					++$report->skipped;
+			// Only a copy that is still there is moved or deleted, and only that counts as a change.
+			// When the batch is full, the copy and its state stay as they are, so the next run moves
+			// or deletes it. An error concerns only this document.
+			try {
+				$canDelete = $config->permanentDelete && ($state === 'trash' || $config->allowDirectDelete);
+				if ($canDelete) {
+					$exists = $this->copyExists($config, $path);
+					if ($exists && $changes >= $config->batchSize) {
+						++$report->skipped;
+						continue;
+					}
+					if ($exists) {
+						if ($report->dryRun) {
+							$report->action("DELETE P{$documentId}: {$path}");
+						} else {
+							$this->storage->delete($config->targetUser, $path);
+							if ($config->pruneEmptyFolders) {
+								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
+							}
+						}
+						++$report->permanentlyDeleted;
+						++$changes;
+					}
+					if (!$report->dryRun) {
+						$this->state->deleteExport($config->targetUser, $documentId);
+					}
 					continue;
 				}
-				if ($report->dryRun) {
-					$report->action("DELETE P{$documentId}: {$path}");
-				} else {
-					$this->storage->delete($config->targetUser, $path);
-					$this->state->deleteExport($config->targetUser, $documentId);
-					if ($config->pruneEmptyFolders) {
-						$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
-					}
-				}
-				++$report->permanentlyDeleted;
-				++$changes;
-				continue;
-			}
 
-			$target = $path;
-			if ($state === 'active' && $config->trashMode === 'move') {
-				$target = $this->deletedPath($config, $path, $archiveRoot, time());
-				if ($changes < $config->batchSize) {
+				$values = ['state' => 'missing', 'missing_runs' => $missingRuns, 'last_error' => null];
+				if ($state === 'active' && $config->trashMode === 'move' && $this->copyExists($config, $path)) {
+					if ($changes >= $config->batchSize) {
+						++$report->skipped;
+						continue;
+					}
+					$target = $this->deletedPath($config, $path, $archiveRoot, time());
 					if ($report->dryRun) {
 						$report->action("MISSING P{$documentId}: {$target}");
-					} elseif ($path !== '' && $this->storage->move($config->targetUser, $path, $target, $config->conflictMode)) {
+						++$report->movedToTrash;
+						++$changes;
+					} elseif ($this->storage->move($config->targetUser, $path, $target, $config->conflictMode)) {
+						$values['path'] = $target;
 						if ($config->pruneEmptyFolders) {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 						}
+						++$report->movedToTrash;
+						++$changes;
 					}
-					++$report->movedToTrash;
-					++$changes;
+				}
+				if (!$report->dryRun) {
+					$this->state->saveExport($config->targetUser, $documentId, $values);
+				}
+			} catch (\Throwable $exception) {
+				$error = $this->exceptionMessage($exception);
+				$report->error("Missing P{$documentId}: {$error}");
+				if (!$report->dryRun) {
+					$this->state->saveExport($config->targetUser, $documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
 			}
-			if (!$report->dryRun) {
-				$this->state->saveExport($config->targetUser, $documentId, ['path' => $target, 'state' => 'missing', 'missing_runs' => $missingRuns]);
-			}
 		}
+	}
+
+	private function copyExists(SyncConfig $config, string $path): bool {
+		return $path !== '' && $this->storage->exists($config->targetUser, $path);
 	}
 
 	private function syncInbox(SyncConfig $config, SyncReport $report): void {
