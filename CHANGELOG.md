@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.1.7](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.6...v0.1.7) (2026-10-07)
+
 ### Bug fixes
 
 - The copy of a document that disappeared from Paperless now moves to the deleted folder after the confirmation runs also when a run reaches its batch size first: it waits for the next run. Before, it stayed where it was for good.
