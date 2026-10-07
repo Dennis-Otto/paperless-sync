@@ -61,30 +61,8 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		if (!is_resource($source)) {
 			throw new RuntimeException('A readable source stream is required.');
 		}
-		$path = $this->normalize($path);
-		[$parentPath, $name] = $this->split($path);
-		$parent = $this->ensureFolder($userId, $parentPath);
-		if ($parent->nodeExists($name) && $conflictMode === 'skip') {
-			throw new RuntimeException("Nextcloud file conflict at {$path}.");
-		}
-
-		$temporaryName = '.' . $name . '.paperless-' . bin2hex(random_bytes(8)) . '.part';
-		try {
-			rewind($source);
-			$parent->newFile($temporaryName, $source);
-			if ($parent->nodeExists($name)) {
-				$parent->get($name)->delete();
-			}
-			$parent->get($temporaryName)->move($parent->getFullPath($name));
-		} catch (\Throwable $exception) {
-			try {
-				if ($parent->nodeExists($temporaryName)) {
-					$parent->get($temporaryName)->delete();
-				}
-			} catch (\Throwable) {
-			}
-			throw $exception;
-		}
+		rewind($source);
+		$this->write($userId, $path, $source, $conflictMode);
 	}
 
 	public function move(string $userId, string $source, string $destination, string $conflictMode): bool {
@@ -152,19 +130,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	}
 
 	public function writeText(string $userId, string $path, string $content, string $conflictMode = 'replace'): void {
-		$stream = fopen('php://temp', 'w+b');
-		if (!is_resource($stream)) {
-			throw new RuntimeException('Could not create a temporary text stream.');
-		}
-		try {
-			fwrite($stream, $content);
-			$this->writeAtomic($userId, $path, $stream, $conflictMode);
-		} finally {
-			/** @psalm-suppress RedundantCondition Nextcloud may close the source stream. */
-			if (is_resource($stream)) {
-				fclose($stream);
-			}
-		}
+		$this->write($userId, $path, $content, $conflictMode);
 	}
 
 	public function pruneEmptyParents(string $userId, string $filePath, string $stopAt): int {
@@ -188,6 +154,37 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		}
 
 		return $removed;
+	}
+
+	/**
+	 * Write next to the target first and then move into place, so readers never see a partial file.
+	 *
+	 * @param resource|string $content
+	 */
+	private function write(string $userId, string $path, $content, string $conflictMode): void {
+		$path = $this->normalize($path);
+		[$parentPath, $name] = $this->split($path);
+		$parent = $this->ensureFolder($userId, $parentPath);
+		if ($parent->nodeExists($name) && $conflictMode === 'skip') {
+			throw new RuntimeException("Nextcloud file conflict at {$path}.");
+		}
+
+		$temporaryName = '.' . $name . '.paperless-' . bin2hex(random_bytes(8)) . '.part';
+		try {
+			$parent->newFile($temporaryName, $content);
+			if ($parent->nodeExists($name)) {
+				$parent->get($name)->delete();
+			}
+			$parent->get($temporaryName)->move($parent->getFullPath($name));
+		} catch (\Throwable $exception) {
+			try {
+				if ($parent->nodeExists($temporaryName)) {
+					$parent->get($temporaryName)->delete();
+				}
+			} catch (\Throwable) {
+			}
+			throw $exception;
+		}
 	}
 
 	/** @param list<array{path: string, name: string, etag: string}> $files */

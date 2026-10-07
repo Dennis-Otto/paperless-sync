@@ -37,7 +37,7 @@ final class SyncJob extends TimedJob {
 		}
 		$status = $this->statusService->get();
 		$lastCompleted = max($status['lastCompleted'], $status['lastStarted']);
-		if ($lastCompleted > 0 && time() - $lastCompleted < $config->syncIntervalMinutes * 60) {
+		if ($lastCompleted > 0 && $this->time->getTime() - $lastCompleted < $config->syncIntervalMinutes * 60) {
 			return;
 		}
 		try {
