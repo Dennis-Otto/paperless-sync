@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
@@ -31,6 +32,7 @@ final class SettingsController extends Controller {
 	}
 
 	/** @param array<string, mixed> $settings */
+	#[FrontpageRoute(verb: 'POST', url: '/settings')]
 	public function save(array $settings = [], string $token = ''): JSONResponse {
 		try {
 			$config = $this->configService->validate($settings, $token);
@@ -49,6 +51,7 @@ final class SettingsController extends Controller {
 		}
 	}
 
+	#[FrontpageRoute(verb: 'DELETE', url: '/settings')]
 	public function reset(): JSONResponse {
 		return new JSONResponse($this->configService->reset());
 	}

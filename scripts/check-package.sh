@@ -51,7 +51,7 @@ fi
 tar --extract --gzip --file "${ARCHIVE}" --directory "${PACKAGE_ROOT}"
 APP_ROOT="${PACKAGE_ROOT}/${APP_ID}"
 
-for required in appinfo/info.xml appinfo/routes.php img/app.svg lib/Cron/SyncJob.php lib/Migration/Version000100Date20260826000000.php; do
+for required in appinfo/info.xml img/app.svg lib/Cron/SyncJob.php lib/Migration/Version000100Date20260826000000.php; do
 	if [[ ! -s "${APP_ROOT}/${required}" ]]; then
 		echo "Required package file is missing: ${required}" >&2
 		exit 1

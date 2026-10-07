@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\Lock\LockedException;
@@ -28,6 +29,7 @@ final class SyncController extends Controller {
 		parent::__construct($appName, $request);
 	}
 
+	#[FrontpageRoute(verb: 'POST', url: '/sync/run')]
 	public function run(bool $dryRun = true): JSONResponse {
 		try {
 			return new JSONResponse($this->syncService->run($dryRun));
@@ -38,6 +40,7 @@ final class SyncController extends Controller {
 		}
 	}
 
+	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
 	public function status(): JSONResponse {
 		return new JSONResponse($this->statusService->get());
 	}
