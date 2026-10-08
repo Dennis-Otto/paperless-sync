@@ -4,7 +4,7 @@
 
 [repository]
 description = "Native Nextcloud synchronization for Paperless-ngx documents"
-homepage = "https://apps.nextcloud.com/apps/paperless_sync"
+homepage = "https://dennis-otto.github.io/paperless-sync/"
 topics = ["document-management", "nextcloud", "paperless-ngx", "php", "synchronization"]
 has_issues = true
 has_discussions = true
