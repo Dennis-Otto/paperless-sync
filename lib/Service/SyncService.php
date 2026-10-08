@@ -98,14 +98,13 @@ final class SyncService {
 						continue;
 					}
 					if ($exists) {
-						if ($report->dryRun) {
-							$report->action("REMOVE EXCLUDED P{$documentId}: {$excludedPath}");
-						} else {
+						if (!$report->dryRun) {
 							$this->storage->delete($config->targetUser, $excludedPath);
 							if ($config->pruneEmptyFolders) {
 								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $excludedPath, $archiveRoot);
 							}
 						}
+						$report->action("REMOVE EXCLUDED P{$documentId}: {$excludedPath}");
 						++$report->removedExcluded;
 						++$changes;
 					}
@@ -200,6 +199,7 @@ final class SyncService {
 					}
 					++$report->exported;
 				}
+				$report->action(($canMove ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
 				$this->state->saveExport($config->targetUser, $documentId, [
 					'path' => $target,
 					'fingerprint' => $fingerprint,
@@ -259,6 +259,7 @@ final class SyncService {
 						if ($config->pruneEmptyFolders) {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 						}
+						$report->action("TRASH P{$documentId}: {$target}");
 						++$report->movedToTrash;
 						++$changes;
 					}
@@ -303,14 +304,13 @@ final class SyncService {
 						continue;
 					}
 					if ($exists) {
-						if ($report->dryRun) {
-							$report->action("DELETE P{$documentId}: {$path}");
-						} else {
+						if (!$report->dryRun) {
 							$this->storage->delete($config->targetUser, $path);
 							if ($config->pruneEmptyFolders) {
 								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 							}
 						}
+						$report->action("DELETE P{$documentId}: {$path}");
 						++$report->permanentlyDeleted;
 						++$changes;
 					}
@@ -336,6 +336,7 @@ final class SyncService {
 						if ($config->pruneEmptyFolders) {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 						}
+						$report->action("MISSING P{$documentId}: {$target}");
 						++$report->movedToTrash;
 						++$changes;
 					}
@@ -392,17 +393,16 @@ final class SyncService {
 				$task = $this->paperless->taskStatus((string)($pending['task_id'] ?? ''));
 				if (in_array($task['status'], ['SUCCESS', 'SUCCEEDED'], true)) {
 					if (($pending['etag'] ?? '') === $file['etag']) {
-						if ($report->dryRun) {
-							$report->action("IMPORT SUCCESS: {$path}");
-						} elseif ($config->deleteInboxAfterSuccess) {
+						if (!$report->dryRun && $config->deleteInboxAfterSuccess) {
 							$this->storage->delete($config->targetUser, $path);
 							$this->state->deleteImport($config->targetUser, $path);
 							if ($config->pruneEmptyFolders) {
 								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
 							}
-						} else {
+						} elseif (!$report->dryRun) {
 							$this->state->saveImport($config->targetUser, $path, ['status' => 'success', 'last_error' => null]);
 						}
+						$report->action("IMPORT SUCCESS: {$path}");
 					} elseif (!$report->dryRun) {
 						$this->state->deleteImport($config->targetUser, $path);
 					}
@@ -411,9 +411,7 @@ final class SyncService {
 				} elseif (in_array($task['status'], ['FAILURE', 'FAILED', 'ERROR'], true)) {
 					$relative = $this->relativeTo($path, $inboxRoot);
 					$destination = $this->join($errorRoot, $relative);
-					if ($report->dryRun) {
-						$report->action("IMPORT ERROR: {$path} -> {$destination}");
-					} else {
+					if (!$report->dryRun) {
 						$this->storage->move($config->targetUser, $path, $destination, $config->conflictMode);
 						$this->storage->writeText($config->targetUser, $destination . '.error.txt', "Paperless import failed\n\n" . $task['message'] . "\n");
 						$this->state->deleteImport($config->targetUser, $path);
@@ -421,6 +419,7 @@ final class SyncService {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
 						}
 					}
+					$report->action("IMPORT ERROR: {$path} -> {$destination}");
 					++$report->importsFailed;
 					unset($byPath[$path]);
 				}
@@ -452,6 +451,7 @@ final class SyncService {
 					'submitted_at' => time(),
 					'last_error' => null,
 				]);
+				$report->action("IMPORT: {$path}");
 				++$report->importsSubmitted;
 				++$submitted;
 			} catch (\Throwable $exception) {
