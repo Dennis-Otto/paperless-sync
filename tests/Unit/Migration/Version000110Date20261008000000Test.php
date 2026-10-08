@@ -9,12 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Migration;
 
-use OCA\PaperlessSync\Migration\Version000109Date20261008000000;
+use OCA\PaperlessSync\Migration\Version000110Date20261008000000;
 use OCP\DB\ISchemaWrapper;
 use OCP\Migration\IOutput;
 use PHPUnit\Framework\TestCase;
 
-final class Version000109Date20261008000000Test extends TestCase {
+final class Version000110Date20261008000000Test extends TestCase {
 	public function testAddsTheAttemptsAndTheNextAttemptToTheImports(): void {
 		$imports = $this->table([]);
 
@@ -46,7 +46,7 @@ final class Version000109Date20261008000000Test extends TestCase {
 	}
 
 	private function migrate(ISchemaWrapper $schema): ?ISchemaWrapper {
-		return (new Version000109Date20261008000000())->changeSchema($this->createMock(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
+		return (new Version000110Date20261008000000())->changeSchema($this->createMock(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
 	}
 
 	private function schema(object $imports): ISchemaWrapper {

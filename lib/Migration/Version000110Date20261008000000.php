@@ -23,7 +23,7 @@ use OCP\Migration\SimpleMigrationStep;
  * @psalm-suppress UndefinedDocblockClass
  * @psalm-suppress UnnecessaryVarAnnotation
  */
-final class Version000109Date20261008000000 extends SimpleMigrationStep {
+final class Version000110Date20261008000000 extends SimpleMigrationStep {
 	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
 		/** @var ISchemaWrapper $schema */
 		$schema = $schemaClosure();
