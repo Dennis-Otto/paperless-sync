@@ -14,6 +14,17 @@ style('paperless_sync', 'settings');
 
 $config = $_['config'];
 $status = $_['status'];
+// The state of the last run as StatusService stores it, and its label; js/settings.js has the same.
+$state = (string)($status['state'] ?? 'never-run');
+$stateLabels = [
+	'never-run' => $l->t('Never run'),
+	'running' => $l->t('Running'),
+	'dry-run-running' => $l->t('Dry-run running'),
+	'completed' => $l->t('Completed'),
+	'dry-run-completed' => $l->t('Dry-run completed'),
+	'completed-with-errors' => $l->t('Completed with errors'),
+	'failed' => $l->t('Failed'),
+];
 ?>
 
 <div
@@ -35,7 +46,7 @@ $status = $_['status'];
 	<div class="paperless-sync-status-card" aria-live="polite">
 		<div>
 			<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
-			<strong id="paperless-sync-last-state"><?php p((string)($status['state'] ?? 'never-run')); ?></strong>
+			<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>"><?php p($stateLabels[$state] ?? $state); ?></strong>
 		</div>
 		<div>
 			<span class="paperless-sync-status-label"><?php p($l->t('Last completed')); ?></span>
