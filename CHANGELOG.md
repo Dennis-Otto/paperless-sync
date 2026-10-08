@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Bug fixes
+
+- The status in the settings names the state of the last run in the language of the user, such as "Completed" or "Abgeschlossen". Before, it showed an internal name such as `completed` or `never-run`, also in German.
+
 ## [0.1.8](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.7...v0.1.8) (2026-10-08)
 
 ### Bug fixes
