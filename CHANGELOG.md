@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.1.9](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.8...v0.1.9) (2026-10-08)
+
 ### Bug fixes
 
 - The report of a run by hand lists every file that the run wrote, moved or deleted and every import, as the report of a dry-run does. Before, it counted the changes but said "No file changes were required." below the counts.
