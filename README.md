@@ -1,5 +1,6 @@
 # Paperless Sync
 
+[![Documentation](https://img.shields.io/badge/docs-website-blue)](https://dennis-otto.github.io/paperless-sync/)
 [![CI](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml)
 [![Docker E2E](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml)
 [![Secret scan](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml)
@@ -14,17 +15,27 @@ Paperless Sync is a native Nextcloud app that mirrors finalized Paperless-ngx do
 
 Paperless remains the source of truth. Nextcloud provides convenient access through Files, desktop and mobile clients, sharing, and its viewer.
 
+The [documentation website](https://dennis-otto.github.io/paperless-sync/) has this documentation as a guide, together with the architecture, the security design and the roadmap.
+
 <sub>💛 If Paperless Sync is useful to you, you can [support its development](https://github.com/sponsors/Dennis-Otto).</sub>
 
 [Quick start](#quick-start) · [Architecture](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/architecture.md) · [Security design](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/security.md) · [Roadmap](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/roadmap.md) · [Releases](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/releases.md) · [Changelog](https://github.com/Dennis-Otto/paperless-sync/blob/main/CHANGELOG.md)
 
+<!-- --8<-- [start:quick-start-section] -->
+
 ## Quick start
+
+<!-- --8<-- [start:quick-start] -->
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
 2. In Paperless-ngx, create a dedicated account with view and download access to the documents to mirror, and an API token for it.
 3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
+
+<!-- --8<-- [end:quick-start] -->
+<!-- --8<-- [end:quick-start-section] -->
+<!-- --8<-- [start:features] -->
 
 ## Features
 
@@ -44,6 +55,9 @@ Paperless remains the source of truth. Nextcloud provides convenient access thro
 - Server-side token storage through Nextcloud's credentials manager
 - Automated semantic releases and signed App Store packages
 
+<!-- --8<-- [end:features] -->
+<!-- --8<-- [start:usage] -->
+
 ## Usage
 
 After installation, open **Administration settings → Paperless Sync**. Configure and test the connection while synchronization remains disabled. Run a dry-run, review the summary, and only then enable scheduled synchronization.
@@ -61,6 +75,9 @@ Dokumente/Paperless/Archiv/Example GmbH/Invoice/2026/2026-08-26 - Example invoic
 ```
 
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
+
+<!-- --8<-- [end:usage] -->
+<!-- --8<-- [start:configuration] -->
 
 ## Configuration
 
@@ -99,6 +116,8 @@ Only a copy that is still there is moved or deleted: a document whose copy is al
 ### Background jobs
 
 The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval is enforced by the app; each run limits modifications to the configured batch size.
+
+<!-- --8<-- [end:configuration] -->
 
 ## Testing
 
