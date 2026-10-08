@@ -24,6 +24,19 @@ What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.m
 
 ## Trust boundaries
 
+```mermaid
+flowchart LR
+    browser(["Browser of an<br>administrator"]) -->|1| app["Paperless Sync<br>in Nextcloud"]
+    app -->|2| paperless[("Paperless-ngx")]
+    app -->|3| files[("Files below the base folder<br>of the target user")]
+    writers(["Whoever may write<br>to the inbox folder"]) -->|4| files
+    app --- credentials[("Credentials manager<br>API token")]
+    classDef untrusted stroke:#c9302c,stroke-width:2px,stroke-dasharray:4 3
+    class browser,writers,paperless untrusted
+```
+
+Each numbered arrow crosses one of the boundaries below; the app checks whatever comes from the parties with a dashed red border.
+
 1. **Browser → app.** Requests pass Nextcloud's login, its CSRF check and the check of the administrator. The app checks every setting against what it may be: URLs with `http` or `https` and without credentials, a query or a fragment; numbers within their ranges; policies from a fixed list; folder names and paths without `.`, `..` or empty parts; a path template with known variables and the marker `{{ id }}`.
 2. **App → Paperless.** Every answer is untrusted input. JSON must have the expected shape, document IDs must be numbers, and every part of a path is cleaned of control characters, separators and names that Windows reserves. A download goes to a temporary file first and follows at most three redirects, only to `http` or `https`.
 3. **App → files of Nextcloud.** Only below the base folder of the target user, with the permissions of that user.

@@ -1,6 +1,19 @@
 # Docker end-to-end tests
 
-The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock. CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and every week against [the coming Nextcloud](#the-coming-nextcloud); set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
+The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock.
+
+```mermaid
+flowchart LR
+    run["run.sh"] -->|occ, WebDAV,<br>the app's routes| nextcloud
+    run -->|scenario, tasks| mock
+    subgraph compose ["Docker Compose project"]
+        nextcloud["Nextcloud<br>this checkout as a custom app"] -->|REST API| mock["Paperless mock<br>mock_server.py"]
+        browser["Chromium in the image of Playwright<br>accessibility.mjs, screenshots.mjs"] --> nextcloud
+    end
+    run --> browser
+```
+
+CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and every week against [the coming Nextcloud](#the-coming-nextcloud); set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
 
 Run locally:
 
@@ -37,6 +50,18 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 At the end of the scenario, `accessibility.mjs` checks the pages of the app in Chromium with [axe-core](https://github.com/dequelabs/axe-core) against WCAG 2.1 at levels A and AA, in the light and the dark theme of Nextcloud: the administration settings with every section open, and the report of a dry-run over a larger archive of the mock, whose list of changes scrolls. It signs in through the login form and looks only into `#paperless-sync-settings`, the element that holds the markup of `templates/`, `js/` and `css/`, so that what Nextcloud draws around it doesn't count. A serious or critical violation fails the suite; the others are listed in the log.
 
 The browser runs in the image of Playwright that `run.sh` names, inside the network of the Compose project, and reaches Nextcloud as `http://nextcloud`; the suite turns off the first-run wizard of Nextcloud, which would cover the pages. `package.json` and `package-lock.json` pin axe-core and playwright-core. Keep playwright-core at the version of the image: Renovate updates both together (`.github/renovate.json5`), and `scripts/check-project.sh` compares them.
+
+## Screenshots
+
+The pictures of the documentation in `docs/images/` and of the App Store in `screenshots/` come from the same containers:
+
+```bash
+bash tests/e2e/screenshots.sh
+```
+
+The Paperless mock serves a small household archive of invented documents (`showcase.py`): fourteen documents of seven correspondents, one still in the Paperless inbox, each a one-page PDF. `screenshots.mjs` then follows the quick start in Chromium: a dry-run and the first synchronization, recorded as `dry-run.gif`; the settings, each of their sections, and the archive in Files, in the light and the dark theme; a walk through the archive to a document in the viewer, recorded as `archive.gif`; and a dry-run a few days later, when the archive has a new title, a document in the trash, one with the excluded tag *Private*, two new documents and a finished import.
+
+The GIFs show a drawn pointer, since a screenshot has none, and share one palette across their frames. The image of Playwright has no font for the interface of Nextcloud, so the script installs Inter (`fonts.conf`). `E2E_PORT` (default `18084`), `E2E_PROJECT_NAME` and `KEEP_E2E=1` work as for `run.sh`. Look at every picture before committing it.
 
 ## The coming Nextcloud
 

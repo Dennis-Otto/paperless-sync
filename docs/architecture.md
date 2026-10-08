@@ -6,6 +6,34 @@ Paperless Sync is a Nextcloud app in PHP. It runs inside Nextcloud, reads Paperl
 
 ## Components
 
+```mermaid
+flowchart LR
+    admin(["Administrator"]) -->|configure, dry-run, run| settings
+    paperless[("Paperless-ngx")]
+    subgraph nextcloud ["Nextcloud server"]
+        cron(["Nextcloud cron"]) --> job["Background job<br>SyncJob"]
+        settings["Settings page<br>and controllers"] --> sync
+        settings --> config
+        job --> sync["Synchronization<br>SyncService"]
+        sync --> config["Configuration<br>ConfigService"]
+        sync --> client["Paperless client<br>PaperlessApiService"]
+        sync --> template["Path templates<br>PathTemplateService"]
+        sync --> storage["Storage<br>NextcloudStorageService"]
+        sync --> state["State<br>SyncStateRepository"]
+        sync --> status["Status<br>StatusService"]
+        config --> appconfig[("App configuration")]
+        config --> credentials[("Credentials manager<br>API token")]
+        state --> database[("Database<br>paperless_sync_export<br>paperless_sync_import")]
+        status --> appconfig
+        storage --> files[("Files of the<br>target user")]
+    end
+    client -->|REST API with the token| paperless
+    classDef external fill:#17541f,stroke:#17541f,color:#fff
+    classDef data fill:#0082c9,stroke:#0082c9,color:#fff
+    class paperless external
+    class appconfig,credentials,database,files data
+```
+
 | Component | Files | What it does |
 | --- | --- | --- |
 | Settings page | `lib/Settings/`, `templates/settings.php`, `js/settings.js` | The page under *Administration settings → Paperless Sync*: the configuration, a test of the connection, a dry run, a run by hand and the status of the last run |
@@ -21,10 +49,36 @@ Paperless Sync is a Nextcloud app in PHP. It runs inside Nextcloud, reads Paperl
 
 ## Data flow
 
-```text
-Paperless-ngx ──REST API, token──► Paperless client ──► Synchronization ──► Storage ──► files of the target user
-      ▲                                                     │      │
-      └─────────── uploads of the inbox, task status ───────┘      └──► State (database)
+One run, from the background job to the status:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cron as Nextcloud cron
+    participant Sync as Synchronization
+    participant Paperless as Paperless-ngx
+    participant Files as Files of the target user
+    participant State as State (database)
+    Cron->>Sync: every five minutes, when enabled and the interval has passed
+    Sync->>Sync: take the lock, check the configuration
+    Sync->>Paperless: test the connection
+    Sync->>Files: test the base folder
+    rect rgba(0, 130, 201, 0.12)
+        Note over Sync,State: Inbox
+        Sync->>Paperless: status of the tasks of earlier uploads
+        Sync->>Files: remove imported files, move failed ones to the error folder
+        Sync->>Paperless: upload new files of the inbox
+        Sync->>State: remember their tasks
+    end
+    rect rgba(23, 84, 31, 0.12)
+        Note over Sync,State: Export
+        Sync->>Paperless: documents, trash, correspondents, types, storage paths, tags
+        Sync->>State: compare with the paths and checksums of the last run
+        Sync->>Paperless: download new and changed documents
+        Sync->>Files: write, move, move to the deleted folder, delete
+        Sync->>State: save paths, checksums and missing runs
+    end
+    Sync->>Sync: prune empty folders, record the status, release the lock
 ```
 
 1. Nextcloud's cron starts the background job every five minutes. It runs only when synchronization is enabled and the configured interval has passed. An administrator can start a run or a dry run on the settings page as well.
