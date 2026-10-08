@@ -101,7 +101,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findImport($ownerUid, $path);
 		$now = time();
 		$values = array_intersect_key($values, array_flip([
-			'etag', 'task_id', 'status', 'submitted_at', 'last_error',
+			'etag', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -113,6 +113,8 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'task_id' => '',
 				'status' => 'pending',
 				'submitted_at' => $now,
+				'attempts' => 0,
+				'retry_at' => 0,
 				'last_error' => null,
 				'created_at' => $now,
 			], $values);
@@ -190,7 +192,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private function normalizeRow(array $row): array {
 		/** @var array<string, int|string|null> $result */
 		$result = [];
-		$integerColumns = ['id', 'document_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'created_at', 'updated_at'];
+		$integerColumns = ['id', 'document_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'attempts', 'retry_at', 'created_at', 'updated_at'];
 		/** @psalm-suppress MixedAssignment */
 		foreach ($row as $key => $value) {
 			if ($value === null) {

@@ -35,6 +35,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $tagInfo = ['names' => [], 'inbox' => []];
 	public ?\Throwable $downloadException = null;
 	public ?\Throwable $uploadException = null;
+	/** @var array<string, \Throwable> the failure of the upload of a file, by its name, ahead of $uploadException */
+	public array $uploadFailures = [];
+	/** @var list<string> the names of the files of every upload, also of the failed ones */
+	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
 	public function testConnection(string $url, string $token): void {
@@ -79,8 +83,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	}
 
 	public function uploadDocument($source, string $filename): string {
-		if ($this->uploadException !== null) {
-			throw $this->uploadException;
+		$this->uploadAttempts[] = $filename;
+		$failure = $this->uploadFailures[$filename] ?? $this->uploadException;
+		if ($failure !== null) {
+			throw $failure;
 		}
 		$content = stream_get_contents($source);
 		$this->uploads[$filename] = is_string($content) ? $content : '';

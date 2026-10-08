@@ -43,7 +43,7 @@ flowchart LR
 | Path templates | `lib/Service/PathTemplateService.php` | Turns the metadata of a document into its path, such as `Example GmbH/Invoice/2026/2026-08-26 - Example invoice [P123].pdf`, with every part cleaned for Nextcloud, macOS and Windows |
 | Storage | `lib/Service/NextcloudStorageService.php` | Creates folders and writes, moves and deletes files below the base folder of the target user, through Nextcloud's file API |
 | Synchronization | `lib/Service/SyncService.php` | One run: first the inbox, then the export with moves and renames, the trash and the guarded deletion; a lock keeps two runs apart |
-| State | `lib/Service/SyncStateRepository.php`, `lib/Migration/` | Two tables in Nextcloud's database: `paperless_sync_export` with the path, checksum and missing runs of every exported document, and `paperless_sync_import` with every file of the inbox and its Paperless task |
+| State | `lib/Service/SyncStateRepository.php`, `lib/Migration/` | Two tables in Nextcloud's database: `paperless_sync_export` with the path, checksum and missing runs of every exported document, and `paperless_sync_import` with every file of the inbox and its Paperless task, or the refusal of Paperless, or the failed attempts and the time of the next one |
 | Background job | `lib/Cron/SyncJob.php` | Starts a run from Nextcloud's cron when synchronization is enabled and the configured interval has passed |
 | Status | `lib/Service/StatusService.php`, `lib/Model/SyncReport.php` | The start, the end, the state, the summary and the last error of the latest run |
 
@@ -67,8 +67,8 @@ sequenceDiagram
         Note over Sync,State: Inbox
         Sync->>Paperless: status of the tasks of earlier uploads
         Sync->>Files: remove imported files, move failed ones to the error folder
-        Sync->>Paperless: upload new files of the inbox
-        Sync->>State: remember their tasks
+        Sync->>Paperless: upload new and changed files of the inbox, and those whose next attempt is due
+        Sync->>State: remember their tasks, refusals and next attempts
     end
     rect rgba(23, 84, 31, 0.12)
         Note over Sync,State: Export
@@ -83,7 +83,7 @@ sequenceDiagram
 
 1. Nextcloud's cron starts the background job every five minutes. It runs only when synchronization is enabled and the configured interval has passed. An administrator can start a run or a dry run on the settings page as well.
 2. The run takes a lock, checks that the app is configured, and tests the connection to Paperless and the base folder in Nextcloud.
-3. **Inbox:** the files of the inbox folder are uploaded to Paperless, at most as many as the batch size allows. Their tasks are followed in the next runs: after success the file is deleted or kept, as configured; after a failure it moves to the error folder, next to a text file with the reason.
+3. **Inbox:** the files of the inbox folder are uploaded to Paperless, at most as many as the batch size allows. Each file goes up from a copy in Nextcloud's temporary folder, so that the request has a `Content-Length` also when the file lies on object storage. Their tasks are followed in the next runs: after success the file is deleted or kept, as configured; after a failure it moves to the error folder, next to a text file with the reason. A file that Paperless refuses at once, with `400`, `413`, `415` or `422`, is remembered with its ETag and skipped until it changes. Any other failure, such as a timeout or a `5xx`, ends the uploads of the run, and the file waits for its next attempt: 15 minutes, doubled after each failure, at most a day.
 4. **Export:** every document gets its path from the path template. A new document is downloaded to a temporary file and then written; a document whose checksum changed is written again; a document whose metadata changed moves to its new path. Documents in the Paperless inbox and documents with an excluded tag are skipped, and their mirrored copies removed.
 5. **Trash and deletion:** a document in the Paperless trash moves to the deleted folder. A document that is missing from both the API and the trash for the configured number of complete runs is deleted, but only when permanent deletion is enabled.
 6. Empty folders are pruned, the state is saved, and the status records the report. A dry run does all of this without writing anything.

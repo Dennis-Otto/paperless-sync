@@ -308,6 +308,19 @@ assert_dav_file sync-target "${ERROR_PATH}" 'Synthetic inbox PDF broken.'
 assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'Synthetic unsupported mime type'
 assert_dav_missing e2e-other "${ERROR_PATH}"
 
+# Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
+# the runs after it don't upload it again until it changes.
+printf '%s\n' 'Synthetic unsupported file.' \
+	| curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--upload-file - \
+		"${DAV_BASE}/sync-target/Documents/Paperless/Inbox/notes.bin" >/dev/null
+sync_run false "${TMP_DIR}/import-rejected.json"
+assert_json import-rejected "${TMP_DIR}/import-rejected.json"
+sync_run false "${TMP_DIR}/import-waiting.json"
+assert_json import-waiting "${TMP_DIR}/import-waiting.json"
+assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
+
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
 	--header 'Accept: application/json' \
@@ -329,4 +342,4 @@ accessibility
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
 
-echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure, pruning, access isolation, and accessibility.'
+echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, access isolation, and accessibility.'

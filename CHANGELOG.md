@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Bug fixes
 
+- Files of the Nextcloud inbox reach Paperless also when Nextcloud can't tell their size beforehand, as for files on object storage such as S3. Before, the upload had no `Content-Length`, Paperless refused it with `No file was submitted.`, and the app uploaded every file of the inbox again in every run.
+- A file that Paperless refuses, such as one of an unsupported type, an empty one or one too large for a proxy in front of Paperless, stays in the inbox and is skipped until it changes. The report of the run and the Nextcloud log name the reason of Paperless once. Before, the app uploaded the file again in every run.
+- When Paperless can't be reached or fails with a server error, a run uploads no further files of the inbox, and the file is tried again after 15 minutes, then after twice as long each time, at most once a day. Before, every run uploaded every file of the inbox again.
 - The report of a run by hand lists every file that the run wrote, moved or deleted and every import, as the report of a dry-run does. Before, it counted the changes but said "No file changes were required." below the counts.
 - The status in the settings names the state of the last run in the language of the user, such as "Completed" or "Abgeschlossen". Before, it showed an internal name such as `completed` or `never-run`, also in German.
 
