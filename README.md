@@ -16,7 +16,7 @@ Paperless remains the source of truth. Nextcloud provides convenient access thro
 
 <sub>💛 If Paperless Sync is useful to you, you can [support its development](https://github.com/sponsors/Dennis-Otto).</sub>
 
-[Quick start](#quick-start) · [Architecture](docs/architecture.md) · [Security design](docs/security.md) · [Roadmap](docs/roadmap.md) · [Releases](docs/releases.md) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Architecture](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/architecture.md) · [Security design](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/security.md) · [Roadmap](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/roadmap.md) · [Releases](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/releases.md) · [Changelog](https://github.com/Dennis-Otto/paperless-sync/blob/main/CHANGELOG.md)
 
 ## Quick start
 
