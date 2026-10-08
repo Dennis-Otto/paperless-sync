@@ -276,7 +276,7 @@ try {
 		page.once('dialog', (dialog) => dialog.accept())
 		await animation.click(page.locator('#paperless-sync-run'))
 		await animation.until(page.locator('#paperless-sync-message', { hasText: 'Synchronization completed.' }).waitFor())
-		await animation.hold(500)
+		await animation.hold(2500)
 		await page.locator('#paperless-sync-settings').evaluate((element) => element.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 		await animation.record(1000)
 		await animation.hold(3500)
