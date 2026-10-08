@@ -9,6 +9,14 @@ All notable changes to this project are documented in this file.
 - The report of a run by hand lists every file that the run wrote, moved or deleted and every import, as the report of a dry-run does. Before, it counted the changes but said "No file changes were required." below the counts.
 - The status in the settings names the state of the last run in the language of the user, such as "Completed" or "Abgeschlossen". Before, it showed an internal name such as `completed` or `never-run`, also in German.
 
+## [0.1.9](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.8...v0.1.9) (2026-10-08)
+
+
+### Bug fixes
+
+* list the changes of a run by hand in its report ([#68](https://github.com/Dennis-Otto/paperless-sync/issues/68)) ([cdfa0d6](https://github.com/Dennis-Otto/paperless-sync/commit/cdfa0d6ea746f8271b33c06f0d5a3932ea32d5c8))
+* name the state of the last run in the language of the user ([#69](https://github.com/Dennis-Otto/paperless-sync/issues/69)) ([8b004fa](https://github.com/Dennis-Otto/paperless-sync/commit/8b004faaed25b12843df4d18f15bcf2bdb24bae2))
+
 ## [0.1.8](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.7...v0.1.8) (2026-10-08)
 
 ### Bug fixes
