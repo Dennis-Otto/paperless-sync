@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.1.9](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.8...v0.1.9) (2026-10-08)
+
 ### Bug fixes
 
 - Files of the Nextcloud inbox reach Paperless also when Nextcloud can't tell their size beforehand, as for files on object storage such as S3. Before, the upload had no `Content-Length`, Paperless refused it with `No file was submitted.`, and the app uploaded every file of the inbox again in every run.
