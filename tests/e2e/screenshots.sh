@@ -102,7 +102,7 @@ BROWSER='
 	cp fonts.conf /etc/fonts/local.conf
 	npm ci --ignore-scripts --no-audit --no-fund --loglevel=error
 	node screenshots.mjs
-	tar -C /tmp/pictures -cf - . >&3
+	tar -C pictures -cf - . >&3
 '
 tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json screenshots.mjs fonts.conf \
 	| "${DOCKER_BIN}" run --rm --interactive \

@@ -5,13 +5,14 @@
 // (screenshots/) in Chromium, in the light and the dark theme of Nextcloud, and records
 // two animations as GIFs. screenshots.sh sets the app up with the synthetic archive of
 // showcase.py and starts this script in the image of Playwright; the pictures go to
-// /tmp/pictures, which the script returns as a tar archive.
+// the folder pictures/ next to this script, which screenshots.sh returns as a tar archive.
 //
 // The story follows the quick start: a dry-run, the first synchronization, the archive
 // in Files, and a dry-run a few days later that shows every kind of change.
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
@@ -24,7 +25,7 @@ const MOCK_URL = process.env.E2E_MOCK_URL ?? 'http://paperless-mock:8080'
 const ADMIN = process.env.E2E_USER ?? 'e2e-admin'
 const OWNER = process.env.E2E_TARGET_USER ?? 'paperless'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
-const OUTPUT = '/tmp/pictures'
+const OUTPUT = fileURLToPath(new URL('pictures', import.meta.url))
 const THEMES = ['light', 'dark']
 const VIEWPORT = { width: 1280, height: 800 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
