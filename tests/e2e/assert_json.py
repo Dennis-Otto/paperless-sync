@@ -35,6 +35,8 @@ elif mode == "export":
     expect("dryRun", False)
     expect("exported", 1)
     expect("errors", 0)
+    if not any(str(action).startswith("EXPORT P123:") for action in payload.get("actions", [])):
+        raise AssertionError(f"The run lists no export: {payload!r}")
 elif mode == "move":
     expect("moved", 1)
     expect("exported", 0)
