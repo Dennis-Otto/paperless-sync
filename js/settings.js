@@ -88,8 +88,21 @@
 			return new Date(timestamp * 1000).toLocaleString()
 		}
 
+		// The state of the last run as StatusService stores it, and its label; templates/settings.php has the same.
+		const stateLabels = {
+			'never-run': translate('Never run'),
+			running: translate('Running'),
+			'dry-run-running': translate('Dry-run running'),
+			completed: translate('Completed'),
+			'dry-run-completed': translate('Dry-run completed'),
+			'completed-with-errors': translate('Completed with errors'),
+			failed: translate('Failed'),
+		}
+
 		function updateStatus(status) {
-			lastState.textContent = status.state || 'never-run'
+			const state = status.state || 'never-run'
+			lastState.textContent = stateLabels[state] || state
+			lastState.dataset.state = state
 			lastCompleted.textContent = formatTime(status.lastCompleted)
 			lastCompleted.dataset.timestamp = status.lastCompleted || 0
 			if (status.error) {
