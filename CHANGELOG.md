@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.1.8](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.7...v0.1.8) (2026-10-08)
+
 ### Bug fixes
 
 - The list of file changes in the report of a run can be scrolled with the keyboard and shows the focus, so that the long report of a large archive is readable without a mouse; screen readers name it "File changes of the run".
