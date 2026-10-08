@@ -73,6 +73,7 @@ final class SyncServiceTest extends TestCase {
 		$first = $this->service->run();
 		$initialPath = 'Dokumente/Paperless/Archiv/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
 		self::assertSame(1, $first->exported);
+		self::assertSame(['EXPORT P123: ' . $initialPath], $first->actions, 'A run lists its changes as a dry-run does.');
 		self::assertSame('%PDF-content-v1', $this->storage->files[$initialPath]);
 		self::assertSame(1, $this->paperless->downloads);
 
@@ -81,6 +82,7 @@ final class SyncServiceTest extends TestCase {
 		$moved = $this->service->run();
 		$renamedPath = 'Dokumente/Paperless/Archiv/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
 		self::assertSame(1, $moved->moved);
+		self::assertSame(['MOVE P123: ' . $renamedPath], $moved->actions);
 		self::assertArrayNotHasKey($initialPath, $this->storage->files);
 		self::assertArrayHasKey($renamedPath, $this->storage->files);
 		self::assertSame(1, $this->paperless->downloads, 'Metadata-only changes must not download the PDF again.');
@@ -93,6 +95,7 @@ final class SyncServiceTest extends TestCase {
 		$trashed = $this->service->run();
 		self::assertSame(1, $trashed->movedToTrash);
 		$trashPath = 'Dokumente/Paperless/Archiv/_Gelöscht/2026-08-27/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(['TRASH P123: ' . $trashPath], $trashed->actions);
 		self::assertArrayHasKey($trashPath, $this->storage->files);
 
 		unset($trashedDocument['deleted_at']);
@@ -100,6 +103,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->trash = [];
 		$restored = $this->service->run();
 		self::assertSame(1, $restored->moved);
+		self::assertSame(['MOVE P123: ' . $renamedPath], $restored->actions);
 		self::assertArrayHasKey($renamedPath, $this->storage->files);
 
 		$this->paperless->documents = [];
@@ -109,6 +113,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->trash = [];
 		$deleted = $this->service->run();
 		self::assertSame(1, $deleted->permanentlyDeleted);
+		self::assertSame(['DELETE P123: ' . $trashPath], $deleted->actions);
 		self::assertSame([], $this->storage->files);
 		self::assertSame([], $this->state->exports);
 	}
@@ -268,12 +273,14 @@ final class SyncServiceTest extends TestCase {
 
 		$submitted = $this->service->run();
 		self::assertSame(1, $submitted->importsSubmitted);
+		self::assertSame(['IMPORT: ' . $path], $submitted->actions);
 		self::assertSame(['police.pdf' => '%PDF-inbox'], $this->paperless->uploads);
 		self::assertArrayHasKey($path, $this->storage->files);
 
 		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => ''];
 		$completed = $this->service->run();
 		self::assertSame(1, $completed->importsSucceeded);
+		self::assertSame(['IMPORT SUCCESS: ' . $path], $completed->actions);
 		self::assertArrayNotHasKey($path, $this->storage->files);
 		self::assertSame([], $this->state->imports);
 	}
@@ -287,6 +294,7 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run();
 		$errorPath = 'Dokumente/Paperless/Fehler/broken.pdf';
 		self::assertSame(1, $report->importsFailed);
+		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
 		self::assertSame('broken', $this->storage->files[$errorPath]);
 		self::assertStringContainsString('Unsupported mime type', $this->storage->files[$errorPath . '.error.txt']);
 	}
@@ -455,6 +463,7 @@ final class SyncServiceTest extends TestCase {
 		$excluded = $this->service->run();
 
 		self::assertSame(1, $excluded->removedExcluded);
+		self::assertSame(['REMOVE EXCLUDED P123: ' . self::EXPORTED_PATH], $excluded->actions);
 		self::assertSame([], $this->storage->files);
 		self::assertSame([], $this->state->exports);
 
@@ -751,6 +760,7 @@ final class SyncServiceTest extends TestCase {
 
 		$deletedPath = self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
 		self::assertSame(1, $report->movedToTrash);
+		self::assertSame(['MISSING P123: ' . $deletedPath], $report->actions);
 		self::assertSame([$deletedPath => '%PDF-content'], $this->storage->files);
 		self::assertSame([self::EXPORTED_PATH, self::ARCHIVE], $this->storage->prunes[0]);
 		self::assertSame('missing', $this->state->exports[123]['state']);
@@ -851,7 +861,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run();
 
-		self::assertSame(['ERROR: Missing P123: conflict'], $report->actions);
+		self::assertSame(['ERROR: Missing P123: conflict', 'MISSING P124: ' . $this->deletedToday(124)], $report->actions);
 		self::assertSame(1, $report->movedToTrash, 'The other missing document still moves.');
 		self::assertSame('%PDF-content', $this->storage->files[$this->deletedToday(124)]);
 		self::assertSame('%PDF-content', $this->storage->files[self::EXPORTED_PATH]);
