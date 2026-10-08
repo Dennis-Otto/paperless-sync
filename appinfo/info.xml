@@ -82,6 +82,7 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
 	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.8/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
 	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.8/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.8/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
 	<dependencies>
 		<php min-version="8.2"/>
 		<nextcloud min-version="33" max-version="35"/>

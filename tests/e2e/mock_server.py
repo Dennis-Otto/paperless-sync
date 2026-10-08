@@ -10,6 +10,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+import showcase
+
 TOKEN = "e2e-only-token"
 DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
 LOCK = threading.Lock()
@@ -56,6 +58,8 @@ def archived_letter(number):
 
 def scenario_documents():
     scenario = STATE["scenario"]
+    if scenario in showcase.SCENARIOS:
+        return showcase.documents(scenario)
     if scenario == "active":
         return [document()], []
     if scenario == "renamed":
@@ -96,18 +100,28 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/trash/":
             self._page(trash)
         elif parsed.path == "/api/correspondents/":
-            self._page([{"id": 4, "name": "Example GmbH"}])
+            self._page(showcase.CORRESPONDENTS if self._showcase() else [{"id": 4, "name": "Example GmbH"}])
         elif parsed.path == "/api/document_types/":
-            self._page([{"id": 7, "name": "Invoice"}])
+            self._page(showcase.DOCUMENT_TYPES if self._showcase() else [{"id": 7, "name": "Invoice"}])
         elif parsed.path == "/api/storage_paths/":
             self._page([])
         elif parsed.path == "/api/tags/":
-            self._page([{"id": 9, "name": "Inbox", "is_inbox_tag": True}])
+            self._page(showcase.TAGS if self._showcase() else [{"id": 9, "name": "Inbox", "is_inbox_tag": True}])
         elif parsed.path == "/api/tasks/":
             task_id = parse_qs(parsed.query).get("task_id", [""])[0]
             with LOCK:
                 task = STATE["tasks"].get(task_id)
             self._page([] if task is None else [{"task_id": task_id, **task}])
+        elif self._showcase() and re.fullmatch(r"/api/documents/\d+/(download|metadata)/", parsed.path):
+            document_id = int(parsed.path.split("/")[3])
+            data = showcase.content(document_id)
+            if data is None:
+                self._json(404, {"detail": "Not found"})
+            elif parsed.path.endswith("/download/"):
+                self._bytes(200, data, "application/pdf")
+            else:
+                checksum = showcase.checksum(document_id)
+                self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif parsed.path == "/api/documents/123/download/":
             with LOCK:
                 STATE["downloads"] += 1
@@ -124,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive"}:
+            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive"} | showcase.SCENARIOS:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:
@@ -167,6 +181,10 @@ class Handler(BaseHTTPRequestHandler):
             )
             STATE["tasks"][task_id] = {"status": "PENDING", "message": ""}
         self._json(200, task_id)
+
+    def _showcase(self):
+        with LOCK:
+            return STATE["scenario"] in showcase.SCENARIOS
 
     def _authorized(self):
         valid = (

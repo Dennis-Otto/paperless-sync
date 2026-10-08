@@ -10,6 +10,10 @@ services:
       - /tmp
     volumes:
       - ./:/mock:ro
+    networks:
+      default:
+        # The name of Paperless in the screenshots of the documentation (screenshots.sh).
+        aliases: [paperless]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 2s

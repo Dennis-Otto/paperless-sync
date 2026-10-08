@@ -2,6 +2,23 @@
 
 Releases follow the [repository blueprint](https://github.com/Dennis-Otto/repo-blueprint): nobody chooses a version or writes release notes by hand.
 
+```mermaid
+flowchart TB
+    subgraph request ["The release pull request"]
+        direction LR
+        prs["Pull requests<br>fix: · feat: · feat!:"] -->|merged into main| bot["chore: release x.y.z<br>version and changelog"]
+    end
+    subgraph build ["Once the maintainer merges it"]
+        direction LR
+        draft["Draft release<br>with its tag"] --> package["Package built<br>and checked"] --> sign["Signed with the<br>app's certificate"] --> assets["Signature, SBOM,<br>provenance"]
+    end
+    subgraph publication ["Publication"]
+        direction LR
+        published["Release published,<br>immutable"] --> store["Nextcloud App Store"] --> verify["Release verified,<br>and every week again"]
+    end
+    request --> build --> publication
+```
+
 ## The release pull request
 
 Every pull request that changes something for users describes it under `## Unreleased` in `CHANGELOG.md`. The release bot (`.github/workflows/release.yml`) keeps a pull request titled `chore: release x.y.z` up to date with `main`:
