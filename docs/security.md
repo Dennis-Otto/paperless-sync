@@ -1,8 +1,8 @@
 # Security design
 
-[← README](../README.md) · [Architecture](architecture.md) · [Roadmap](roadmap.md) · [Releases](releases.md)
+[← README](https://github.com/Dennis-Otto/paperless-sync) · [Architecture](architecture.md) · [Roadmap](roadmap.md) · [Releases](releases.md)
 
-What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.md](../SECURITY.md) says how to report a vulnerability and how to verify a release, and argues why the repository and its releases are safe.
+What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SECURITY.md) says how to report a vulnerability and how to verify a release, and argues why the repository and its releases are safe.
 
 ## What you can expect
 
@@ -42,11 +42,11 @@ What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.m
 | Two runs at once break the state | A lock lets only one run at a time, and the background job never runs in parallel | `testRunWhileAnotherRunIsActiveIsAConflict`, `testCronChecksEveryFiveMinutesAndNeverRunsTwice` |
 | A slow or huge Paperless blocks Nextcloud | Timeouts for every request and the batch size for the changes of one run | `testBatchSizeLimitsTheChangesOfOneRun` in `tests/Unit/Service/SyncServiceTest.php` |
 
-The Docker end-to-end tests run the app in real Nextcloud containers of every supported version against a mock of the Paperless API ([tests/e2e/README.md](../tests/e2e/README.md)).
+The Docker end-to-end tests run the app in real Nextcloud containers of every supported version against a mock of the Paperless API ([tests/e2e/README.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md)).
 
 ## Residual risks
 
-- The permissions of the Paperless account decide what the app can read and do. Use a dedicated account with only the permissions of the features you use, as the [README](../README.md#paperless-connection) describes.
+- The permissions of the Paperless account decide what the app can read and do. Use a dedicated account with only the permissions of the features you use, as the [README](https://github.com/Dennis-Otto/paperless-sync#paperless-connection) describes.
 - An `http` URL is allowed, for a Paperless in a trusted local network; then the token and the documents travel unencrypted. Use `https` whenever the connection leaves such a network.
 - Everyone who can write to the inbox folder can add documents to Paperless while the inbox import is on. Share the inbox folder only with people who may do that.
 - The mirrored files follow Nextcloud's sharing: whoever the target user shares the archive with sees the documents.

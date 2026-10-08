@@ -1,6 +1,6 @@
 # Architecture
 
-[← README](../README.md) · [Security design](security.md) · [Roadmap](roadmap.md) · [Releases](releases.md)
+[← README](https://github.com/Dennis-Otto/paperless-sync) · [Security design](security.md) · [Roadmap](roadmap.md) · [Releases](releases.md)
 
 Paperless Sync is a Nextcloud app in PHP. It runs inside Nextcloud, reads Paperless-ngx through its REST API and writes files through Nextcloud's file API. It has no server, daemon or port of its own.
 
