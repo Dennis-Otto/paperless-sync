@@ -101,8 +101,7 @@ nav:
   - Roadmap: roadmap.md
   - Releases: releases.md
   - Changelog: changelog.md
-  # Once the blueprint has brought them:
-  # - Decisions: decisions/README.md
+  - Decisions: decisions/README.md
 
 # extra:
 #   alternate:

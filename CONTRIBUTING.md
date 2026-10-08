@@ -14,6 +14,18 @@ All changes reach the protected `main` branch through pull requests that pass ev
 - Changes to synchronization, deletion, path generation, permissions, scheduling, or Paperless API behavior must include focused unit coverage and an end-to-end scenario where practical. Review `tests/e2e/MANUAL_ACCEPTANCE_TESTS.md` before releases that affect user data.
 - Do not include real credentials, production endpoints, private documents, personal metadata, or screenshots and logs containing those values. Use reserved example domains and clearly synthetic fixtures.
 
+## Tests
+
+New functionality comes with tests in the automated test suite, in the same pull request, and so does every change of behavior. A bug fix comes with a test that fails without the fix, so that the bug can't return unnoticed. `scripts/check.sh` fails when a line of `lib/` runs in no test. A pull request without the tests it needs is not merged.
+
+## Coding standards
+
+- **PHP** follows the [Nextcloud coding standard](https://github.com/nextcloud/coding-standard), which builds on PSR-1 and PSR-2 and indents with tabs, as php-cs-fixer checks it, and passes Psalm at its strictest level, 1.
+- **Shell scripts** pass [ShellCheck](https://www.shellcheck.net/), **workflows** pass actionlint and zizmor's audit of their security, and **Markdown** follows the rules of markdownlint in `.markdownlint.jsonc`.
+- **Every text file** has LF line endings, no trailing whitespace and a line break at its end; `.editorconfig` sets up most editors for it.
+
+`scripts/check.sh` and the Lint workflow check these standards on every pull request, which merges only when they pass. An exception to a rule is rare and is marked at its place in the code, with its reason in a comment.
+
 ## Workflow
 
 1. Open an issue first for anything larger than a small fix, so we can agree on the approach.
@@ -42,6 +54,16 @@ git config core.hooksPath .githooks
 ```
 
 The dev container in `.devcontainer/` has all of this set up, for VS Code and for GitHub Codespaces: open the repository in it, and `bash scripts/check.sh` runs.
+
+## Website
+
+MkDocs builds the website from `mkdocs.yml` and the pages in `docs/`. The check *docs* builds it strictly in every pull request, so that a broken link fails, and every change of `main` publishes it on GitHub Pages. To see it while you write, at <http://127.0.0.1:8000>:
+
+```sh
+python3 -m venv .venv-docs
+.venv-docs/bin/pip install --require-hashes -r .github/docs-requirements.txt
+.venv-docs/bin/mkdocs serve
+```
 
 ## Releases
 
