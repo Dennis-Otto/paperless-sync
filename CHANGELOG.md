@@ -10,6 +10,13 @@ All notable changes to this project are documented in this file.
 - A file that Paperless refuses, such as one of an unsupported type, an empty one or one too large for a proxy in front of Paperless, stays in the inbox and is skipped until it changes. The report of the run and the Nextcloud log name the reason of Paperless once. Before, the app uploaded the file again in every run.
 - When Paperless can't be reached or fails with a server error, a run uploads no further files of the inbox, and the file is tried again after 15 minutes, then after twice as long each time, at most once a day. Before, every run uploaded every file of the inbox again.
 
+## [0.1.10](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.9...v0.1.10) (2026-10-08)
+
+
+### Bug fixes
+
+* upload inbox files with a Content-Length and stop retrying refused ones ([#74](https://github.com/Dennis-Otto/paperless-sync/issues/74)) ([57faf2c](https://github.com/Dennis-Otto/paperless-sync/commit/57faf2c7393928260cdc7bfa69c89b2cbc52522d))
+
 ## [0.1.9](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.8...v0.1.9) (2026-10-08)
 
 ### Bug fixes
