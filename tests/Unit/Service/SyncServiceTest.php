@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use LogicException;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
@@ -24,6 +25,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use RuntimeException;
 
 final class SyncServiceTest extends TestCase {
@@ -437,18 +439,202 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['a.pdf' => '%PDF-a'], $this->paperless->uploads);
 	}
 
-	public function testFailedUploadIsReportedAndRetriedInTheNextRun(): void {
+	public function testFailedUploadWaitsAndIsRetriedWhenItsTimeHasCome(): void {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
-		$this->paperless->uploadException = new RuntimeException('Paperless rejected the upload');
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 502: Bad Gateway', false, 502);
 
 		$failed = $this->service->run();
-		self::assertSame(['ERROR: Import ' . $path . ': Paperless rejected the upload'], $failed->actions);
-		self::assertSame([], $this->state->imports);
+		self::assertSame(['ERROR: Import ' . $path . ': Paperless answered the upload with HTTP 502: Bad Gateway (attempt 1, the next in 15 minutes)'], $failed->actions);
+		self::assertSame(1, $failed->errors);
+		self::assertSame('retry', $this->state->imports[$path]['status']);
+		self::assertSame(1, $this->state->imports[$path]['attempts']);
+		self::assertSame(900, $this->state->imports[$path]['retry_at'] - $this->state->imports[$path]['submitted_at']);
+		self::assertSame('Paperless answered the upload with HTTP 502: Bad Gateway', $this->state->imports[$path]['last_error']);
+
+		$waiting = $this->service->run();
+		self::assertSame([], $waiting->actions);
+		self::assertSame(0, $waiting->errors);
+		self::assertSame(1, $waiting->skipped);
+		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts, 'The file must wait for its next attempt.');
 
 		$this->paperless->uploadException = null;
+		$this->state->imports[$path]['retry_at'] = time();
 		$retried = $this->service->run();
 		self::assertSame(1, $retried->importsSubmitted);
+		self::assertSame(['police.pdf' => '%PDF-inbox'], $this->paperless->uploads);
+		self::assertSame('pending', $this->state->imports[$path]['status']);
+		self::assertSame(0, $this->state->imports[$path]['attempts']);
+		self::assertSame(0, $this->state->imports[$path]['retry_at']);
+		self::assertNull($this->state->imports[$path]['last_error']);
+	}
+
+	public function testWaitAfterAFailedUploadDoublesUpToADay(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
+		$levels = [];
+		$this->logger->method('log')->willReturnCallback(static function (string $level, string $message, array $context) use (&$levels): void {
+			$levels[] = $level;
+		});
+
+		$waits = [];
+		for ($run = 1; $run <= 10; ++$run) {
+			$this->service->run();
+			$import = $this->state->imports[$path];
+			self::assertSame($run, $import['attempts']);
+			$waits[] = intdiv($import['retry_at'] - $import['submitted_at'], 60);
+			$this->state->imports[$path]['retry_at'] = time();
+		}
+
+		self::assertSame([15, 30, 60, 120, 240, 480, 960, 1440, 1440, 1440], $waits);
+		self::assertSame([LogLevel::WARNING, ...array_fill(0, 9, LogLevel::INFO)], $levels, 'Only the first failure is a warning.');
+	}
+
+	public function testFileThatPaperlessRefusedWaitsUntilItChanges(): void {
+		$path = 'Dokumente/Paperless/Eingang/notes.zip';
+		$this->storage->files[$path] = 'PK-archive';
+		$reason = 'Paperless answered the upload with HTTP 400: document: File type application/zip not supported';
+		$this->paperless->uploadException = new PaperlessUploadException($reason, true, 400);
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless refused the inbox file {path}; it stays in the inbox until it changes: {reason}',
+			['path' => $path, 'reason' => $reason, 'status' => 400],
+		);
+
+		$refused = $this->service->run();
+		self::assertSame(['IMPORT REJECTED: ' . $path . ': ' . $reason], $refused->actions);
+		self::assertSame(1, $refused->importsFailed);
+		self::assertSame(0, $refused->errors);
+		self::assertSame('completed', $this->settings['status_last_state']);
+		self::assertSame('rejected', $this->state->imports[$path]['status']);
+		self::assertSame($reason, $this->state->imports[$path]['last_error']);
+		self::assertArrayHasKey($path, $this->storage->files, 'A refused file stays in the inbox.');
+
+		$this->paperless->uploadException = null;
+		for ($run = 0; $run < 3; ++$run) {
+			$skipped = $this->service->run();
+			self::assertSame([], $skipped->actions);
+			self::assertSame(0, $skipped->importsFailed);
+			self::assertSame(1, $skipped->skipped);
+		}
+		self::assertSame(['notes.zip'], $this->paperless->uploadAttempts, 'Paperless would refuse the same file again.');
+
+		$this->storage->files[$path] = '%PDF-replaced';
+		$changed = $this->service->run();
+		self::assertSame(1, $changed->importsSubmitted);
+		self::assertSame(['notes.zip' => '%PDF-replaced'], $this->paperless->uploads);
+		self::assertSame('pending', $this->state->imports[$path]['status']);
+	}
+
+	public function testRefusedFileIsUploadedAgainUnderANewName(): void {
+		$path = 'Dokumente/Paperless/Eingang/notes.zip';
+		$this->storage->files[$path] = '%PDF-1';
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 400: document: No file was submitted.', true, 400);
+		$this->service->run();
+		$this->paperless->uploadException = null;
+		$renamed = 'Dokumente/Paperless/Eingang/notes.pdf';
+		$this->storage->files[$renamed] = $this->storage->files[$path];
+		unset($this->storage->files[$path]);
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->importsSubmitted);
+		self::assertSame([$renamed], array_keys($this->state->imports));
+	}
+
+	public function testChangedFileIsUploadedAtOnceAfterAFailedUpload(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
+		$this->service->run();
+		$this->paperless->uploadException = null;
+		$this->storage->files[$path] = '%PDF-inbox-corrected';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->importsSubmitted);
+		self::assertSame(0, $this->state->imports[$path]['attempts']);
+	}
+
+	public function testRefusedFileDoesNotHoldUpTheOthers(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/a.zip'] = 'PK-a';
+		$this->storage->files['Dokumente/Paperless/Eingang/b.pdf'] = '%PDF-b';
+		$this->paperless->uploadFailures['a.zip'] = new PaperlessUploadException('Paperless answered the upload with HTTP 413.', true, 413);
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->importsFailed);
+		self::assertSame(1, $report->importsSubmitted);
+		self::assertSame(['b.pdf' => '%PDF-b'], $this->paperless->uploads);
+	}
+
+	public function testFailureOfOneFileDoesNotHoldUpTheOthers(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/a.pdf'] = '%PDF-a';
+		$this->storage->files['Dokumente/Paperless/Eingang/b.pdf'] = '%PDF-b';
+		$this->paperless->uploadFailures['a.pdf'] = new RuntimeException('Could not copy the file for the Paperless upload.');
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->errors);
+		self::assertSame(1, $report->importsSubmitted);
+		self::assertSame('retry', $this->state->imports['Dokumente/Paperless/Eingang/a.pdf']['status']);
+	}
+
+	public function testUnavailablePaperlessEndsTheUploadsOfTheRun(): void {
+		foreach (['a', 'b', 'c'] as $name) {
+			$this->storage->files["Dokumente/Paperless/Eingang/{$name}.pdf"] = "%PDF-{$name}";
+		}
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 503.', false, 503);
+
+		$first = $this->service->run();
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame(1, $first->errors);
+		self::assertSame(2, $first->skipped);
+		self::assertSame(['Dokumente/Paperless/Eingang/a.pdf'], array_keys($this->state->imports), 'Files that waited were not attempted.');
+
+		$second = $this->service->run();
+		self::assertSame(['a.pdf', 'b.pdf'], $this->paperless->uploadAttempts, 'Each run tries one more file while Paperless fails.');
+		self::assertSame(2, $second->skipped);
+
+		$this->paperless->uploadException = null;
+		$recovered = $this->service->run();
+		self::assertSame(1, $recovered->importsSubmitted);
+		self::assertSame(['c.pdf' => '%PDF-c'], $this->paperless->uploads);
+	}
+
+	public function testFailedUploadsTakeTheirPlaceInTheBatch(): void {
+		$this->configService->save(['batch_size' => 2]);
+		foreach (['a', 'b', 'c'] as $name) {
+			$this->storage->files["Dokumente/Paperless/Eingang/{$name}.zip"] = "PK-{$name}";
+		}
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 400.', true, 400);
+
+		$report = $this->service->run();
+
+		self::assertSame(['a.zip', 'b.zip'], $this->paperless->uploadAttempts);
+		self::assertSame(2, $report->importsFailed);
+		self::assertSame(1, $report->skipped);
+	}
+
+	public function testDryRunSkipsWaitingFilesAndKeepsTheirState(): void {
+		$refused = 'Dokumente/Paperless/Eingang/refused.zip';
+		$waiting = 'Dokumente/Paperless/Eingang/waiting.pdf';
+		$due = 'Dokumente/Paperless/Eingang/due.pdf';
+		$this->storage->files[$refused] = 'PK';
+		$this->storage->files[$waiting] = '%PDF-waiting';
+		$this->storage->files[$due] = '%PDF-due';
+		$this->paperless->uploadFailures['refused.zip'] = new PaperlessUploadException('Paperless answered the upload with HTTP 400.', true, 400);
+		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
+		$this->service->run();
+		$this->service->run();
+		$this->state->imports[$due]['retry_at'] = time();
+		$imports = $this->state->imports;
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['IMPORT: ' . $due], $report->actions);
+		self::assertSame(2, $report->skipped);
+		self::assertSame($imports, $this->state->imports);
 	}
 
 	public function testExcludedDocumentRemovesMirroredCopyAndCanBeExportedAgain(): void {

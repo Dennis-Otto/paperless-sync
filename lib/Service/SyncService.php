@@ -14,10 +14,15 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\Lock\ILockingProvider;
 use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use RuntimeException;
 
 final class SyncService {
 	private const LOCK_PATH = AppConstants::APP_ID . '::synchronization';
+	/** The wait after the first failed upload of a file whose failure may pass, in seconds; it doubles with each further one. */
+	private const RETRY_DELAY = 900;
+	/** The longest wait between two uploads of a file that keep failing, in seconds. */
+	private const MAX_RETRY_DELAY = 86400;
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -366,6 +371,9 @@ final class SyncService {
 		foreach ($files as $file) {
 			$byPath[$file['path']] = $file;
 		}
+		/** @var array<string, int> $attempts the failed uploads of each file whose next attempt is due */
+		$attempts = [];
+		$now = time();
 
 		foreach ($this->state->allImports($config->targetUser) as $pending) {
 			$path = (string)($pending['path'] ?? '');
@@ -376,12 +384,25 @@ final class SyncService {
 				}
 				continue;
 			}
-			if (($pending['status'] ?? '') === 'success' && ($pending['etag'] ?? '') === $file['etag']) {
+			$status = (string)($pending['status'] ?? '');
+			$unchangedFile = ($pending['etag'] ?? '') === $file['etag'];
+			if ($status === 'success' && $unchangedFile) {
 				++$report->unchanged;
 				unset($byPath[$path]);
 				continue;
 			}
-			if (($pending['status'] ?? '') !== 'pending') {
+			// A file that Paperless refused waits until it changes, and a file whose upload failed
+			// for a reason that may pass waits until its next attempt is due.
+			if ($status === 'retry' && $unchangedFile && (int)($pending['retry_at'] ?? 0) <= $now) {
+				$attempts[$path] = (int)($pending['attempts'] ?? 0);
+				continue;
+			}
+			if (($status === 'rejected' || $status === 'retry') && $unchangedFile) {
+				++$report->skipped;
+				unset($byPath[$path]);
+				continue;
+			}
+			if ($status !== 'pending') {
 				if (!$report->dryRun) {
 					$this->state->deleteImport($config->targetUser, $path);
 				}
@@ -429,15 +450,18 @@ final class SyncService {
 		}
 
 		$submitted = 0;
+		$paperlessFailed = false;
 		foreach ($byPath as $path => $file) {
-			if ($submitted >= $config->batchSize) {
+			// Every upload takes its place in the batch, also one that fails. After a failure that may
+			// pass, Paperless is down or overloaded, and the other files wait for the next run.
+			if ($submitted >= $config->batchSize || $paperlessFailed) {
 				++$report->skipped;
 				continue;
 			}
+			++$submitted;
 			if ($report->dryRun) {
 				$report->action("IMPORT: {$path}");
 				++$report->importsSubmitted;
-				++$submitted;
 				continue;
 			}
 			$stream = null;
@@ -449,19 +473,76 @@ final class SyncService {
 					'task_id' => $taskId,
 					'status' => 'pending',
 					'submitted_at' => time(),
+					'attempts' => 0,
+					'retry_at' => 0,
 					'last_error' => null,
 				]);
 				$report->action("IMPORT: {$path}");
 				++$report->importsSubmitted;
-				++$submitted;
+			} catch (PaperlessUploadException $exception) {
+				if ($exception->permanent) {
+					$this->rejectImport($config, $report, $path, $file['etag'], $exception);
+				} else {
+					$this->retryImportLater($config, $report, $path, $file['etag'], ($attempts[$path] ?? 0) + 1, $exception);
+					$paperlessFailed = true;
+				}
 			} catch (\Throwable $exception) {
-				$report->error("Import {$path}: {$this->exceptionMessage($exception)}");
+				$this->retryImportLater($config, $report, $path, $file['etag'], ($attempts[$path] ?? 0) + 1, $exception);
 			} finally {
 				if (is_resource($stream)) {
 					fclose($stream);
 				}
 			}
 		}
+	}
+
+	/**
+	 * Paperless would refuse the same file again, so it waits in the inbox until it changes. Only
+	 * this run reports and logs the reason; the runs until then skip the file quietly.
+	 */
+	private function rejectImport(SyncConfig $config, SyncReport $report, string $path, string $etag, PaperlessUploadException $exception): void {
+		$reason = $this->exceptionMessage($exception);
+		$this->state->saveImport($config->targetUser, $path, [
+			'etag' => $etag,
+			'task_id' => '',
+			'status' => 'rejected',
+			'submitted_at' => time(),
+			'attempts' => 0,
+			'retry_at' => 0,
+			'last_error' => mb_substr($reason, 0, 4000),
+		]);
+		$report->action("IMPORT REJECTED: {$path}: {$reason}");
+		++$report->importsFailed;
+		$this->logger->warning('Paperless refused the inbox file {path}; it stays in the inbox until it changes: {reason}', [
+			'path' => $path,
+			'reason' => $reason,
+			'status' => $exception->statusCode,
+		]);
+	}
+
+	/** The upload failed for a reason that may pass, so the file waits longer after each failure. */
+	private function retryImportLater(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, \Throwable $exception): void {
+		$error = $this->exceptionMessage($exception);
+		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
+		$minutes = intdiv($delay, 60);
+		$now = time();
+		$this->state->saveImport($config->targetUser, $path, [
+			'etag' => $etag,
+			'task_id' => '',
+			'status' => 'retry',
+			'submitted_at' => $now,
+			'attempts' => $attempts,
+			'retry_at' => $now + $delay,
+			'last_error' => mb_substr($error, 0, 4000),
+		]);
+		$report->error("Import {$path}: {$error} (attempt {$attempts}, the next in {$minutes} minutes)");
+		// The first failure of a file is a warning, the ones after it only information.
+		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
+			'path' => $path,
+			'error' => $error,
+			'attempts' => $attempts,
+			'minutes' => $minutes,
+		]);
 	}
 
 	/**

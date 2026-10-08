@@ -64,7 +64,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 ## The report of a run
 
-A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and for a dry-run a line for every file that a run would write, move or delete. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
+A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and for a dry-run a line for every file that a run would write, move or delete. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">

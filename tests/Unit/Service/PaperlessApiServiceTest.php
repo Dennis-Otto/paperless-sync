@@ -12,7 +12,9 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\PaperlessApiService;
+use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\UnsizedStream;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -277,16 +279,88 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testUploadSendsTheFileAndReturnsTheTask(): void {
-		$this->responses[] = [200, '"4f1e0f9a-task"'];
-		$source = $this->sink();
+		$sent = [];
+		$this->responses[] = function (array $options) use (&$sent): array {
+			$sent = $this->uploadedFile($options);
+			return [200, '"4f1e0f9a-task"'];
+		};
 
-		self::assertSame('4f1e0f9a-task', $this->service->uploadDocument($source, 'police.pdf'));
+		self::assertSame('4f1e0f9a-task', $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'));
 
 		$request = $this->requests[0];
 		self::assertSame('POST', $request['method']);
 		self::assertSame(self::URL . '/api/documents/post_document/', $request['url']);
-		self::assertSame([['name' => 'document', 'contents' => $source, 'filename' => 'police.pdf']], $request['options']['multipart']);
+		self::assertSame(['name' => 'document', 'filename' => 'police.pdf', 'content' => '%PDF-inbox', 'size' => 10], $sent);
 		self::assertArrayNotHasKey('Accept', $request['options']['headers']);
+		self::assertSame(180, $request['options']['timeout']);
+		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'), 'The copy of the file must be removed.');
+	}
+
+	public function testFileWithoutASizeIsSentWithOne(): void {
+		$sent = [];
+		$this->responses[] = function (array $options) use (&$sent): array {
+			$sent = $this->uploadedFile($options);
+			return [200, '"task"'];
+		};
+		$source = UnsizedStream::open('%PDF-on-object-storage');
+		self::assertFalse(fstat($source), 'A file on object storage has no size.');
+
+		$this->service->uploadDocument($source, 'police.pdf');
+
+		self::assertSame('%PDF-on-object-storage', $sent['content']);
+		self::assertSame(22, $sent['size'], 'Without a size the request has no Content-Length, and Paperless sees no file.');
+	}
+
+	public function testEmptyFileIsRefusedWithoutARequest(): void {
+		try {
+			$this->service->uploadDocument($this->source(''), 'empty.pdf');
+			self::fail('An empty file must be refused.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame('The file is empty.', $exception->getMessage());
+			self::assertTrue($exception->permanent);
+		}
+		self::assertSame([], $this->requests);
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	public function testUploadNeedsATemporaryFile(): void {
+		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager->method('getTemporaryFile')->willReturn(false);
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
+		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager);
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Could not create a temporary Paperless upload file.');
+		$service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+	}
+
+	public function testUploadThatCannotBeCopiedIsReported(): void {
+		$directory = sys_get_temp_dir() . '/paperless-sync-test-' . bin2hex(random_bytes(4));
+		mkdir($directory);
+		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager->method('getTemporaryFile')->willReturn($directory);
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
+		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager);
+		$warnings = [];
+		set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
+			$warnings[] = $message;
+			return true;
+		}, E_WARNING);
+
+		try {
+			$service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('A file that cannot be copied must be reported.');
+		} catch (RuntimeException $exception) {
+			self::assertNotInstanceOf(PaperlessUploadException::class, $exception);
+			self::assertSame('Could not copy the file for the Paperless upload.', $exception->getMessage());
+		} finally {
+			restore_error_handler();
+			rmdir($directory);
+		}
+		self::assertCount(1, $warnings);
 	}
 
 	/** @return array<string, array{mixed, string}> */
@@ -302,7 +376,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testUploadAcceptsTheTaskInAnObject(mixed $body, string $task): void {
 		$this->responses[] = [200, $body];
 
-		self::assertSame($task, $this->service->uploadDocument($this->sink(), 'police.pdf'));
+		self::assertSame($task, $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'));
 	}
 
 	public function testUploadWithoutATaskIsRejected(): void {
@@ -310,7 +384,7 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage('Paperless returned an invalid upload task response.');
-		$this->service->uploadDocument($this->sink(), 'police.pdf');
+		$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
 	}
 
 	public function testUploadRequiresASource(): void {
@@ -319,12 +393,72 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->service->uploadDocument('not a stream', 'police.pdf');
 	}
 
-	public function testRejectedUploadIsReported(): void {
-		$this->responses[] = [413, '{"detail": "Too large"}'];
+	/** @return array<string, array{int, mixed, string, bool}> */
+	public static function refusedUploads(): array {
+		$long = str_repeat('x', 400);
+		return [
+			'file without Content-Length' => [400, ['document' => ['No file was submitted.']], 'Paperless answered the upload with HTTP 400: document: No file was submitted.', true],
+			'unsupported type' => [400, ['document' => ['File type application/octet-stream not supported']], 'Paperless answered the upload with HTTP 400: document: File type application/octet-stream not supported', true],
+			'several fields' => [400, ['document' => ['a', ['b' => 'c']], 'title' => 'd', 'code' => [5, null]], 'Paperless answered the upload with HTTP 400: document: a c; title: d; code: 5', true],
+			'errors of the whole form' => [400, ['non_field_errors' => ['Invalid data.']], 'Paperless answered the upload with HTTP 400: Invalid data.', true],
+			'too large for the proxy' => [413, "<html>\n<head><title>413 Request Entity Too Large</title></head>\n<body><center><h1>413</h1></center><hr><center>cloudflare</center></body>\n</html>", 'Paperless answered the upload with HTTP 413: 413 Request Entity Too Large', true],
+			'unsupported media type' => [415, ['detail' => 'Unsupported media type.'], 'Paperless answered the upload with HTTP 415: Unsupported media type.', true],
+			'unprocessable' => [422, '"Cannot process"', 'Paperless answered the upload with HTTP 422: Cannot process', true],
+			'long reason' => [400, ['detail' => $long], 'Paperless answered the upload with HTTP 400: ' . str_repeat('x', 300), true],
+			'invalid token' => [401, ['detail' => 'Invalid token.'], 'Paperless answered the upload with HTTP 401: Invalid token.', false],
+			'missing permission' => [403, ['detail' => 'You do not have permission to perform this action.'], 'Paperless answered the upload with HTTP 403: You do not have permission to perform this action.', false],
+			'too many requests' => [429, ['Request was throttled.'], 'Paperless answered the upload with HTTP 429: Request was throttled.', false],
+			'server error' => [500, '<h1>Server Error (500)</h1>', 'Paperless answered the upload with HTTP 500: Server Error (500)', false],
+			'bad gateway' => [502, "<html><body>Bad &amp; broken\n gateway</body></html>", 'Paperless answered the upload with HTTP 502: Bad & broken gateway', false],
+			'unavailable without a body' => [503, '', 'Paperless answered the upload with HTTP 503.', false],
+			'no body' => [504, null, 'Paperless answered the upload with HTTP 504.', false],
+			'redirect' => [302, null, 'Paperless answered the upload with HTTP 302.', false],
+		];
+	}
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage('Paperless could not upload document: HTTP 413.');
-		$this->service->uploadDocument($this->sink(), 'police.pdf');
+	#[DataProvider('refusedUploads')]
+	public function testRefusedUploadNamesTheReasonOfPaperless(int $status, mixed $body, string $message, bool $permanent): void {
+		$this->responses[] = [$status, $body];
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('A refused upload must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame($message, $exception->getMessage());
+			self::assertSame($permanent, $exception->permanent, 'Only a refusal of the file itself repeats as long as the file stays the same.');
+			self::assertSame($status, $exception->statusCode);
+		}
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	public function testReasonMayComeAsAStream(): void {
+		$body = fopen('php://temp', 'w+b');
+		self::assertIsResource($body);
+		fwrite($body, '{"document": ["The submitted file is empty."]}');
+		rewind($body);
+		$this->responses[] = [400, $body];
+
+		$this->expectException(PaperlessUploadException::class);
+		$this->expectExceptionMessage('Paperless answered the upload with HTTP 400: document: The submitted file is empty.');
+		$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+	}
+
+	public function testUnreachablePaperlessMayPass(): void {
+		$timeout = new RuntimeException('cURL error 28: Operation timed out after 180001 milliseconds');
+		$this->responses[] = static function () use ($timeout): array {
+			throw $timeout;
+		};
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('An unreachable Paperless must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame('Paperless could not be reached for the upload: cURL error 28: Operation timed out after 180001 milliseconds', $exception->getMessage());
+			self::assertFalse($exception->permanent);
+			self::assertSame(0, $exception->statusCode);
+			self::assertSame($timeout, $exception->getPrevious());
+		}
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
 	}
 
 	public function testTaskStatusAndItsMessage(): void {
@@ -416,5 +550,33 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertIsResource($sink);
 
 		return $sink;
+	}
+
+	/** @return resource a file of the inbox */
+	private function source(string $content) {
+		$source = $this->sink();
+		fwrite($source, $content);
+		rewind($source);
+
+		return $source;
+	}
+
+	/**
+	 * The file in the request, read while the request is made, with the size that its stream has.
+	 *
+	 * @param array<string, mixed> $options
+	 * @return array{name: mixed, filename: mixed, content: string|false, size: mixed}
+	 */
+	private function uploadedFile(array $options): array {
+		$part = $options['multipart'][0];
+		self::assertIsResource($part['contents']);
+		$stat = fstat($part['contents']);
+
+		return [
+			'name' => $part['name'],
+			'filename' => $part['filename'],
+			'content' => stream_get_contents($part['contents']),
+			'size' => is_array($stat) ? $stat['size'] : null,
+		];
 	}
 }

@@ -179,14 +179,22 @@ Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is
 
 ```mermaid
 flowchart LR
-    file["📄 A file in 📁 Eingang"] -->|next run| uploaded["Uploaded to Paperless"]
-    uploaded --> task{"Its Paperless task,<br>in the next runs"}
+    file["📄 A file in 📁 Eingang"] -->|next run| upload{"Upload to<br>Paperless"}
+    upload -->|accepted| task{"Its Paperless task,<br>in the next runs"}
+    upload -->|"refused, such as an<br>unsupported file type"| refused["Stays in Eingang,<br>skipped until it changes"]
+    upload -->|"Paperless unreachable<br>or overloaded"| retry["Waits 15 minutes, then<br>twice as long each time,<br>up to a day"]
+    retry --> upload
+    refused -->|"saved anew, renamed<br>or replaced"| upload
     task -->|still running| task
     task -->|success| done["Removed from Eingang,<br>or kept, as configured"]
     task -->|failure| failed["Moved to 📁 Fehler, next to<br>a .error.txt with the reason"]
 ```
 
 A failed file keeps its subfolder below the error folder.
+
+Paperless may refuse a file right away: one of a type it doesn't take, an empty one, or one too large for a proxy in front of it, such as the 100 MB of the free plan of Cloudflare. The report of that run lists the file once as `IMPORT REJECTED`, with the reason that Paperless gave, and the Nextcloud log records it as a warning. The runs after it leave the file in the inbox and skip it until it changes; save it anew, rename or replace it to submit it again.
+
+When Paperless can't be reached, or fails with a server error such as `502 Bad Gateway`, the run uploads no further files and tries this one again later: after 15 minutes, then after twice as long each time, at most once a day. The other files follow in the next runs.
 
 ### Deletion safety
 

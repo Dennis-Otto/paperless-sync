@@ -95,8 +95,27 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame('task-1', $import['task_id']);
 		self::assertSame('e1', $import['etag']);
 		self::assertIsInt($import['submitted_at']);
+		self::assertSame(0, $import['attempts']);
+		self::assertSame(0, $import['retry_at']);
 		self::assertNull($import['last_error']);
 		self::assertNull($this->repository->findImport('paperless', 'Eingang/other.pdf'));
+	}
+
+	public function testFailedUploadRecordsItsAttemptsAndTheTimeOfTheNext(): void {
+		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'status' => 'retry', 'attempts' => 3, 'retry_at' => 1791460800, 'last_error' => 'HTTP 502']);
+
+		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
+		self::assertNotNull($import);
+		self::assertSame('retry', $import['status']);
+		self::assertSame(3, $import['attempts']);
+		self::assertSame(1791460800, $import['retry_at']);
+
+		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['status' => 'pending', 'attempts' => 0, 'retry_at' => 0]);
+
+		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
+		self::assertNotNull($import);
+		self::assertSame(0, $import['attempts']);
+		self::assertSame(0, $import['retry_at']);
 	}
 
 	public function testSavingAnExistingImportChangesOnlyTheGivenColumns(): void {

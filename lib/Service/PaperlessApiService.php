@@ -19,6 +19,9 @@ use UnexpectedValueException;
 
 final class PaperlessApiService implements PaperlessClientInterface {
 	private const PAGE_SIZE = 1000;
+	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
+	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
+	private const REASON_LENGTH = 300;
 	private IClient $client;
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -144,20 +147,68 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if (!is_resource($source)) {
 			throw new UnexpectedValueException('A readable upload stream is required.');
 		}
-		$response = $this->client->post(
-			$this->url('/api/documents/post_document/'),
-			[
-				'headers' => $this->headers(false),
-				'multipart' => [[
-					'name' => 'document',
-					'contents' => $source,
-					'filename' => $filename,
-				]],
-				'connect_timeout' => 10,
-				'timeout' => 180,
-			],
-		);
-		$this->requireSuccess($response->getStatusCode(), 'upload document');
+		$temporaryPath = $this->tempManager->getTemporaryFile();
+		if ($temporaryPath === false) {
+			throw new RuntimeException('Could not create a temporary Paperless upload file.');
+		}
+		chmod($temporaryPath, 0600);
+		$upload = fopen($temporaryPath, 'w+b');
+		try {
+			// The copy on local disk has a size, so that the request has a Content-Length. The stream of
+			// a file on object storage has none, and Paperless reads a body without one as "No file was
+			// submitted.", so that it refused every file of the inbox.
+			$size = is_resource($upload) ? stream_copy_to_stream($source, $upload) : false;
+			if (!is_resource($upload) || $size === false) {
+				throw new RuntimeException('Could not copy the file for the Paperless upload.');
+			}
+			if ($size === 0) {
+				// Paperless refuses it too: "The submitted file is empty."
+				throw new PaperlessUploadException('The file is empty.', true);
+			}
+			rewind($upload);
+
+			return $this->postDocument($upload, $filename);
+		} finally {
+			/** @psalm-suppress RedundantCondition Nextcloud's HTTP client may close the stream. */
+			if (is_resource($upload)) {
+				fclose($upload);
+			}
+			if (is_file($temporaryPath)) {
+				unlink($temporaryPath);
+			}
+		}
+	}
+
+	/** @param resource $upload */
+	private function postDocument($upload, string $filename): string {
+		try {
+			$response = $this->client->post(
+				$this->url('/api/documents/post_document/'),
+				[
+					'headers' => $this->headers(false),
+					'multipart' => [[
+						'name' => 'document',
+						'contents' => $upload,
+						'filename' => $filename,
+					]],
+					'connect_timeout' => 10,
+					'timeout' => 180,
+					// An error comes back as a response, so that the reason in its body can be read.
+					'http_errors' => false,
+				],
+			);
+		} catch (\Throwable $exception) {
+			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false, 0, $exception);
+		}
+		$status = $response->getStatusCode();
+		if ($status < 200 || $status >= 300) {
+			$reason = $this->errorReason($response->getBody());
+			throw new PaperlessUploadException(
+				"Paperless answered the upload with HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'),
+				in_array($status, self::PERMANENT_UPLOAD_STATUSES, true),
+				$status,
+			);
+		}
 		$data = $this->decodeBody($response->getBody());
 		if (is_string($data) && $data !== '') {
 			return $data;
@@ -312,6 +363,45 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		} catch (JsonException $exception) {
 			throw new UnexpectedValueException('Paperless returned invalid JSON.', 0, $exception);
 		}
+	}
+
+	/**
+	 * The reason in the body of an error, in one line: the messages of a validation error of
+	 * Paperless, such as {"document": ["File type text/plain not supported"]}, or the title of
+	 * the page of a proxy in front of it, such as "413 Request Entity Too Large".
+	 *
+	 * @param resource|string|null $body
+	 * @psalm-suppress MixedAssignment
+	 */
+	private function errorReason($body): string {
+		if (is_resource($body)) {
+			$body = stream_get_contents($body);
+		}
+		if (!is_string($body)) {
+			return '';
+		}
+		$decoded = json_decode($body, true);
+		if (is_array($decoded)) {
+			$parts = [];
+			foreach ($decoded as $field => $value) {
+				$messages = [];
+				$values = is_array($value) ? $value : [$value];
+				array_walk_recursive($values, static function (mixed $item) use (&$messages): void {
+					if (is_scalar($item)) {
+						$messages[] = (string)$item;
+					}
+				});
+				$text = implode(' ', $messages);
+				$parts[] = is_string($field) && !in_array($field, ['detail', 'non_field_errors'], true) ? "{$field}: {$text}" : $text;
+			}
+			$reason = implode('; ', $parts);
+		} elseif (is_string($decoded)) {
+			$reason = $decoded;
+		} else {
+			$reason = preg_match('#<title[^>]*>(.*?)</title>#is', $body, $match) === 1 ? $match[1] : strip_tags($body);
+		}
+
+		return mb_substr(trim((string)preg_replace('/\s+/', ' ', html_entity_decode($reason))), 0, self::REASON_LENGTH);
 	}
 
 	private function requireSuccess(int $statusCode, string $operation): void {

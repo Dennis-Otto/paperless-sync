@@ -29,7 +29,7 @@ The scenario verifies:
 - metadata-only moves without downloading the PDF again
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion
-- successful and failed Nextcloud inbox imports
+- successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs
 - accessibility of the administration settings and the run report, see [Accessibility](#accessibility)
@@ -43,7 +43,7 @@ Optional environment variables:
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 
-All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact.
+All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.`
 
 ## Accessibility
 

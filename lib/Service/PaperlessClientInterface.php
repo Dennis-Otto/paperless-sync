@@ -35,7 +35,10 @@ interface PaperlessClientInterface {
 
 	public function documentChecksum(int $documentId, bool $original): string;
 
-	/** @param resource $source */
+	/**
+	 * @param resource $source
+	 * @throws PaperlessUploadException when Paperless doesn't take the file, or can't be reached
+	 */
 	public function uploadDocument($source, string $filename): string;
 
 	/** @return array{status: string, message: string} */

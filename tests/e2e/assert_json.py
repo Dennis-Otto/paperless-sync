@@ -63,6 +63,21 @@ elif mode == "import-success":
 elif mode == "import-failed":
     expect("importsFailed", 1)
     expect("errors", 0)
+elif mode == "import-rejected":
+    expect("importsFailed", 1)
+    expect("importsSubmitted", 0)
+    expect("errors", 0)
+    if not any(
+        str(action).startswith("IMPORT REJECTED: Documents/Paperless/Inbox/notes.bin:")
+        and "File type application/octet-stream not supported" in str(action)
+        for action in payload.get("actions", [])
+    ):
+        raise AssertionError(f"The run names no refusal with the reason of Paperless: {payload!r}")
+elif mode == "import-waiting":
+    expect("importsFailed", 0)
+    expect("importsSubmitted", 0)
+    expect("skipped", 1)
+    expect("errors", 0)
 elif mode == "status":
     expect("state", "completed")
     expect("error", "")
@@ -81,5 +96,6 @@ elif mode == "mock-final":
         raise AssertionError(f"Unexpected upload filenames: {uploads!r}")
     if not all(item.get("containsFixture") is True for item in uploads):
         raise AssertionError(f"Uploaded fixtures were not transferred intact: {uploads!r}")
+    expect("refusedUploads", ["notes.bin"])
 else:
     raise AssertionError(f"Unknown assertion mode: {mode}")

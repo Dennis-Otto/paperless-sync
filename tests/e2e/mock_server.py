@@ -28,6 +28,7 @@ def reset_state():
                 "metadataRequests": 0,
                 "invalidAuth": 0,
                 "uploads": [],
+                "refusedUploads": [],
                 "tasks": {},
             }
         )
@@ -166,10 +167,22 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
 
+        # Like Django under Paperless, read a body only as long as its Content-Length: a
+        # chunked body without one arrives as no file at all.
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length)
         match = re.search(br'filename="([^"]+)"', body)
         filename = match.group(1).decode("utf-8", "replace") if match else "unknown"
+        refusal = None
+        if length == 0:
+            refusal = "No file was submitted."
+        elif b"Synthetic unsupported file" in body:
+            refusal = "File type application/octet-stream not supported"
+        if refusal is not None:
+            with LOCK:
+                STATE["refusedUploads"].append(filename)
+            self._json(400, {"document": [refusal]})
+            return
         with LOCK:
             task_id = f"task-{len(STATE['uploads']) + 1}"
             STATE["uploads"].append(
