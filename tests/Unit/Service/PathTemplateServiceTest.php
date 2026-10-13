@@ -294,6 +294,9 @@ final class PathTemplateServiceTest extends TestCase {
 			'TIFF by type' => [['original_file_name' => 'scan.ti-f', 'mime_type' => 'image/tiff'], true, '.tiff'],
 			'unknown type' => [['original_file_name' => 'scan', 'mime_type' => 'text/plain'], true, '.bin'],
 			'no type' => [['original_file_name' => 42], true, '.bin'],
+			// $ in a pattern also matches before a final line break, which must not reach the name.
+			'line break after the original extension' => [['original_file_name' => "scan.txt\n"], false, '.bin'],
+			'line break after the archive extension' => [['archived_file_name' => "archive.pdf\n", 'mime_type' => 'image/png'], true, '.png'],
 		];
 	}
 
@@ -312,6 +315,7 @@ final class PathTemplateServiceTest extends TestCase {
 			'digits first' => ['12abc'],
 			'empty' => [''],
 			'missing' => [null],
+			'line break after the digits' => ["1\n"],
 		];
 	}
 

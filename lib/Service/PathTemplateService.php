@@ -107,7 +107,8 @@ final class PathTemplateService {
 	): string {
 		/** @psalm-suppress MixedAssignment */
 		$id = isset($document['id']) ? (string)$document['id'] : '';
-		if ($id === '' || preg_match('/^\d+$/', $id) !== 1) {
+		// \z and not $, which also matches before a final line break: "5\n" is no ID.
+		if ($id === '' || preg_match('/^\d+\z/', $id) !== 1) {
 			throw new InvalidArgumentException('Paperless returned a document without a numeric ID.');
 		}
 
@@ -265,7 +266,8 @@ final class PathTemplateService {
 		$archiveName = is_string($archiveValue) ? $archiveValue : '';
 		$filename = $config->preferArchive && $archiveName !== '' ? $archiveName : $originalFilename;
 		$extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-		if (preg_match('/^[a-z0-9]{1,10}$/', $extension) !== 1) {
+		// \z and not $, which also matches before a final line break: the extension goes into the name uncleaned.
+		if (preg_match('/^[a-z0-9]{1,10}\z/', $extension) !== 1) {
 			/** @psalm-suppress MixedAssignment */
 			$mimeValue = $document['mime_type'] ?? null;
 			$mime = is_string($mimeValue) ? strtolower($mimeValue) : '';

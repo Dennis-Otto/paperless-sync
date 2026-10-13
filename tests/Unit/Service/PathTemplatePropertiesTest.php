@@ -66,7 +66,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 			$extension = substr($this->service->render($this->config('[P{{ id }}]{{ extension }}', $config->preferArchive), $document, [], [], []), strlen($marker));
 
 			$problems = [];
-			if (preg_match('/^\.[a-z0-9]{1,10}$/', $extension) !== 1) {
+			if (preg_match('/^\.[a-z0-9]{1,10}\z/', $extension) !== 1) {
 				$problems[] = "The extension {$extension} is not one.";
 			}
 			if (!str_ends_with($path, $extension)) {
@@ -186,7 +186,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 		if ($value === false || $value === '') {
 			return $default;
 		}
-		if (preg_match('/^\d{1,9}$/', $value) !== 1) {
+		if (preg_match('/^\d{1,9}\z/', $value) !== 1) {
 			self::fail("{$name} must be a whole number of at most nine digits, not {$value}.");
 		}
 
@@ -205,8 +205,8 @@ final class PathTemplatePropertiesTest extends TestCase {
 			'storage_path' => $this->pick($random, [3, null]),
 			'created' => $this->pick($random, ['2026-08-26', '2026-08-26T09:00:00+02:00', '0001-01-01', 'yesterday', null, 20260826]),
 			'added' => $this->pick($random, ['2026-09-01', '1999-12-31T23:59:59Z', '', null]),
-			'original_file_name' => $random->getInt(0, 9) === 0 ? null : $this->text($random, 8) . $this->pick($random, ['.pdf', '.PDF', '.jpeg', '.ti-f', '.', '', '.' . $this->text($random, 2)]),
-			'archived_file_name' => $this->pick($random, [null, '', 'archive.pdf', $this->text($random, 4) . '.PDF']),
+			'original_file_name' => $random->getInt(0, 9) === 0 ? null : $this->text($random, 8) . $this->pick($random, ['.pdf', '.PDF', '.jpeg', '.ti-f', '.', '', ".pdf\n", ".txt\t", '.' . $this->text($random, 2)]),
+			'archived_file_name' => $this->pick($random, [null, '', 'archive.pdf', $this->text($random, 4) . '.PDF', "archive.pdf\n"]),
 			'mime_type' => $this->pick($random, ['application/pdf', 'image/jpeg', 'IMAGE/PNG', 'image/tiff', 'text/plain', null]),
 		];
 		$fallback = fn (): string => $this->service->cleanComponent($this->text($random, 6), 'Unknown');
