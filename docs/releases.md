@@ -46,4 +46,4 @@ The `release` environment allows only `main`. It holds `APP_PRIVATE_KEY` (the ke
 
 If a job fails, re-run the failed jobs of the Release workflow: a draft is completed, and the App Store accepts the same version again without a second release. A published release is never replaced.
 
-Registering the app in the App Store, needed once and again only for a new certificate, is the manual workflow *Register app in Nextcloud App Store*.
+Registering the app in the App Store, which is needed once and again only for a new certificate, is the manual workflow *Register app in Nextcloud App Store*.
