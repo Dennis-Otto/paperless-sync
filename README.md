@@ -22,7 +22,7 @@ raise of max-version by the upstream bot; scripts/check-project.sh checks that t
 
 Paperless Sync is a native Nextcloud app. It writes the finished documents of Paperless-ngx into a folder tree in the files of a Nextcloud user, by correspondent, document type and year, and keeps the tree current: a new title renames a file, a new correspondent moves it, and the Paperless trash has a folder of its own. Files that you put into an inbox folder in Nextcloud go the other way, to Paperless. Paperless remains the source of truth, and Nextcloud gives you the documents in Files, in its desktop and mobile clients, in its viewer and in shares.
 
-Unlike a mount of the media folder of Paperless or a script that copies over WebDAV, Paperless Sync runs inside Nextcloud as one of its background jobs: it needs no extra container and no stored Nextcloud password, the copies are real files of Nextcloud with versions, shares and search, an edit in Nextcloud never reaches the originals in Paperless, and a copy is deleted only after complete scans of Paperless confirm that its document is gone.
+Unlike a mount of the media folder of Paperless or a script that copies over WebDAV, Paperless Sync runs inside Nextcloud as one of its background jobs: it needs no extra container and no stored Nextcloud password, the copies are real files of Nextcloud with versions, shares and search, an edit in Nextcloud never reaches the originals in Paperless, and a copy whose document leaves Paperless is deleted only when you turn permanent deletion on, after complete scans of Paperless confirm that the document is gone.
 
 The [documentation website](https://dennis-otto.github.io/paperless-sync/) has this guide, together with the [architecture](docs/architecture.md), the [security design](docs/security.md), the [decisions](docs/decisions/README.md) and the [roadmap](docs/roadmap.md).
 
@@ -79,7 +79,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 - **Nextcloud <span data-app="nextcloud">33–35</span>**, with the system cron for its background jobs, as Nextcloud recommends: *Administration settings → Basic settings → Background jobs → Cron*. Every run of the app is one of these jobs.
 - **PHP <span data-app="php">8.2+</span>** on the Nextcloud server.
-- **Paperless-ngx 2.10 or newer**, the first version with a trash, which the app mirrors, at an address that the Nextcloud server reaches over HTTP or HTTPS. A Paperless at an address of the local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, works today only with the system setting `allow_local_remote_servers` of Nextcloud, which turns off its protection against server-side request forgery for the whole server; [#110](https://github.com/Dennis-Otto/paperless-sync/issues/110) narrows it to Paperless.
+- **Paperless-ngx 2.10 or newer**, the first version with a trash, which the app mirrors, at an address that the Nextcloud server reaches over HTTP or HTTPS. A Paperless at an address of the local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, works today only with the system setting `allow_local_remote_servers` of Nextcloud, which turns off its protection against server-side request forgery for the whole server; [#110](https://github.com/Dennis-Otto/paperless-sync/issues/110) tracks a setting that allows only the address of Paperless.
 - **A Paperless account for the app**, with an API token. It needs to view and download the documents to mirror, to see them in the trash for the deleted folder, and the permission `documents.add_document` for the inbox; [Paperless connection](#paperless-connection) has the details.
 
 <!-- --8<-- [end:requirements] -->
@@ -106,7 +106,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - A folder tree in the files of the configured Nextcloud user, by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
 - The archive PDF of each document, or its original file
 - Renames and moves when the metadata changes in Paperless, and no empty folders left behind
-- Documents in the Paperless inbox wait until they are finished, and a document with a tag that you exclude stays out, its copy removed when it gets the tag
+- Documents in the Paperless inbox wait until they are finished, and a document that gets a tag you exclude, or the inbox tag again, stays out, its copy removed
 - A stable marker such as `[P123]` in every file name, which [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) understands
 
 ### Inbox
