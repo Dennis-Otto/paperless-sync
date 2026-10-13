@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
-# end-to-end tests, the rules that decide when they run, the icon of the website,
-# and the JavaScript of the settings and the translations, which have no build step.
+# end-to-end tests, the rules that decide when they run, the icon and the hook of the
+# website, and the JavaScript of the settings and the translations, which have no
+# build step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -44,7 +45,7 @@ done
 for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e2e/README.md \
   tests/e2e/MANUAL_ACCEPTANCE_TESTS.md tests/Unit/Service/SyncServiceTest.php scripts/check.sh \
   mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
-  .github/social-cards/preview.yml \
+  .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
   composer.lock screenshots/01-admin-settings.png; do
   expect skip "$path"
@@ -119,6 +120,15 @@ if ! cmp -s img/app.svg docs/images/app.svg; then
   exit 1
 fi
 echo "The website shows the icon of the app, img/app.svg."
+
+printf '\n== %s\n' "Hook of the website"
+# The hook .github/mkdocs_project.py writes the versions of appinfo/info.xml on the
+# home page. Its tests need Python alone, no MkDocs.
+if command -v python3 >/dev/null 2>&1; then
+  python3 -B tests/website/test_mkdocs_project.py
+else
+  echo "Python 3 is not installed here; the CI tests the hook of the website."
+fi
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then

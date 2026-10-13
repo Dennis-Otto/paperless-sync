@@ -389,34 +389,34 @@ The pictures of the documentation and of the App Store come from the same Docker
 bash tests/e2e/screenshots.sh
 ```
 
-`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds with `scripts/check-package.sh`, and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, and the JavaScript and the translations.
+`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds with `scripts/check-package.sh`, and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, the tests of its hook, and the JavaScript and the translations.
 
-The [website](https://dennis-otto.github.io/paperless-sync/) takes its look from the app. The icon of the app is its logo, its favicon and the logo of its preview cards, from a copy in `docs/images/app.svg` that `scripts/check-project.sh` keeps equal to `img/app.svg`. `docs/stylesheets/brand.css` holds the colours of the icon, in shades that pass WCAG AA in the light and the dark palette. A link to the home page shows the social preview of the repository, `.github/social-preview.png`, which `bash scripts/social-preview.sh` renders from `.github/social-preview.html`, and the versions of Nextcloud and PHP on the home page come from `appinfo/info.xml` through the hook `.github/mkdocs_project.py`:
+The [website](https://dennis-otto.github.io/paperless-sync/) takes its look from the app. The icon of the app is its logo, its favicon and the logo of its preview cards, from a copy in `docs/images/app.svg` that `scripts/check-project.sh` keeps equal to `img/app.svg`. `docs/stylesheets/brand.css` holds the colors of the icon, in shades that pass WCAG AA in the light and the dark palette. A link to the home page shows the social preview of the repository, `.github/social-preview.png`, which `bash scripts/social-preview.sh` renders from `.github/social-preview.html`, and the versions of Nextcloud and PHP on the home page come from `appinfo/info.xml` through the hook `.github/mkdocs_project.py`, which writes them into the fields such as `<span data-app="php">8.2+</span>` of `docs/index.md`; GitHub shows the text of the fields as written:
 
 ```mermaid
 flowchart TB
     accTitle: Where the website of Paperless Sync takes its look from
-    accDescr: The icon of the app, img/app.svg, is copied to docs/images/app.svg, which scripts/check-project.sh compares with it; the website shows the copy as its logo, its favicon and on the preview cards of its pages. The social preview of the repository, rendered from .github/social-preview.html, is the preview card of the home page. The colours come from docs/stylesheets/brand.css, and the hook .github/mkdocs_project.py writes the versions of appinfo/info.xml on the home page. The files of the repository are green, the parts of the website blue.
+    accDescr: The icon of the app, img/app.svg, is copied to docs/images/app.svg, which scripts/check-project.sh compares with it; the website shows the copy as its logo, its favicon and on the preview cards of its pages. The social preview of the repository, rendered from .github/social-preview.html, is the preview card of the home page. The colors come from docs/stylesheets/brand.css, and the hook .github/mkdocs_project.py writes the versions of appinfo/info.xml on the home page. The files of the repository are green, the parts of the website blue.
 
     icon["img/app.svg<br>the icon of the app"]
     copy["docs/images/app.svg"]
     preview["social-preview.html<br>→ social-preview.png"]
-    colours["docs/stylesheets/<br>brand.css"]
+    colors["docs/stylesheets/<br>brand.css"]
     info["appinfo/info.xml"]
     logo(["Logo, favicon and<br>preview cards"])
     home(["Preview card of<br>the home page"])
-    palette(["Colours, light<br>and dark"])
+    palette(["Colors, light<br>and dark"])
     chips(["Versions on<br>the home page"])
 
     icon -- "copied, compared by<br>check-project.sh" --> copy
     copy --> logo
     preview --> home
-    colours --> palette
+    colors --> palette
     info -- "mkdocs_project.py" --> chips
 
     classDef source fill:#17803d2e,stroke:#17803d,stroke-width:2px
     classDef website fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class icon,copy,preview,colours,info source
+    class icon,copy,preview,colors,info source
     class logo,home,palette,chips website
 ```
 

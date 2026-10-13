@@ -1,11 +1,13 @@
 """The hook of the website of Paperless Sync, beside the hooks of the blueprint.
 
-mkdocs.yml names this file under hooks. A page that writes {{ app.nextcloud }} or
-{{ app.php }} shows the versions of Nextcloud and PHP that appinfo/info.xml asks
-for, such as 33 to 35 and 8.2 or later, so that the home page follows a change of
-the app, such as the pull request of the upstream bot that raises max-version,
-without an edit of its own. A placeholder that this hook doesn't know fails the
-build.
+mkdocs.yml names this file under hooks. A page shows a version that appinfo/info.xml
+asks for in a field, such as <span data-app="php">8.2+</span>, named nextcloud or php.
+The hook writes the versions of info.xml into every field, so that the website follows
+a change of the app, such as the pull request of the upstream bot that raises
+max-version, without an edit of its own. The text in the Markdown is what github.com
+shows, and it may lag behind the website until the next edit of the page. A field that
+this hook doesn't know or can't read fails the build.
+tests/website/test_mkdocs_project.py tests the hook.
 """
 
 from __future__ import annotations
@@ -17,9 +19,9 @@ from xml.etree import ElementTree
 
 from mkdocs.exceptions import PluginError
 
-# Any placeholder of this hook, known or not.
-PLACEHOLDER = re.compile(r"\{\{ app\.[^}]*\}\}")
-# The values of the placeholders, read at the start of the last build.
+# A field of this hook: its name and the text that the hook replaces.
+FIELD = re.compile(r'<span data-app="([^"]*)">[^<]*</span>')
+# The versions for the fields, by name, read at the start of the last build.
 VALUES: dict[str, str] = {}
 
 
@@ -44,18 +46,23 @@ def on_config(config: Any) -> None:
     if dependencies is None:
         raise PluginError("appinfo/info.xml has no dependencies.")
     VALUES.clear()
-    VALUES["{{ app.nextcloud }}"] = versions(
-        dependencies.find("nextcloud"), "Nextcloud"
-    )
-    VALUES["{{ app.php }}"] = versions(dependencies.find("php"), "PHP")
+    VALUES["nextcloud"] = versions(dependencies.find("nextcloud"), "Nextcloud")
+    VALUES["php"] = versions(dependencies.find("php"), "PHP")
 
 
 def on_page_markdown(markdown: str, *, page: Any, **_: Any) -> str:
-    """Fill in the placeholders of a page."""
-    for placeholder, value in VALUES.items():
-        markdown = markdown.replace(placeholder, value)
-    unknown = PLACEHOLDER.search(markdown)
-    if unknown:
-        source = page.file.src_uri
-        raise PluginError(f"{source} has the unknown placeholder {unknown[0]}.")
+    """Write the versions into the fields of a page."""
+    source = page.file.src_uri
+
+    def fill(field: re.Match[str]) -> str:
+        name = field[1]
+        if name not in VALUES:
+            raise PluginError(f'{source} has the unknown field data-app="{name}".')
+        return f'<span data-app="{name}">{VALUES[name]}</span>'
+
+    markdown, filled = FIELD.subn(fill, markdown)
+    if markdown.count("data-app") != filled:
+        raise PluginError(
+            f'{source} has a field that isn\'t <span data-app="name">text</span>.'
+        )
     return markdown

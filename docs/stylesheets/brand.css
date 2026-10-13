@@ -1,6 +1,6 @@
-/* The brand of Paperless Sync on its website: the colours of its icon, img/app.svg,
+/* The brand of Paperless Sync on its website: the colors of its icon, img/app.svg,
    in shades that read well. mkdocs.yml sets primary and accent to custom in both
-   palettes, so these colours take the place of Material's indigo. Every pair passes
+   palettes, so these colors take the place of Material's indigo. Every pair passes
    WCAG AA, most AAA:
 
    - Header and primary button: a dark shade of the green of the icon, #145c4a, with
@@ -40,7 +40,7 @@
   --md-accent-bg-color--light: hsla(var(--md-hue), 15%, 14%, 0.7);
 }
 
-/* A button without a fill has the colour of the links on the dark background, where
+/* A button without a fill has the color of the links on the dark background, where
    the dark green of the header would be too faint. */
 [data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary, :focus, :hover) {
   color: var(--md-typeset-a-color);

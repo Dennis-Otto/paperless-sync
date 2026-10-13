@@ -15,10 +15,10 @@ social:
 
 A native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can submit files from a Nextcloud inbox to Paperless. Paperless remains the source of truth.
 
-<!-- The hook in .github/mkdocs_project.py fills in the versions from appinfo/info.xml. -->
+<!-- On the website, the hook in .github/mkdocs_project.py writes the versions of appinfo/info.xml into the fields. -->
 <ul class="ps-requirements" aria-label="Requirements">
-  <li>Nextcloud {{ app.nextcloud }}</li>
-  <li>PHP {{ app.php }}</li>
+  <li>Nextcloud <span data-app="nextcloud">33–35</span></li>
+  <li>PHP <span data-app="php">8.2+</span></li>
   <li>Paperless-ngx with an API token</li>
   <li>Nextcloud's system cron</li>
 </ul>
