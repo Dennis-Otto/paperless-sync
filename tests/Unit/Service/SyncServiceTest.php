@@ -395,6 +395,37 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	/**
+	 * A move that waits for the next run, because the batch is full or Nextcloud refused a write,
+	 * keeps the MD5 that the read of its mirrored file found, so every mirrored file is read once,
+	 * also when the moves of a large archive take many runs. A dry-run saves nothing.
+	 */
+	public function testFingerprintOfAnEarlierVersionReadsTheMirroredFileOnceWhenTheMoveWaitsOnPaperless2(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocuments([$this->document(123), $this->document(124)]);
+		$this->configService->save(['batch_size' => 1]);
+		foreach ($this->paperless->documents as $index => $document) {
+			$this->state->exports[(int)$document['id']]['fingerprint'] = hash('sha256', '%PDF-content');
+			$this->paperless->documents[$index]['title'] = 'Strom August korrigiert';
+			$this->paperless->documents[$index]['modified'] = '2026-08-26T11:00:00+02:00';
+		}
+
+		$dryRun = $this->service->run(true);
+		self::assertSame(1, $dryRun->moved);
+		self::assertSame([hash('sha256', '%PDF-content'), hash('sha256', '%PDF-content')], [$this->state->exports[123]['fingerprint'], $this->state->exports[124]['fingerprint']], 'A dry-run saves nothing.');
+		$this->storage->reads = [];
+		$first = $this->service->run();
+		$second = $this->service->run();
+
+		self::assertSame([1, 1, 0], [$first->moved, $first->skipped, $first->exported]);
+		self::assertSame([1, 1, 0], [$second->moved, $second->unchanged, $second->exported]);
+		self::assertSame(2, $this->paperless->downloads, 'A change of the metadata alone must not download the documents again.');
+		self::assertEqualsCanonicalizing([$this->archivePath(123), $this->archivePath(124)], $this->storage->reads, 'Each mirrored file is read once.');
+		foreach ([123, 124] as $documentId) {
+			self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[$documentId]['fingerprint']);
+		}
+	}
+
+	/**
 	 * A mirrored file with other content than the download that the earlier version saved, or one
 	 * that Nextcloud can't read, can't vouch for the document, so the document is downloaded again:
 	 * the file moves to its new path and gets the content of the download there.

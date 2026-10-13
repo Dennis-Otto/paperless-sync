@@ -163,7 +163,13 @@ final class SyncService {
 					$sameContent = ($entry['source_revision'] ?? '') === $sourceRevision;
 					if (!$sameContent) {
 						$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
+						$stored = $fingerprint;
 						$fingerprint = $this->completedFingerprint($config, $oldPath, $fingerprint, $checksum);
+						// The completed fingerprint names the content of the mirrored file, whatever the run does
+						// next, so a move that waits for the next run doesn't read the file once more.
+						if ($fingerprint !== $stored && !$report->dryRun) {
+							$this->state->saveExport($config->targetUser, $documentId, ['fingerprint' => $fingerprint]);
+						}
 						$sameContent = DocumentFingerprint::matches($fingerprint, $checksum);
 					}
 				}
