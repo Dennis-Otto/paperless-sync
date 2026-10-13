@@ -15,7 +15,7 @@ Nextcloud ties shares and public links, comments, tags, favorites and the versio
 
 ## Decision
 
-Option 3. A copy whose path and content change moves first, which keeps its ID, and then gets its new content in place. The state records the new path right after the move, so that a download that fails then leaves the file known at its new path. A copy at the path of a document with the content of the document stays as it is, whatever the state of the document, so a restored document under the keep policy downloads nothing. With *Skip and report conflict*, the copy that the app wrote is not in the way: the state records its path, and the file still has the content of the last download. A file of a user, and a copy that someone changed in Nextcloud, stay untouched and are reported.
+Option 3. A copy whose path and content change moves first, which keeps its ID, and then gets its new content in place. The state records the new path right after the move, so that a download that fails then leaves the file known at its new path. A copy at the path of a document with the content of the document stays as it is, whatever the state of the document, so a restored document under the keep policy downloads nothing. With *Skip and report conflict*, the copy that the app wrote is not in the way: the state records its path, and the file still has the content of the last download. A file of a user, and a copy that someone changed in Nextcloud, stay untouched and are reported, also a changed copy that would move to a new path. Before a write in place, the state marks the copy as being written, so that a copy that a failed write left incomplete stays the app's own and is written again.
 
 ## Consequences
 

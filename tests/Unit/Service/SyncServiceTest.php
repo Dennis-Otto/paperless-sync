@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use LogicException;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
@@ -960,6 +961,68 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
 		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
 		self::assertSame($fileId, $this->storage->fileId($newPath));
+	}
+
+	/** The move would take a copy that someone changed along, and the new content would replace their edit. */
+	public function testChangedCopyStaysWhenContentAndPathChangeAndConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-annotated by the user';
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$dryRun = $this->service->run(true);
+		$report = $this->service->run();
+
+		$conflict = 'ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.';
+		self::assertSame([$conflict], $dryRun->actions);
+		self::assertSame([$conflict], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-annotated by the user'], $this->storage->files);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		self::assertSame(1, $this->paperless->downloads, 'The copy stays, so the download would be in vain.');
+	}
+
+	/** A write in place that fails halfway leaves the own copy incomplete, which the next run writes again. */
+	public function testOwnCopyThatAFailedUpdateLeftIncompleteIsWrittenAgainWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$this->storage->writeFailures[self::EXPORTED_PATH] = new RuntimeException('The disk is full');
+
+		$failed = $this->service->run();
+		self::assertSame(['ERROR: P123: The disk is full'], $failed->actions);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[123]['fingerprint']);
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-cont';
+		$this->storage->writeFailures = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** The state records the new path after the move and the write in place before it starts, so a failed write leaves the moved copy the app's own. */
+	public function testMovedCopyThatAFailedUpdateLeftIncompleteIsWrittenAgainWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		$this->storage->writeFailures[$newPath] = new RuntimeException('The disk is full');
+
+		$this->service->run();
+		self::assertSame(['path' => $newPath, 'fingerprint' => DocumentFingerprint::PENDING], array_intersect_key($this->state->exports[123], ['path' => true, 'fingerprint' => true]));
+		$this->storage->files[$newPath] = '%PDF-cont';
+		$this->storage->writeFailures = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
 	}
 
 	public function testMoveOntoAnExistingFileIsAConflictWhenConflictsAreSkipped(): void {

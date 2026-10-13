@@ -159,7 +159,7 @@ final class SyncService {
 				// The mirrored file has the content of the document while its revision is the same, and
 				// after a change while Paperless reports one of its checksums, MD5 or SHA-256.
 				$sameContent = false;
-				if ($entry !== null && $fingerprint !== '') {
+				if ($entry !== null && $fingerprint !== '' && $fingerprint !== DocumentFingerprint::PENDING) {
 					$sameContent = ($entry['source_revision'] ?? '') === $sourceRevision;
 					if (!$sameContent) {
 						$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
@@ -213,6 +213,12 @@ final class SyncService {
 					&& !isset($sharedPaths[$oldPath])
 					&& $this->storage->exists($config->targetUser, $oldPath);
 				$moveOnly = $sameContent && $canMove;
+				// A copy that moves and then gets the new content in place has to be the app's own
+				// as well, or the edit of someone in Nextcloud would be lost: it stays at its path.
+				if ($config->conflictMode === 'skip' && $canMove && !$sameContent
+					&& !$this->isOwnCopy($config, $oldPath, $oldPath, $fingerprint)) {
+					throw new RuntimeException("Nextcloud file conflict at {$oldPath}.");
+				}
 				if ($report->dryRun) {
 					$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
 					$moveOnly ? ++$report->moved : ++$report->exported;
@@ -231,14 +237,22 @@ final class SyncService {
 				}
 				if (!$moveOnly) {
 					// The file at the path is the app's own after a move or the check of a conflict.
-					$writeMode = $canMove || $ownCopy ? 'replace' : $config->conflictMode;
+					$ownTarget = $canMove || $ownCopy;
+					$writeMode = $ownTarget ? 'replace' : $config->conflictMode;
 					// The download goes to Nextcloud in chunks, so that a document of any size fits
 					// into the memory of PHP.
 					$fingerprint = $this->paperless->downloadDocument(
 						$documentId,
 						$useOriginal,
 						/** @param resource $download */
-						function ($download) use ($config, $target, $writeMode): void {
+						function ($download) use ($config, $documentId, $target, $writeMode, $ownTarget): void {
+							// While the new content replaces the content of the app's own copy, the
+							// state says so: a write in place that fails halfway leaves the copy
+							// incomplete, and the next run still takes it as its own and writes it
+							// again, also when conflicts are skipped.
+							if ($ownTarget) {
+								$this->state->saveExport($config->targetUser, $documentId, ['fingerprint' => DocumentFingerprint::PENDING]);
+							}
 							$this->storage->writeStream($config->targetUser, $target, $download, $writeMode);
 						},
 					)->value();
@@ -524,15 +538,19 @@ final class SyncService {
 	}
 
 	/**
-	 * Whether the file at the path of a document is the copy that the app wrote: the state of the
-	 * document records the path, and the file still has the content of the saved fingerprint. A
-	 * copy that the user changed, and a file that can't be read, count as files of the user.
+	 * Whether the file at a path is the copy of a document that the app wrote: the state of the
+	 * document records the path, and the file still has the content of the saved fingerprint, or
+	 * the app was writing it when its last write failed. A copy that the user changed, and a file
+	 * that can't be read, count as files of the user.
 	 */
-	private function isOwnCopy(SyncConfig $config, string $oldPath, string $target, string $fingerprint): bool {
-		if ($oldPath !== $target) {
+	private function isOwnCopy(SyncConfig $config, string $recordedPath, string $path, string $fingerprint): bool {
+		if ($recordedPath !== $path) {
 			return false;
 		}
-		$mirrored = $this->mirroredFingerprint($config, $target);
+		if ($fingerprint === DocumentFingerprint::PENDING) {
+			return true;
+		}
+		$mirrored = $this->mirroredFingerprint($config, $path);
 
 		return $mirrored !== null && DocumentFingerprint::matches($fingerprint, $mirrored->sha256);
 	}
