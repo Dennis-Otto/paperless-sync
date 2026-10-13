@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Nextcloud on MariaDB instead of SQLite: run.sh adds this file to compose.yaml with
+# E2E_DATABASE=mysql and installs Nextcloud with it.
+
+services:
+  mariadb:
+    image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+    # The settings that Nextcloud asks of MySQL and MariaDB:
+    # https://docs.nextcloud.com/server/latest/admin_manual/configuration_database/linux_database_configuration.html
+    command: ["--transaction-isolation=READ-COMMITTED", "--binlog-format=ROW"]
+    environment:
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: e2e-only-password
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    # The database lives as long as its container; in memory, it doesn't wait for the disk.
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  nextcloud:
+    depends_on:
+      mariadb:
+        condition: service_healthy
