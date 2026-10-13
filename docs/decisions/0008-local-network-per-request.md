@@ -17,7 +17,7 @@ Nextcloud's HTTP client accepts the option `nextcloud.allow_local_address` for a
 
 ## Decision
 
-Option 3. Every request of the app to Paperless goes through one method, `PaperlessApiService::send()`, which adds the option exactly when the setting is on. The test of the connection on save uses the value of the form, so that it works before it is saved. Only a clear yes turns the setting on, and saving needs the password of an administrator. When Nextcloud refuses an address, the app says what to do, translated, and the settings page moves the focus to the setting.
+Option 3. Every request of the app to Paperless goes through one method, `PaperlessApiService::send()`, which adds the option exactly when the setting is on. With the setting off, the download, whose own `allow_redirects` replaces the check of every redirect by Nextcloud's HTTP client, checks every redirect itself with Nextcloud's `IRemoteHostValidator`, so that it doesn't depend on `dns_pinning`. The test of the connection on save uses the value of the form, so that it works before it is saved. Only a clear yes turns the setting on, and saving needs the password of an administrator. When Nextcloud refuses an address, or finds no DNS record for a name that only the hosts file of the server may know, the app says what to do, translated, and the settings page moves the focus to the setting.
 
 ## Consequences
 

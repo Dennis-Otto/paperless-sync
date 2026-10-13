@@ -426,12 +426,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 */
 	private function send(string $method, string $url, #[\SensitiveParameter] string $token, bool $localNetwork, #[\SensitiveParameter] array $options, bool $acceptJson = true): IResponse {
 		$options['headers'] = $this->headersForToken($token, $acceptJson);
-		$redirects = $options['allow_redirects'] ?? null;
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];
-		} elseif (is_array($redirects)) {
-			$redirects['on_redirect'] = $this->refuseLocalRedirect(...);
-			$options['allow_redirects'] = $redirects;
+		} elseif (isset($options['allow_redirects']) && is_array($options['allow_redirects'])) {
+			$options['allow_redirects'] = ['on_redirect' => $this->refuseLocalRedirect(...)] + $options['allow_redirects'];
 		}
 		try {
 			return $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
