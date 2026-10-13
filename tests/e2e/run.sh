@@ -539,17 +539,21 @@ if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/_Deleted')
 	exit 1
 fi
 mock_state > "${TMP_DIR}/mock-restored.json"
-assert_json mock-restored "${TMP_DIR}/mock-restored.json" "${DOWNLOADS}"
+assert_json mock-no-download "${TMP_DIR}/mock-restored.json" "${DOWNLOADS}"
 
 # With conflict_mode=skip, a file of the user at the path of a new document stays as
-# it is, and the run reports the conflict; with replace, the document takes its place.
+# it is, and the run reports the conflict without downloading the document in vain;
+# with replace, the document takes its place.
 dav_upload sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
 save_settings "${TMP_DIR}/conflict-skip.json" conflict_mode=skip
 assert_json conflict-skip "${TMP_DIR}/conflict-skip.json"
 control /control/scenario/conflict >/dev/null
+DOWNLOADS="$(mock_state | json_value downloads)"
 sync_run false "${TMP_DIR}/conflict.json"
 assert_json conflict "${TMP_DIR}/conflict.json"
 assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
+mock_state > "${TMP_DIR}/mock-conflict.json"
+assert_json mock-no-download "${TMP_DIR}/mock-conflict.json" "${DOWNLOADS}"
 save_settings "${TMP_DIR}/conflict-replace.json" conflict_mode=replace
 assert_json conflict-replace "${TMP_DIR}/conflict-replace.json"
 sync_run false "${TMP_DIR}/conflict-replaced.json"

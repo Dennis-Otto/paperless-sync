@@ -124,8 +124,8 @@ elif mode == "restored":
     expect("movedToTrash", 0)
     expect("errors", 0)
     expect_action(f"MOVE P123: {ARCHIVE}/2026-08-26 - Monthly invoice corrected [P123].pdf")
-elif mode == "mock-restored":
-    # The copy came back from the deleted folder; the document wasn't downloaded again.
+elif mode == "mock-no-download":
+    # A run that moved a copy back, or skipped a conflict, downloaded no document.
     expect("downloads", int(argument))
     expect("invalidAuth", 0)
 elif mode == "conflict-skip":
