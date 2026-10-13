@@ -43,16 +43,35 @@ $stateLabels = [
 		</div>
 	</div>
 
-	<div class="paperless-sync-status-card" aria-live="polite">
-		<div>
-			<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
-			<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>"><?php p($stateLabels[$state] ?? $state); ?></strong>
+	<div id="paperless-sync-status" class="paperless-sync-status">
+		<div class="paperless-sync-status-card">
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
+				<span class="paperless-sync-status-value">
+					<span id="paperless-sync-running" class="paperless-sync-spinner icon-loading-small" <?php if (!str_ends_with($state, 'running')) {
+						print_unescaped('hidden');
+					} ?>></span>
+					<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>" aria-live="polite"><?php p($stateLabels[$state] ?? $state); ?></strong>
+				</span>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Last finished')); ?></span>
+				<strong id="paperless-sync-last-ended">—</strong>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Last successful run')); ?></span>
+				<strong id="paperless-sync-last-success">—</strong>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Next scheduled run')); ?></span>
+				<strong id="paperless-sync-next-run">—</strong>
+			</div>
+			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
 		</div>
-		<div>
-			<span class="paperless-sync-status-label"><?php p($l->t('Last completed')); ?></span>
-			<strong id="paperless-sync-last-completed" data-timestamp="<?php p((string)($status['lastCompleted'] ?? 0)); ?>">—</strong>
+		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
+			<h3 id="paperless-sync-errors-title"></h3>
+			<ul id="paperless-sync-errors-list"></ul>
 		</div>
-		<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
 	</div>
 
 	<form id="paperless-sync-form">
@@ -231,7 +250,9 @@ $stateLabels = [
 	<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite"></p>
 	<div id="paperless-sync-report" class="paperless-sync-report" hidden>
 		<h3><?php p($l->t('Run report')); ?></h3>
+		<p id="paperless-sync-report-meta" class="paperless-sync-report-meta"></p>
 		<div id="paperless-sync-report-summary" class="paperless-sync-report-summary"></div>
 		<pre id="paperless-sync-report-actions" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>"></pre>
+		<p id="paperless-sync-report-omitted" class="paperless-sync-report-omitted" hidden></p>
 	</div>
 </div>

@@ -6,8 +6,38 @@
 (function() {
 	'use strict'
 
-	function translate(text) {
-		return window.t ? window.t('paperless_sync', text) : text
+	function translate(text, parameters) {
+		// The text goes into textContent, so Nextcloud need not escape the parameters for HTML.
+		if (window.t) {
+			return window.t('paperless_sync', text, parameters, undefined, { escape: false })
+		}
+		return text.replace(/{(\w+)}/g, function(placeholder, name) {
+			return parameters && name in parameters ? String(parameters[name]) : placeholder
+		})
+	}
+
+	function translatePlural(singular, plural, count) {
+		if (window.n) {
+			return window.n('paperless_sync', singular, plural, count)
+		}
+		return (count === 1 ? singular : plural).replace('%n', String(count))
+	}
+
+	// The status that the server put into the page, as @nextcloud/initial-state reads it: JSON
+	// in Base64, in a hidden input.
+	function initialStatus() {
+		const input = document.getElementById('initial-state-paperless_sync-status')
+		if (!input) {
+			return null
+		}
+		try {
+			const bytes = Uint8Array.from(window.atob(input.value), function(character) {
+				return character.charCodeAt(0)
+			})
+			return JSON.parse(new TextDecoder().decode(bytes))
+		} catch (error) {
+			return null
+		}
 	}
 
 	// The answer of Nextcloud to a request to a route with #[PasswordConfirmationRequired] while the
@@ -78,9 +108,22 @@
 		const report = document.getElementById('paperless-sync-report')
 		const reportSummary = document.getElementById('paperless-sync-report-summary')
 		const reportActions = document.getElementById('paperless-sync-report-actions')
+		const reportMeta = document.getElementById('paperless-sync-report-meta')
+		const reportOmitted = document.getElementById('paperless-sync-report-omitted')
 		const lastState = document.getElementById('paperless-sync-last-state')
-		const lastCompleted = document.getElementById('paperless-sync-last-completed')
+		const running = document.getElementById('paperless-sync-running')
+		const lastEnded = document.getElementById('paperless-sync-last-ended')
+		const lastSuccess = document.getElementById('paperless-sync-last-success')
+		const nextRun = document.getElementById('paperless-sync-next-run')
+		const errors = document.getElementById('paperless-sync-errors')
+		const errorsTitle = document.getElementById('paperless-sync-errors-title')
+		const errorsList = document.getElementById('paperless-sync-errors-list')
 		const buttons = [save, dryRun, run, reset, refresh]
+		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
+		const pollInterval = 5000
+		const pollLimit = 60
+		let pollTimer = 0
+		let polls = 0
 
 		function settings() {
 			const values = {}
@@ -143,7 +186,26 @@
 			if (!timestamp) {
 				return '—'
 			}
-			return new Date(timestamp * 1000).toLocaleString()
+			return new Date(timestamp * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+		}
+
+		// Changes a text only when it differs, so that a screen reader doesn't read it out again
+		// with every refresh.
+		function setText(element, text) {
+			if (element.textContent !== text) {
+				element.textContent = text
+			}
+		}
+
+		// Null when scheduled runs are off; a time that has passed, or 0, means the next background job.
+		function formatNextRun(timestamp) {
+			if (timestamp === null || timestamp === undefined) {
+				return translate('Off')
+			}
+			if (timestamp * 1000 <= Date.now()) {
+				return translate('With the next background job')
+			}
+			return translate('≈ {time}', { time: formatTime(timestamp) })
 		}
 
 		// The state of the last run as StatusService stores it, and its label; templates/settings.php has the same.
@@ -157,18 +219,79 @@
 			failed: translate('Failed'),
 		}
 
-		function updateStatus(status) {
-			const state = status.state || 'never-run'
-			lastState.textContent = stateLabels[state] || state
+		function showState(state) {
+			setText(lastState, stateLabels[state] || state)
 			lastState.dataset.state = state
-			lastCompleted.textContent = formatTime(status.lastCompleted)
-			lastCompleted.dataset.timestamp = status.lastCompleted || 0
-			if (status.error) {
-				showMessage(status.error, true)
-			}
+			running.hidden = !state.endsWith('running')
 		}
 
-		function showReport(result) {
+		// The error of a run that failed and the errors of single documents, with the count of
+		// those that the report leaves out.
+		function showErrors(status, lastReport) {
+			const messages = []
+			if (status.error) {
+				messages.push(status.error)
+			}
+			const errorMessages = Array.isArray(lastReport.errorMessages) ? lastReport.errorMessages : []
+			messages.push(...errorMessages)
+			const more = (lastReport.errors || 0) - errorMessages.length
+			if (more > 0) {
+				messages.push(translatePlural('… and %n more error', '… and %n more errors', more))
+			}
+			errors.hidden = messages.length === 0
+			if (messages.length === 0) {
+				return
+			}
+			setText(errorsTitle, status.state === 'failed' ? translate('The last run failed') : translate('Errors of the last run'))
+			const shown = Array.from(errorsList.children, function(item) {
+				return item.textContent
+			})
+			if (shown.length === messages.length && shown.every(function(text, index) { return text === messages[index] })) {
+				return
+			}
+			errorsList.replaceChildren(...messages.map(function(text) {
+				const item = document.createElement('li')
+				item.textContent = text
+				return item
+			}))
+		}
+
+		function updateStatus(status) {
+			const state = status.state || 'never-run'
+			const lastReport = status.report && typeof status.report === 'object' ? status.report : {}
+			showState(state)
+			setText(lastEnded, formatTime(status.lastEnded))
+			setText(lastSuccess, formatTime(status.lastSuccess))
+			setText(nextRun, formatNextRun(status.nextRun))
+			showErrors(status, lastReport)
+			if (Object.keys(lastReport).length > 0) {
+				showReport(lastReport, false)
+			}
+			watch(state)
+		}
+
+		// Asks for the status again while a run is active, such as a scheduled one, until it ends.
+		function watch(state) {
+			window.clearTimeout(pollTimer)
+			pollTimer = 0
+			if (!state.endsWith('running')) {
+				polls = 0
+				return
+			}
+			if (polls >= pollLimit) {
+				return
+			}
+			pollTimer = window.setTimeout(async function() {
+				polls++
+				try {
+					await refreshStatus()
+				} catch (error) {
+					watch(state)
+				}
+			}, pollInterval)
+		}
+
+		function showReport(result, reveal) {
 			const labels = {
 				exported: translate('Exported'), moved: translate('Moved'), movedToTrash: translate('Moved to trash'),
 				permanentlyDeleted: translate('Deleted'), removedExcluded: translate('Excluded copies removed'), importsSubmitted: translate('Imports submitted'),
@@ -185,24 +308,40 @@
 				item.append(value, label)
 				reportSummary.append(item)
 			})
-			reportActions.textContent = Array.isArray(result.actions) && result.actions.length > 0 ? result.actions.join('\n') : translate('No file changes were required.')
+			const ended = result.completedAt ? formatTime(result.completedAt) : ''
+			if (result.dryRun) {
+				setText(reportMeta, ended ? translate('Dry-run, finished {time}', { time: ended }) : translate('Dry-run, stopped before its end'))
+			} else {
+				setText(reportMeta, ended ? translate('Run, finished {time}', { time: ended }) : translate('Run, stopped before its end'))
+			}
+			setText(reportActions, Array.isArray(result.actions) && result.actions.length > 0 ? result.actions.join('\n') : translate('No file changes were required.'))
+			const omitted = result.omittedActions || 0
+			reportOmitted.hidden = omitted === 0
+			setText(reportOmitted, omitted > 0 ? translatePlural('… and %n more change, which the list leaves out', '… and %n more changes, which the list leaves out', omitted) : '')
 			report.hidden = false
-			report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+			if (reveal) {
+				report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+			}
 		}
 
 		async function runSync(isDryRun) {
 			setBusy(true)
+			showState(isDryRun ? 'dry-run-running' : 'running')
 			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), false)
 			try {
 				const result = await request(root.dataset.runUrl, 'POST', { dryRun: isDryRun })
-				showReport(result)
+				showReport(result, true)
 				showMessage(isDryRun ? translate('Dry-run completed. No files were changed.') : translate('Synchronization completed.'), result.errors > 0)
-				await refreshStatus()
 			} catch (error) {
 				showMessage(error.message || translate('Synchronization failed.'), true)
 				focusSetting(error)
 			} finally {
 				setBusy(false)
+			}
+			try {
+				await refreshStatus()
+			} catch (error) {
+				// The status stays as it was; Refresh asks again.
 			}
 		}
 
@@ -222,6 +361,8 @@
 				savedUrl = normalizeUrl(config.paperlessUrl)
 				updateToken()
 				showMessage(translate('Connection successful. Configuration saved.'), false)
+				// The schedule may have changed, and with it the next scheduled run.
+				await refreshStatus()
 			} catch (error) {
 				showMessage(error.message || translate('Could not save the configuration.'), true)
 				focusSetting(error)
@@ -271,6 +412,9 @@
 
 		paperlessUrl.addEventListener('input', updateToken)
 		updateToken()
-		lastCompleted.textContent = formatTime(Number.parseInt(lastCompleted.dataset.timestamp, 10))
+		const status = initialStatus()
+		if (status !== null) {
+			updateStatus(status)
+		}
 	})
 })()

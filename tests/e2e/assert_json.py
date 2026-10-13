@@ -105,11 +105,29 @@ elif mode == "import-waiting":
     expect("importsSubmitted", 0)
     expect("skipped", 1)
     expect("errors", 0)
+elif mode == "status-errors":
+    # The run that the full quota stopped: its error stays in the status, for the settings page.
+    expect("state", "completed-with-errors")
+    report = payload.get("report", {})
+    messages = [str(message) for message in report.get("errorMessages", [])]
+    if not any(message.startswith("P123: Not enough free space in Nextcloud") for message in messages):
+        raise AssertionError(f"The status keeps no error of the document: {payload!r}")
+    if not any(str(action).startswith("EXPORT STOPPED:") for action in report.get("actions", [])):
+        raise AssertionError(f"The status keeps no report of the run: {payload!r}")
+    if payload.get("lastEnded", 0) < payload.get("lastStarted", 0) or payload.get("lastSuccess", 0) < 1:
+        raise AssertionError(f"The times of the runs are wrong: {payload!r}")
 elif mode == "status":
     expect("state", "completed")
     expect("error", "")
+    # The schedule is off in these tests.
+    expect("nextRun", None)
     if not isinstance(payload.get("summary"), dict):
         raise AssertionError(f"Status summary is missing: {payload!r}")
+    report = payload.get("report", {})
+    if report.get("errorMessages") != [] or report.get("dryRun") is not False:
+        raise AssertionError(f"The status keeps no report of the last run: {payload!r}")
+    if payload.get("lastSuccess") != payload.get("lastEnded"):
+        raise AssertionError(f"The last run, without errors, is not the last successful one: {payload!r}")
 elif mode == "mock-after-move":
     expect("downloads", 1)
     if payload.get("metadataRequests", 0) < 1:

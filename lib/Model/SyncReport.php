@@ -11,6 +11,30 @@ namespace OCA\PaperlessSync\Model;
 
 /** @psalm-suppress PossiblyUnusedProperty */
 final class SyncReport implements \JsonSerializable {
+	/** The most lines of changes that the report lists; it counts those it leaves out in $omittedActions. */
+	public const ACTION_LIMIT = 100;
+	/** The most error messages that the report keeps; $errors counts them all. */
+	public const ERROR_LIMIT = 50;
+
+	/**
+	 * The priority of a line by its start, 1 the highest. A full report gives up its last line of
+	 * the lowest priority for a line of a higher one, so that errors, deletions and moves to the
+	 * deleted folder never hide behind exports, moves and imports.
+	 */
+	private const PRIORITIES = [
+		'ERROR: ' => 1,
+		'DELETE ' => 2,
+		'REMOVE EXCLUDED ' => 2,
+		'TRASH ' => 3,
+		'MISSING ' => 3,
+		'IMPORT ERROR: ' => 4,
+		'IMPORT REJECTED: ' => 4,
+	];
+	/** The priority of every other line: exports, moves, imports and documents that wait. */
+	private const LOWEST = 5;
+	/** The priority of a notice, which the report keeps past its limit and never gives up. */
+	private const NOTICE = 0;
+
 	public int $activeDocuments = 0;
 	public int $trashedDocuments = 0;
 	public int $exported = 0;
@@ -25,9 +49,17 @@ final class SyncReport implements \JsonSerializable {
 	public int $unchanged = 0;
 	public int $skipped = 0;
 	public int $errors = 0;
+	/** The lines of changes that the report leaves out, for want of room. */
+	public int $omittedActions = 0;
 
 	/** @var list<string> */
 	public array $actions = [];
+	/** @var list<string> the first errors of the run, without the lines of its changes */
+	public array $errorMessages = [];
+
+	/** @var list<int> the priority of each line of $actions */
+	private array $priorities = [];
+	private int $notices = 0;
 
 	public function __construct(
 		public readonly bool $dryRun,
@@ -36,9 +68,30 @@ final class SyncReport implements \JsonSerializable {
 	) {
 	}
 
+	/**
+	 * A line for a change of the run. In a full report, the line takes the place of the last line
+	 * of the lowest priority, when that is lower than its own, and the report counts the line that
+	 * it leaves out.
+	 */
 	public function action(string $message): void {
-		if (count($this->actions) < 100) {
-			$this->actions[] = $message;
+		$priority = self::priority($message);
+		if (count($this->actions) - $this->notices < self::ACTION_LIMIT) {
+			$this->append($message, $priority);
+			return;
+		}
+		++$this->omittedActions;
+		$replaced = null;
+		$lowest = $priority;
+		foreach ($this->priorities as $index => $candidate) {
+			if ($candidate > $priority && $candidate >= $lowest) {
+				$replaced = $index;
+				$lowest = $candidate;
+			}
+		}
+		if ($replaced !== null) {
+			array_splice($this->actions, $replaced, 1);
+			array_splice($this->priorities, $replaced, 1);
+			$this->append($message, $priority);
 		}
 	}
 
@@ -47,25 +100,48 @@ final class SyncReport implements \JsonSerializable {
 	 * counted no document as missing says so, also after a hundred other actions.
 	 */
 	public function notice(string $message): void {
-		$this->actions[] = $message;
+		$this->append($message, self::NOTICE);
+		++$this->notices;
 	}
 
 	public function error(string $message): void {
 		++$this->errors;
+		if (count($this->errorMessages) < self::ERROR_LIMIT) {
+			$this->errorMessages[] = $message;
+		}
 		$this->action('ERROR: ' . $message);
 	}
 
 	/** @return array<string, bool|int|list<string>> */
 	public function jsonSerialize(): array {
-		return get_object_vars($this);
+		$data = get_object_vars($this);
+		unset($data['priorities'], $data['notices']);
+
+		/** @var array<string, bool|int|list<string>> $data */
+		return $data;
 	}
 
 	/** @return array<string, bool|int> */
 	public function summary(): array {
 		$data = $this->jsonSerialize();
-		unset($data['actions']);
+		unset($data['actions'], $data['errorMessages']);
 
 		/** @var array<string, bool|int> $data */
 		return $data;
+	}
+
+	private function append(string $message, int $priority): void {
+		$this->actions[] = $message;
+		$this->priorities[] = $priority;
+	}
+
+	private static function priority(string $message): int {
+		foreach (self::PRIORITIES as $start => $priority) {
+			if (str_starts_with($message, $start)) {
+				return $priority;
+			}
+		}
+
+		return self::LOWEST;
 	}
 }

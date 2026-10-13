@@ -100,6 +100,16 @@ sync_run() {
 		"${BASE_URL}/apps/paperless_sync/sync/run"
 }
 
+# The status of the last run, as the settings page shows it.
+sync_status() {
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "$1" \
+		"${BASE_URL}/apps/paperless_sync/sync/status"
+}
+
 dav_status() {
 	user="$1"
 	method="$2"
@@ -196,7 +206,7 @@ for attribute in \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
 	'data-status-url="/apps/paperless_sync/sync/status"' \
-	'data-setting="paperless_local_network"'; do
+	'id="initial-state-paperless_sync-status"' 	'data-setting="paperless_local_network"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
@@ -318,6 +328,9 @@ occ user:setting sync-target files quota '1 B' >/dev/null
 sync_run false "${TMP_DIR}/export-stopped.json"
 occ user:setting --delete sync-target files quota >/dev/null
 assert_json export-stopped "${TMP_DIR}/export-stopped.json"
+# The status keeps the error of the document for the settings page.
+sync_status "${TMP_DIR}/status-errors.json"
+assert_json status-errors "${TMP_DIR}/status-errors.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
 
 sync_run false "${TMP_DIR}/re-export.json"
@@ -390,12 +403,7 @@ sync_run false "${TMP_DIR}/import-waiting.json"
 assert_json import-waiting "${TMP_DIR}/import-waiting.json"
 assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
 
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--output "${TMP_DIR}/status.json" \
-	"${BASE_URL}/apps/paperless_sync/sync/status"
+sync_status "${TMP_DIR}/status.json"
 assert_json status "${TMP_DIR}/status.json"
 
 "${COMPOSE[@]}" exec -T paperless-mock python -c \
