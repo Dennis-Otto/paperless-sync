@@ -4,14 +4,14 @@
 
 When something doesn't work, Paperless Sync says why, and this page leads from what you see to its cause and its fix. The [FAQ](faq.md) answers the questions about what the app does, such as where deleted files go. Where to look first:
 
-- **Saving the settings fails:** the message below the buttons of *Administration settings → Paperless Sync* names the cause.
+- **Saving the settings fails:** the message next to the buttons, in the bar at the bottom of *Administration settings → Paperless Sync*, names the cause.
 - **A run fails or ends with errors:** the status at the top of the settings shows the state of the last run, also of a scheduled one, with a box of its errors, and the [Nextcloud log](#read-the-log) has an entry of the app `paperless_sync` for each of them.
 - **No run starts at all:** the [background jobs](#no-run-starts) of Nextcloud don't run.
 - **A file is missing or in an unexpected place:** the report of the last run, or of a dry-run, has a line for every file that the run writes, moves or deletes.
 
 ## The way of a request to Paperless
 
-Saving the settings tests the connection with one request for the first document, and every run starts with the same request. Each step on its way can fail with an error of its own:
+Saving the settings with the schedule on, or with a new token, tests the connection with one request for the first document, and every run starts with the same request. Each step on its way can fail with an error of its own:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-way-of-a-request-from-nextcloud-to-paperless-and-the-error-of-each.dark.svg">
@@ -36,7 +36,7 @@ Saving the settings tests the connection with one request for the first document
 | `The configured Nextcloud base folder is not a writable folder.` | The base folder is a file, or a share that the target user may only read. **Fix:** Choose a folder that the target user owns. |
 | `Enter the API token again to connect to another Paperless URL.` | The URL changed, and the token goes only to the URL that it was saved with. **Fix:** Enter the token with the new URL. |
 | `Paperless Sync is not completely configured.` | No URL, token or target user, or the URL changed past the settings page, with `occ` for example, and waits for its token. **Fix:** Enter the missing value, or the token again, and save. |
-| `Nextcloud file conflict at …` | Conflicts are skipped, and a file is in the way of the document. **Fix:** Move or delete that file, or choose **Replace synchronized file**; see the [conflict policy](guide.md#conflict-policy). |
+| `Nextcloud file conflict at …` | Conflicts are skipped, and a file of someone else is in the way of the document, or someone edited its copy in Nextcloud. **Fix:** Move or delete that file, or choose **Replace synchronized file**; see the [conflict policy](guide.md#conflict-policy). |
 | `EXPORT STOPPED` and `Not enough free space in Nextcloud` | The quota of the target user is full, or the archive is read-only or its storage unavailable. **Fix:** Raise the quota or free space; the next run carries on. |
 | `SCAN INCOMPLETE` | A page of Paperless came back short, or documents were added or deleted while the run read them. The run counted no document as missing. **Fix:** Nothing, if the next run is complete. If it stays, look for a proxy that cuts long answers, or permissions that change. |
 | `Paperless answered the upload with HTTP 403` | The account may not add documents, which the inbox needs. The upload waits and tries again later. **Fix:** Give the account the permission `documents.add_document` in Paperless. |
@@ -113,7 +113,7 @@ The archive is in the files of the target user alone; the app gives nobody else 
 
 ### Deleted copies are not in the trash bin
 
-A copy that a scheduled run deletes, or replaces, goes to the trash bin of the target user, *Deleted files* in *Files*, where only the target user sees and restores it. A run that an administrator starts with *Synchronize now* deletes such files for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks: until it is fixed, leave runs that may delete to the schedule, and try a change with a dry-run first. Without the app *Deleted files* of Nextcloud, every deletion is for good.
+A copy that a scheduled run deletes, and a file in the way of a copy that moves, go to the trash bin of the target user, *Deleted files* in *Files*, where only the target user sees and restores it. A run that an administrator starts with *Synchronize now* deletes such files for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks: until it is fixed, leave runs that may delete to the schedule, and try a change with a dry-run first. Without the app *Deleted files* of Nextcloud, every deletion is for good. A copy whose document gets a new content is no deletion: it stays the same file, with the previous content as a version.
 
 ### A file is back after I deleted or renamed it
 
@@ -125,6 +125,6 @@ Paperless Sync remembers what it wrote for each target user. Depending on what y
 
 - **Write the archive anew:** turn synchronization off, delete the archive folder in the files of the target user, which moves it to their trash bin, and start a dry-run: it lists an export for every document. Turn synchronization on again, and the runs write the archive anew, within the batch size. The copies of the deleted folder don't come back.
 - **Begin a new archive:** enter another target user. The app keeps the records of each user apart, so the new archive starts empty and the old one stays as it is.
-- **Remove the connection:** *Disconnect* deletes the settings and the token of the app; the records of what it wrote stay for a later connection. The [FAQ](faq.md#how-do-i-uninstall-paperless-sync) says what uninstalling leaves behind.
+- **Remove the connection:** *Disconnect* deletes the token and turns off the schedule and the local-network setting; the other settings and the records of what it wrote stay for a later connection. The [FAQ](faq.md#how-do-i-uninstall-paperless-sync) says what uninstalling leaves behind.
 
 A file of the inbox that Paperless refused waits until it changes: save it anew, rename or replace it to submit it again.
