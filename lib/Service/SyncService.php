@@ -167,8 +167,10 @@ final class SyncService {
 						$sameContent = DocumentFingerprint::matches($fingerprint, $checksum);
 					}
 				}
+				// The copy at the path of the document has its content, whatever the state of the
+				// document, such as one that Paperless restored from its trash while the keep policy
+				// left the copy in place: only the state changes.
 				$unchanged = $sameContent
-					&& ($entry['state'] ?? '') === 'active'
 					&& $oldPath === $target
 					&& $this->storage->exists($config->targetUser, $target);
 				if ($unchanged) {
@@ -177,8 +179,10 @@ final class SyncService {
 						$this->state->saveExport($config->targetUser, $documentId, [
 							'fingerprint' => $fingerprint,
 							'source_revision' => $sourceRevision,
+							'state' => 'active',
 							'missing_runs' => 0,
 							'last_seen' => time(),
+							'trash_date' => null,
 							'last_error' => null,
 						]);
 					}
@@ -189,45 +193,63 @@ final class SyncService {
 					continue;
 				}
 				++$attempts;
-				// When conflicts are skipped, Nextcloud refuses to write over a file, so the download or
-				// the move would be in vain.
+				// When conflicts are skipped, a file at the path stays, unless it is the app's own copy,
+				// so the download or the move would be in vain. A copy that the user changed is no
+				// longer the app's own.
+				$ownCopy = false;
 				if ($config->conflictMode === 'skip' && $this->storage->exists($config->targetUser, $target)) {
-					throw new RuntimeException("Nextcloud file conflict at {$target}.");
+					if (!$this->isOwnCopy($config, $oldPath, $target, $fingerprint)) {
+						throw new RuntimeException("Nextcloud file conflict at {$target}.");
+					}
+					$ownCopy = true;
 				}
 
-				$canMove = $sameContent
-					&& $oldPath !== ''
+				// The file keeps its identity in Nextcloud, its file ID with its shares, comments,
+				// tags, favorites and versions: it moves to its new path, and a new content replaces
+				// its content in place. A file that another document shares is not moved, because it
+				// may have the content of the other one.
+				$canMove = $oldPath !== ''
 					&& $oldPath !== $target
 					&& !isset($sharedPaths[$oldPath])
 					&& $this->storage->exists($config->targetUser, $oldPath);
+				$moveOnly = $sameContent && $canMove;
 				if ($report->dryRun) {
-					$report->action(($canMove ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
-					$canMove ? ++$report->moved : ++$report->exported;
+					$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+					$moveOnly ? ++$report->moved : ++$report->exported;
 					++$changes;
 					continue;
 				}
 
 				if ($canMove) {
 					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
-					++$report->moved;
-				} else {
+					// The state follows the file at once, so that the next run finds it at its new
+					// path also when the download or the pruning that follows fails.
+					$this->state->saveExport($config->targetUser, $documentId, ['path' => $target]);
+					if ($config->pruneEmptyFolders) {
+						$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
+					}
+				}
+				if (!$moveOnly) {
+					// The file at the path is the app's own after a move or the check of a conflict.
+					$writeMode = $canMove || $ownCopy ? 'replace' : $config->conflictMode;
 					// The download goes to Nextcloud in chunks, so that a document of any size fits
 					// into the memory of PHP.
 					$fingerprint = $this->paperless->downloadDocument(
 						$documentId,
 						$useOriginal,
 						/** @param resource $download */
-						function ($download) use ($config, $target): void {
-							$this->storage->writeAtomic($config->targetUser, $target, $download, $config->conflictMode);
+						function ($download) use ($config, $target, $writeMode): void {
+							$this->storage->writeStream($config->targetUser, $target, $download, $writeMode);
 						},
 					)->value();
-					if ($oldPath !== '' && $oldPath !== $target) {
-						$this->storage->delete($config->targetUser, $oldPath);
-					}
-					++$report->exported;
 				}
+				$removeOldCopy = !$canMove && $oldPath !== '' && $oldPath !== $target;
+				if ($removeOldCopy) {
+					$this->storage->delete($config->targetUser, $oldPath);
+				}
+				$moveOnly ? ++$report->moved : ++$report->exported;
 				++$changes;
-				$report->action(($canMove ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+				$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
 				$this->state->saveExport($config->targetUser, $documentId, [
 					'path' => $target,
 					'fingerprint' => $fingerprint,
@@ -238,7 +260,7 @@ final class SyncService {
 					'trash_date' => null,
 					'last_error' => null,
 				]);
-				if ($config->pruneEmptyFolders && $oldPath !== '' && $oldPath !== $target) {
+				if ($config->pruneEmptyFolders && $removeOldCopy) {
 					$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 				}
 			} catch (\Throwable $exception) {
@@ -493,21 +515,43 @@ final class SyncService {
 	 * once more. A file that can't be read leaves the fingerprint as it is, and the download replaces it.
 	 */
 	private function completedFingerprint(SyncConfig $config, string $path, string $fingerprint, string $checksum): string {
-		if (str_contains($fingerprint, ' ') || strlen($checksum) !== 32 || !$this->copyExists($config, $path)) {
+		if (str_contains($fingerprint, ' ') || strlen($checksum) !== 32) {
 			return $fingerprint;
+		}
+		$mirrored = $this->mirroredFingerprint($config, $path);
+
+		return $mirrored !== null && $mirrored->sha256 === $fingerprint ? $mirrored->value() : $fingerprint;
+	}
+
+	/**
+	 * Whether the file at the path of a document is the copy that the app wrote: the state of the
+	 * document records the path, and the file still has the content of the saved fingerprint. A
+	 * copy that the user changed, and a file that can't be read, count as files of the user.
+	 */
+	private function isOwnCopy(SyncConfig $config, string $oldPath, string $target, string $fingerprint): bool {
+		if ($oldPath !== $target) {
+			return false;
+		}
+		$mirrored = $this->mirroredFingerprint($config, $target);
+
+		return $mirrored !== null && DocumentFingerprint::matches($fingerprint, $mirrored->sha256);
+	}
+
+	/** The checksums of the mirrored file at the path, from one read of it, or null when it is gone or can't be read. */
+	private function mirroredFingerprint(SyncConfig $config, string $path): ?DocumentFingerprint {
+		if (!$this->copyExists($config, $path)) {
+			return null;
 		}
 		try {
 			$stream = $this->storage->openRead($config->targetUser, $path);
 			try {
-				$mirrored = DocumentFingerprint::of($stream);
+				return DocumentFingerprint::of($stream);
 			} finally {
 				fclose($stream);
 			}
 		} catch (\Throwable) {
-			return $fingerprint;
+			return null;
 		}
-
-		return $mirrored->sha256 === $fingerprint ? $mirrored->value() : $fingerprint;
 	}
 
 	private function syncInbox(SyncConfig $config, SyncReport $report): void {

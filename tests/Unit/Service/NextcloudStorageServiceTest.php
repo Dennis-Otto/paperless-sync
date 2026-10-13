@@ -38,8 +38,13 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $nodes = [self::HOME => null];
 	/** @var array<string, true> the folders in which nothing can be created */
 	private array $readOnly = [];
-	/** @var array<string, \Throwable> failures of the node operations newFile, move and delete */
+	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete */
 	private array $failures = [];
+	/** @var array<string, int> the file ID of every node, which Nextcloud keeps through moves and updates in place */
+	private array $fileIds = [];
+	private int $lastFileId = 0;
+	/** @var list<string> the absolute paths of every node that was deleted */
+	private array $deleted = [];
 	/** @var array<string, int|float> the free space of a folder, by absolute path; unlimited for the others */
 	private array $freeSpace = [];
 	private bool $filesCannotBeOpened = false;
@@ -135,31 +140,76 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertFalse($this->service->exists(self::USER, 'Archiv/b.pdf'));
 	}
 
-	public function testWriteAtomicStoresTheWholeStreamInNewFolders(): void {
+	public function testWriteStreamStoresTheWholeStreamInNewFolders(): void {
 		$stream = $this->stream('%PDF-content');
 
-		$this->service->writeAtomic(self::USER, 'Archiv/2026/a.pdf', $stream, 'replace');
+		$this->service->writeStream(self::USER, 'Archiv/2026/a.pdf', $stream, 'replace');
 
 		self::assertSame('%PDF-content', $this->nodes[self::HOME . '/Archiv/2026/a.pdf']);
 		self::assertSame([], $this->temporaryFiles());
 	}
 
-	public function testWriteAtomicReplacesAnExistingFile(): void {
+	/**
+	 * Deleting the file and moving a new one into its place would give it a new file ID, which
+	 * loses its shares, comments, tags, favorites and versions and leaves the old copy in the trash bin.
+	 */
+	public function testWriteStreamUpdatesAnExistingFileInPlace(): void {
 		$this->nodes[self::HOME . '/Archiv'] = null;
 		$this->nodes[self::HOME . '/Archiv/a.pdf'] = 'old';
+		$fileId = $this->fileId(self::HOME . '/Archiv/a.pdf');
 
-		$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
 
 		self::assertSame('new', $this->nodes[self::HOME . '/Archiv/a.pdf']);
+		self::assertSame($fileId, $this->fileId(self::HOME . '/Archiv/a.pdf'));
+		self::assertSame([], $this->deleted, 'Nothing goes to the trash bin.');
 		self::assertSame([], $this->temporaryFiles());
 	}
 
-	public function testWriteAtomicKeepsAnExistingFileWhenConflictsAreSkipped(): void {
+	public function testWriteTextUpdatesAnExistingFileInPlace(): void {
+		$this->nodes[self::HOME . '/Fehler'] = null;
+		$this->nodes[self::HOME . '/Fehler/a.pdf.error.txt'] = 'Paperless import failed';
+		$fileId = $this->fileId(self::HOME . '/Fehler/a.pdf.error.txt');
+
+		$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed again');
+
+		self::assertSame('Paperless import failed again', $this->nodes[self::HOME . '/Fehler/a.pdf.error.txt']);
+		self::assertSame($fileId, $this->fileId(self::HOME . '/Fehler/a.pdf.error.txt'));
+	}
+
+	public function testFailedUpdateInPlaceIsReported(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->nodes[self::HOME . '/Archiv/a.pdf'] = 'old';
+		$this->failures['putContent'] = new NotPermittedException('The file is locked');
+
+		try {
+			$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
+			self::fail('The failed update must be reported.');
+		} catch (NotPermittedException $exception) {
+			self::assertSame('The file is locked', $exception->getMessage());
+		}
+		self::assertSame('old', $this->nodes[self::HOME . '/Archiv/a.pdf']);
+		self::assertSame([], $this->temporaryFiles());
+	}
+
+	public function testWriteStreamReplacesAFolderInThePlaceOfTheFile(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->nodes[self::HOME . '/Archiv/a.pdf'] = null;
+		$this->nodes[self::HOME . '/Archiv/a.pdf/b.pdf'] = 'b';
+
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
+
+		self::assertSame('new', $this->nodes[self::HOME . '/Archiv/a.pdf']);
+		self::assertArrayNotHasKey(self::HOME . '/Archiv/a.pdf/b.pdf', $this->nodes);
+		self::assertSame([], $this->temporaryFiles());
+	}
+
+	public function testWriteStreamKeepsAnExistingFileWhenConflictsAreSkipped(): void {
 		$this->nodes[self::HOME . '/Archiv'] = null;
 		$this->nodes[self::HOME . '/Archiv/a.pdf'] = 'old';
 
 		try {
-			$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'skip');
+			$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'skip');
 			self::fail('A conflict must not replace the file.');
 		} catch (RuntimeException $exception) {
 			self::assertSame('Nextcloud file conflict at Archiv/a.pdf.', $exception->getMessage());
@@ -167,17 +217,17 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertSame('old', $this->nodes[self::HOME . '/Archiv/a.pdf']);
 	}
 
-	public function testWriteAtomicRequiresAStream(): void {
+	public function testWriteStreamRequiresAStream(): void {
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('A readable source stream is required.');
-		$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', 'not a stream', 'replace');
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', 'not a stream', 'replace');
 	}
 
 	public function testFailedWriteRemovesItsTemporaryFile(): void {
 		$this->failures['move'] = new RuntimeException('The storage is full');
 
 		try {
-			$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
+			$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
 			self::fail('The failed move must be reported.');
 		} catch (RuntimeException $exception) {
 			self::assertSame('The storage is full', $exception->getMessage());
@@ -191,7 +241,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->failures['delete'] = new NotPermittedException('The temporary file is locked');
 
 		try {
-			$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
+			$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
 			self::fail('The failed move must be reported.');
 		} catch (RuntimeException $exception) {
 			self::assertSame('The storage is full', $exception->getMessage());
@@ -216,7 +266,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->freeSpace[self::HOME . '/Archiv'] = 11;
 
 		try {
-			$this->service->writeAtomic(self::USER, 'Archiv/2026/a.pdf', $this->stream('%PDF-content'), 'replace');
+			$this->service->writeStream(self::USER, 'Archiv/2026/a.pdf', $this->stream('%PDF-content'), 'replace');
 			self::fail('A file larger than the free space must be refused.');
 		} catch (NotEnoughSpaceException $exception) {
 			self::assertSame('Not enough free space in Nextcloud: the file needs 12 bytes, and 11 are free.', $exception->getMessage());
@@ -228,7 +278,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->nodes[self::HOME . '/Archiv'] = null;
 		$this->freeSpace[self::HOME . '/Archiv'] = 12.0;
 
-		$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
 
 		self::assertSame('%PDF-content', $this->nodes[self::HOME . '/Archiv/a.pdf']);
 	}
@@ -298,10 +348,12 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->nodes[self::HOME . '/Archiv'] = null;
 		$this->nodes[self::HOME . '/Archiv/a.pdf'] = 'new';
 		$this->nodes[self::HOME . '/Archiv/b.pdf'] = 'old';
+		$fileId = $this->fileId(self::HOME . '/Archiv/a.pdf');
 
 		self::assertTrue($this->service->move(self::USER, 'Archiv/a.pdf', 'Archiv/b.pdf', 'replace'));
 
 		self::assertSame('new', $this->nodes[self::HOME . '/Archiv/b.pdf']);
+		self::assertSame($fileId, $this->fileId(self::HOME . '/Archiv/b.pdf'), 'The moved file keeps its ID.');
 		self::assertArrayNotHasKey(self::HOME . '/Archiv/a.pdf', $this->nodes);
 	}
 
@@ -441,6 +493,11 @@ final class NextcloudStorageServiceTest extends TestCase {
 		return array_values(array_filter(array_keys($this->nodes), static fn (string $path): bool => str_ends_with($path, '.part')));
 	}
 
+	/** The file ID of a node, which Nextcloud gives it when it creates it. */
+	private function fileId(string $path): int {
+		return $this->fileIds[$path] ??= ++$this->lastFileId;
+	}
+
 	private function node(string $path): Node {
 		if (!array_key_exists($path, $this->nodes)) {
 			throw new NotFoundException($path);
@@ -473,6 +530,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 			}
 			$target = $this->resolve($path, $relative);
 			$this->nodes[$target] = is_resource($content) ? (string)stream_get_contents($content) : (string)$content;
+			$this->fileIds[$target] = ++$this->lastFileId;
 
 			return $this->file($target);
 		});
@@ -484,6 +542,12 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$file = $this->createMock(File::class);
 		$this->describe($file, $path);
 		$file->method('getEtag')->willReturnCallback(fn (): string => md5((string)$this->nodes[$path]));
+		$file->method('putContent')->willReturnCallback(function (mixed $content) use ($path): void {
+			if (isset($this->failures['putContent'])) {
+				throw $this->failures['putContent'];
+			}
+			$this->nodes[$path] = is_resource($content) ? (string)stream_get_contents($content) : (string)$content;
+		});
 		$file->method('fopen')->willReturnCallback(function () use ($path) {
 			if ($this->filesCannotBeOpened) {
 				return false;
@@ -498,16 +562,18 @@ final class NextcloudStorageServiceTest extends TestCase {
 		return $file;
 	}
 
-	/** The operations of every node: its name, deleting and moving it with everything below it. */
+	/** The operations of every node: its name and ID, deleting and moving it with everything below it. */
 	private function describe(Folder|File $node, string $path): void {
 		$node->method('getName')->willReturn(basename($path));
+		$node->method('getId')->willReturnCallback(fn (): int => $this->fileId($path));
 		$node->method('delete')->willReturnCallback(function () use ($path): void {
 			if (isset($this->failures['delete'])) {
 				throw $this->failures['delete'];
 			}
+			$this->deleted[] = $path;
 			foreach (array_keys($this->nodes) as $candidate) {
 				if ($candidate === $path || str_starts_with($candidate, $path . '/')) {
-					unset($this->nodes[$candidate]);
+					unset($this->nodes[$candidate], $this->fileIds[$candidate]);
 				}
 			}
 		});
@@ -518,8 +584,10 @@ final class NextcloudStorageServiceTest extends TestCase {
 			$moved = [];
 			foreach ($this->nodes as $candidate => $content) {
 				if ($candidate === $path || str_starts_with($candidate, $path . '/')) {
-					$moved[$target . substr($candidate, strlen($path))] = $content;
-					unset($this->nodes[$candidate]);
+					$destination = $target . substr($candidate, strlen($path));
+					$moved[$destination] = $content;
+					$this->fileIds[$destination] = $this->fileId($candidate);
+					unset($this->nodes[$candidate], $this->fileIds[$candidate]);
 				}
 			}
 			$this->nodes += $moved;
