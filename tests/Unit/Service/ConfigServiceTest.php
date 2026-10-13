@@ -204,6 +204,24 @@ final class ConfigServiceTest extends TestCase {
 	}
 
 	/**
+	 * Nextcloud starts the background job every five minutes at most, so a shorter interval can't
+	 * be kept: it can't be saved, and one that an earlier version or occ stored acts as five
+	 * minutes, as it always did, and is shown as such.
+	 */
+	public function testTheIntervalIsAtLeastTheTimeBetweenTwoBackgroundJobs(): void {
+		self::assertSame(5, ConfigService::MINIMUM_INTERVAL_MINUTES);
+		self::assertSame(5, $this->service->save(['sync_interval_minutes' => 5] + self::validSettings(), 'secret-token')->syncIntervalMinutes);
+		self::assertSame(1440, $this->service->save(['sync_interval_minutes' => 1440] + self::validSettings())->syncIntervalMinutes);
+
+		$this->settings['sync_interval_minutes'] = 1;
+		self::assertSame(5, $this->service->get()->syncIntervalMinutes);
+
+		$config = $this->service->save(['batch_size' => 20] + self::validSettings());
+		self::assertSame([5, 20], [$config->syncIntervalMinutes, $config->batchSize], 'Saving other settings keeps the interval that acts.');
+		self::assertSame(5, $this->settings['sync_interval_minutes']);
+	}
+
+	/**
 	 * Disconnecting deletes the token, as its button and its question say, and turns off the
 	 * schedule, which would fail without the token. The other settings stay, the deletion policy
 	 * of the administrator too, so that connecting again needs the token and not all of them.
@@ -292,7 +310,8 @@ final class ConfigServiceTest extends TestCase {
 			'nested folder name' => [['archive_folder' => 'Archiv/2026'], 'Folder names must contain exactly one path component.'],
 			'shared folder name' => [['error_folder' => 'Eingang'], 'Archive, inbox, and error folders must have different names.'],
 			'template without ID' => [['path_template' => '{{ title }}{{ extension }}'], 'The archive path template must contain {{ id }}.'],
-			'interval too short' => [['sync_interval_minutes' => 0], 'Synchronization interval must be between 1 and 1440.'],
+			'interval shorter than the background job' => [['sync_interval_minutes' => 4], 'Synchronization interval must be between 5 and 1440.'],
+			'interval longer than a day' => [['sync_interval_minutes' => 1441], 'Synchronization interval must be between 5 and 1440.'],
 			'batch too large' => [['batch_size' => 1001], 'Batch size must be between 1 and 1000.'],
 			'too many confirmation runs' => [['missing_grace_runs' => 31], 'Missing-document confirmation runs must be between 1 and 30.'],
 			'unknown trash policy' => [['trash_mode' => 'delete'], 'Invalid Paperless trash policy.'],

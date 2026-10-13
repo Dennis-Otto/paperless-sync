@@ -11,7 +11,8 @@
 // network of Compose unless "Paperless runs in my local network" is on, and the page
 // leads there. The form always shows what the server stored, says when it holds unsaved
 // changes, and shows every result and error next to the buttons, translated, also when
-// a proxy answers with a page of its own. run.sh starts it in the image of Playwright,
+// a proxy answers with a page of its own. The CSS of Nextcloud, which styles every button
+// and input, leaves Disconnect at the end of the bar and every checkbox next to its label. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
 // Paperless and the saved configuration of run.sh are there, and it leaves that
 // configuration as it found it.
@@ -98,6 +99,33 @@ try {
 		window.dispatchEvent(event)
 		return event.defaultPrevented
 	})
+
+	// The CSS of Nextcloud gives every button a margin and every input the height of a
+	// button. Disconnect, which can't be undone, must still keep its distance at the end of
+	// the bar, and a checkbox must sit on the first line of its label, not below it.
+	const bar = await page.locator('.paperless-sync-actions').boundingBox()
+	const disconnect = await reset.boundingBox()
+	expect(
+		bar !== null && disconnect !== null && bar.x + bar.width - (disconnect.x + disconnect.width) <= 20 && disconnect.x - bar.x > bar.width / 2,
+		`Disconnect must sit at the right end of the bar: ${JSON.stringify({ bar, disconnect })}`,
+	)
+	const misaligned = await page.locator('.paperless-sync-switches label').evaluateAll((labels) => labels.flatMap((label) => {
+		const box = label.querySelector('input').getBoundingClientRect()
+		const text = document.createRange()
+		text.selectNodeContents(label.querySelector('span'))
+		const line = text.getClientRects()[0]
+		const offset = (box.top + box.height / 2) - (line.top + line.height / 2)
+		return Math.abs(offset) < 4 && box.height <= 24 ? [] : [`${label.textContent.trim()}: ${box.height} px high, ${offset.toFixed(1)} px off the middle of its first line`]
+	}))
+	expect(misaligned.length === 0, `Checkboxes must align with the first line of their labels: ${misaligned.join('; ')}`)
+	const interval = page.locator('[data-setting="sync_interval_minutes"]')
+	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
+	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
+	expect(
+		helpLinks.length === 5 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Every section must link to its part of the guide: ${JSON.stringify(helpLinks)}`,
+	)
+	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
 
 	const savedUrl = await url.inputValue()
 	expect(!(await required()), 'With the saved URL, the stored token must be enough.')

@@ -48,9 +48,12 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame('running', $status['state']);
 		self::assertSame('', $status['error']);
 		self::assertGreaterThanOrEqual($before, $status['lastStarted']);
+		self::assertSame($status['lastStarted'], $this->settings['status_last_sync_started'], 'The schedule counts from the start of a real run.');
 
+		$this->settings['status_last_sync_started'] = 1;
 		$this->service->started(true);
 		self::assertSame('dry-run-running', $this->service->get()['state']);
+		self::assertSame(1, $this->settings['status_last_sync_started'], 'A dry-run is no start for the schedule.');
 	}
 
 	public function testCompletedRunKeepsItsSummaryAndItsReport(): void {
@@ -181,17 +184,123 @@ final class StatusServiceTest extends TestCase {
 		$config = $this->config(true);
 		self::assertSame(0, $this->service->nextRun($config), 'Before the first run, the next background job starts one.');
 
+		$this->settings['status_last_started'] = $this->settings['status_last_sync_started'] = 10_000;
+		$this->settings['status_last_completed'] = $this->settings['status_last_ended'] = $this->settings['status_last_sync_ended'] = 10_060;
+		self::assertSame(10_060 + 15 * 60, $this->service->nextRun($config));
+
+		$this->settings['status_last_started'] = $this->settings['status_last_sync_started'] = 10_100;
+		self::assertSame(10_100 + 15 * 60, $this->service->nextRun($config), 'A run that is still active counts from its start.');
+
+		$this->settings['status_last_ended'] = $this->settings['status_last_sync_ended'] = 10_120;
+		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config), 'A run that failed counts from its end.');
+
+		self::assertNull($this->service->nextRun($this->config(false)), 'Without scheduled runs there is no next one.');
+	}
+
+	/**
+	 * A dry-run changes nothing, so the schedule doesn't count from it: a dry-run at 10:00 with an
+	 * interval of an hour leaves the next run where the last run put it. Only while the dry-run is
+	 * active, which holds the lock of the synchronization, does the next run wait for it, at most
+	 * the interval after its start, so that a dry-run that never ended holds back no more.
+	 */
+	public function testADryRunDoesNotPostponeTheNextScheduledRun(): void {
+		$config = $this->config(true);
+		$now = time();
+		$this->settings['status_last_started'] = $this->settings['status_last_sync_started'] = $now - 600;
+		$this->service->completed(new SyncReport(false, $now - 600, $now - 540));
+		$scheduled = $now - 540 + 15 * 60;
+		self::assertSame($scheduled, $this->service->nextRun($config));
+		self::assertSame($now - 540, $this->settings['status_last_sync_ended'], 'The schedule counts from the end of a real run.');
+
+		$this->service->started(true);
+		self::assertSame($now - 600, $this->settings['status_last_sync_started'], 'A dry-run is no start of a run for the schedule.');
+		self::assertSame((int)$this->settings['status_last_started'] + 15 * 60, $this->service->nextRun($config), 'An active dry-run holds the lock, so the next run waits for it.');
+
+		// A dry-run that ends in the second it started.
+		$this->service->completed(new SyncReport(true, $now, (int)$this->settings['status_last_started']));
+		self::assertSame($scheduled, $this->service->nextRun($config), 'A dry-run that completed leaves the schedule alone.');
+		self::assertSame($now - 540, $this->settings['status_last_sync_ended']);
+
+		$this->service->started(true);
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(true, $now));
+		self::assertSame($scheduled, $this->service->nextRun($config), 'A dry-run that failed leaves the schedule alone.');
+		self::assertSame($now - 540, $this->settings['status_last_sync_ended']);
+	}
+
+	/**
+	 * A real run counts for the schedule however it ends; a failure without a report, which can't
+	 * tell whether it was a dry-run, counts as well, as every run did before.
+	 */
+	public function testARealRunThatFailedCountsFromItsEnd(): void {
+		$config = $this->config(true);
+		$before = time();
+
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(false, $before));
+		self::assertGreaterThanOrEqual($before + 15 * 60, $this->service->nextRun($config));
+		self::assertGreaterThanOrEqual($before, $this->settings['status_last_sync_ended']);
+
+		$this->settings['status_last_sync_ended'] = 0;
+		$this->service->failed(new RuntimeException('Paperless was unavailable'));
+		self::assertGreaterThanOrEqual($before, $this->settings['status_last_sync_ended']);
+	}
+
+	/**
+	 * The status of an earlier version, which didn't tell runs and dry-runs apart, counts from the
+	 * last run of any kind; the first run after the update takes that run over, also a dry-run, so
+	 * that a dry-run after the update doesn't count either.
+	 */
+	public function testStatusOfAnEarlierVersionCountsFromItsLastRun(): void {
+		$config = $this->config(true);
 		$this->settings['status_last_started'] = 10_000;
 		$this->settings['status_last_completed'] = 10_060;
 		self::assertSame(10_060 + 15 * 60, $this->service->nextRun($config));
 
 		$this->settings['status_last_ended'] = 10_120;
-		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config), 'A run that failed counts from its end.');
+		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config));
 
-		$this->settings['status_last_started'] = 10_500;
-		self::assertSame(10_500 + 15 * 60, $this->service->nextRun($config), 'A run that is still active counts from its start.');
+		$this->service->started(true);
+		self::assertSame(10_000, $this->settings['status_last_sync_started'], 'The first run after the update takes the last run over.');
+		self::assertSame(10_120, $this->settings['status_last_sync_ended']);
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config), 'A dry-run after the update leaves the schedule alone.');
 
-		self::assertNull($this->service->nextRun($this->config(false)), 'Without scheduled runs there is no next one.');
+		$this->service->started(true);
+		self::assertSame(10_000, $this->settings['status_last_sync_started'], 'Only the first run after the update takes the last run over.');
+	}
+
+	/**
+	 * A status of an earlier version without the end of every run takes the end of its last
+	 * completed run over.
+	 */
+	public function testStatusOfAnEarlierVersionWithoutTheEndOfEveryRunTakesItsLastCompletedRunOver(): void {
+		$this->settings['status_last_started'] = 10_000;
+		$this->settings['status_last_completed'] = 10_060;
+
+		$this->service->started(true);
+
+		self::assertSame(10_000, $this->settings['status_last_sync_started']);
+		self::assertSame(10_060, $this->settings['status_last_sync_ended']);
+	}
+
+	/**
+	 * A new installation runs dry-runs first and turns scheduled runs on after that, as the
+	 * settings page recommends. It has no earlier run to take over, so once a dry-run has ended,
+	 * the next background job starts the first scheduled run, however long the interval.
+	 */
+	public function testDryRunsOfANewInstallationDoNotPostponeTheFirstScheduledRun(): void {
+		$config = $this->config(true);
+
+		$this->service->started(true);
+		self::assertSame(0, $this->settings['status_last_sync_started'], 'A new installation has no real run yet.');
+		self::assertSame(0, $this->settings['status_last_sync_ended']);
+		self::assertSame((int)$this->settings['status_last_started'] + 15 * 60, $this->service->nextRun($config), 'An active dry-run holds the lock, so the first run waits for it.');
+
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		self::assertSame(0, $this->service->nextRun($config), 'After the dry-run, the next background job starts the first run.');
+
+		$this->service->started(true);
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(true, time()));
+		self::assertSame(0, $this->service->nextRun($config), 'A dry-run that failed changes that neither.');
 	}
 
 	public function testNextScheduledRunLeavesTheLazyReportUnloaded(): void {

@@ -87,7 +87,7 @@ Every run is a background job of Nextcloud. When the status shows no next run, s
 2. Set up the system cron as [Nextcloud describes it](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/background_jobs_configuration.html#cron): every five minutes, `php -f /var/www/html/cron.php` as the user of the web server. The image of Nextcloud for Docker runs no cron of its own; give it a second container of the same image with the command `/cron.sh`, or a cron job on the host with `docker exec -u www-data nextcloud php -f /var/www/html/cron.php`.
 3. `occ background-job:list --class 'OCA\PaperlessSync\Cron\SyncJob'` shows when Nextcloud last started the job of the app.
 
-Nextcloud starts the job every five minutes at most, and the job starts a run when the interval of the app has passed since the last one. A run that is still busy, such as the first synchronization of a large archive, holds back the next one until it ends.
+Nextcloud starts the job every five minutes at most, and the job starts a run when the interval of the app has passed since the last one; a dry-run doesn't count. A run that is still busy, such as the first synchronization of a large archive, holds back the next one until it ends.
 
 ### Read the log
 
@@ -101,7 +101,7 @@ Nextcloud logs warnings and errors by default. To see that a run completed, with
 
 ### Documents of the trash come late
 
-The Paperless trash shows an account only the documents that it owns and those without an owner. A document of someone else that goes to the trash disappears for the app from both lists, so it counts as missing: its copy moves to the deleted folder only after the configured number of complete scans, below the date of that run instead of the date of the trash. With permanent deletion and *Also allow deletion when the app never observed the Paperless trash state* both on, the copy is even deleted then, although the document can still be restored in Paperless.
+The Paperless trash shows an account only the documents that it owns and those without an owner. A document of someone else that goes to the trash disappears for the app from both lists, so it counts as missing: its copy moves to the deleted folder only after the configured number of complete scans, below the date of that run instead of the date of the trash. With permanent deletion and *Also delete copies of documents that disappeared without passing the Paperless trash* both on, the copy is even deleted then, although the document can still be restored in Paperless.
 
 **Fix:** Make the account of the app the owner of the documents, with a workflow for new ones and the bulk edit of permissions for the others, as the [guide](guide.md#paperless-connection) shows; both keep the access of the people who own them now. Don't make the account a superuser: it would see the whole trash, but its token controls all of Paperless.
 

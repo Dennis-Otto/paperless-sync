@@ -101,6 +101,8 @@
 }
 
 .paperless-sync-card {
+	/* The heading of a card stacks its title and its description when the card is narrow. */
+	container-type: inline-size;
 	margin: 18px 0;
 	padding: 22px;
 	border: 1px solid var(--color-border);
@@ -123,6 +125,7 @@
 
 .paperless-sync-card-heading > div {
 	display: flex;
+	flex: none;
 	gap: 10px;
 	align-items: center;
 }
@@ -134,7 +137,19 @@
 
 .paperless-sync-card-heading p {
 	max-width: 430px;
-	text-align: right;
+	text-align: end;
+}
+
+/* The link from a section to its part of the guide, after its description. */
+.paperless-sync-help {
+	color: var(--color-main-text);
+	text-decoration: underline;
+	white-space: nowrap;
+}
+
+.paperless-sync-help:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
 }
 
 .paperless-sync-step {
@@ -190,6 +205,20 @@
 	align-items: flex-start;
 }
 
+/* Nextcloud gives every input the height of a button and a margin, which pushed a checkbox
+   below its label. A checkbox keeps its own size and sits on the middle of the first line of its
+   label, however many lines the label has; with the line of its label, 1lh is that line. */
+.paperless-sync-switches input[type='checkbox'] {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	min-height: 0;
+	padding: 0;
+	font: inherit;
+	margin: 0.2em 0 0;
+	margin: calc((1lh - 16px) / 2) 0 0;
+}
+
 .paperless-sync-danger-toggle {
 	font-weight: 700;
 	color: var(--color-error-text);
@@ -219,8 +248,10 @@
 	backdrop-filter: blur(12px);
 }
 
-.paperless-sync-reset {
-	margin-left: auto;
+/* Disconnect, which can't be undone, keeps its distance at the end of the bar. The ID outweighs
+   the margin that Nextcloud gives every button. */
+#paperless-sync-reset {
+	margin-inline-start: auto;
 }
 
 /* The note about unsaved changes and the result of the last action, each on a line of its own
@@ -303,21 +334,24 @@
 	outline-offset: 2px;
 }
 
+@container (max-width: 600px) {
+	.paperless-sync-card-heading {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.paperless-sync-card-heading p {
+		text-align: start;
+	}
+}
+
 @media (max-width: 700px) {
 	.paperless-sync-grid,
 	.paperless-sync-switches--inline {
 		grid-template-columns: 1fr;
 	}
 
-	.paperless-sync-card-heading {
-		flex-direction: column;
-	}
-
-	.paperless-sync-card-heading p {
-		text-align: left;
-	}
-
-	.paperless-sync-reset {
-		margin-left: 0;
+	#paperless-sync-reset {
+		margin-inline-start: 0;
 	}
 }
