@@ -5,7 +5,16 @@ name: Docker E2E
 
 # The end-to-end tests in Docker against the current release of every Nextcloud
 # version that appinfo/info.xml supports, from min-version to max-version, so that
-# raising max-version, as the upstream bot does, tests the new version at once.
+# raising max-version, as the upstream bot does, tests the new version at once. One
+# job runs all versions side by side (tests/e2e/run-all.sh): one wait for a runner
+# instead of three after each other, and the downloads of one version overlap with
+# the installation of another.
+#
+# In a pull request, they run only when the change can affect the app
+# (tests/e2e/affected.sh). A change of the documentation or of other workflows
+# alone, or a release, which only writes its version, passes the required check
+# nextcloud at once. Every push to main runs them, and so does every night, as the
+# images of the versions move with each point release of Nextcloud.
 #
 # Every Monday, and when started by hand, they also run against the coming Nextcloud
 # (tests/e2e/canary.sh): the beta or release candidate of the next major version, or
@@ -19,59 +28,29 @@ on:
     branches: [main]
   pull_request:
   schedule:
+    # Every night: every supported version.
+    - cron: "23 2 * * *"
+    # Every Monday: the coming Nextcloud.
     - cron: "17 5 * * 1"
   workflow_dispatch:
 
 permissions: {}
 
+# A newer push to a pull request or to main replaces the run that is still going for
+# the older one. The scheduled runs have a group of their own and run to the end.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
-  versions:
-    name: supported Nextcloud versions
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    outputs:
-      majors: ${{ steps.versions.outputs.majors }}
-    steps:
-      - name: Record the network traffic of the job
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Read min-version and max-version of appinfo/info.xml
-        id: versions
-        run: |
-          python3 - >> "$GITHUB_OUTPUT" <<'PYTHON'
-          import json
-          import xml.etree.ElementTree as tree
-
-          nextcloud = tree.parse("appinfo/info.xml").getroot().find("dependencies/nextcloud")
-          low, high = int(nextcloud.get("min-version")), int(nextcloud.get("max-version"))
-          print("majors=" + json.dumps(list(range(low, high + 1))))
-          PYTHON
-
-  nextcloud-version:
-    name: Nextcloud ${{ matrix.nextcloud }}
-    needs: versions
+  nextcloud:
+    name: nextcloud
+    # The run of Monday morning is the coming Nextcloud's alone.
+    if: github.event.schedule != '17 5 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        nextcloud: ${{ fromJSON(needs.versions.outputs.majors) }}
-    env:
-      # The current release of the major version.
-      NEXTCLOUD_IMAGE: nextcloud:${{ matrix.nextcloud }}-apache
     steps:
       - name: Record the network traffic of the job
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
@@ -80,29 +59,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Run the Paperless Sync end-to-end tests
-        run: bash tests/e2e/run.sh
-
-  nextcloud:
-    name: nextcloud
-    if: always() && github.event_name != 'schedule'
-    needs: [versions, nextcloud-version]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Record the network traffic of the job
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
-        with:
-          egress-policy: audit
-      - name: Require every supported Nextcloud version to pass
-        env:
-          VERSIONS: ${{ needs.versions.result }}
-          RESULT: ${{ needs.nextcloud-version.result }}
-        run: test "$VERSIONS" = success && test "$RESULT" = success
+          # The merge commit of a pull request and its base, which affected.sh compares.
+          fetch-depth: 2
+      - name: Find out whether the change can affect the app
+        id: changes
+        if: github.event_name == 'pull_request'
+        run: bash tests/e2e/affected.sh
+      - name: Run the Paperless Sync end-to-end tests against every supported Nextcloud version
+        if: steps.changes.outputs.affected != 'false'
+        run: bash tests/e2e/run-all.sh
 
   coming:
     name: coming Nextcloud
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event.schedule == '17 5 * * 1' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

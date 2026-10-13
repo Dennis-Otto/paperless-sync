@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# Git Bash on Windows would turn the paths inside the containers, such as
+# /mock/assert_json.py, into paths of Windows before docker sees them.
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+${MSYS2_ARG_CONV_EXCL};}/mock/"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
@@ -15,6 +19,12 @@ BASE_URL="http://127.0.0.1:${E2E_PORT}"
 DAV_BASE="${BASE_URL}/remote.php/dav/files"
 TMP_DIR="$(mktemp -d)"
 COMPOSE=("${DOCKER_BIN}" compose --project-name "${PROJECT_NAME}" --file "${SCRIPT_DIR}/compose.yaml")
+# The browser of the accessibility check (accessibility.mjs). Keep its version equal to
+# playwright-core in package.json; Renovate updates both together, and
+# scripts/check-project.sh compares them.
+PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27"
+# The download of that image in the background, while Nextcloud installs.
+PLAYWRIGHT_PULL=""
 
 export E2E_PORT
 
@@ -26,10 +36,14 @@ cleanup() {
 		"${COMPOSE[@]}" logs --no-color --tail 300 || true
 	fi
 	rm -rf "${TMP_DIR}"
-	if [[ "${KEEP_E2E:-0}" != "1" ]]; then
-		"${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
-	else
+	if [[ -n "${PLAYWRIGHT_PULL}" ]]; then
+		kill "${PLAYWRIGHT_PULL}" 2>/dev/null || true
+	fi
+	if [[ "${KEEP_E2E:-0}" == "1" ]]; then
 		echo "E2E environment kept at ${BASE_URL} (project ${PROJECT_NAME})."
+	elif [[ "${CI:-}" != "true" ]]; then
+		# A runner of the CI is thrown away with its containers after the job.
+		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 	fi
 	exit "${status}"
 }
@@ -53,17 +67,19 @@ control() {
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
 # network of the Compose project. The files of the check reach the browser through
-# standard input, so that npm leaves nothing in the checkout. Keep the version of the
-# image of Playwright equal to playwright-core in package.json; Renovate updates both
-# together, and scripts/check-project.sh compares them.
+# standard input, so that npm leaves nothing in the checkout.
 accessibility() {
+	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
+		echo "The image of Playwright didn't download in the background; docker run tries again."
+	fi
+	PLAYWRIGHT_PULL=""
 	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
 			--env E2E_USER=e2e-admin \
 			--env "E2E_PASSWORD=${PASSWORD}" \
-			mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 \
+			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs'
 }
 
@@ -119,8 +135,12 @@ TRASH_PATH='Documents/Paperless/Archive/_Deleted/2026-08-27/Example%20GmbH/Invoi
 ERROR_PATH='Documents/Paperless/Errors/broken.pdf'
 
 cd "${REPOSITORY_ROOT}"
-"${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
+if ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
+	PLAYWRIGHT_PULL=$!
+fi
 
 if ! occ status --output=json 2>/dev/null | grep --fixed-strings '"installed":true' >/dev/null; then
 	occ maintenance:install \
@@ -132,6 +152,11 @@ occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
 # The browser of the accessibility check reaches Nextcloud by its name in the network.
 occ config:system:set trusted_domains 2 --value=nextcloud >/dev/null
 occ config:system:set allow_local_remote_servers --type=boolean --value=true >/dev/null
+# The password policy would look up every new password at Have I Been Pwned: a
+# request to the internet that the tests don't need and that can fail.
+occ config:app:set password_policy enforceHaveIBeenPwned --type=boolean --value=false >/dev/null
+NEXTCLOUD_VERSION="$(occ status --output=json | grep -oE '"versionstring":"[^"]+"' | cut -d '"' -f 4 || true)"
+echo "The tests run against Nextcloud ${NEXTCLOUD_VERSION:-?}."
 
 for user in sync-target e2e-other; do
 	"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \

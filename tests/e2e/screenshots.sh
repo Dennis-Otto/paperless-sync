@@ -23,7 +23,7 @@ BASE_URL="http://127.0.0.1:${E2E_PORT}"
 COMPOSE=("${DOCKER_BIN}" compose --project-name "${PROJECT_NAME}" --file "${SCRIPT_DIR}/compose.yaml")
 # The same image of Playwright as the accessibility check of run.sh, so that one
 # update moves both.
-PLAYWRIGHT_IMAGE="$(grep -oE 'mcr\.microsoft\.com/playwright:[^ ]+' "${SCRIPT_DIR}/run.sh" | head -n 1)"
+PLAYWRIGHT_IMAGE="$(grep -oE 'mcr\.microsoft\.com/playwright:[^ "]+' "${SCRIPT_DIR}/run.sh" | head -n 1)"
 
 export E2E_PORT
 
@@ -34,7 +34,7 @@ cleanup() {
 		"${COMPOSE[@]}" logs --no-color --tail 100 || true
 	fi
 	if [[ "${KEEP_E2E:-0}" != "1" ]]; then
-		"${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 	else
 		echo "Screenshot environment kept at ${BASE_URL} (project ${PROJECT_NAME})."
 	fi
@@ -47,7 +47,7 @@ occ() {
 }
 
 cd "${REPOSITORY_ROOT}"
-"${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
+"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
 
 occ nextcloud php occ maintenance:install \

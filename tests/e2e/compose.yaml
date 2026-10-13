@@ -5,6 +5,8 @@ services:
   paperless-mock:
     image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
     command: ["python", "/mock/mock_server.py"]
+    # Python as process 1 would ignore the signal to stop, and Docker would wait for it.
+    init: true
     read_only: true
     tmpfs:
       - /tmp
