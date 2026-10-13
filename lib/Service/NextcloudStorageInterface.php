@@ -18,6 +18,9 @@ interface NextcloudStorageInterface {
 
 	public function exists(string $userId, string $path): bool;
 
+	/** Whether the path is a folder in which the user may create files and folders. */
+	public function isWritableFolder(string $userId, string $path): bool;
+
 	/**
 	 * The source stream may be consumed and closed by Nextcloud.
 	 *

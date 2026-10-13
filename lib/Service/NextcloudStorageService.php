@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\NotEnoughSpaceException;
 use OCP\IUserManager;
 use RuntimeException;
 
@@ -54,6 +55,17 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 
 	public function exists(string $userId, string $path): bool {
 		return $this->rootFolder->getUserFolder($userId)->nodeExists($this->normalize($path));
+	}
+
+	public function isWritableFolder(string $userId, string $path): bool {
+		$path = $this->normalize($path);
+		$userFolder = $this->rootFolder->getUserFolder($userId);
+		if (!$userFolder->nodeExists($path)) {
+			return false;
+		}
+		$node = $userFolder->get($path);
+
+		return $node instanceof Folder && $node->isCreatable();
 	}
 
 	/** @psalm-suppress DocblockTypeContradiction */
@@ -164,6 +176,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	private function write(string $userId, string $path, $content, string $conflictMode): void {
 		$path = $this->normalize($path);
 		[$parentPath, $name] = $this->split($path);
+		$this->requireSpace($userId, $parentPath, is_string($content) ? strlen($content) : $this->streamSize($content));
 		$parent = $this->ensureFolder($userId, $parentPath);
 		if ($parent->nodeExists($name) && $conflictMode === 'skip') {
 			throw new RuntimeException("Nextcloud file conflict at {$path}.");
@@ -185,6 +198,40 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 			}
 			throw $exception;
 		}
+	}
+
+	/**
+	 * Nextcloud applies no quota to a file whose name ends in .part, such as the temporary file of a
+	 * write, so the write checks the free space itself: in the deepest folder of the path that
+	 * exists, before it creates a folder, because a full quota refuses new folders as well.
+	 * Unlimited, unknown and not yet computed space is negative and not checked.
+	 *
+	 * @throws NotEnoughSpaceException
+	 */
+	private function requireSpace(string $userId, string $parentPath, int $size): void {
+		$folder = $this->rootFolder->getUserFolder($userId);
+		foreach (explode('/', $parentPath) as $component) {
+			if ($component === '' || !$folder->nodeExists($component)) {
+				break;
+			}
+			$node = $folder->get($component);
+			if (!$node instanceof Folder) {
+				break;
+			}
+			$folder = $node;
+		}
+		/** @var mixed $free Nextcloud declares an int, and its implementations return a float for large values. */
+		$free = $folder->getFreeSpace();
+		if ((is_int($free) || is_float($free)) && $free >= 0 && $free < $size) {
+			throw new NotEnoughSpaceException("Not enough free space in Nextcloud: the file needs {$size} bytes, and {$free} are free.");
+		}
+	}
+
+	/** @param resource $stream */
+	private function streamSize($stream): int {
+		$stat = fstat($stream);
+
+		return is_array($stat) ? $stat['size'] : 0;
 	}
 
 	/** @param list<array{path: string, name: string, etag: string}> $files */

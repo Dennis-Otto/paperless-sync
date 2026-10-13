@@ -13,7 +13,8 @@ Run this matrix in an isolated Nextcloud/Paperless lab before a release that cha
 | Missing documents | A document that disappears from Paperless without passing through its trash moves the Nextcloud copy to the deleted folder after the configured number of complete scans, also when a run reaches its batch size first: the copy then moves in a later run. |
 | Permanent deletion | No Nextcloud file is permanently deleted before the configured number of complete missing-document scans. Direct deletion remains blocked unless explicitly enabled. |
 | Inbox import | Recursive import submits each source once, keeps it while the task is pending, removes it after success, and moves failures plus diagnostics to the error folder. |
-| Conflicts | `skip` preserves an unrelated Nextcloud file and reports the conflict; `replace` changes only the managed destination. |
+| Conflicts | `skip` preserves an unrelated Nextcloud file and reports the conflict without downloading the document; `replace` changes only the managed destination. |
+| Full storage | With the quota of the target user used up, a run reports one export error and `EXPORT STOPPED`, downloads no further document, and exports the rest once space is free again. |
 | Permissions | The configured target user owns the files; an unrelated Nextcloud user cannot read them unless they are explicitly shared. |
 | Scheduling | System cron invokes the registered background job, respects the configured interval, and does not run in parallel. |
 | Clients | Files remain readable through Nextcloud Web, desktop sync, iOS, and Android after exports, moves, and trash restoration. |

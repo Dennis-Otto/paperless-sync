@@ -91,7 +91,7 @@ def scenario_documents():
         trashed = document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")
         trashed["deleted_at"] = "2026-08-27T08:00:00+02:00"
         return [], [trashed]
-    if scenario == "empty":
+    if scenario in ("empty", "incomplete"):
         return [], []
     if scenario == "archive":
         # A larger archive, whose dry-run lists more changes than the report shows at once.
@@ -119,7 +119,9 @@ class Handler(BaseHTTPRequestHandler):
 
         documents, trash = scenario_documents()
         if parsed.path == "/api/documents/":
-            self._page(documents)
+            # An incomplete answer, as of a proxy or a permission glitch: an empty page whose count
+            # still lists the document.
+            self._page(documents, 1 if STATE["scenario"] == "incomplete" else None)
         elif parsed.path == "/api/trash/":
             self._page(trash)
         elif parsed.path == "/api/correspondents/":
@@ -170,7 +172,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive", "names"} | showcase.SCENARIOS:
+            if scenario not in {"active", "renamed", "excluded", "trash", "incomplete", "empty", "archive", "names"} | showcase.SCENARIOS:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:
@@ -244,8 +246,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(401, {"detail": "Invalid synthetic credentials"})
         return valid
 
-    def _page(self, results):
-        self._json(200, {"count": len(results), "next": None, "previous": None, "results": results})
+    def _page(self, results, count=None):
+        self._json(200, {"count": len(results) if count is None else count, "next": None, "previous": None, "results": results})
 
     def _json(self, status, payload):
         self._bytes(status, json.dumps(payload).encode("utf-8"), "application/json")

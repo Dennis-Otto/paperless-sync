@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 
 /**
@@ -19,6 +20,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $documents = [];
 	/** @var list<array<string, mixed>> */
 	public array $trash = [];
+	/** The number of documents that Paperless lists, when the run receives fewer: an incomplete scan. */
+	public ?int $documentsListed = null;
+	/** The number of documents that Paperless lists in its trash, when the run receives fewer. */
+	public ?int $trashListed = null;
 	/** @var array<string, string> */
 	public array $correspondents = [];
 	/** @var array<string, string> */
@@ -44,12 +49,12 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public function testConnection(string $url, string $token): void {
 	}
 
-	public function documents(): array {
-		return $this->documents;
+	public function documents(): PaperlessScan {
+		return self::scan($this->documents, $this->documentsListed);
 	}
 
-	public function trash(): array {
-		return $this->trash;
+	public function trash(): PaperlessScan {
+		return self::scan($this->trash, $this->trashListed);
 	}
 
 	public function correspondents(): array {
@@ -98,5 +103,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 			throw $this->taskException;
 		}
 		return $this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => ''];
+	}
+
+	/** @param list<array<string, mixed>> $documents */
+	private static function scan(array $documents, ?int $listed): PaperlessScan {
+		return new PaperlessScan($documents, $listed === null, $listed ?? count($documents));
 	}
 }

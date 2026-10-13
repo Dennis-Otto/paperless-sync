@@ -9,14 +9,16 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\PaperlessScan;
+
 interface PaperlessClientInterface {
 	public function testConnection(string $url, string $token): void;
 
-	/** @return list<array<string, mixed>> */
-	public function documents(): array;
+	/** The active documents, and whether the run received all of them. */
+	public function documents(): PaperlessScan;
 
-	/** @return list<array<string, mixed>> */
-	public function trash(): array;
+	/** The documents in the trash of Paperless, and whether the run received all of them. */
+	public function trash(): PaperlessScan;
 
 	/** @return array<string, string> */
 	public function correspondents(): array;

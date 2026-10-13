@@ -92,38 +92,108 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->service->testConnection(self::URL, '');
 	}
 
-	public function testDocumentsAreReadFromEveryPage(): void {
-		$this->responses[] = [200, ['count' => 2001, 'results' => [['id' => 1]]]];
-		$this->responses[] = [200, ['count' => 2001, 'results' => [['id' => 2]]]];
-		$this->responses[] = [200, ['count' => 2001, 'results' => [['id' => 3]]]];
+	public function testDocumentsAreReadFromEveryPageInTheOrderOfTheirIds(): void {
+		$this->responses[] = [200, ['count' => 2001, 'results' => self::entries(1, 1000)]];
+		$this->responses[] = [200, ['count' => 2001, 'results' => self::entries(1001, 2000)]];
+		$this->responses[] = [200, ['count' => 2001, 'results' => self::entries(2001, 2001)]];
 
-		self::assertSame([['id' => 1], ['id' => 2], ['id' => 3]], $this->service->documents());
-		self::assertSame([1, 2, 3], array_map(static fn (array $request): mixed => $request['options']['query']['page'], $this->requests));
+		$scan = $this->service->documents();
+
+		self::assertSame(self::entries(1, 2001), $scan->documents);
+		self::assertTrue($scan->complete);
+		self::assertSame(2001, $scan->listed);
+		self::assertSame([
+			['ordering' => 'id', 'page' => 1, 'page_size' => 1000],
+			['ordering' => 'id', 'page' => 2, 'page_size' => 1000],
+			['ordering' => 'id', 'page' => 3, 'page_size' => 1000],
+		], array_map(static fn (array $request): mixed => $request['options']['query'], $this->requests), 'Ordered by ID, a document added during the scan joins the last page.');
 		self::assertSame(self::URL . '/api/documents/', $this->requests[2]['url']);
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
 	}
 
-	public function testTrashIsReadFromItsEndpoint(): void {
-		$this->responses[] = [200, ['results' => [['id' => 4, 'deleted_at' => '2026-08-27T08:00:00+02:00']]]];
-
-		self::assertSame([['id' => 4, 'deleted_at' => '2026-08-27T08:00:00+02:00']], $this->service->trash());
-		self::assertSame(self::URL . '/api/trash/', $this->requests[0]['url']);
+	/** @return array<string, array{list<array{int, int, int}>}> the count, the first and the last ID of each page; no IDs when the last is lower */
+	public static function incompleteScans(): array {
+		return [
+			'a short page before the last' => [[[1500, 1, 999], [1500, 1001, 1500]]],
+			'an empty page' => [[[1500, 1, 1000], [1500, 1, 0]]],
+			'a short last page' => [[[1500, 1, 1000], [1500, 1001, 1499]]],
+			'a single short page' => [[[3, 1, 2]]],
+			'a document deleted during the scan' => [[[1500, 1, 1000], [1499, 1002, 1500]]],
+			'a document added during the scan' => [[[1500, 1, 1000], [1501, 1001, 1501]]],
+			'a document read twice' => [[[1500, 1, 1000], [1500, 1000, 1499]]],
+		];
 	}
 
-	public function testResultsWithoutAnEnvelopeAreAccepted(): void {
+	/** @param list<array{int, int, int}> $pages */
+	#[DataProvider('incompleteScans')]
+	public function testScanThatMayHaveMissedDocumentsIsIncomplete(array $pages): void {
+		$documents = [];
+		foreach ($pages as [$count, $first, $last]) {
+			$results = $last < $first ? [] : self::entries($first, $last);
+			$this->responses[] = [200, ['count' => $count, 'results' => $results]];
+			array_push($documents, ...$results);
+		}
+
+		$scan = $this->service->documents();
+
+		self::assertFalse($scan->complete);
+		self::assertSame($documents, $scan->documents, 'The documents that came back are still synchronized.');
+		self::assertSame(end($pages)[0], $scan->listed);
+		self::assertSame([], $this->responses, 'The pages follow from the count of the first one.');
+	}
+
+	public function testDocumentWithoutAnIdLeavesTheScanIncomplete(): void {
+		$this->responses[] = [200, ['count' => 2, 'results' => [['id' => 1], ['title' => 'without an ID']]]];
+
+		self::assertFalse($this->service->documents()->complete);
+	}
+
+	public function testTrashIsReadFromItsEndpoint(): void {
+		$this->responses[] = [200, ['count' => 1, 'results' => [['id' => 4, 'deleted_at' => '2026-08-27T08:00:00+02:00']]]];
+
+		$scan = $this->service->trash();
+
+		self::assertSame([['id' => 4, 'deleted_at' => '2026-08-27T08:00:00+02:00']], $scan->documents);
+		self::assertTrue($scan->complete);
+		self::assertSame(self::URL . '/api/trash/', $this->requests[0]['url']);
+		self::assertSame(['page' => 1, 'page_size' => 1000], $this->requests[0]['options']['query'], 'Paperless orders its trash on its own.');
+	}
+
+	public function testScanOfTheTrashIsCheckedToo(): void {
+		$this->responses[] = [200, ['count' => 2, 'results' => [['id' => 4]]]];
+
+		self::assertFalse($this->service->trash()->complete);
+	}
+
+	public function testResultsWithoutAnEnvelopeAreReadButLeaveTheScanIncomplete(): void {
 		$this->responses[] = [200, [['id' => 1, 0 => 'dropped'], 'not an object', ['id' => 2]]];
 
-		self::assertSame([['id' => 1], ['id' => 2]], $this->service->documents());
+		$scan = $this->service->documents();
+
+		self::assertSame([['id' => 1], ['id' => 2]], $scan->documents);
+		self::assertFalse($scan->complete, 'Without the count of Paperless, the run cannot tell whether it has every document.');
 	}
 
-	public function testAnObjectWithoutResultsHasNoDocuments(): void {
+	public function testAnObjectWithoutResultsHasNoDocumentsAndLeavesTheScanIncomplete(): void {
 		$this->responses[] = [200, ['detail' => 'Nothing here']];
 
-		self::assertSame([], $this->service->documents());
+		$scan = $this->service->documents();
+
+		self::assertSame([], $scan->documents);
+		self::assertFalse($scan->complete, 'An answer without a list must not make every document look deleted.');
+	}
+
+	public function testEmptyListIsACompleteScan(): void {
+		$this->responses[] = [200, ['count' => 0, 'next' => null, 'previous' => null, 'results' => []]];
+
+		$scan = $this->service->documents();
+
+		self::assertSame([], $scan->documents);
+		self::assertTrue($scan->complete);
 	}
 
 	public function testNamesOfCorrespondentsDocumentTypesAndStoragePaths(): void {
-		$entries = ['results' => [['id' => 4, 'name' => 'Energie GmbH'], ['id' => 5], ['name' => 'without an ID'], ['id' => [6], 'name' => 'list as ID']]];
+		$entries = ['count' => 3, 'results' => [['id' => 4, 'name' => 'Energie GmbH'], ['id' => 5], ['id' => '6', 'name' => ['not a name']]]];
 		$this->responses = [[200, $entries], [200, $entries], [200, $entries]];
 
 		self::assertSame(['4' => 'Energie GmbH'], $this->service->correspondents());
@@ -136,18 +206,48 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testTagsWithTheirNamesAndInboxFlags(): void {
-		$this->responses[] = [200, ['results' => [
+		$this->responses[] = [200, ['count' => 3, 'results' => [
 			['id' => 9, 'name' => 'Inbox', 'is_inbox_tag' => true],
 			['id' => 10, 'name' => 'Steuer', 'is_inbox_tag' => false],
 			['id' => 11, 'is_inbox_tag' => 'yes'],
-			['name' => 'without an ID'],
-			['id' => null, 'name' => 'null ID'],
 		]]];
 
 		self::assertSame([
 			'names' => ['9' => 'Inbox', '10' => 'Steuer', '11' => '11'],
 			'inbox' => ['9'],
 		], $this->service->tags());
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function smallLists(): array {
+		return [
+			'tags' => ['tags', '/api/tags/'],
+			'correspondents' => ['correspondents', '/api/correspondents/'],
+			'document types' => ['documentTypes', '/api/document_types/'],
+			'storage paths' => ['storagePaths', '/api/storage_paths/'],
+		];
+	}
+
+	/**
+	 * Without every tag, a document with an excluded tag would be exported; without every
+	 * correspondent, document type or storage path, documents would move to other paths.
+	 */
+	#[DataProvider('smallLists')]
+	public function testIncompleteListOfNamesFailsTheRun(string $method, string $path): void {
+		$this->responses[] = [200, ['count' => 2, 'results' => [['id' => 9, 'name' => 'Privat']]]];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage("Paperless's list {$path} came back incomplete or changed while the run read it (1 of 2 received).");
+		$this->service->{$method}();
+	}
+
+	#[DataProvider('smallLists')]
+	public function testListOfNamesWithoutTheCountOfPaperlessFailsTheRun(string $method, string $path): void {
+		$this->responses[] = [200, [['id' => 9, 'name' => 'Privat']]];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage("Paperless's list {$path} came back incomplete or changed while the run read it (1 of 1 received).");
+		$this->service->{$method}();
 	}
 
 	public function testDownloadCopiesTheDocumentIntoTheSinkAndRemovesTheTemporaryFile(): void {
@@ -517,7 +617,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		rewind($body);
 		$this->responses[] = [200, $body];
 
-		self::assertSame([['id' => 1]], $this->service->documents());
+		self::assertSame([['id' => 1]], $this->service->documents()->documents);
 	}
 
 	public function testUnconfiguredAppDoesNotCallPaperless(): void {
@@ -526,6 +626,11 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage('Paperless is not configured.');
 		$this->service->documents();
+	}
+
+	/** @return list<array{id: int}> the documents with the IDs from $first to $last */
+	private static function entries(int $first, int $last): array {
+		return array_map(static fn (int $id): array => ['id' => $id], range($first, $last));
 	}
 
 	/** @param array<string, mixed> $options */
