@@ -17,6 +17,7 @@ Run this matrix in an isolated Nextcloud/Paperless lab before a release that cha
 | Full storage | With the quota of the target user used up, a run reports one export error and `EXPORT STOPPED`, downloads no further document, and exports the rest once space is free again. |
 | Permissions | The configured target user owns the files; an unrelated Nextcloud user cannot read them unless they are explicitly shared. |
 | Scheduling | System cron invokes the registered background job, respects the configured interval, and does not run in parallel. |
+| Run visibility | After a scheduled run with an error of a document, a reload of the settings shows the error, the report and *Completed with errors*; the Nextcloud log has one warning for the error, and none for the same error in the runs after it. |
 | Clients | Files remain readable through Nextcloud Web, desktop sync, iOS, and Android after exports, moves, and trash restoration. |
 
 Record the Paperless version, Nextcloud version, app version, client versions, chosen configuration, and sanitized result summaries. Never attach a production token, hostname, document, path, or log containing personal metadata to an issue.

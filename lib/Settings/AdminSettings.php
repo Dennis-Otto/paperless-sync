@@ -13,6 +13,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Services\IInitialState;
 use OCP\IURLGenerator;
 use OCP\Settings\ISettings;
 
@@ -22,13 +23,19 @@ final class AdminSettings implements ISettings {
 		private ConfigService $configService,
 		private StatusService $statusService,
 		private IURLGenerator $urlGenerator,
+		private IInitialState $initialState,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
+		$config = $this->configService->get();
+		$status = $this->statusService->overview($config);
+		// The page shows the status, its error and its report from the start, as after a refresh.
+		$this->initialState->provideInitialState('status', $status);
+
 		return new TemplateResponse(AppConstants::APP_ID, 'settings', [
-			'config' => $this->configService->get(),
-			'status' => $this->statusService->get(),
+			'config' => $config,
+			'status' => $status,
 			'saveUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.save'),
 			'resetUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.reset'),
 			'runUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.run'),
