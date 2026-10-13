@@ -57,6 +57,40 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
+		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
+	}
+
+	/** The page has the stored configuration without the token, which never reaches the browser. */
+	public function testThePageGetsTheConfigurationWithoutTheToken(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+
+		$this->adminSettings()->getForm();
+
+		$config = $this->initialState['config'];
+		self::assertInstanceOf(SyncConfig::class, $config);
+		self::assertTrue($config->tokenConfigured);
+		self::assertStringNotContainsString('secret-token', json_encode($config, JSON_THROW_ON_ERROR));
+	}
+
+	/**
+	 * js/settings.js fills every field of the form from the configuration that the server
+	 * stored: the field data-setting="paperless_url" from paperlessUrl. Every field has its
+	 * value there, and every value of the configuration but the state of the token has its field.
+	 */
+	public function testEveryFieldOfTheFormHasAValueOfTheConfiguration(): void {
+		$template = file_get_contents(__DIR__ . '/../../../templates/settings.php');
+		self::assertIsString($template);
+		preg_match_all('/data-setting="([a-z_]+)"/', $template, $matches);
+		$fields = array_map(
+			static fn (string $setting): string => lcfirst(str_replace('_', '', ucwords($setting, '_'))),
+			$matches[1],
+		);
+		$values = array_keys($this->configService()->get()->jsonSerialize());
+
+		sort($fields);
+		$values = array_values(array_diff($values, ['tokenConfigured']));
+		sort($values);
+		self::assertSame($values, $fields);
 	}
 
 	public function testFormBelongsToTheSectionOfTheApp(): void {

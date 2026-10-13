@@ -85,6 +85,7 @@ OC.L10N.register(
 		"Run dry-run": "Testlauf starten",
 		"Synchronize now": "Jetzt synchronisieren",
 		"Disconnect": "Trennen",
+		"Unsaved changes: \"Run dry-run\" uses the saved settings, and \"Synchronize now\" waits until you save.": "Ungespeicherte Änderungen: „Testlauf starten“ verwendet die gespeicherten Einstellungen, und „Jetzt synchronisieren“ wartet, bis du speicherst.",
 		"Run report": "Laufbericht",
 		"File changes of the run": "Dateiänderungen des Laufs",
 		"Dry-run, finished {time}": "Testlauf, beendet {time}",
@@ -112,10 +113,32 @@ OC.L10N.register(
 		"Synchronizing Paperless and Nextcloud…": "Paperless und Nextcloud werden synchronisiert …",
 		"Dry-run completed. No files were changed.": "Testlauf abgeschlossen. Es wurden keine Dateien verändert.",
 		"Synchronization completed.": "Synchronisation abgeschlossen.",
+		"_Dry-run completed with %n error. No files were changed; see the report._::_Dry-run completed with %n errors. No files were changed; see the report._": [
+			"Testlauf mit %n Fehler abgeschlossen. Es wurden keine Dateien verändert; siehe den Bericht.",
+			"Testlauf mit %n Fehlern abgeschlossen. Es wurden keine Dateien verändert; siehe den Bericht."
+		],
+		"_Synchronization completed with %n error. See the report._::_Synchronization completed with %n errors. See the report._": [
+			"Synchronisation mit %n Fehler abgeschlossen. Siehe den Bericht.",
+			"Synchronisation mit %n Fehlern abgeschlossen. Siehe den Bericht."
+		],
+		"The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.": "Der Lauf dauert länger, als der Webserver auf eine Antwort wartet. Er läuft im Hintergrund weiter, und der Status oben zeigt, wann er endet.",
+		"Synchronization failed.": "Die Synchronisation ist fehlgeschlagen.",
 		"Testing Paperless and Nextcloud access…": "Paperless- und Nextcloud-Zugriff werden geprüft …",
+		"Saving the settings…": "Einstellungen werden gespeichert …",
 		"Connection successful. Configuration saved.": "Verbindung erfolgreich. Konfiguration gespeichert.",
+		"Saved. Scheduled synchronization is off; the connection was not tested.": "Gespeichert. Die geplante Synchronisation ist aus; die Verbindung wurde nicht getestet.",
+		"Could not save the configuration.": "Die Konfiguration konnte nicht gespeichert werden.",
+		"Run synchronization now and apply the configured file moves and deletion policy?": "Jetzt synchronisieren und die konfigurierten Dateiverschiebungen und Löschregeln anwenden?",
 		"Status refreshed.": "Status aktualisiert.",
-		"Paperless disconnected. Existing files were not changed.": "Paperless wurde getrennt. Bestehende Dateien wurden nicht verändert."
+		"Could not refresh status.": "Der Status konnte nicht aktualisiert werden.",
+		"Disconnect Paperless? This deletes the stored API token and turns off scheduled synchronization and the access to the local network. The other settings, the synchronized files and their state stay as they are.": "Paperless trennen? Das gespeicherte API-Token wird gelöscht, und die geplante Synchronisation und der Zugriff auf das lokale Netzwerk werden ausgeschaltet. Die übrigen Einstellungen, die synchronisierten Dateien und ihr Zustand bleiben, wie sie sind.",
+		"Your unsaved changes will be discarded.": "Deine ungespeicherten Änderungen gehen dabei verloren.",
+		"Paperless disconnected: the API token is deleted and scheduled synchronization is off. The other settings and the files are unchanged.": "Paperless getrennt: Das API-Token ist gelöscht und die geplante Synchronisation aus. Die übrigen Einstellungen und die Dateien sind unverändert.",
+		"Could not disconnect Paperless.": "Paperless konnte nicht getrennt werden.",
+		"Nextcloud could not be reached. Check the connection and try again.": "Nextcloud war nicht erreichbar. Prüfe die Verbindung und versuche es noch einmal.",
+		"Your session has expired. Reload the page and try again.": "Deine Sitzung ist abgelaufen. Lade die Seite neu und versuche es noch einmal.",
+		"The server answered with status {status}.": "Der Server hat mit dem Status {status} geantwortet.",
+		"The web server answered with status {status}. The status above shows how the run ended.": "Der Webserver hat mit dem Status {status} geantwortet. Der Status oben zeigt, wie der Lauf endete."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

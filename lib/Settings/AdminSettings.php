@@ -32,6 +32,9 @@ final class AdminSettings implements ISettings {
 		$status = $this->statusService->overview($config);
 		// The page shows the status, its error and its report from the start, as after a refresh.
 		$this->initialState->provideInitialState('status', $status);
+		// The stored configuration, without the token, which the form compares with what it shows
+		// to tell unsaved changes, as after a save or a disconnect.
+		$this->initialState->provideInitialState('config', $config);
 
 		return new TemplateResponse(AppConstants::APP_ID, 'settings', [
 			'config' => $config,
