@@ -134,3 +134,5 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
     [:octicons-arrow-right-24: Releases](releases.md) · [Changelog](changelog.md)
 
 </div>
+
+--8<-- "README.md:help"

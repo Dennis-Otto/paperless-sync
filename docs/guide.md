@@ -81,3 +81,5 @@ A dry-run or a run by hand ends with its report: how many documents each kind of
 </picture>
 
 --8<-- "README.md:status-report"
+
+--8<-- "README.md:help"
