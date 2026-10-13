@@ -1,8 +1,10 @@
 # Guide
 
-How to install and set up Paperless Sync, what it does, how to use it, and what each part of its configuration means.
+How Paperless Sync works, what it needs, how to install and set it up, what it does, how to use it, and what each part of its configuration means.
 
 --8<-- "README.md:how-it-works"
+
+--8<-- "README.md:requirements"
 
 --8<-- "README.md:quick-start-section"
 

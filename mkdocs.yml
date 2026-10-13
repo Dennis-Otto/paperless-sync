@@ -63,6 +63,7 @@ nav:
   - Architecture: architecture.md
   - Security design: security.md
   - Roadmap: roadmap.md
+  - Development: development.md
   - Releases: releases.md
   - Changelog: changelog.md
   - Decisions: decisions/README.md
