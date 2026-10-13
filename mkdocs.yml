@@ -63,10 +63,12 @@ nav:
   - Help:
       - FAQ: faq.md
       - Troubleshooting: troubleshooting.md
+  - Compare: alternatives.md
   - Architecture: architecture.md
   - Security design: security.md
   - Roadmap: roadmap.md
   - Development: development.md
+  - Automation: automation.md
   - Releases: releases.md
   - Changelog: changelog.md
   - Decisions: decisions/README.md

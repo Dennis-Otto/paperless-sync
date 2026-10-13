@@ -134,10 +134,11 @@ printf '\n== %s\n' "Versions in the README"
 # The first screen of the README shows the version in the App Store and the versions of
 # Nextcloud in badges that read appinfo/info.xml on main, so that they follow every
 # release and every raise of max-version by the upstream bot without an edit. The
-# fields such as <span data-app="nextcloud">33–35</span> in README.md and docs/index.md
-# are text on GitHub, which the hook of the website fills with the versions of info.xml.
-# They may lag behind a max-version that the upstream bot raised, so that its pull
-# request passes on its own, but they never name another minimum or more than info.xml.
+# fields such as <span data-app="nextcloud">33–35</span> in README.md, docs/index.md and
+# docs/alternatives.md are text on GitHub, which the hook of the website fills with the
+# versions of info.xml. They may lag behind a max-version that the upstream bot raised,
+# so that its pull request passes on its own, but they never name another minimum or
+# more than info.xml.
 dash="$(printf '\342\200\223')"
 info_versions() {
   local lowest="$1" highest="$2"
@@ -199,7 +200,7 @@ while IFS= read -r field; do
   fi
   echo "$file names $label $text, but appinfo/info.xml says $expected; write $expected."
   problems=$((problems + 1))
-done < <(grep -oE 'data-app="[^"]*">[^<]*<' README.md docs/index.md || true)
+done < <(grep -oE 'data-app="[^"]*">[^<]*<' README.md docs/index.md docs/alternatives.md || true)
 if ! grep -qF 'data-app="nextcloud">' README.md || ! grep -qF 'data-app="php">' README.md; then
   echo "The requirements in README.md name the versions in the fields <span data-app=\"nextcloud\"> and <span data-app=\"php\">; one of them is missing."
   problems=$((problems + 1))
@@ -207,7 +208,7 @@ fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "The badges of the README read appinfo/info.xml on main, and the $fields field(s) of versions in README.md and docs/index.md agree with Nextcloud $nextcloud_text and PHP $php_text."
+echo "The badges of the README read appinfo/info.xml on main, and the $fields field(s) of versions in README.md, docs/index.md and docs/alternatives.md agree with Nextcloud $nextcloud_text and PHP $php_text."
 
 printf '\n== %s\n' "Description of the app"
 # GitHub, the website and Composer describe the app in the same words, those that people
