@@ -1,4 +1,5 @@
 ---
+title: "Paperless-ngx and Nextcloud: the ways to connect them"
 description: "Paperless-ngx and Nextcloud: Paperless Sync compared with Nextcloud's Paperless integration, the WebDAV container paperless-nextcloud-sync, rclone scripts, an external-storage mount of the media folder and Paperless's consume folder, mail and apps, with guides to move over without duplicates."
 hide:
   - navigation
@@ -8,6 +9,8 @@ hide:
 of the table, such as a faster way than the interval or a new way into Paperless, change
 the row with it; the sources at the end say where the facts of the others come from. -->
 
+<!-- The title of the front matter is the one that search engines and the browser tab show; the navigation calls the page Compare. -->
+<!-- markdownlint-disable-next-line MD025 -->
 # Paperless-ngx and Nextcloud: the ways to connect them
 
 [← README](https://github.com/Dennis-Otto/paperless-sync) · [Guide](guide.md) · [Automation](automation.md) · [Architecture](architecture.md)
@@ -24,13 +27,13 @@ config:
 ---
 flowchart TB
     accTitle: Which way to connect Paperless-ngx and Nextcloud fits
-    accDescr: When only files should go into Paperless, Nextcloud's Paperless integration sends single files by hand, and Paperless's own consume folder, mail fetcher and apps take scans from a phone, a mail or a scanner. When the documents of Paperless should appear in Nextcloud Files, the question is whether you can install apps in your Nextcloud. If not, such as with a hosted Nextcloud, the WebDAV container or an rclone script copy them over WebDAV. If you can, and a read-only view of Paperless's own files on the same server is enough, an external-storage mount fits; for a tidy archive by correspondent, type and year, an inbox to Paperless and deletions only after confirmation, Paperless Sync. The questions are orange, the options green.
+    accDescr: When only files should go into Paperless, Nextcloud's Paperless integration sends single files by hand, the inbox of Paperless Sync takes every file put into a folder of Nextcloud, with the export turned off if you like, and Paperless's own consume folder, mail fetcher and apps take scans from a phone, a mail or a scanner. When the documents of Paperless should appear in Nextcloud Files, the question is whether you can install apps in your Nextcloud. If not, such as with a hosted Nextcloud, the WebDAV container or an rclone script copy them over WebDAV. If you can, and a read-only view of Paperless's own files is enough, an external-storage mount fits, of a local folder or over SMB or SFTP; for a tidy archive by correspondent, type and year, an inbox to Paperless and deletions only after confirmation, Paperless Sync. The questions are orange, the options green.
 
     need{{"Paperless documents<br>in Nextcloud Files?"}}
-    into(["Nextcloud's<br>Paperless integration,<br>or Paperless's consume<br>folder, mail, apps"])
+    into(["Paperless integration,<br>the inbox of<br>Paperless Sync, or<br>Paperless's consume<br>folder, mail, apps"])
     install{{"Can you install<br>apps in Nextcloud?"}}
     webdav(["WebDAV<br>container or<br>rclone script"])
-    view{{"A read-only view of<br>Paperless's files on<br>one server enough?"}}
+    view{{"A read-only view<br>of Paperless's own<br>files enough?"}}
     mount(["External-<br>storage mount"])
     sync(["Paperless Sync"])
 
@@ -57,7 +60,7 @@ flowchart TB
 | **Nextcloud password stored** | none | none | a password or app password of an account | an app password, in `rclone.conf` | none for a local folder | — |
 | **Folders** | its own path template: correspondent, type, year or any metadata | — | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | — |
 | **New title or correspondent** | the file is renamed or moved, and keeps its shares, comments and versions | — | followed, as Paperless renames its file | a new upload, the old file deleted | seen at the next scan, as a new file without the shares of the old one | — |
-| **Delay** | the interval, 5 minutes by default | a click | seconds | the schedule of the job | until Nextcloud scans the folder | — |
+| **Delay** | the interval, 5 minutes by default, once the document has left the Paperless inbox | a click | seconds | the schedule of the job | until Nextcloud scans the folder | — |
 | **Document deleted in Paperless** | its copy moves to a folder of its own, and is deleted only when you allow it, after complete scans confirm it | — | deleted at once | deleted at once by `rclone sync` | gone at once | — |
 | **Preview of the changes** | a dry run | — | — | `--dry-run` | — | — |
 | **Edits in Nextcloud** | stay in the copy until its document changes in Paperless, never reach Paperless | — | overwritten at its next start | overwritten at the next run | change Paperless's own files, unless the mount is read-only | — |
@@ -75,7 +78,7 @@ Choose it when you want the finished documents of Paperless as a tidy archive in
 It is not the right choice when:
 
 - you can't install apps in your Nextcloud, such as a Nextcloud of a provider: the [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) and [rclone](#an-rclone-or-webdav-script) work over WebDAV;
-- a document must be in Nextcloud within seconds: a run follows the interval, 5 minutes by default, and Nextcloud's cron;
+- a document must be in Nextcloud within seconds: a run follows the interval, 5 minutes by default, and Nextcloud's cron, and by default a document comes only once it has left the inbox of Paperless;
 - your Nextcloud is older than the versions in the [requirements](guide.md#requirements);
 - every user should have an archive of their own Paperless account: one Nextcloud user owns the archive and shares it, and [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84) asks for more;
 - a second copy of every document is too much for the disk: the archive is a copy, as PDF/A or the original file.
@@ -118,7 +121,7 @@ The inbox of Paperless Sync is a consume folder in Nextcloud: a file that reache
 
 ## Move to Paperless Sync
 
-Both guides end with one copy of every document, in the folders that people know, and the old way switched off.
+Both guides end with one copy of every finished document, in the folders that people know, and the old way switched off. By default, Paperless Sync leaves out the documents that are still in the inbox of Paperless and those with an excluded tag, and every run counts them as skipped; the mount and the container show them, so each guide has a step to decide about them.
 
 ### From an external-storage mount
 
@@ -128,19 +131,20 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 2. **Write the path template.** Take the format and translate its placeholders with the table below. End the last part with a space and `[P{{ id }}]{{ extension }}`: every file name of Paperless Sync carries the marker of its document, and Paperless adds the extension on its own. The format `{{ created_year }}/{{ correspondent }}/{{ title }}` becomes the template `{{ created_year }}/{{ correspondent }}/{{ title }} [P{{ id }}]{{ extension }}`.
 3. **Set the names of missing values.** Paperless names a missing correspondent or document type `none`, unless `PAPERLESS_FILENAME_FORMAT_REMOVE_NONE` is on. To keep these folders, write `none` into *Missing correspondent* and *Missing document type*.
 4. **Choose the file and the folder.** Choose the archive PDF for `documents/archive` or the original file for `documents/originals`. Choose a base folder of the target user outside the mount: never one inside it, where the app would write into the media folder of Paperless.
-5. **Start a dry run** and compare its paths with those of the mount. Change the template until they match; Paperless replaces some characters, such as `:`, with `-`, Paperless Sync with `_`.
+5. **Start a dry run** and compare its paths with those of the mount. Change the template until they match, as far as the table allows; Paperless replaces some characters, such as `:`, with `-`, Paperless Sync with `_`.
 6. **Turn synchronization on.** A run makes at most as many changes as the batch size, 100 by default, so a large archive comes in several runs; for the first export, you may raise the batch size up to 1,000.
-7. **Share the archive** with the users and groups of the mount, read-only if they shouldn't change the copies, once the status shows a run without errors and nothing skipped.
-8. **Remove the mount** under *Administration settings → External storage*. That removes only the mount; the files of Paperless stay as they are.
+7. **Decide about the inbox.** The mount shows every document, also those still in the inbox of Paperless. Paperless Sync leaves them out while *Skip Paperless inbox documents* is on, as it is by default, and also leaves out the documents with one of the *Additional excluded Paperless tags*; every run counts them as skipped. If the users of the mount should keep seeing them, finish them in Paperless, or turn the setting off and remove the tags that they should see from that list.
+8. **Share the archive** with the users and groups of the mount, read-only if they shouldn't change the copies, once the status shows a run without errors and a dry run exports nothing more: then the archive holds every document that the settings let in, and the skipped ones are those of step 7.
+9. **Remove the mount** under *Administration settings → External storage*. That removes only the mount; the files of Paperless stay as they are.
 
 | `PAPERLESS_FILENAME_FORMAT` | Paperless Sync |
 | --- | --- |
 | `{{ title }}`, `{{ correspondent }}`, `{{ document_type }}` | the same |
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | the same |
 | `{{ added }}`, `{{ added_year }}` | the same |
-| `{{ doc_pk }}` | `{{ id }}` |
+| `{{ doc_pk }}` | `{{ id }}`, without the leading zeros: `123`, not `0000123` |
 | `{{ original_name }}` | `{{ original_filename }}` |
-| a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths) | `{{ storage_path }}`, its name |
+| a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | none yet: `{{ storage_path }}` puts only the name of the storage path in, as one folder |
 | `{{ created_day }}`, the names of months, `{{ asn }}`, `{{ tag_list }}`, `{{ owner_username }}`, custom fields and Jinja logic | none yet: use `{{ created }}` for the full date, or leave them out |
 
 ### From paperless-nextcloud-sync
@@ -179,8 +183,9 @@ flowchart TB
 2. **Choose the account and the folder.** In the settings of Paperless Sync, the target user is the account of `WEBDRIVE_USER`, and the base folder is the folder of `WEBDRIVE_URL`, the part after `/remote.php/dav/files/<user>/`, such as `Paperless`.
 3. **Write the path template** for the folders of `PAPERLESS_FILENAME_FORMAT`, as in steps 2 and 3 [from a mount](#from-an-external-storage-mount), and choose the archive PDF when the container read `documents/archive`, as its README suggests.
 4. **Start a dry run**, then turn synchronization on. The archive grows in `Archiv`, next to the old folders, in as many runs as the batch size needs.
-5. **Delete the old folders** once the status shows a run without errors and nothing skipped: everything in the base folder but `Archiv`, `Eingang` and `Fehler`. They go to the trash bin of the account, from where you can restore them, and every document is left with one copy.
-6. **Open the inbox to others**, if they should send files to Paperless: a read-only share of the base folder doesn't let them, so share `Eingang` with them with permission to upload.
+5. **Decide about the inbox**, as in step 7 [from a mount](#from-an-external-storage-mount): the container copied every document, also those that Paperless Sync leaves out: by default those still in the inbox of Paperless, and those with an excluded tag.
+6. **Delete the old folders** once the status shows a run without errors and a dry run exports nothing more: everything in the base folder but `Archiv`, `Eingang` and `Fehler`. They go to the trash bin of the account, from where you can restore them, and every document in the archive is left with one copy.
+7. **Open the inbox to others**, if they should send files to Paperless: a read-only share of the base folder doesn't let them, so share `Eingang` with them with permission to upload.
 
 ## Sources
 
