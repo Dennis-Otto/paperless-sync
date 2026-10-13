@@ -24,8 +24,8 @@ A dedicated account with an API token, which can view and download the documents
 
 The files of the archive are a mirror of Paperless, and they are read-only by intent. An edit stays while its document stays the same in Paperless. When the document changes there, a run may write the file anew from Paperless, depending on the change, and the [conflict policy](guide.md#conflict-policy) decides about your edit:
 
-- **Replace synchronized file**, the default: the file of Paperless takes the place of your edit. A scheduled run puts your edited file, with its versions, into the trash bin of the target user; a run started with *Synchronize now* deletes it for good ([#119](https://github.com/Dennis-Otto/paperless-sync/issues/119)).
-- **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated.
+- **Replace synchronized file**, the default: the run writes the content of Paperless into the same file, so its shares and versions stay. Your edit remains as an earlier version, under *Versions* in the details of the file: in a scheduled run, and in a run started with *Synchronize now* only when the administrator who starts it is the target user; otherwise it is lost.
+- **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated. A copy that nobody edited is no conflict, and the run updates it.
 
 A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless.
 
@@ -69,7 +69,7 @@ Yes, the files belong to the target user, so the quota of that user applies. Whe
 
 ### Does it work with object storage such as S3?
 
-Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) adds S3 to the end-to-end tests.
+Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) tracks adding S3 to the end-to-end tests.
 
 ## Setup and operation
 
@@ -101,7 +101,7 @@ Yes, with the setting **Paperless runs in my local network**, which allows the a
 
 ### How do I uninstall Paperless Sync?
 
-1. Choose **Disconnect** in its settings, which deletes the settings and the API token.
+1. Choose **Disconnect** in its settings, which deletes the API token and turns off the schedule and **Paperless runs in my local network**. The other settings stay, for a later connection, until you delete the records of the app below.
 2. Remove the app under *Apps*, or with `occ app:remove paperless_sync`.
 
-Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. To remove them for good, an administrator of the database drops both tables and also deletes the records of the app, which tell Nextcloud that the tables exist: `DELETE FROM oc_migrations WHERE app = 'paperless_sync'` and `DELETE FROM oc_appconfig WHERE appid = 'paperless_sync'`, with your prefix. Dropping only the tables breaks a later installation, which then skips creating them.
+Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. To remove them for good, an administrator of the database drops both tables and also deletes the records of the app, which tell Nextcloud that the tables exist and hold its settings: `DELETE FROM oc_migrations WHERE app = 'paperless_sync'` and `DELETE FROM oc_appconfig WHERE appid = 'paperless_sync'`, with your prefix. Dropping only the tables breaks a later installation, which then skips creating them.
