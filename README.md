@@ -28,16 +28,37 @@ The [documentation website](https://dennis-otto.github.io/paperless-sync/) has t
 ## How it works
 
 ```mermaid
-flowchart LR
-    documents["Paperless-ngx<br>finished documents"] -->|read through the REST API| export(["Paperless Sync"])
-    trash["Paperless-ngx<br>trash"] -->|read| export
-    export -->|write, rename, move| archive["📁 Archiv<br>correspondent / type / year"]
-    export -->|mirror the trash| deleted["📁 Archiv/_Gelöscht"]
-    inbox["📁 Eingang"] -->|pick up| import(["Paperless Sync"])
-    import -->|upload through the REST API| consume["Paperless-ngx<br>new documents"]
-    import -->|failed imports| errors["📁 Fehler"]
-    classDef paperless fill:#17541f,stroke:#17541f,color:#fff
-    classDef nextcloud fill:#0082c9,stroke:#0082c9,color:#fff
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How Paperless Sync moves documents
+    accDescr: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archiv of Nextcloud, by correspondent, type and year, and mirrors the trash into Archiv/_Gelöscht. The other way, it picks up the files of the folder Eingang and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Fehler. Paperless-ngx is green, the folders of Nextcloud are blue.
+
+    documents["Paperless-ngx<br>finished documents"]
+    trash["Paperless-ngx<br>trash"]
+    export(["Paperless Sync"])
+    archive["📁 Archiv<br>correspondent /<br>type / year"]
+    deleted["📁 Archiv/<br>_Gelöscht"]
+    inbox["📁 Eingang"]
+    import(["Paperless Sync"])
+    consume["Paperless-ngx<br>new documents"]
+    errors["📁 Fehler"]
+
+    documents -- "read through<br>the REST API" --> export
+    trash -- "read" --> export
+    export -- "write, rename,<br>move" --> archive
+    export -- "mirror<br>the trash" --> deleted
+    %% An invisible link puts the import below the export, so that the diagram stays narrow.
+    archive ~~~ inbox
+    inbox -- "pick up" --> import
+    import -- "upload through<br>the REST API" --> consume
+    import -- "failed<br>imports" --> errors
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
     class documents,trash,consume paperless
     class archive,deleted,inbox,errors nextcloud
 ```
@@ -128,18 +149,34 @@ This produces paths such as:
 Dokumente/Paperless/Archiv/Example GmbH/Invoice/2026/2026-08-26 - Example invoice [P123].pdf
 ```
 
-Each part of the template becomes a folder, and the base folder holds the folders of the inbox and of failed imports next to the archive:
+Each part of the template becomes a folder. The base folder holds the inbox folder, with the files for Paperless, and the error folder, with failed imports, next to the archive; the deleted folder in the archive holds the copies of the documents in the Paperless trash:
 
 ```mermaid
-flowchart TD
-    base["📁 Dokumente/Paperless<br><i>base folder</i>"] --> archive["📁 Archiv<br><i>archive folder</i>"]
-    base --> inbox["📁 Eingang<br><i>inbox folder: files for Paperless</i>"]
-    base --> errors["📁 Fehler<br><i>error folder: failed imports</i>"]
-    archive --> correspondent["📁 Example GmbH<br><i>{{ correspondent }}</i>"]
-    archive --> deleted["📁 _Gelöscht<br><i>deleted folder: the Paperless trash</i>"]
-    correspondent --> type["📁 Invoice<br><i>{{ document_type }}</i>"]
-    type --> year["📁 2026<br><i>{{ created_year }}</i>"]
-    year --> file["📄 2026-08-26 - Example invoice [P123].pdf<br><i>{{ created }} - {{ title }} [P{{ id }}]{{ extension }}</i>"]
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The folders of the default path template
+    accDescr: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.
+
+    base["📁 Dokumente/Paperless<br><i>base folder</i>"]
+    inbox["📁 Eingang<br><i>inbox folder</i>"]
+    archive["📁 Archiv<br><i>archive folder</i>"]
+    errors["📁 Fehler<br><i>error folder</i>"]
+    correspondent["📁 Example GmbH<br><i>{{ correspondent }}</i>"]
+    deleted["📁 _Gelöscht<br><i>deleted folder</i>"]
+    type["📁 Invoice<br><i>{{ document_type }}</i>"]
+    year["📁 2026<br><i>{{ created_year }}</i>"]
+    file["📄 2026-08-26 -<br>Example invoice<br>[P123].pdf<br><i>{{ created }} -<br>{{ title }} [P{{ id }}]<br>{{ extension }}</i>"]
+
+    base --> inbox & archive & errors
+    archive --> correspondent & deleted
+    correspondent --> type --> year --> file
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class base,archive,inbox,errors,correspondent,deleted,type,year,file nextcloud
 ```
 
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
@@ -184,11 +221,11 @@ flowchart TB
     accTitle: How a part of the path is built
     accDescr: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.
 
-    part["A part of the template<br><code>{{ created }} - {{ title }} [P{{ id }}]</code>"]
-    values["The values as plain text<br>cleaned for Nextcloud, macOS and Windows"]
-    fits{"At most 200 bytes for a folder,<br>217 for the file name?"}
-    shorten["Shorten the longest free text:<br>title, correspondent, document type,<br>storage path, original file name"]
-    name["📄 2026-08-26 - Example invoice [P123].pdf"]
+    part["A part of the template<br><code>{{ created }} -<br>{{ title }}<br>[P{{ id }}]</code>"]
+    values["The values as plain text,<br>cleaned for Nextcloud,<br>macOS and Windows"]
+    fits{"At most 200 bytes<br>for a folder, 217<br>for the file name?"}
+    shorten["Shorten the longest<br>free text: title,<br>correspondent,<br>document type,<br>storage path,<br>original file name"]
+    name["📄 2026-08-26 -<br>Example invoice<br>[P123].pdf"]
 
     part --> values --> fits
     fits -- "no" --> shorten --> fits
@@ -203,16 +240,37 @@ flowchart TB
 Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is on, go to Paperless, at most as many in one run as the batch size allows. A file stays in the inbox until its Paperless task reports success:
 
 ```mermaid
-flowchart LR
-    file["📄 A file in 📁 Eingang"] -->|next run| upload{"Upload to<br>Paperless"}
-    upload -->|accepted| task{"Its Paperless task,<br>in the next runs"}
-    upload -->|"refused, such as an<br>unsupported file type"| refused["Stays in Eingang,<br>skipped until it changes"]
-    upload -->|"Paperless unreachable<br>or overloaded"| retry["Waits 15 minutes, then<br>twice as long each time,<br>up to a day"]
-    retry --> upload
-    refused -->|"saved anew, renamed<br>or replaced"| upload
-    task -->|still running| task
-    task -->|success| done["Removed from Eingang,<br>or kept, as configured"]
-    task -->|failure| failed["Moved to 📁 Fehler, next to<br>a .error.txt with the reason"]
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a file from the inbox to Paperless
+    accDescr: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, it moves to the folder Fehler, next to a .error.txt with the reason.
+
+    %% The wait comes first, so that it is drawn above the upload and the diagram stays narrow.
+    retry["Paperless<br>unreachable or<br>overloaded: waits<br>15 minutes, then<br>twice as long,<br>up to a day"]
+    file["📄 A file in<br>📁 Eingang"]
+    upload{"Upload to<br>Paperless"}
+    task{"Its task,<br>in the<br>next runs"}
+    refused["Refused, such as<br>an unsupported<br>file type: stays<br>in Eingang,<br>skipped until<br>it changes"]
+    done["Success:<br>removed from<br>Eingang, or kept,<br>as configured"]
+    failed["Failure:<br>moved to<br>📁 Fehler, next<br>to a .error.txt<br>with the reason"]
+
+    retry -- "again" --> upload
+    file -- "next run" --> upload
+    upload --> retry
+    upload -- "accepted" --> task
+    upload --> refused
+    refused -- "saved anew,<br>renamed or<br>replaced" --> upload
+    task --> done
+    task --> failed
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class file,refused,done,failed nextcloud
+    class upload,task paperless
 ```
 
 A failed file keeps its subfolder below the error folder.
@@ -227,16 +285,17 @@ Moving Paperless documents to its trash can be mirrored into the configured `_Ge
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TB
+    accTitle: What happens to the copy of a document
+    accDescr: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Gelöscht; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Gelöscht is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.
     state "In the archive" as archive
     state "In _Gelöscht" as deleted
     state "Deleted in Nextcloud" as gone
     [*] --> archive: exported
-    archive --> deleted: moved to the trash in Paperless
-    deleted --> archive: restored in Paperless
-    deleted --> gone: deleted for good in Paperless,<br>after N complete scans,<br>with permanent deletion on
-    archive --> deleted: gone from Paperless without the trash,<br>after N complete scans
-    archive --> gone: the same, with permanent<br>and direct deletion on
+    archive --> deleted: moved to the trash<br>in Paperless, or gone<br>without the trash<br>for N complete scans
+    deleted --> archive: restored<br>in Paperless
+    deleted --> gone: deleted for good<br>in Paperless, after<br>N complete scans, with<br>permanent deletion on
+    archive --> gone: gone without the trash<br>for N complete scans,<br>with permanent and<br>direct deletion on
 ```
 
 N is the number of *Required consecutive missing scans*, three by default. With the trash behavior *Keep archive file in place*, the copy stays in the archive instead of moving to `_Gelöscht`, and it is deleted from there when the rules allow it.
