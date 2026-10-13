@@ -13,32 +13,10 @@ When something doesn't work, Paperless Sync says why, and this page leads from w
 
 Saving the settings tests the connection with one request for the first document, and every run starts with the same request. Each step on its way can fail with an error of its own:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: The way of a request from Nextcloud to Paperless, and the error of each step
-    accDescr: A request of Paperless Sync passes six steps before Paperless answers with the documents. An address of the local network needs the setting Paperless runs in my local network, or Nextcloud blocks it. The name must resolve and Paperless must answer at its port, or the message has cURL error 6 or 7. A certificate of HTTPS must be one that Nextcloud trusts, or the message has cURL error 60. The URL must lead to the API of Paperless, or the answer is 404 Not Found, or a page of a login that is no JSON. The token must be valid, or the answer is 401 Unauthorized. Finally, in a run, the account must see every list that the run reads, or the answer is 403 Forbidden.
-
-    request(["Paperless Sync<br>asks Paperless"])
-    local["<b>Address allowed?</b><br><i>else: Nextcloud blocks<br>local addresses</i>"]
-    reach["<b>Name resolves,<br>port answers?</b><br><i>else: cURL error 6 or 7</i>"]
-    tls["<b>Certificate trusted?</b><br><i>else: cURL error 60</i>"]
-    api["<b>URL leads to the API?</b><br><i>else: 404 Not Found,<br>or invalid JSON</i>"]
-    token["<b>Token valid?</b><br><i>else: 401 Unauthorized</i>"]
-    lists["<b>Account sees<br>every list?</b><br><i>else, in a run:<br>403 Forbidden</i>"]
-    done(["Paperless answers"])
-
-    request --> local --> reach --> tls --> api --> token --> lists --> done
-
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class local,reach,tls,api,token,lists check
-    class done done
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-way-of-a-request-from-nextcloud-to-paperless-and-the-error-of-each.dark.svg">
+  <img src="images/diagrams/the-way-of-a-request-from-nextcloud-to-paperless-and-the-error-of-each.svg" alt="The way of a request from Nextcloud to Paperless, and the error of each step: A request of Paperless Sync passes six steps before Paperless answers with the documents. An address of the local network needs the setting Paperless runs in my local network, or Nextcloud blocks it. The name must resolve and Paperless must answer at its port, or the message has cURL error 6 or 7. A certificate of HTTPS must be one that Nextcloud trusts, or the message has cURL error 60. The URL must lead to the API of Paperless, or the answer is 404 Not Found, or a page of a login that is no JSON. The token must be valid, or the answer is 401 Unauthorized. Finally, in a run, the account must see every list that the run reads, or the answer is 403 Forbidden.">
+</picture>
 
 ## Messages and their fixes
 

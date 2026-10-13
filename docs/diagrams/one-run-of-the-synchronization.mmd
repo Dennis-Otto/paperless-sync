@@ -1,0 +1,35 @@
+---
+config:
+  sequence:
+    wrap: true
+    width: 120
+    actorMargin: 20
+    diagramMarginX: 8
+---
+sequenceDiagram
+    accTitle: One run of the synchronization
+    accDescr: The background job or the settings page starts a run. Paperless Sync takes the lock, checks the configuration, and tests the connection to Paperless-ngx and the base folder in Nextcloud. Inbox: it asks Paperless for the tasks of earlier uploads, removes imported files from Nextcloud and moves failed ones, uploads new, changed and due files to Paperless, and stores their tasks, refusals and retries in the database. Export: it reads every page of the documents, the trash and the metadata from Paperless, checks that every list came back complete, compares their paths and checksums with those in the database, downloads new and changed documents, writes, moves, trashes and deletes their files, and saves paths, checksums and missing runs. Finally it prunes empty folders, records the status and releases the lock.
+    participant Paperless as Paperless-ngx
+    participant Sync as Paperless Sync
+    participant Nextcloud as Nextcloud
+    Note over Paperless,Nextcloud: started by the background job or on the settings page
+    Note over Sync: take the lock, check the configuration
+    Sync->>Paperless: test the connection
+    Sync->>Nextcloud: test the base folder
+    rect rgba(0, 130, 201, 0.12)
+        Note over Paperless,Nextcloud: Inbox
+        Sync->>Paperless: the tasks of earlier uploads
+        Sync->>Nextcloud: remove imported, move failed files
+        Sync->>Paperless: upload new, changed and due files
+        Sync->>Nextcloud: save tasks, refusals, retries
+    end
+    rect rgba(23, 128, 61, 0.12)
+        Note over Paperless,Nextcloud: Export
+        Sync->>Paperless: every page of documents, trash, metadata
+        Note over Sync: check that every list is complete
+        Sync->>Nextcloud: compare with saved paths, checksums
+        Sync->>Paperless: download new and changed ones
+        Sync->>Nextcloud: write, move, trash, delete files
+        Sync->>Nextcloud: save paths, checksums, missing runs
+    end
+    Note over Sync: prune folders, record the status, unlock

@@ -19,36 +19,10 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 
 ## Which one fits?
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: Which way to connect Paperless-ngx and Nextcloud fits
-    accDescr: When only files should go into Paperless, Nextcloud's Paperless integration sends single files by hand, the inbox of Paperless Sync takes every file put into a folder of Nextcloud, with the export turned off if you like, and Paperless's own consume folder, mail fetcher and apps take scans from a phone, a mail or a scanner. When the documents of Paperless should appear in Nextcloud Files, the question is whether you can install apps in your Nextcloud. If not, such as with a hosted Nextcloud, the WebDAV container or an rclone script copy them over WebDAV. If you can, and a read-only view of Paperless's own files is enough, an external-storage mount fits, of a local folder or over SMB or SFTP; for a tidy archive by correspondent, type and year, an inbox to Paperless and deletions only after confirmation, Paperless Sync. The questions are orange, the options green.
-
-    need{{"Paperless documents<br>in Nextcloud Files?"}}
-    into(["Paperless integration,<br>the inbox of<br>Paperless Sync, or<br>Paperless's consume<br>folder, mail, apps"])
-    install{{"Can you install<br>apps in Nextcloud?"}}
-    webdav(["WebDAV<br>container or<br>rclone script"])
-    view{{"A read-only view<br>of Paperless's own<br>files enough?"}}
-    mount(["External-<br>storage mount"])
-    sync(["Paperless Sync"])
-
-    need -- "no, only into<br>Paperless" --> into
-    need -- "yes" --> install
-    install -- "no, such as<br>a hosted<br>Nextcloud" --> webdav
-    install -- "yes" --> view
-    view -- "yes" --> mount
-    view -- "no: a tidy<br>archive, an inbox,<br>safe deletions" --> sync
-
-    classDef question fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    classDef option fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class need,install,view question
-    class into,webdav,mount,sync option
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/which-way-to-connect-paperless-ngx-and-nextcloud-fits.dark.svg">
+  <img src="images/diagrams/which-way-to-connect-paperless-ngx-and-nextcloud-fits.svg" alt="Which way to connect Paperless-ngx and Nextcloud fits: When only files should go into Paperless, Nextcloud's Paperless integration sends single files by hand, the inbox of Paperless Sync takes every file put into a folder of Nextcloud, with the export turned off if you like, and Paperless's own consume folder, mail fetcher and apps take scans from a phone, a mail or a scanner. When the documents of Paperless should appear in Nextcloud Files, the question is whether you can install apps in your Nextcloud. If not, such as with a hosted Nextcloud, the WebDAV container or an rclone script copy them over WebDAV. If you can, and a read-only view of Paperless's own files is enough, an external-storage mount fits, of a local folder or over SMB or SFTP; for a tidy archive by correspondent, type and year, an inbox to Paperless and deletions only after confirmation, Paperless Sync. The questions are orange, the options green.">
+</picture>
 
 ## The options at a glance
 
@@ -151,33 +125,10 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 
 The container copies the media folder of Paperless into a folder of a Nextcloud account, which that account has shared with others. Paperless Sync takes that folder over as its base folder, so that every share keeps working, and builds its archive inside. It can't take over the old files in place: every file name of Paperless Sync carries the marker of its document, such as `[P123]`, so no path of the archive is that of an old file, and the old folders go once the archive is complete:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: The folder of the container becomes the base folder of Paperless Sync
-    accDescr: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archiv, the archive, Eingang, the inbox to Paperless, and Fehler, the failed imports. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.
-
-    base["📁 Paperless<br><i>the folder of the container,<br>shared as before,<br>now the base folder</i>"]
-    old["📁 2025, 2026, …<br><i>the old folders of the<br>container: to the trash<br>bin once the archive<br>is complete</i>"]
-    archive["📁 Archiv<br><i>the archive of<br>Paperless Sync</i>"]
-    inbox["📁 Eingang<br><i>files for<br>Paperless</i>"]
-    errors["📁 Fehler<br><i>failed<br>imports</i>"]
-
-    base --> old & archive
-    %% Invisible links put the inbox and the error folder one level lower, so that the diagram stays narrow.
-    old ~~~ inbox
-    archive ~~~ errors
-    base --> inbox & errors
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    classDef old fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class base,archive,inbox,errors nextcloud
-    class old old
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-folder-of-the-container-becomes-the-base-folder-of-paperless-sync.dark.svg">
+  <img src="images/diagrams/the-folder-of-the-container-becomes-the-base-folder-of-paperless-sync.svg" alt="The folder of the container becomes the base folder of Paperless Sync: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archiv, the archive, Eingang, the inbox to Paperless, and Fehler, the failed imports. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.">
+</picture>
 
 1. **Stop the container** and remove it from the Compose file of Paperless. At every start, it deletes the files of its folder that the media folder of Paperless doesn't have, so it would delete the archive of Paperless Sync. Its folder and its shares stay as they are.
 2. **Choose the account and the folder.** In the settings of Paperless Sync, the target user is the account of `WEBDRIVE_USER`, and the base folder is the folder of `WEBDRIVE_URL`, the part after `/remote.php/dav/files/<user>/`, such as `Paperless`.

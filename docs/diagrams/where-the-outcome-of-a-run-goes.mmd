@@ -1,0 +1,22 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Where the outcome of a run goes
+    accDescr: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.
+
+    run(["`⚙️ Run<br>*scheduled, by hand<br>or dry-run*`"])
+    report["`📋 Report<br>*counts, up to 100 lines,<br>errors first*`"]
+    status["`🗂️ Status<br>*state, times, errors<br>and report of the last run*`"]
+    page["`🖥️ Settings page<br>*at every visit*`"]
+    log["`📜 Nextcloud log<br>*a warning for each<br>new error of a document*`"]
+
+    run --> report --> status --> page
+    run -- "errors" --> log
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,report,status,page nextcloud
+    class log warning

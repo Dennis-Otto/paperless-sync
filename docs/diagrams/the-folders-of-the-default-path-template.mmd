@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The folders of the default path template
+    accDescr: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.
+
+    base["`📁 Dokumente/Paperless<br>*base folder*`"]
+    inbox["`📁 Eingang<br>*inbox folder*`"]
+    archive["`📁 Archiv<br>*archive folder*`"]
+    errors["`📁 Fehler<br>*error folder*`"]
+    correspondent["`📁 Example GmbH<br>*{{ correspondent }}*`"]
+    deleted["`📁 _Gelöscht<br>*deleted folder*`"]
+    type["`📁 Invoice<br>*{{ document_type }}*`"]
+    year["`📁 2026<br>*{{ created_year }}*`"]
+    file["`📄 2026-08-26 -<br>Example invoice<br>[P123].pdf<br>*{{ created }} -<br>{{ title }} [P{{ id }}]<br>{{ extension }}*`"]
+
+    base --> inbox & archive & errors
+    archive --> correspondent & deleted
+    correspondent --> type --> year --> file
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class base,archive,inbox,errors,correspondent,deleted,type,year,file nextcloud

@@ -2,31 +2,10 @@
 
 How to build, check and test Paperless Sync, where the pictures and the look of the website come from, and how a change becomes a release. [CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md) has the rules for a change: its tests, the sign-off of every commit and the title of its pull request.
 
-```mermaid
-flowchart TB
-    accTitle: The way of a change into a release
-    accDescr: A change on a branch passes bash scripts/check.sh and the end-to-end tests in Docker on the machine of its author. Its pull request, titled as a Conventional Commit, passes the required checks: the CI, the end-to-end tests against every supported Nextcloud version when the change can affect the app, CodeQL, the secret scan, the licenses of every file and the sign-off. A failed check sends it back to the branch. Once every check passes, it is squashed into main, and the release bot adds it to the pull request of the next release; merging that one publishes the signed package on GitHub and in the Nextcloud App Store. Your steps are orange, the checks and the bots blue, and the release green.
-
-    change["A change<br>on a branch"]
-    local["bash scripts/check.sh<br>bash tests/e2e/run.sh"]
-    request["A pull request with a<br>Conventional Commit title"]
-    checks{"The required checks:<br>CI, end-to-end tests,<br>CodeQL, secret scan,<br>licenses, sign-off"}
-    main["Squashed<br>into main"]
-    bot["chore: release x.y.z<br>by the release bot"]
-    release(["The signed package<br>on GitHub and in the<br>Nextcloud App Store"])
-
-    change --> local --> request --> checks
-    checks -- "a check fails" --> change
-    checks -- "every check passes" --> main --> bot
-    bot -- "merged" --> release
-
-    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class change,local,request yours
-    class checks,main,bot bots
-    class release result
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-way-of-a-change-into-a-release.dark.svg">
+  <img src="images/diagrams/the-way-of-a-change-into-a-release.svg" alt="The way of a change into a release: A change on a branch passes bash scripts/check.sh and the end-to-end tests in Docker on the machine of its author. Its pull request, titled as a Conventional Commit, passes the required checks: the CI, the end-to-end tests against every supported Nextcloud version when the change can affect the app, CodeQL, the secret scan, the licenses of every file and the sign-off. A failed check sends it back to the branch. Once every check passes, it is squashed into main, and the release bot adds it to the pull request of the next release; merging that one publishes the signed package on GitHub and in the Nextcloud App Store. Your steps are orange, the checks and the bots blue, and the release green.">
+</picture>
 
 ## Set-up
 
@@ -67,32 +46,10 @@ The first screen of the README shows the version in the App Store and the versio
 
 The [website](index.md) takes its look from the app. The icon of the app is its logo, its favicon and the logo of its preview cards, from a copy in `docs/images/app.svg` that `scripts/check-project.sh` keeps equal to `img/app.svg`. `docs/stylesheets/brand.css` holds the colors of the icon, in shades that pass WCAG AA in the light and the dark palette. A link to the home page shows the social preview of the repository, `.github/social-preview.png`, which `bash scripts/social-preview.sh` renders from `.github/social-preview.html`. The versions of Nextcloud and PHP on the website come from `appinfo/info.xml` through the hook `.github/mkdocs_project.py`, which writes them into the fields such as `<span data-app="php">8.2+</span>` of every page, those of the requirements that the guide takes from the README included; GitHub shows the text of the fields as written:
 
-```mermaid
-flowchart TB
-    accTitle: Where the website of Paperless Sync takes its look from
-    accDescr: The icon of the app, img/app.svg, is copied to docs/images/app.svg, which scripts/check-project.sh compares with it; the website shows the copy as its logo, its favicon and on the preview cards of its pages. The social preview of the repository, rendered from .github/social-preview.html, is the preview card of the home page. The colors come from docs/stylesheets/brand.css, and the hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the pages. The files of the repository are green, the parts of the website blue.
-
-    icon["img/app.svg<br>the icon of the app"]
-    copy["docs/images/app.svg"]
-    preview["social-preview.html<br>→ social-preview.png"]
-    colors["docs/stylesheets/<br>brand.css"]
-    info["appinfo/info.xml"]
-    logo(["Logo, favicon and<br>preview cards"])
-    home(["Preview card of<br>the home page"])
-    palette(["Colors, light<br>and dark"])
-    chips(["Versions of Nextcloud<br>and PHP on the pages"])
-
-    icon -- "copied, compared by<br>check-project.sh" --> copy
-    copy --> logo
-    preview --> home
-    colors --> palette
-    info -- "mkdocs_project.py" --> chips
-
-    classDef source fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    classDef website fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class icon,copy,preview,colors,info source
-    class logo,home,palette,chips website
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/where-the-website-of-paperless-sync-takes-its-look-from.dark.svg">
+  <img src="images/diagrams/where-the-website-of-paperless-sync-takes-its-look-from.svg" alt="Where the website of Paperless Sync takes its look from: The icon of the app, img/app.svg, is copied to docs/images/app.svg, which scripts/check-project.sh compares with it; the website shows the copy as its logo, its favicon and on the preview cards of its pages. The social preview of the repository, rendered from .github/social-preview.html, is the preview card of the home page. The colors come from docs/stylesheets/brand.css, and the hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the pages. The files of the repository are green, the parts of the website blue.">
+</picture>
 
 The same hook shows an alert of GitHub, a quote that begins with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`, as an admonition of the website. So a page, or a part of the README that the website takes by a snippet, writes an alert once for both, such as the warning about edits of the archive in the [conflict policy](guide.md#conflict-policy).
 

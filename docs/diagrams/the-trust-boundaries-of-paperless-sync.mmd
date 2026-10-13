@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: The trust boundaries of Paperless Sync
+    accDescr: Four numbered arrows cross a trust boundary. 1: the browser of an administrator sends requests to Paperless Sync in Nextcloud. 2: the app calls Paperless-ngx. 3: the app writes the files below the base folder of the target user. 4: whoever may write to the inbox folder puts files there. The app keeps the API token in the credentials manager. The browser, the writers of the inbox and Paperless-ngx are untrusted and have a dashed red border.
+
+    credentials[("Credentials<br>manager:<br>API token")]
+    browser(["Browser of an<br>administrator"])
+    app["Paperless Sync<br>in Nextcloud"]
+    writers(["Whoever may<br>write to the<br>inbox folder"])
+    paperless[("Paperless-ngx")]
+    files[("Files below<br>the base folder<br>of the target user")]
+
+    credentials --- app
+    browser -- "1" --> app
+    app -- "2" --> paperless
+    app -- "3" --> files
+    writers -- "4" --> files
+
+    classDef untrusted fill:#c9302c1f,stroke:#c9302c,stroke-width:2px,stroke-dasharray:4 3
+    class browser,writers,paperless untrusted
