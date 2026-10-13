@@ -45,6 +45,7 @@ Both run in Git Bash on Windows too, with Docker Desktop.
 The scenario verifies:
 
 - administrator configuration and server-side token handling, in the browser too: saving after Nextcloud asks for the password, and a new Paperless URL, which needs the token again, see [Accessibility](#accessibility)
+- a Paperless in the local network without `allow_local_remote_servers`: Nextcloud refuses the mock at its address of the network of Compose, the save says how to allow it and the page moves the focus to *Paperless runs in my local network*, and with that setting on, the whole scenario runs
 - dry-run behavior without filesystem mutations
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again

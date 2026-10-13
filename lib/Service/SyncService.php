@@ -50,7 +50,7 @@ final class SyncService {
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
 				throw new RuntimeException('Paperless Sync is not completely configured.');
 			}
-			$this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken());
+			$this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork);
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {
 				$this->storage->prepare($config);

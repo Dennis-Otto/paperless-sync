@@ -83,7 +83,10 @@
 			return request(url, method, body, true)
 		}
 		if (!response.ok) {
-			throw new Error(payload.message || translate('The request failed.'))
+			const error = new Error(payload.message || translate('The request failed.'))
+			// The setting that the message of the server names as the way out, if any.
+			error.setting = payload.setting
+			throw error
 		}
 		return payload
 	}
@@ -168,6 +171,15 @@
 			message.textContent = text
 			message.classList.toggle('paperless-sync-message--error', isError)
 			message.classList.toggle('paperless-sync-message--success', !isError && text !== '')
+		}
+
+		// Moves the focus to the setting that the message names, such as "Paperless runs in my local
+		// network", so that it is one key press away; a screen reader reads its hint with it.
+		function focusSetting(error) {
+			const input = error.setting ? root.querySelector('[data-setting="' + window.CSS.escape(error.setting) + '"]') : null
+			if (input) {
+				input.focus()
+			}
 		}
 
 		function formatTime(timestamp) {
@@ -322,6 +334,7 @@
 				showMessage(isDryRun ? translate('Dry-run completed. No files were changed.') : translate('Synchronization completed.'), result.errors > 0)
 			} catch (error) {
 				showMessage(error.message || translate('Synchronization failed.'), true)
+				focusSetting(error)
 			} finally {
 				setBusy(false)
 			}
@@ -352,6 +365,7 @@
 				await refreshStatus()
 			} catch (error) {
 				showMessage(error.message || translate('Could not save the configuration.'), true)
+				focusSetting(error)
 			} finally {
 				setBusy(false)
 			}

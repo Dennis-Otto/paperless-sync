@@ -56,7 +56,6 @@ occ nextcloud php occ maintenance:install \
 	--admin-pass="${PASSWORD}" >/dev/null
 occ nextcloud php occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
 occ nextcloud php occ config:system:set trusted_domains 2 --value=nextcloud >/dev/null
-occ nextcloud php occ config:system:set allow_local_remote_servers --type=boolean --value=true >/dev/null
 occ nextcloud php occ config:system:set default_language --value=en >/dev/null
 occ nextcloud php occ config:system:set default_locale --value=en_US >/dev/null
 # The owner of the archive starts with empty files, without the examples of Nextcloud.
@@ -80,6 +79,7 @@ curl --fail-with-body --silent --show-error \
 	--header 'OCS-APIRequest: true' \
 	--request POST \
 	--data-urlencode 'settings[paperless_url]=http://paperless:8080' \
+	--data-urlencode 'settings[paperless_local_network]=1' \
 	--data-urlencode "settings[target_user]=${TARGET_USER}" \
 	--data-urlencode 'settings[excluded_tags]=Private' \
 	--data-urlencode 'token=e2e-only-token' \

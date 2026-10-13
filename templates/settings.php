@@ -99,6 +99,12 @@ $stateLabels = [
 				</label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving or disconnecting may ask for your password.')); ?></p>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Paperless runs in my local network')); ?></span></label>
+			</div>
+			<p class="settings-hint" id="paperless-sync-local-network-hint"><?php p($l->t('Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">

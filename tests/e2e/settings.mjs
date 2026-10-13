@@ -7,9 +7,11 @@
 // So the check makes the page and the server 30 minutes older: the page must show
 // Nextcloud's dialog for the password, confirm it with the server and save again. The
 // stored token goes only to the URL that it was saved with, so the page asks for the
-// token as soon as the URL changes. run.sh starts it in the image of Playwright, inside
-// the network of the Compose project, after the accessibility check, while Paperless
-// and the saved configuration of run.sh are there.
+// token as soon as the URL changes. Nextcloud refuses the mock at its address of the
+// network of Compose unless "Paperless runs in my local network" is on, and the page
+// leads there. run.sh starts it in the image of Playwright, inside the network of the
+// Compose project, after the accessibility check, while Paperless and the saved
+// configuration of run.sh are there.
 
 import { chromium } from 'playwright-core'
 
@@ -78,6 +80,24 @@ try {
 	expect(saves.length === 2, `The page saved ${saves.length} times instead of once more after the password.`)
 	expect(JSON.stringify(saves[1]) === JSON.stringify(saves[0]), 'The page must send the same settings again after the password.')
 	console.log('Settings: saving asks for the password when Nextcloud requires it, and saves after it.')
+
+	const localNetwork = page.locator('[data-setting="paperless_local_network"]')
+	expect(await localNetwork.isChecked(), 'run.sh saved the settings with the local network allowed.')
+	await localNetwork.uncheck()
+	await page.locator('#paperless-sync-save').click()
+	await page.locator('#paperless-sync-save:enabled').waitFor()
+	const refusal = await page.locator('#paperless-sync-message').textContent()
+	expect(
+		refusal === 'Nextcloud blocks connections to local addresses such as paperless-mock. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
+		`A refused local address must say what to do: ${refusal}`,
+	)
+	expect(await localNetwork.evaluate((input) => input === document.activeElement), 'The focus must move to the setting that the message names.')
+	await localNetwork.check()
+	await page.locator('#paperless-sync-save').click()
+	await page.locator('#paperless-sync-save:enabled').waitFor()
+	const saved = await page.locator('#paperless-sync-message').textContent()
+	expect(saved === 'Connection successful. Configuration saved.', `The save with the local network allowed failed: ${saved}`)
+	console.log('Settings: Nextcloud refuses a Paperless in the local network until its setting allows it, and the page leads there.')
 } finally {
 	await browser.close()
 }
