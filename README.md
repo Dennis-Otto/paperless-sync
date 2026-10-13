@@ -1,50 +1,58 @@
+<!-- The first screen. The badges of the version in the App Store and of the versions of
+Nextcloud read appinfo/info.xml on main, so that they follow every release and every
+raise of max-version by the upstream bot; scripts/check-project.sh checks that they do. -->
+<div align="center">
+
+<img src="img/app.svg" alt="" width="72" height="72">
+
 # Paperless Sync
 
-[![Documentation](https://img.shields.io/badge/docs-website-blue)](https://dennis-otto.github.io/paperless-sync/)
-[![CI](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml)
-[![Docker E2E](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml)
-[![Secret scan](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml)
-[![CodeQL](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/codeql.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/codeql.yml)
-[![SBOM](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Dennis-Otto/paperless-sync/badge)](https://scorecard.dev/viewer/?uri=github.com/Dennis-Otto/paperless-sync)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15277/badge)](https://www.bestpractices.dev/projects/15277)
-[![REUSE](https://api.reuse.software/badge/github.com/Dennis-Otto/paperless-sync)](https://api.reuse.software/info/github.com/Dennis-Otto/paperless-sync)
-[![Sponsor](https://img.shields.io/badge/sponsor-%E2%99%A5-db61a2?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Dennis-Otto)
+**Your Paperless-ngx archive as an always-current folder tree in Nextcloud Files — plus an inbox from Nextcloud into Paperless.**
 
-Paperless Sync is a native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can optionally submit files from a Nextcloud inbox to Paperless.
+[![The version of Paperless Sync in the Nextcloud App Store](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml&query=%2Finfo%2Fversion&prefix=v&label=App%20Store&logo=nextcloud&logoColor=white&color=0082c9)](https://apps.nextcloud.com/apps/paperless_sync)
+[![The versions of Nextcloud that Paperless Sync supports](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml&query=concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29&label=Nextcloud&logo=nextcloud&logoColor=white&color=0082c9)](#requirements)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-website-526cfe?logo=materialformkdocs&logoColor=white)](https://dennis-otto.github.io/paperless-sync/)
 
-Paperless remains the source of truth. Nextcloud provides convenient access through Files, desktop and mobile clients, sharing, and its viewer.
+[**Get it from the App Store**](https://apps.nextcloud.com/apps/paperless_sync) · [Requirements](#requirements) · [Quick start](#quick-start) · [Documentation](https://dennis-otto.github.io/paperless-sync/) · [FAQ](docs/faq.md) · [Troubleshooting](docs/troubleshooting.md) · [Help](#help-and-feedback) · [Changelog](CHANGELOG.md)
 
 ![The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud](docs/images/archive.gif)
 
-The [documentation website](https://dennis-otto.github.io/paperless-sync/) has this documentation as a guide, together with the architecture, the security design and the roadmap.
+</div>
 
-<sub>💛 If Paperless Sync is useful to you, you can [support its development](https://github.com/sponsors/Dennis-Otto).</sub>
+Paperless Sync is a native Nextcloud app. It writes the finished documents of Paperless-ngx into a folder tree in the files of a Nextcloud user, by correspondent, document type and year, and keeps the tree current: a new title renames a file, a new correspondent moves it, and the Paperless trash has a folder of its own. Files that you put into an inbox folder in Nextcloud go the other way, to Paperless. Paperless remains the source of truth, and Nextcloud gives you the documents in Files, in its desktop and mobile clients, in its viewer and in shares.
 
-[Quick start](#quick-start) · [Screenshots](#screenshots) · [Architecture](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/architecture.md) · [Security design](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/security.md) · [Roadmap](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/roadmap.md) · [Releases](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/releases.md) · [Changelog](https://github.com/Dennis-Otto/paperless-sync/blob/main/CHANGELOG.md)
+Unlike a mount of the media folder of Paperless or a script that copies over WebDAV, Paperless Sync runs inside Nextcloud as one of its background jobs: it needs no extra container and no stored Nextcloud password, the copies are real files of Nextcloud with versions, shares and search, an edit in Nextcloud never reaches the originals in Paperless, and a copy whose document leaves Paperless is deleted only when you turn permanent deletion on, after complete scans of Paperless confirm that the document is gone. [How it compares](docs/alternatives.md) sets every way to connect Paperless and Nextcloud side by side, with guides to move over from a mount or from the WebDAV container.
+
+The [documentation website](https://dennis-otto.github.io/paperless-sync/) has this guide, together with the [FAQ](docs/faq.md), the [troubleshooting](docs/troubleshooting.md) page, the [comparison with the alternatives](docs/alternatives.md), the [architecture](docs/architecture.md), the [security design](docs/security.md), the [automation](docs/automation.md), the [decisions](docs/decisions/README.md) and the [roadmap](docs/roadmap.md).
+
+<sub>💛 If Paperless Sync works for you, [rate it in the App Store](https://apps.nextcloud.com/apps/paperless_sync) so that others find it, or [support its development](https://github.com/sponsors/Dennis-Otto).</sub>
 
 <!-- --8<-- [start:how-it-works] -->
 
 ## How it works
 
-```mermaid
-flowchart LR
-    documents["Paperless-ngx<br>finished documents"] -->|read through the REST API| export(["Paperless Sync"])
-    trash["Paperless-ngx<br>trash"] -->|read| export
-    export -->|write, rename, move| archive["📁 Archiv<br>correspondent / type / year"]
-    export -->|mirror the trash| deleted["📁 Archiv/_Gelöscht"]
-    inbox["📁 Eingang"] -->|pick up| import(["Paperless Sync"])
-    import -->|upload through the REST API| consume["Paperless-ngx<br>new documents"]
-    import -->|failed imports| errors["📁 Fehler"]
-    classDef paperless fill:#17541f,stroke:#17541f,color:#fff
-    classDef nextcloud fill:#0082c9,stroke:#0082c9,color:#fff
-    class documents,trash,consume paperless
-    class archive,deleted,inbox,errors nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-paperless-sync-moves-documents.dark.svg">
+  <img src="docs/images/diagrams/how-paperless-sync-moves-documents.svg" alt="How Paperless Sync moves documents: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archiv of Nextcloud, by correspondent, type and year, and mirrors the trash into Archiv/_Gelöscht. The other way, it picks up the files of the folder Eingang and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Fehler. Paperless-ngx is green, the folders of Nextcloud are blue.">
+</picture>
 
-At the configured interval, Nextcloud's cron starts a run of the app inside Nextcloud. It reads the finished documents of Paperless and writes each one into the archive of the Nextcloud user who owns it, at the path that the path template builds from its metadata. When the metadata changes in Paperless, the file moves; when a document goes to the Paperless trash, its copy goes to `_Gelöscht`. Files that someone puts into `Eingang` go the other way, to Paperless.
+At the configured interval, Nextcloud's cron starts a run of the app inside Nextcloud. It reads the finished documents of Paperless and writes each one into the archive in the files of the configured Nextcloud target user, at the path that the path template builds from its metadata; other users see the archive when that user shares it with them. When the metadata changes in Paperless, the file moves; when a document goes to the Paperless trash, its copy goes to `_Gelöscht`. Files that someone puts into `Eingang` go the other way, to Paperless.
 
 <!-- --8<-- [end:how-it-works] -->
+<!-- --8<-- [start:requirements] -->
+
+## Requirements
+
+<!-- On the website, the hook in .github/mkdocs_project.py writes the versions of appinfo/info.xml into the fields. -->
+
+- **Nextcloud <span data-app="nextcloud">33–35</span>**, with the system cron for its background jobs, as Nextcloud recommends: *Administration settings → Basic settings → Background jobs → Cron*. Every run of the app is one of these jobs.
+- **PHP <span data-app="php">8.2+</span>** on the Nextcloud server.
+- **Paperless-ngx 2.10 or newer, 3.x included**; 2.10 is the first version with a trash, which the app mirrors. Paperless needs an address that the Nextcloud server reaches over HTTP or HTTPS; for an address of your local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, turn on the setting [Paperless runs in my local network](#paperless-in-your-local-network).
+- **A Paperless account for the app**, with an API token, that isn't a superuser. It needs to view and download the documents to mirror, and the permission `documents.add_document` for the inbox; owning the documents lets it mirror the Paperless trash right away. [Paperless connection](#paperless-connection) has the details.
+- **Room in the files of the target user**, the Nextcloud user who owns the archive: the archive counts against the quota of that user.
+
+<!-- --8<-- [end:requirements] -->
 <!-- --8<-- [start:quick-start-section] -->
 
 ## Quick start
@@ -53,7 +61,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
 2. In Paperless-ngx, create a dedicated account with view and download access to the documents to mirror, and an API token for it.
-3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud.
+3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
 
@@ -63,21 +71,35 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 ## Features
 
-- Native Nextcloud filesystem operations without WebDAV credentials
-- Configurable target user and base, archive, inbox, error, and deleted folders
-- Configurable archive path template
-- Correspondent-first folder hierarchy by default
-- Archive PDF or original-file export
-- Metadata-aware renames and moves
-- Paperless inbox detection and configurable excluded tags, including removal of previously mirrored copies
-- Recursive Nextcloud inbox import with Paperless task tracking
-- Paperless trash mirroring and optional permanent deletion
-- Configurable missing-document confirmation runs
-- Empty-folder pruning
-- Conflict policy, batch size, and interval controls
-- Dry-run, manual execution, status, and error summaries
-- Server-side token storage through Nextcloud's credentials manager
-- Automated semantic releases and signed App Store packages
+### Archive
+
+- A folder tree in the files of the configured Nextcloud user, by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
+- The archive PDF of each document, or its original file
+- Renames and moves when the metadata changes in Paperless, and no empty folders left behind
+- Each copy stays the same file in Nextcloud: a new content of its document, such as a new archive version, updates it in place, so its shares, public links, comments, tags, favorites and versions stay with it
+- Documents in the Paperless inbox wait until they are finished, and a document that gets a tag you exclude, or the inbox tag again, stays out, its copy removed
+- A stable marker such as `[P123]` in every file name, which [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) understands
+
+### Inbox
+
+- Files in an inbox folder of Nextcloud, and in its subfolders if you like, go to Paperless as new documents
+- The app follows the Paperless task of each file: after a success, it removes the file or keeps it, as you choose; after a failure, it moves the file to the error folder, next to the reason
+- When Paperless can't take a file now, the upload waits and tries again, from 15 minutes up to a day
+
+### Safety
+
+- Synchronization stays off until you turn it on, and a dry run lists every change that a run would make, without making it
+- The Paperless trash is mirrored into a folder of its own; permanent deletion is off by default and, when on, waits for the set number of complete scans of Paperless in a row
+- A conflict policy for a file in the way: replace it, or skip it and report the conflict; the app's own copies are never in the way
+- No WebDAV credentials and no password of a Nextcloud user: the app writes through Nextcloud's filesystem API
+- The Paperless API token stays in Nextcloud's credentials manager, never reaches the browser and goes only to the address saved with it
+- A Paperless in your local network, such as `http://paperless:8000`, without turning off Nextcloud's protection against server-side request forgery for the whole server
+
+### Operations
+
+- Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
+- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run
+- Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
 <!-- --8<-- [end:features] -->
 
@@ -128,21 +150,21 @@ This produces paths such as:
 Dokumente/Paperless/Archiv/Example GmbH/Invoice/2026/2026-08-26 - Example invoice [P123].pdf
 ```
 
-Each part of the template becomes a folder, and the base folder holds the folders of the inbox and of failed imports next to the archive:
+Each part of the template becomes a folder. The base folder holds the inbox folder, with the files for Paperless, and the error folder, with failed imports, next to the archive; the deleted folder in the archive holds the copies of the documents in the Paperless trash:
 
-```mermaid
-flowchart TD
-    base["📁 Dokumente/Paperless<br><i>base folder</i>"] --> archive["📁 Archiv<br><i>archive folder</i>"]
-    base --> inbox["📁 Eingang<br><i>inbox folder: files for Paperless</i>"]
-    base --> errors["📁 Fehler<br><i>error folder: failed imports</i>"]
-    archive --> correspondent["📁 Example GmbH<br><i>{{ correspondent }}</i>"]
-    archive --> deleted["📁 _Gelöscht<br><i>deleted folder: the Paperless trash</i>"]
-    correspondent --> type["📁 Invoice<br><i>{{ document_type }}</i>"]
-    type --> year["📁 2026<br><i>{{ created_year }}</i>"]
-    year --> file["📄 2026-08-26 - Example invoice [P123].pdf<br><i>{{ created }} - {{ title }} [P{{ id }}]{{ extension }}</i>"]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-folders-of-the-default-path-template.dark.svg">
+  <img src="docs/images/diagrams/the-folders-of-the-default-path-template.svg" alt="The folders of the default path template: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.">
+</picture>
 
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
+
+When you change the title, the tags, the correspondent or the type of a document in Paperless, its file moves to its new path and keeps its shares, comments and versions in Nextcloud, and the desktop and mobile clients only rename it. Only a change of the content, such as a new archive version after Paperless processed the document again, downloads it again, and the download goes into the same file, at its new path if it has one, so the file keeps its shares, comments and favorites; in a scheduled run, Nextcloud keeps the previous content as a version of the file. A run tells the two apart by the checksums of the file: it keeps the SHA-256 and the MD5 of every download and compares them with the checksum that Paperless reports, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0. For a file that an earlier version of the app exported, which has only its SHA-256 saved, the first change on Paperless-ngx 2.x reads the file in Nextcloud once to add its MD5, so that it moves without a download too. A download goes to Nextcloud in chunks, so a document of any size fits into the memory of PHP.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.svg" alt="How a run tells new metadata from new content: A document that was never exported is downloaded. For an exported document, a run compares the revision of Paperless with the one it saved. With a new revision, it asks Paperless for the checksum of the file, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0, and looks for it among the SHA-256 and the MD5 that it saved at the download. When the revision is the same, or the checksum is among them, the content is the same: the file stays where it is, or moves to its new path. When an earlier version of the app saved the SHA-256 alone and Paperless reports an MD5, the run computes both checksums of the mirrored file: when its SHA-256 is the saved one and its MD5 the one of Paperless, the content is the same too. Otherwise the run downloads the document to a temporary file, computes both checksums in one pass over it, writes it to Nextcloud in chunks, into the file of the document when it has one, which keeps its ID and moves to its new path first, and saves the checksums. The questions are indigo, the requests to Paperless-ngx green, and the results in Nextcloud blue.">
+</picture>
 
 <!-- --8<-- [end:usage] -->
 <!-- --8<-- [start:configuration] -->
@@ -151,13 +173,63 @@ Stable markers such as `[P123]` are compatible with the independent [Paperless U
 
 ### Paperless connection
 
-Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used. Trash synchronization requires visibility of the corresponding trashed documents.
+Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used.
 
-The API token is stored in Nextcloud's credentials manager and never returned to the browser.
+The Paperless trash shows an account only the documents that it owns and those without an owner: a permission granted on a document of someone else doesn't count there. A superuser sees the whole trash, but its token controls all of Paperless, every document and every user, so don't use one for this app. Make the account of the app the owner of the documents instead, and keep the access of the people who own them now:
+
+- **New documents:** add a workflow in Paperless with the trigger *Document Added* and an action *Assignment* that assigns the account of the app as the owner and gives view and edit permissions to the users or groups who own the documents now.
+- **Existing documents:** select them in the document list, choose *Permissions*, set the account of the app as the owner, and give view and edit permissions to the same users or groups. Leave *Merge with existing permissions* off: with it on, Paperless keeps the current owner and sets one only for documents without an owner. Off, the dialog replaces the permissions of the selected documents, so list everyone who should keep access.
+
+Only the owner of a document or a superuser can change its owner. The Paperless trash then lists these documents for the account of the app and for superusers, not for the people who owned them before.
+
+Without ownership, the trash still reaches the archive, only later: a document in the trash that the account can't see counts as missing, and its copy moves to the deleted folder after the configured number of complete scans. Keep *Also allow deletion when the app never observed the Paperless trash state* off in that case: with it and permanent deletion both on, such a copy is deleted then, although the document can still be restored in Paperless.
+
+The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+
+#### Paperless in your local network
+
+Nextcloud refuses connections to addresses of the local network, such as `http://paperless:8000` in Docker, `http://paperless.lan` or `http://192.168.1.20:8000`, to protect against server-side request forgery. When Paperless runs at such an address, turn on **Paperless runs in my local network** and save. Nextcloud then allows a local address for the requests of Paperless Sync to the saved Paperless URL only. Every other app and request stays protected, which the system switch `allow_local_remote_servers` would undo for the whole server.
+
+Without the setting, saving says what to do:
+
+> Nextcloud blocks connections to local addresses such as paperless. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.
+
+The setting also helps when the name of Paperless is set only in the hosts file of the server, such as with `extra_hosts` in Docker: without it, Nextcloud looks names up only in the DNS, and saving says that it found no DNS record for the name.
+
+If you turned on `allow_local_remote_servers` for this app before, turn on the setting, save, and then turn the switch off again with `occ config:system:delete allow_local_remote_servers`. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#a-paperless-in-the-local-network) explains what the setting allows.
+
+### Saving, pausing and disconnecting
+
+**Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-saving-the-settings-tests.dark.svg">
+  <img src="docs/images/diagrams/what-saving-the-settings-tests.svg" alt="What saving the settings tests: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.">
+</picture>
+
+To pause synchronization, such as while Paperless is down, its token is revoked or the target user is disabled, uncheck **Enable scheduled synchronization** and save. A save that fails while the schedule is on says so and moves the focus to that switch.
+
+After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so. **Run dry-run** and **Synchronize now** use the saved settings, so **Synchronize now** waits until you save, and the browser asks before you leave the page.
+
+**Disconnect** deletes the stored API token and turns off scheduled synchronization and **Paperless runs in my local network**. The other settings, the synchronized files and their state stay as they are; to connect again, enter the token, turn the local network on again if Paperless runs there, and save.
+
+Results and errors appear in the bar of the buttons, which stays at the bottom of the window. When a proxy or the web server answers for a long run by hand, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the run, the page says that the run continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how the run ended.
 
 ### Folder ownership
 
-The configured Nextcloud target user owns the synchronized folders. The app operates through Nextcloud's internal filesystem API and therefore does not need that user's password or an app password.
+The configured Nextcloud target user owns the synchronized folders. The app operates through Nextcloud's internal filesystem API and therefore does not need that user's password or an app password. Other users see the archive when the target user shares its folder with them, or with a group of them; share it read-only, and share the inbox folder only with those who may send documents to Paperless.
+
+The app remembers what it wrote for each target user. Another target user starts a new archive, which the runs write anew from Paperless, and the archive of the previous one stays as it is, no longer updated.
+
+### Conflict policy
+
+The *File conflict policy* decides what a run does when a file is already at the path of a document, such as a file that someone put there, or the copy itself after its document changed in Paperless:
+
+- **Replace synchronized file**, the default: the run writes the document from Paperless in its place. The file that it replaces goes where the [deletions](#deletion-safety) of the run go.
+- **Skip and report conflict**: the run leaves the file as it is and reports `Nextcloud file conflict at …` as an error of the document, in every run until the file is gone, and doesn't write or move the document there. That holds for the copy of the app as well, which then stays as it was until you delete it; [#98](https://github.com/Dennis-Otto/paperless-sync/issues/98) tracks that.
+
+> [!WARNING]
+> The files of the archive are a mirror of Paperless, and they are read-only by intent: nothing goes back from them to Paperless. The next run writes a copy that you deleted or renamed anew at its path, and when its document changes in Paperless, a run may replace a copy that you edited, or report a conflict for it when conflicts are skipped. Edit documents in Paperless, and copy a file out of the archive to keep a version of your own.
 
 ### Path template variables
 
@@ -179,41 +251,19 @@ Each part of the path is cleaned for Nextcloud, macOS and Windows: control chara
 
 Nextcloud accepts names of up to 250 bytes, and a character of Cyrillic takes two bytes, of Chinese three and an emoji four. So a folder name has at most 200 bytes and a file name at most 217, which leaves room for the temporary name of a write. A name that would be longer is shortened in its free text alone: the title, the correspondent, the document type, the storage path and the original file name, the longest first. The text of the template, the dates, the marker and the extension stay whole:
 
-```mermaid
-flowchart TB
-    accTitle: How a part of the path is built
-    accDescr: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.
-
-    part["A part of the template<br><code>{{ created }} - {{ title }} [P{{ id }}]</code>"]
-    values["The values as plain text<br>cleaned for Nextcloud, macOS and Windows"]
-    fits{"At most 200 bytes for a folder,<br>217 for the file name?"}
-    shorten["Shorten the longest free text:<br>title, correspondent, document type,<br>storage path, original file name"]
-    name["📄 2026-08-26 - Example invoice [P123].pdf"]
-
-    part --> values --> fits
-    fits -- "no" --> shorten --> fits
-    fits -- "yes" --> name
-
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class name done
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.dark.svg">
+  <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.svg" alt="How a part of the path is built: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.">
+</picture>
 
 ### Nextcloud inbox
 
 Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is on, go to Paperless, at most as many in one run as the batch size allows. A file stays in the inbox until its Paperless task reports success:
 
-```mermaid
-flowchart LR
-    file["📄 A file in 📁 Eingang"] -->|next run| upload{"Upload to<br>Paperless"}
-    upload -->|accepted| task{"Its Paperless task,<br>in the next runs"}
-    upload -->|"refused, such as an<br>unsupported file type"| refused["Stays in Eingang,<br>skipped until it changes"]
-    upload -->|"Paperless unreachable<br>or overloaded"| retry["Waits 15 minutes, then<br>twice as long each time,<br>up to a day"]
-    retry --> upload
-    refused -->|"saved anew, renamed<br>or replaced"| upload
-    task -->|still running| task
-    task -->|success| done["Removed from Eingang,<br>or kept, as configured"]
-    task -->|failure| failed["Moved to 📁 Fehler, next to<br>a .error.txt with the reason"]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.dark.svg">
+  <img src="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.svg" alt="The way of a file from the inbox to Paperless: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, it moves to the folder Fehler, next to a .error.txt with the reason.">
+</picture>
 
 A failed file keeps its subfolder below the error folder.
 
@@ -223,23 +273,16 @@ When Paperless can't be reached, or fails with a server error such as `502 Bad G
 
 ### Deletion safety
 
-Moving Paperless documents to its trash can be mirrored into the configured `_Gelöscht` folder; when the trash behavior keeps archive files in place, the copy stays where it is. Permanent Nextcloud deletion is disabled by default. When enabled, a document must be absent from both the active Paperless API and its trash for the configured number of consecutive complete scans.
+Moving Paperless documents to its trash can be mirrored into the configured `_Gelöscht` folder, below the date on which the document went to the trash, such as `_Gelöscht/2026-08-27/Example GmbH/Invoice/2026/…`; when the trash behavior keeps archive files in place, the copy stays where it is. Deleting the copy of a document that Paperless deleted is disabled by default. When enabled, a document must be absent from both the active Paperless API and its trash for the configured number of consecutive complete scans.
 
-```mermaid
-stateDiagram-v2
-    direction LR
-    state "In the archive" as archive
-    state "In _Gelöscht" as deleted
-    state "Deleted in Nextcloud" as gone
-    [*] --> archive: exported
-    archive --> deleted: moved to the trash in Paperless
-    deleted --> archive: restored in Paperless
-    deleted --> gone: deleted for good in Paperless,<br>after N complete scans,<br>with permanent deletion on
-    archive --> deleted: gone from Paperless without the trash,<br>after N complete scans
-    archive --> gone: the same, with permanent<br>and direct deletion on
-```
+A copy that a scheduled run deletes goes to the trash bin of the target user, *Deleted files* in Files, as do the folders that it empties: Nextcloud keeps them there for the retention of its trash bin, and the target user can restore them. A run started with *Synchronize now* deletes them for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks. The same holds for the copy that an excluded tag removes, for an inbox file after its import and for a file that the [conflict policy](#conflict-policy) replaces. Without the app *Deleted files* of Nextcloud, every deletion is for good.
 
-N is the number of *Required consecutive missing scans*, three by default. With the trash behavior *Keep archive file in place*, the copy stays in the archive instead of moving to `_Gelöscht`, and it is deleted from there when the rules allow it.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-happens-to-the-copy-of-a-document.dark.svg">
+  <img src="docs/images/diagrams/what-happens-to-the-copy-of-a-document.svg" alt="What happens to the copy of a document: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Gelöscht; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Gelöscht is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.">
+</picture>
+
+N is the number of *Required consecutive missing scans*, three by default. With the trash behavior *Keep archive file in place*, the copy stays in the archive instead of moving to `_Gelöscht`, and it is deleted from there when the rules allow it. A document that Paperless restores, or lists again, keeps that copy without a download.
 
 The copy of a document that disappears from Paperless without passing through its trash moves to the deleted folder after the same number of scans. It stays in place when the trash behavior keeps archive files in place, and it is deleted when direct deletion is allowed as well.
 
@@ -247,102 +290,86 @@ Only a copy that is still there is moved or deleted: a document whose copy is al
 
 Only a complete scan counts. Paperless lists its documents page by page, and a page may come back short or empty, from a proxy in front of Paperless or a glitch of its permissions, or a document may be added or deleted while the run reads the pages. Then documents that still exist would look deleted. So a scan counts only when every page came back full, with the same count of Paperless, and the run received every document that Paperless listed; the run reads the documents in the order of their IDs, so that a new one joins the last page. After an incomplete scan of the documents or of the trash, the report says `SCAN INCOMPLETE`, the Nextcloud log has a warning, and the run counts no document as missing; the next complete scan carries on. A document that a scan lists again starts its count of missing scans anew. The lists of tags, correspondents, document types and storage paths are checked the same way: when one of them comes back incomplete, the run fails before it changes anything in the archive, so that a document is never exported for want of its excluded tag, and never moves for want of its correspondent.
 
-```mermaid
-flowchart TB
-    accTitle: When a document counts as missing
-    accDescr: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew, and one in neither list counts one more missing scan; after N scans in a row, its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.
-
-    scan["A run reads every page<br>of the documents and the trash"] --> complete{"Every page full<br>and the list unchanged?"}
-    complete -->|no| incomplete["SCAN INCOMPLETE:<br>no document counts<br>as missing in this run"]
-    complete -->|yes| listed{"Is the document<br>in one of the lists?"}
-    listed -->|yes| reset["Its count of missing<br>scans starts anew"]
-    listed -->|no| scans{"Missing in N<br>scans in a row?"}
-    scans -->|not yet| wait["WAIT: one more<br>missing scan"]
-    scans -->|yes| change["Moved to _Gelöscht,<br>or deleted when allowed,<br>within the batch size"]
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class scan,complete,listed,scans check
-    class incomplete,reset,wait kept
-    class change changed
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/when-a-document-counts-as-missing.dark.svg">
+  <img src="docs/images/diagrams/when-a-document-counts-as-missing.svg" alt="When a document counts as missing: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew, and one in neither list counts one more missing scan; after N scans in a row, its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.">
+</picture>
 
 ### Batch size
 
 The batch size limits the changes of one run: exports, moves, removals of excluded copies, moves to the deleted folder and deletions. A change that fails takes its place as well, so a run that can't write, such as one against a full quota or a file name that Nextcloud refuses, downloads no more documents than the batch size allows. An export that fails takes its place only among the exports, though, so documents whose export keeps failing never hold up the moves of trashed or missing documents. What doesn't fit into a run waits for the next one, and the report counts it as skipped. Uploads from the inbox have a batch of the same size of their own, so a run uploads at most that many files to Paperless as well.
 
-```mermaid
-flowchart TB
-    accTitle: How a run spends its batch
-    accDescr: A document to export or move is skipped when the batch is full or Nextcloud cannot store files. Otherwise it takes a place in the batch. With the conflict policy skip, a file in the way is reported as a conflict without a download. Otherwise the document is downloaded and written, or moved. A failure is reported, and the document waits behind the others in the next run; a full quota, a read-only or an unavailable storage also ends the exports of the run.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-spends-its-batch.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-spends-its-batch.svg" alt="How a run spends its batch: A document to export or move is skipped when the batch is full or Nextcloud cannot store files. Otherwise it takes a place in the batch. With the conflict policy skip, a file in the way that is not the app's own copy is reported as a conflict without a download. Otherwise the document is downloaded and written, or moved. A failure is reported, and the document waits behind the others in the next run; a full quota, a read-only or an unavailable storage also ends the exports of the run.">
+</picture>
 
-    document["A new, changed or<br>renamed document"] --> full{"Batch full, or<br>exports stopped?"}
-    full -->|yes| skipped["Skipped: waits<br>for the next run"]
-    full -->|no| place["Takes a place<br>in the batch"]
-    place --> conflict{"Conflicts skipped and<br>a file in the way?"}
-    conflict -->|yes| reported["ERROR: the conflict,<br>without a download"]
-    conflict -->|no| write["Downloaded and written,<br>or moved"]
-    write -->|done| done["EXPORT or MOVE"]
-    write -->|fails| failed["ERROR: waits behind<br>the others next run"]
-    failed -->|"full quota, read-only or<br>unavailable storage"| stopped["EXPORT STOPPED:<br>the others wait<br>for the next run"]
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class full,place,conflict,write check
-    class skipped,reported,failed,stopped waits
-    class done result
-```
-
-The run takes the most recently added documents first, so a new document doesn't wait behind a backlog, such as the first export of a large archive. A document whose last export or move failed waits behind the others, the one that failed longest ago first, so documents that keep failing don't hold up the rest. When Nextcloud can't store files in the archive at all, because the quota is full or the archive is read-only or its storage unavailable, the run stops exporting and moving at the first failure and reports `EXPORT STOPPED`; the other documents follow in the next run, and removing copies, which frees space, goes on. Nextcloud applies no quota to the temporary file of a write, so the app checks the free space before every write itself. A path that Nextcloud refuses on its own, such as a forbidden file name or a read-only subfolder, concerns only its document. With the conflict policy *Skip and report conflict*, a file in the way is reported as a conflict before the document is downloaded, and a dry-run reports it too.
+The run takes the most recently added documents first, so a new document doesn't wait behind a backlog, such as the first export of a large archive. A document whose last export or move failed waits behind the others, the one that failed longest ago first, so documents that keep failing don't hold up the rest. When Nextcloud can't store files in the archive at all, because the quota is full or the archive is read-only or its storage unavailable, the run stops exporting and moving at the first failure and reports `EXPORT STOPPED`; the other documents follow in the next run, and removing copies, which frees space, goes on. Nextcloud applies no quota to the temporary file of a write, so the app checks the free space before every write itself. A path that Nextcloud refuses on its own, such as a forbidden file name or a read-only subfolder, concerns only its document. With the conflict policy *Skip and report conflict*, a file in the way is reported as a conflict before the document is downloaded, and a dry-run reports it too. The app's own copy of a document is not in the way: the state of the document records its path, and it still has the content of the last download, so it gets the new content. A copy that someone changed in Nextcloud counts as theirs and stays, also when the document gets a new path; a copy that a failed write left incomplete is still the app's own and gets the content in the next run.
 
 ### Background jobs
 
-The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval is enforced by the app; each run limits its changes in Nextcloud, and its uploads to Paperless, to the configured [batch size](#batch-size) each.
+The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval is enforced by the app; each run limits its changes in Nextcloud, and its uploads to Paperless, to the configured [batch size](#batch-size) each. Nextcloud starts the job of the app every five minutes at most, so a shorter interval acts as five minutes.
+
+A large archive takes many runs at first: about the number of documents divided by the batch size, times the interval. With the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes the first synchronization faster; every later run changes only what changed in Paperless.
 
 <!-- --8<-- [end:configuration] -->
 
-## Testing
+## Status, report and log
 
-Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, incomplete scans of Paperless, the batch size with failing writes, inbox success and failure, dry-run behavior, and release version management.
+<!-- --8<-- [start:status] -->
+Every run leaves its outcome in three places, also a scheduled run that nobody watched:
 
-The Docker end-to-end suite mounts this checkout into real Nextcloud containers and uses a deterministic Paperless API mock. It configures the app, runs dry-runs, exports, moves, the trash and its restore, conflicts, documents that vanish, guarded deletion and the inbox, and starts the background job as system cron would. `run-all.sh` runs it against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, side by side, and the newest of them also on PostgreSQL, and on MariaDB with S3 object storage; `run.sh` runs it against one version, on SQLite by default:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-outcome-of-a-run-goes.dark.svg">
+  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.">
+</picture>
 
-```bash
-bash tests/e2e/run-all.sh
-bash tests/e2e/run.sh
-E2E_DATABASE=mysql E2E_OBJECTSTORE=s3 bash tests/e2e/run.sh
-```
+The top of the settings page shows how the last run ended, when it finished, the last run without errors and, roughly, the next scheduled run: Nextcloud's background jobs start it, so it follows a few minutes after the interval. A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
+<!-- --8<-- [end:status] -->
 
-CI runs `run-all.sh` on every push to `main`, every night, and in every pull request that can affect the app; a pull request that changes only the documentation, other workflows or the version of a release passes the check at once. PostgreSQL, MariaDB and S3 run in a job of their own, which is no required check, in a pull request that changes the migrations, the state, the files in Nextcloud, the uploads to Paperless or the tests. See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/status-error-dark.png">
+  <img alt="The status of Paperless Sync after a run with an error: the state Completed with errors in red, the times of the last run, of the last successful run and of the next scheduled run, and below them a box that names the document whose download failed" src="docs/images/status-error-light.png">
+</picture>
+
+<!-- --8<-- [start:status-report] -->
+The report counts every change and lists up to 100 lines of them. A run with more lines lists its errors, deletions, removals of excluded copies, moves to the deleted folder and failed imports first, in place of exports, moves and imports, and says how many lines it leaves out, so that a dry-run never hides a deletion behind a hundred imports; `SCAN INCOMPLETE` and `EXPORT STOPPED` always stay. The status keeps the first 50 errors of the run and counts the others.
+
+The Nextcloud log has a warning, with the ID of the document and its path, when an error of a document first occurs or changes; an error that comes back in every run is logged once. A run that fails as a whole is logged as an error.
+<!-- --8<-- [end:status-report] -->
+
+## FAQ and troubleshooting
+
+The [FAQ](docs/faq.md) answers the common questions, such as what happens to an edit of a mirrored file, where deleted files go and how long the first synchronization takes. [Troubleshooting](docs/troubleshooting.md) leads from an error message, a run that fails or a file that is missing to its cause and its fix.
+
+<!-- --8<-- [start:help] -->
+
+## Help and feedback
+
+- **A question** about the set-up, or whether the app can do something: ask in the [Q&A discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/q-a), where the answer stays for the next person who asks.
+- **A bug**: open a [bug report](https://github.com/Dennis-Otto/paperless-sync/issues/new?template=bug_report.yml) with the versions of the app and of Nextcloud. Report a vulnerability [privately](https://github.com/Dennis-Otto/paperless-sync/security/advisories/new) instead.
+- **An idea**: suggest it in a [feature request](https://github.com/Dennis-Otto/paperless-sync/issues/new?template=feature_request.yml).
+- **If it works for you**: [rate it in the Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync), so that others find it, star the [repository](https://github.com/Dennis-Otto/paperless-sync), or [support its development](https://github.com/sponsors/Dennis-Otto).
+
+<!-- --8<-- [end:help] -->
 
 ## Development
 
-Requirements: PHP 8.2+, Composer, Node.js and Docker; the dev container in `.devcontainer/` has them ready.
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says how a change gets in, and [Development](docs/development.md) how to build, check and test the app: `scripts/check.sh`, the end-to-end tests in Docker against every supported Nextcloud version, the pictures of the documentation, the website and the release process. [Automation](docs/automation.md) shows the bots that check, release and look after the app. The project follows [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md) and the [code of conduct](CODE_OF_CONDUCT.md).
 
-```bash
-composer install
-bash scripts/check.sh
-bash tests/e2e/run.sh
-```
+## Quality and security
 
-The pictures of the documentation and of the App Store come from the same Docker setup, with a synthetic household archive; take them anew after a change of the interface:
+[![CI](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/ci.yml)
+[![Docker E2E](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/e2e.yml)
+[![Secret scan](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/secret-scan.yml)
+[![CodeQL](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/codeql.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/codeql.yml)
+[![SBOM](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml/badge.svg)](https://github.com/Dennis-Otto/paperless-sync/actions/workflows/sbom.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Dennis-Otto/paperless-sync/badge)](https://scorecard.dev/viewer/?uri=github.com/Dennis-Otto/paperless-sync)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15277/badge)](https://www.bestpractices.dev/projects/15277)
+[![REUSE](https://api.reuse.software/badge/github.com/Dennis-Otto/paperless-sync)](https://api.reuse.software/info/github.com/Dennis-Otto/paperless-sync)
 
-```bash
-bash tests/e2e/screenshots.sh
-```
-
-`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds with `scripts/check-package.sh`, and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, and the JavaScript and the translations.
-
-The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psalm analyzes the PHP code, CodeQL scans the JavaScript, and the SBOM workflow continuously inventories dependencies.
-
-## Release process
-
-The protected `main` branch requires the checks of the CI, the Docker end-to-end tests against every supported Nextcloud version, the dependency review, CodeQL, the secret scan, the licenses of every file (REUSE), the sign-off of every commit and a Conventional Commit title. Dependabot keeps the dependencies current; routine updates merge on their own once every check passes.
-
-The release bot keeps a pull request for the next release. Its version follows from the titles of the merged pull requests, and what they wrote under *Unreleased* in `CHANGELOG.md` becomes its notes. Merging it publishes the release: the package, checked before and after signing with the app's certificate, its detached signature, an SPDX SBOM and signed build provenance, then the same package in the Nextcloud App Store, verified afterwards as users can verify it. See [the release guide](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/releases.md).
-
-Project decisions and support expectations are documented in [GOVERNANCE.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/GOVERNANCE.md), [SUPPORT.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SUPPORT.md), and [CODE_OF_CONDUCT.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CODE_OF_CONDUCT.md).
+A change reaches `main` only when the unit tests, which run every line of the app, pass, together with Psalm, CodeQL, the secret scan, the dependency review, the license check of every file and, when the change can affect the app, the end-to-end tests in Docker against every supported Nextcloud version. Every release is signed, with an SBOM and signed build provenance, and checked in the App Store afterwards; [Automation](docs/automation.md) shows every workflow behind it. The [security design](docs/security.md) says what the app protects and how; report a vulnerability [privately](https://github.com/Dennis-Otto/paperless-sync/security/advisories/new).
 
 ## License
 
-AGPL-3.0-or-later
+[AGPL-3.0-or-later](LICENSE)

@@ -20,6 +20,7 @@ final class ConfigService {
 
 	private const DEFAULTS = [
 		'paperless_url' => '',
+		'paperless_local_network' => false,
 		'enabled' => false,
 		'target_user' => '',
 		'base_path' => 'Dokumente/Paperless',
@@ -61,23 +62,57 @@ final class ConfigService {
 		return $this->fromValues($this->readValues(), $this->getToken() !== '');
 	}
 
+	/**
+	 * The stored token, but only while the configured URL is the one that it was saved with. The
+	 * URL may change without the settings page and its check in resolveToken(): through occ, or
+	 * through the provisioning API of Nextcloud, which may set any value of the app configuration.
+	 * The token is then held back until it is entered again, instead of going to the new URL with
+	 * the next run.
+	 */
 	public function getToken(): string {
-		/** @psalm-suppress MixedAssignment */
-		$token = $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		$stored = $this->storedToken();
 
-		return is_string($token) ? $token : '';
+		return $stored !== null && $stored['url'] === $this->configuredUrl() ? $stored['token'] : '';
 	}
 
-	public function resolveToken(string $candidate): string {
-		$token = trim($candidate);
-		if ($token === '') {
-			$token = $this->getToken();
+	/**
+	 * The token for a connection to $url: the one that was entered, or else the stored one, but
+	 * only for the URL that it was stored with. Otherwise, whoever may change the settings, with
+	 * the session of an administrator for example, could point the URL at a server of their own and
+	 * receive the stored token with the test of the connection, without ever knowing it.
+	 */
+	public function resolveToken(#[\SensitiveParameter] string $tokenCandidate, string $url): string {
+		$token = trim($tokenCandidate);
+		if ($token !== '') {
+			return $token;
 		}
-		if ($token === '') {
+		$stored = $this->storedToken();
+		if ($stored === null) {
 			throw new InvalidArgumentException('A Paperless API token is required.');
 		}
+		// The whole URL, not only its host: one host may serve several apps behind a proxy.
+		if (rtrim(trim($url), '/') !== $stored['url']) {
+			throw new InvalidArgumentException('Enter the API token again to connect to another Paperless URL.');
+		}
 
-		return $token;
+		return $stored['token'];
+	}
+
+	/**
+	 * Bind a token that an earlier version stored on its own to the configured URL, the one that
+	 * it was saved with, so that it keeps working after the update.
+	 *
+	 * @return bool whether there was such a token
+	 */
+	public function bindUnboundToken(): bool {
+		/** @psalm-suppress MixedAssignment */
+		$token = $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		if (!is_string($token) || trim($token) === '') {
+			return false;
+		}
+		$this->storeToken($this->configuredUrl(), trim($token));
+
+		return true;
 	}
 
 	/**
@@ -85,7 +120,7 @@ final class ConfigService {
 	 *
 	 * @param array<string, mixed> $settings
 	 */
-	public function validate(array $settings, string $tokenCandidate = ''): SyncConfig {
+	public function validate(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$values = $this->readValues();
 		foreach (array_keys(self::DEFAULTS) as $key) {
 			if (array_key_exists($key, $settings)) {
@@ -93,21 +128,21 @@ final class ConfigService {
 				$values[$key] = $settings[$key];
 			}
 		}
-		$token = $this->resolveToken($tokenCandidate);
 		/** @var array<string, mixed> $normalized */
 		$normalized = $this->normalize($values);
+		$token = $this->resolveToken($tokenCandidate, (string)$normalized['paperless_url']);
 
 		return $this->fromValues($normalized, $token !== '');
 	}
 
 	/** @param array<string, mixed> $settings */
-	public function save(array $settings, string $tokenCandidate = ''): SyncConfig {
+	public function save(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$config = $this->validate($settings, $tokenCandidate);
-		$token = $this->resolveToken($tokenCandidate);
+		$token = $this->resolveToken($tokenCandidate, $config->paperlessUrl);
 		$values = $config->jsonSerialize();
 
 		$mapping = [
-			'paperless_url' => 'paperlessUrl', 'enabled' => 'enabled', 'target_user' => 'targetUser',
+			'paperless_url' => 'paperlessUrl', 'paperless_local_network' => 'paperlessLocalNetwork', 'enabled' => 'enabled', 'target_user' => 'targetUser',
 			'base_path' => 'basePath', 'archive_folder' => 'archiveFolder', 'inbox_folder' => 'inboxFolder',
 			'error_folder' => 'errorFolder', 'deleted_folder' => 'deletedFolder', 'path_template' => 'pathTemplate',
 			'export_enabled' => 'exportEnabled', 'inbox_enabled' => 'inboxEnabled', 'prefer_archive' => 'preferArchive',
@@ -131,16 +166,23 @@ final class ConfigService {
 				$this->appConfig->setValueString(AppConstants::APP_ID, $storageKey, $value);
 			}
 		}
-		$this->credentialsManager->store('', self::TOKEN_IDENTIFIER, $token);
+		$this->storeToken($config->paperlessUrl, $token);
 
 		return $this->get();
 	}
 
+	/**
+	 * Disconnect Paperless: delete the token and turn off what reaches Paperless without an
+	 * administrator watching, the scheduled synchronization, and the access to the local network,
+	 * which lifts a protection of Nextcloud. The other settings stay, the deletion policy too: to
+	 * connect again, an administrator enters the token, and allows the local network again when
+	 * Paperless runs there.
+	 */
 	public function reset(): SyncConfig {
-		foreach (array_keys(self::DEFAULTS) as $key) {
-			$this->appConfig->deleteKey(AppConstants::APP_ID, $this->storageKey($key));
-		}
 		$this->credentialsManager->delete('', self::TOKEN_IDENTIFIER);
+		foreach (['enabled', 'paperless_local_network'] as $key) {
+			$this->appConfig->setValueBool(AppConstants::APP_ID, $this->storageKey($key), false);
+		}
 
 		return $this->get();
 	}
@@ -160,6 +202,31 @@ final class ConfigService {
 		}
 
 		return $normalized;
+	}
+
+	/** The token with the URL that it may go to, nothing else, in the store of Nextcloud, which encrypts it. */
+	private function storeToken(string $url, #[\SensitiveParameter] string $token): void {
+		$this->credentialsManager->store('', self::TOKEN_IDENTIFIER, ['url' => $url, 'token' => $token]);
+	}
+
+	/** @return array{url: string, token: string}|null the stored token and the URL that it was saved with */
+	private function storedToken(): ?array {
+		/** @psalm-suppress MixedAssignment */
+		$stored = $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		if (!is_array($stored)) {
+			return null;
+		}
+		$url = $stored['url'] ?? null;
+		$token = $stored['token'] ?? null;
+		if (!is_string($url) || !is_string($token) || $token === '') {
+			return null;
+		}
+
+		return ['url' => $url, 'token' => $token];
+	}
+
+	private function configuredUrl(): string {
+		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '')), '/');
 	}
 
 	/** @return array<string, mixed> */
@@ -182,6 +249,9 @@ final class ConfigService {
 	/** @param array<string, mixed> $values @return array<string, mixed> */
 	private function normalize(array $values): array {
 		$values['paperless_url'] = $this->normalizeUrl((string)$values['paperless_url']);
+		// It lifts a protection of Nextcloud, so only a clear yes turns it on: true, as the settings
+		// page sends it, or 1, "1", "true", "on" or "yes", as a form sends it; "false" too is a no.
+		$values['paperless_local_network'] = filter_var($values['paperless_local_network'], FILTER_VALIDATE_BOOLEAN);
 		$values['target_user'] = trim((string)$values['target_user']);
 		if ($values['target_user'] === '') {
 			throw new InvalidArgumentException('A Nextcloud target user is required.');
@@ -235,7 +305,7 @@ final class ConfigService {
 			(bool)$values['allow_direct_delete'], (int)$values['missing_grace_runs'], (bool)$values['prune_empty_folders'],
 			(bool)$values['delete_inbox_after_success'], (bool)$values['recursive_inbox'], (string)$values['conflict_mode'],
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
-			(string)$values['untitled'],
+			(string)$values['untitled'], (bool)$values['paperless_local_network'],
 		);
 	}
 }

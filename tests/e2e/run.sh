@@ -46,8 +46,9 @@ case "${E2E_OBJECTSTORE}" in
 		exit 1
 		;;
 esac
-# E2E_ACCESSIBILITY=0 leaves out the accessibility check at the end, which doesn't
-# depend on the database or the storage; run-all.sh runs it once for every version.
+# E2E_ACCESSIBILITY=0 leaves out the checks in the browser at the end, accessibility.mjs and
+# settings.mjs, which don't depend on the database or the storage; run-all.sh runs them once
+# for every version.
 E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
 TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
@@ -118,21 +119,25 @@ mock_state() {
 }
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
-# network of the Compose project. The files of the check reach the browser through
-# standard input, so that npm leaves nothing in the checkout.
+# network of the Compose project, and settings.mjs then uses the settings as an
+# administrator does: it saves them with the confirmation of the password, disconnects
+# and connects again with the token, and checks what the page says about unsaved
+# changes, results and errors, also in German. The files of the checks reach the
+# browser through standard input, so that npm leaves nothing in the checkout.
 accessibility() {
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
 			--env E2E_USER=e2e-admin \
 			--env "E2E_PASSWORD=${PASSWORD}" \
+			--env E2E_TOKEN=e2e-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
-			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs'
+			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs'
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -154,20 +159,12 @@ save_settings() {
 		"${BASE_URL}/apps/paperless_sync/settings"
 }
 
-sync_status() {
-	output="$1"
-	curl --fail-with-body --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--output "${output}" \
-		"${BASE_URL}/apps/paperless_sync/sync/status"
-}
-
-# The times when the last run started and completed, as the background job reads them
-# from the database.
+# The times when the last run started, completed and ended, from which the background job
+# computes its next run, as it reads them from the database.
 last_run() {
-	echo "$(occ config:app:get paperless_sync status_last_started) $(occ config:app:get paperless_sync status_last_completed)"
+	for key in status_last_started status_last_completed status_last_ended; do
+		printf '%s ' "$(occ config:app:get paperless_sync "${key}")"
+	done
 }
 
 # Checks the status of a run in another process, such as the background job, as the
@@ -197,6 +194,16 @@ sync_run() {
 		--data-urlencode "dryRun=${dry_run}" \
 		--output "${output}" \
 		"${BASE_URL}/apps/paperless_sync/sync/run"
+}
+
+# The status of the last run, as the settings page shows it.
+sync_status() {
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "$1" \
+		"${BASE_URL}/apps/paperless_sync/sync/status"
 }
 
 dav_status() {
@@ -241,6 +248,40 @@ assert_dav_file() {
 		--output "${output}" \
 		"${DAV_BASE}/${user}/${path}"
 	grep --fixed-strings "${needle}" "${output}" >/dev/null
+}
+
+# The ID of a file in Nextcloud, to which its shares, comments, tags, favorites and versions belong.
+file_id() {
+	user="$1"
+	path="$2"
+	curl --fail-with-body --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 0' \
+		--header 'Content-Type: application/xml' \
+		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' \
+		"${DAV_BASE}/${user}/${path}" \
+		| grep -oE '<oc:fileid>[0-9]+</oc:fileid>' | grep -oE '[0-9]+'
+}
+
+# The file of the document keeps the ID of its first export through every change of the document.
+assert_file_id() {
+	path="$1"
+	actual="$(file_id sync-target "${path}")"
+	if [[ "${actual}" != "${FILE_ID}" ]]; then
+		echo "The file has the ID ${actual} instead of ${FILE_ID}, which loses its shares, comments and versions: ${path}" >&2
+		exit 1
+	fi
+}
+
+# The entries of the versions app for the file of the document.
+version_count() {
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		"${BASE_URL}/remote.php/dav/versions/sync-target/versions/${FILE_ID}" \
+		| grep -oE '<d:response>' | wc -l
 }
 
 INITIAL_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20%5BP123%5D.pdf'
@@ -289,7 +330,10 @@ fi
 occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
 # The browser of the accessibility check reaches Nextcloud by its name in the network.
 occ config:system:set trusted_domains 2 --value=nextcloud >/dev/null
-occ config:system:set allow_local_remote_servers --type=boolean --value=true >/dev/null
+# Nextcloud refuses addresses of the local network, such as the one of paperless-mock, as
+# on every server where nobody turned allow_local_remote_servers on for every app. The app
+# reaches the mock with its own setting "Paperless runs in my local network" instead.
+occ config:system:delete allow_local_remote_servers >/dev/null
 # The password policy would look up every new password at Have I Been Pwned: a
 # request to the internet that the tests don't need and that can fail.
 occ config:app:set password_policy enforceHaveIBeenPwned --type=boolean --value=false >/dev/null
@@ -330,7 +374,10 @@ for attribute in \
 	'data-save-url="/apps/paperless_sync/settings"' \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
-	'data-status-url="/apps/paperless_sync/sync/status"'; do
+	'data-status-url="/apps/paperless_sync/sync/status"' \
+	'id="initial-state-paperless_sync-status"' \
+	'id="initial-state-paperless_sync-config"' \
+	'data-setting="paperless_local_network"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
@@ -369,12 +416,32 @@ if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
 	exit 1
 fi
 
+# Without the setting, Nextcloud refuses the address of the mock, and the answer says how to
+# allow it instead of Nextcloud's own "Host "paperless-mock" violates local access rules".
+REFUSED_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+	--data-urlencode 'settings[target_user]=sync-target' \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/local-network-refused.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/settings")"
+if [[ "${REFUSED_STATUS}" != "400" ]]; then
+	echo "Saving a Paperless in the local network without its setting answered HTTP ${REFUSED_STATUS} instead of 400: $(cat "${TMP_DIR}/local-network-refused.json")" >&2
+	exit 1
+fi
+assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
+
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
 	--header 'Accept: application/json' \
 	--header 'OCS-APIRequest: true' \
 	--request POST \
 	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+	--data-urlencode 'settings[paperless_local_network]=1' \
 	--data-urlencode 'settings[target_user]=sync-target' \
 	--data-urlencode 'settings[base_path]=Documents/Paperless' \
 	--data-urlencode 'settings[archive_folder]=Archive' \
@@ -404,14 +471,88 @@ assert_dav_missing sync-target "${INITIAL_PATH}"
 sync_run false "${TMP_DIR}/export.json"
 assert_json export "${TMP_DIR}/export.json"
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
 
 control /control/scenario/renamed >/dev/null
 sync_run false "${TMP_DIR}/move.json"
 assert_json move "${TMP_DIR}/move.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
+# Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0: with either, a change
+# of the metadata alone moves the file, here back and forth, without a download.
+control /control/checksum/md5 >/dev/null
+control /control/scenario/active >/dev/null
+sync_run false "${TMP_DIR}/move-md5.json"
+assert_json move "${TMP_DIR}/move-md5.json"
+assert_dav_missing sync-target "${RENAMED_PATH}"
+assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+control /control/scenario/renamed >/dev/null
+sync_run false "${TMP_DIR}/move-md5-back.json"
+assert_json move "${TMP_DIR}/move-md5-back.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
+control /control/checksum/sha256 >/dev/null
 mock_state > "${TMP_DIR}/mock-after-move.json"
 assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
+
+# A new content of the document updates its file in place, in a run by hand: the file keeps its
+# ID, and a share of it shows the new content.
+curl --fail-with-body --silent --show-error \
+	--user "sync-target:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'path=/Documents/Paperless/Archive/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf' \
+	--data-urlencode 'shareType=0' \
+	--data-urlencode 'shareWith=e2e-other' \
+	--output /dev/null \
+	"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123.'
+control /control/content/revised >/dev/null
+sync_run false "${TMP_DIR}/revised.json"
+assert_json export "${TMP_DIR}/revised.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+assert_file_id "${RENAMED_PATH}"
+assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
+# The background job, as system cron starts it. Until synchronization is enabled, it does
+# nothing. Then it runs when the interval since the last run has passed, here as if that run was
+# an hour ago, and started again at once, it waits for the interval. In the job, the versions app
+# of Nextcloud also keeps the previous content as a version.
+VERSIONS_BEFORE="$(version_count)"
+control /control/content/original >/dev/null
+HOUR_AGO="$(($(date +%s) - 3600))"
+for key in status_last_started status_last_completed status_last_ended; do
+	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
+done
+JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+if [[ "$(last_run)" != "${HOUR_AGO} ${HOUR_AGO} ${HOUR_AGO} " ]]; then
+	echo 'The background job synchronized while synchronization was disabled.' >&2
+	exit 1
+fi
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+# With the schedule on, saving tests the connection first.
+save_settings "${TMP_DIR}/enabled.json" enabled=1
+assert_json enabled "${TMP_DIR}/enabled.json"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
+LAST_RUN="$(last_run)"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
+	echo 'The background job ran again before its interval had passed.' >&2
+	exit 1
+fi
+# The schedule goes off again, as the steps after this one and settings.mjs expect it.
+save_settings "${TMP_DIR}/disabled.json" enabled=0
+assert_json disabled "${TMP_DIR}/disabled.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
+VERSIONS_AFTER="$(version_count)"
+if ((VERSIONS_AFTER != VERSIONS_BEFORE + 1)); then
+	echo "The versions app has ${VERSIONS_AFTER} entries for the file after the update in the background job instead of $((VERSIONS_BEFORE + 1))." >&2
+	exit 1
+fi
 
 control /control/scenario/excluded >/dev/null
 sync_run false "${TMP_DIR}/excluded.json"
@@ -430,6 +571,9 @@ occ user:setting sync-target files quota '1 B' >/dev/null
 sync_run false "${TMP_DIR}/export-stopped.json"
 occ user:setting --delete sync-target files quota >/dev/null
 assert_json export-stopped "${TMP_DIR}/export-stopped.json"
+# The status keeps the error of the document for the settings page.
+sync_status "${TMP_DIR}/status-errors.json"
+assert_json status-errors "${TMP_DIR}/status-errors.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
 
 sync_run false "${TMP_DIR}/re-export.json"
@@ -496,31 +640,11 @@ assert_json status "${TMP_DIR}/status.json"
 mock_state > "${TMP_DIR}/mock-final.json"
 assert_json mock-final "${TMP_DIR}/mock-final.json"
 
-# The background job, as system cron starts it. Until synchronization is enabled, it
-# does nothing. Then it runs when the interval since the last run has passed, here as
-# if that run was an hour ago, and started again at once, it waits for the interval.
+# The deleted document is back in Paperless, and the next run exports it again.
 control /control/scenario/renamed >/dev/null
-HOUR_AGO="$(($(date +%s) - 3600))"
-for key in status_last_started status_last_completed; do
-	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
-done
-JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-if [[ "$(last_run)" != "${HOUR_AGO} ${HOUR_AGO}" ]]; then
-	echo 'The background job synchronized while synchronization was disabled.' >&2
-	exit 1
-fi
-save_settings "${TMP_DIR}/enabled.json" enabled=1
-assert_json enabled "${TMP_DIR}/enabled.json"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
+sync_run false "${TMP_DIR}/export-again.json"
+assert_json export "${TMP_DIR}/export-again.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-LAST_RUN="$(last_run)"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
-	echo 'The background job ran again before its interval had passed.' >&2
-	exit 1
-fi
 
 # Restored from the trash of Paperless, a document gets its copy back from the deleted
 # folder, without a download, and the deleted folder goes when it is empty.
@@ -610,8 +734,79 @@ fi
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
 
-checks='dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, background job, restore, conflicts, vanished documents'
-if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
-	checks="${checks}, and accessibility"
+# A run that can't reach Paperless, the most common failure, logs its error without the token,
+# although Nextcloud writes the arguments of every frame of the trace of an exception. It comes
+# last, because assert_log.py above fails on the error that it logs.
+log_count() {
+	# The text to count reaches the shell of the container as its argument $1.
+	# shellcheck disable=SC2016
+	"${COMPOSE[@]}" exec -T nextcloud sh -c 'grep -c -F -e "$1" /var/www/html/data/nextcloud.log || true' sh "$1"
+}
+"${COMPOSE[@]}" stop paperless-mock >/dev/null
+UNREACHABLE_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=false' \
+	--output "${TMP_DIR}/unreachable.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+if [[ "${UNREACHABLE_STATUS}" != "500" ]]; then
+	echo "A run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
+	exit 1
 fi
-echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}."
+if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
+	echo 'The log of Nextcloud holds no failed run, so the check of the token below would prove nothing.' >&2
+	exit 1
+fi
+# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter].
+# Without one in the log, PHP left out the arguments of every frame
+# (zend.exception_ignore_args=On, as in php.ini-production), and the count of the token below
+# would pass without the fix.
+if [[ "$(log_count SensitiveParameterValue)" == "0" ]]; then
+	echo 'The log of Nextcloud holds no argument replaced by PHP, so the check of the token below would prove nothing.' >&2
+	exit 1
+fi
+TOKEN_IN_LOG="$(log_count e2e-only-token)"
+if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" >/dev/null; then
+	echo "A run without Paperless put the token into its answer or into ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
+	exit 1
+fi
+
+# The provisioning API of Nextcloud may change any value of the app, the URL too, without the
+# settings page, which asks for the token again. The next run must not send the stored token to
+# the new URL; the URL that the token was saved with gets it again.
+set_paperless_url() {
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode "value=$1" \
+		--output /dev/null \
+		"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/paperless_url"
+}
+set_paperless_url 'http://paperless-mock:8080/elsewhere'
+REPOINTED_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=true' \
+	--output "${TMP_DIR}/repointed.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+if [[ "${REPOINTED_STATUS}" != "500" ]] || ! grep --fixed-strings 'not completely configured' "${TMP_DIR}/repointed.json" >/dev/null; then
+	echo "A run after the URL was changed through the provisioning API used the stored token: HTTP ${REPOINTED_STATUS}, $(cat "${TMP_DIR}/repointed.json")" >&2
+	exit 1
+fi
+set_paperless_url 'http://paperless-mock:8080'
+sync_run true "${TMP_DIR}/back.json"
+
+checks='a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
+	checks="${checks}, accessibility, the settings in the browser"
+fi
+echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token."

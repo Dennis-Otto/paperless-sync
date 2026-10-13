@@ -13,14 +13,14 @@ name: Docker E2E
 # A second job runs the newest version on PostgreSQL, and on MariaDB with an S3 object
 # store as its primary storage, on a runner of its own: the five installations in one
 # job took more than five minutes on the four cores of a runner, the versions alone
-# keep nextcloud as fast as before. It is no required check, as decision 0007 says.
+# keep nextcloud as fast as before. It is a required check too, as decision 0007 says.
 #
 # In a pull request, the versions run only when the change can affect the app
 # (tests/e2e/affected.sh), and the databases and S3 only when it can behave
 # differently there: a change of the migrations, the state, the files in Nextcloud,
 # the uploads, appinfo/info.xml or the tests. A change of the documentation or of
-# other workflows alone, or a release, which only writes its version, passes the
-# required check nextcloud at once. Every push to main runs them all, and so does
+# other workflows alone, or a release, which only writes its version, passes both
+# required checks at once. Every push to main runs them all, and so does
 # every night, as the images of the versions move with each point release of
 # Nextcloud.
 #

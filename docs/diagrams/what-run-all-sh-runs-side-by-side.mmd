@@ -1,0 +1,22 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What run-all.sh runs side by side
+    accDescr: Every supported Nextcloud version, from min-version to max-version, runs on SQLite with local storage and with the accessibility check. The newest version also runs on PostgreSQL, and on MariaDB with an S3 object store, without the accessibility check, which doesn't depend on them.
+
+    all["run-all.sh"]
+    versions["Every version<br>from min-version<br>to max-version:<br>SQLite, local storage,<br>accessibility"]
+    pgsql["max-version:<br>PostgreSQL,<br>local storage"]
+    mysql["max-version:<br>MariaDB,<br>S3 object store"]
+
+    all --> versions
+    all --> pgsql
+    all --> mysql
+
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class all bot
+    class versions,pgsql,mysql done

@@ -36,6 +36,17 @@ if mode == "config":
     expect("targetUser", "sync-target")
     expect("tokenConfigured", True)
     expect("permanentDelete", True)
+    expect("paperlessLocalNetwork", True)
+    # A save with a token entered tests the connection first.
+    expect("connectionTested", True)
+elif mode == "local-network-refused":
+    expect(
+        "message",
+        "Nextcloud blocks connections to local addresses such as paperless-mock. "
+        'If Paperless runs in your network, turn on "Paperless runs in my local network" '
+        "and save the settings.",
+    )
+    expect("setting", "paperless_local_network")
 elif mode == "dry-run":
     expect("dryRun", True)
     expect("exported", 1)
@@ -106,8 +117,21 @@ elif mode == "import-waiting":
     expect("importsSubmitted", 0)
     expect("skipped", 1)
     expect("errors", 0)
+elif mode == "status-errors":
+    # The run that the full quota stopped: its error stays in the status, for the settings page.
+    expect("state", "completed-with-errors")
+    report = payload.get("report", {})
+    messages = [str(message) for message in report.get("errorMessages", [])]
+    if not any(message.startswith("P123: Not enough free space in Nextcloud") for message in messages):
+        raise AssertionError(f"The status keeps no error of the document: {payload!r}")
+    if not any(str(action).startswith("EXPORT STOPPED:") for action in report.get("actions", [])):
+        raise AssertionError(f"The status keeps no report of the run: {payload!r}")
+    if payload.get("lastEnded", 0) < payload.get("lastStarted", 0) or payload.get("lastSuccess", 0) < 1:
+        raise AssertionError(f"The times of the runs are wrong: {payload!r}")
 elif mode == "enabled":
     expect("enabled", True)
+elif mode == "disabled":
+    expect("enabled", False)
 elif mode == "job":
     # The status after the background job: a complete run, not a dry-run, that exported
     # the document, after the last run of an hour ago.
@@ -167,8 +191,15 @@ elif mode == "vanished-kept":
 elif mode == "status":
     expect("state", "completed")
     expect("error", "")
+    # The schedule is off in these tests.
+    expect("nextRun", None)
     if not isinstance(payload.get("summary"), dict):
         raise AssertionError(f"Status summary is missing: {payload!r}")
+    report = payload.get("report", {})
+    if report.get("errorMessages") != [] or report.get("dryRun") is not False:
+        raise AssertionError(f"The status keeps no report of the last run: {payload!r}")
+    if payload.get("lastSuccess") != payload.get("lastEnded"):
+        raise AssertionError(f"The last run, without errors, is not the last successful one: {payload!r}")
 elif mode == "mock-after-move":
     expect("downloads", 1)
     if payload.get("metadataRequests", 0) < 1:
@@ -195,8 +226,9 @@ elif mode == "names":
             raise AssertionError(f"names: {relative} has a name longer than Nextcloud allows")
         print(quote(path))
 elif mode == "mock-final":
-    # The first export, the one that the full quota stopped after its download, and the export after it.
-    expect("downloads", 3)
+    # The first export, the revised content and the original one again, the export that the full
+    # quota stopped after its download, and the export after it.
+    expect("downloads", 5)
     expect("invalidAuth", 0)
     uploads = payload.get("uploads", [])
     if [item.get("filename") for item in uploads] != ["policy.pdf", "broken.pdf"]:

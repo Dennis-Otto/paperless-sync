@@ -61,20 +61,131 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame(15, $config->syncIntervalMinutes);
 		self::assertSame('Ohne_ Korrespondent', $config->emptyCorrespondent);
 		self::assertTrue($config->tokenConfigured);
-		self::assertSame('secret-token', $this->token);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
 		self::assertSame(15, $this->settings['sync_interval_minutes']);
 		self::assertArrayNotHasKey('not_a_setting', $this->settings);
 	}
 
-	public function testSavingWithoutATokenKeepsTheStoredOne(): void {
+	/** @return array<string, array{string}> the stored URL as an administrator may enter it again */
+	public static function sameUrls(): array {
+		return [
+			'unchanged' => ['https://paperless.example.test'],
+			'with a slash and spaces' => [' https://paperless.example.test/ '],
+		];
+	}
+
+	#[DataProvider('sameUrls')]
+	public function testSavingTheSameUrlWithoutATokenKeepsTheStoredOne(string $url): void {
 		$this->service->save(self::validSettings(), 'secret-token');
 
-		$config = $this->service->save(['batch_size' => 50]);
+		$config = $this->service->save(['paperless_url' => $url, 'batch_size' => 50]);
 
 		self::assertSame(50, $config->batchSize);
+		self::assertSame('https://paperless.example.test', $config->paperlessUrl);
 		self::assertSame('secret-token', $this->service->getToken());
-		self::assertSame('secret-token', $this->service->resolveToken(' '));
-		self::assertSame('other-token', $this->service->resolveToken(' other-token '));
+		self::assertSame('secret-token', $this->service->resolveToken(' ', 'https://paperless.example.test'));
+	}
+
+	public function testATokenThatIsEnteredIsUsedForAnyUrl(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+
+		self::assertSame('other-token', $this->service->resolveToken(' other-token ', 'https://other.example.test'));
+		$config = $this->service->save(['paperless_url' => 'https://other.example.test'], 'other-token');
+
+		self::assertSame('https://other.example.test', $config->paperlessUrl);
+		self::assertSame(['url' => 'https://other.example.test', 'token' => 'other-token'], $this->credential);
+	}
+
+	/** @return array<string, array{string}> URLs that may lead to another server or another app than the stored one */
+	public static function otherUrls(): array {
+		return [
+			'another host' => ['https://attacker.example.test'],
+			'another port' => ['https://paperless.example.test:8443'],
+			'another scheme' => ['http://paperless.example.test'],
+			'another path on the same host' => ['https://paperless.example.test/other-app'],
+		];
+	}
+
+	/**
+	 * The stored token goes only to the URL that it was saved with. Otherwise, whoever can change
+	 * the settings could point the URL at a server of their own and receive the token with the test
+	 * of the connection, without knowing it.
+	 */
+	#[DataProvider('otherUrls')]
+	public function testANewUrlNeedsTheTokenAgain(string $url): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$stored = $this->settings;
+		$calls = [
+			'validate' => fn (): mixed => $this->service->validate(['paperless_url' => $url], ' '),
+			'save' => fn (): mixed => $this->service->save(['paperless_url' => $url]),
+			'resolveToken' => fn (): mixed => $this->service->resolveToken('', $url),
+		];
+
+		foreach ($calls as $method => $call) {
+			try {
+				$call();
+				self::fail("{$method}() must refuse a new URL without a token.");
+			} catch (InvalidArgumentException $exception) {
+				self::assertSame('Enter the API token again to connect to another Paperless URL.', $exception->getMessage());
+			}
+		}
+		self::assertSame($stored, $this->settings);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+	}
+
+	/**
+	 * The provisioning API of Nextcloud and occ may change the URL without the settings page. The
+	 * next run must not send the stored token there.
+	 */
+	public function testAUrlChangedElsewhereGetsNoToken(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		self::assertSame('', $this->service->getToken());
+		self::assertFalse($this->service->get()->tokenConfigured);
+		try {
+			$this->service->validate([]);
+			self::fail('The settings page must not take over a URL that was changed elsewhere without the token.');
+		} catch (InvalidArgumentException $exception) {
+			self::assertSame('Enter the API token again to connect to another Paperless URL.', $exception->getMessage());
+		}
+		self::assertSame('secret-token', $this->service->resolveToken('', 'https://paperless.example.test'), 'The URL that the token was saved with still gets it.');
+
+		$this->settings['paperless_url'] = 'https://paperless.example.test/';
+		self::assertSame('secret-token', $this->service->getToken());
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+	}
+
+	/** A token that an earlier version stored without its URL waits for the update to bind it to one. */
+	public function testATokenWithoutItsUrlIsNotUsed(): void {
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		$this->credential = 'secret-token';
+
+		self::assertSame('', $this->service->getToken());
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('A Paperless API token is required.');
+		$this->service->validate(self::validSettings());
+	}
+
+	/** @return array<string, array{mixed}> what else the store of credentials may hold */
+	public static function unusableCredentials(): array {
+		return [
+			'without a URL' => [['token' => 'secret-token']],
+			'without a token' => [['url' => 'https://paperless.example.test']],
+			'with an empty token' => [['url' => 'https://paperless.example.test', 'token' => '']],
+			'with a token that is no text' => [['url' => 'https://paperless.example.test', 'token' => 42]],
+		];
+	}
+
+	#[DataProvider('unusableCredentials')]
+	public function testAnIncompleteCredentialIsNoToken(mixed $credential): void {
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		$this->credential = $credential;
+
+		self::assertSame('', $this->service->getToken());
+		self::assertFalse($this->service->bindUnboundToken());
+		self::assertSame($credential, $this->credential);
 	}
 
 	public function testATokenIsRequired(): void {
@@ -89,18 +200,82 @@ final class ConfigServiceTest extends TestCase {
 
 		self::assertSame(7, $config->batchSize);
 		self::assertSame([], $this->settings);
-		self::assertSame('', $this->token);
+		self::assertNull($this->credential);
 	}
 
-	public function testResetRemovesEverySettingAndTheToken(): void {
-		$this->service->save(self::validSettings() + ['enabled' => true], 'secret-token');
+	/**
+	 * Disconnecting deletes the token, as its button and its question say, and turns off the
+	 * schedule, which would fail without the token. The other settings stay, the deletion policy
+	 * of the administrator too, so that connecting again needs the token and not all of them.
+	 */
+	public function testDisconnectDeletesTheTokenAndTurnsOffTheSchedule(): void {
+		$this->service->save(self::validSettings() + ['enabled' => true, 'permanent_delete' => true, 'base_path' => 'Archive/Paperless', 'batch_size' => 20], 'secret-token');
+		$stored = $this->settings;
 
 		$config = $this->service->reset();
 
-		self::assertSame([], $this->settings);
-		self::assertSame('', $this->token);
+		self::assertNull($this->credential);
+		self::assertSame(array_replace($stored, ['sync_enabled' => false]), $this->settings);
+		self::assertFalse($config->tokenConfigured);
+		self::assertFalse($config->enabled);
+		self::assertSame('https://paperless.example.test', $config->paperlessUrl);
+		self::assertSame(['paperless', 'Archive/Paperless', 20], [$config->targetUser, $config->basePath, $config->batchSize]);
+		self::assertTrue($config->permanentDelete);
+		self::assertSame('', $this->service->getToken());
+	}
+
+	/** Disconnecting needs no saved settings, such as right after the installation. */
+	public function testDisconnectWithoutSettingsKeepsTheDefaults(): void {
+		$config = $this->service->reset();
+
+		self::assertSame(['sync_enabled' => false, 'paperless_local_network' => false], $this->settings);
+		self::assertSame($this->configService()->get()->jsonSerialize(), $config->jsonSerialize());
 		self::assertSame('', $config->paperlessUrl);
 		self::assertFalse($config->tokenConfigured);
+	}
+
+	/**
+	 * Allowing the local network lifts a protection of Nextcloud for the requests to Paperless, so
+	 * it is off until an administrator turns it on, and off again after disconnecting.
+	 */
+	public function testTheLocalNetworkIsAllowedOnlyAfterItWasTurnedOn(): void {
+		self::assertFalse($this->service->get()->paperlessLocalNetwork);
+
+		$config = $this->service->save(self::validSettings() + ['paperless_local_network' => true], 'secret-token');
+
+		self::assertTrue($config->paperlessLocalNetwork);
+		self::assertTrue($this->settings['paperless_local_network']);
+		self::assertTrue($config->jsonSerialize()['paperlessLocalNetwork'], 'The settings page shows it.');
+		self::assertTrue($this->service->save(self::validSettings())->paperlessLocalNetwork, 'A save that leaves it out keeps it.');
+
+		self::assertFalse($this->service->reset()->paperlessLocalNetwork);
+		self::assertFalse($this->settings['paperless_local_network']);
+	}
+
+	/** @return array<string, array{mixed, bool}> a value of the setting as a request may send it, and whether it allows the local network */
+	public static function valuesOfTheLocalNetwork(): array {
+		return [
+			'true' => [true, true],
+			'false' => [false, false],
+			'1 of a form' => ['1', true],
+			'0 of a form' => ['0', false],
+			'the number 1' => [1, true],
+			'"true"' => ['true', true],
+			'"on"' => ['on', true],
+			'"false"' => ['false', false],
+			'empty' => ['', false],
+			'anything else' => ['maybe', false],
+			'null' => [null, false],
+		];
+	}
+
+	/** Only a clear yes lifts the protection of Nextcloud; "false", which PHP would take for true, is a no. */
+	#[DataProvider('valuesOfTheLocalNetwork')]
+	public function testOnlyAClearYesAllowsTheLocalNetwork(mixed $value, bool $allowed): void {
+		$config = $this->service->save(self::validSettings() + ['paperless_local_network' => $value], 'secret-token');
+
+		self::assertSame($allowed, $config->paperlessLocalNetwork);
+		self::assertSame($allowed, $this->settings['paperless_local_network']);
 	}
 
 	/** @return array<string, array{array<string, mixed>, string}> */

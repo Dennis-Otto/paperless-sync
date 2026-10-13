@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a file from the inbox to Paperless
+    accDescr: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, it moves to the folder Fehler, next to a .error.txt with the reason.
+
+    %% The wait comes first, so that it is drawn above the upload and the diagram stays narrow.
+    retry["Paperless<br>unreachable or<br>overloaded: waits<br>15 minutes, then<br>twice as long,<br>up to a day"]
+    file["📄 A file in<br>📁 Eingang"]
+    upload{"Upload to<br>Paperless"}
+    task{"Its task,<br>in the<br>next runs"}
+    refused["Refused, such as<br>an unsupported<br>file type: stays<br>in Eingang,<br>skipped until<br>it changes"]
+    done["Success:<br>removed from<br>Eingang, or kept,<br>as configured"]
+    failed["Failure:<br>moved to<br>📁 Fehler, next<br>to a .error.txt<br>with the reason"]
+
+    retry -- "again" --> upload
+    file -- "next run" --> upload
+    upload --> retry
+    upload -- "accepted" --> task
+    upload --> refused
+    refused -- "saved anew,<br>renamed or<br>replaced" --> upload
+    task --> done
+    task --> failed
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class file,refused,done,failed nextcloud
+    class upload,task paperless

@@ -21,9 +21,9 @@
 #
 # E2E_VERSIONS="33 35" chooses the versions instead, and E2E_VERSIONS=none runs only
 # the variants, on max-version; the CI runs those in a job of their own, next to the
-# versions. KEEP_E2E=1 keeps the containers of each, as with run.sh. E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs
-# before the job of the CI ends after 20 minutes, so that the logs of all are still
-# printed.
+# versions. KEEP_E2E=1 keeps the containers of each, as with run.sh.
+# E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs before the job of the CI
+# ends after 20 minutes, so that the logs of all are still printed.
 
 set -euo pipefail
 

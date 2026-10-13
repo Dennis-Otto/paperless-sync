@@ -8,7 +8,8 @@
 // the folder pictures/ next to this script, which screenshots.sh returns as a tar archive.
 //
 // The story follows the quick start: a dry-run, the first synchronization, the archive
-// in Files, and a dry-run a few days later that shows every kind of change.
+// in Files, a dry-run a few days later that shows every kind of change, and a run that
+// ends with an error, which the status keeps.
 
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -357,6 +358,25 @@ try {
 		if (theme === 'light') {
 			save('screenshots/03-dry-run-report.png', report)
 		}
+		await context.close()
+	}
+
+	// A document that Paperless lists but doesn't hand out: the run ends with its error,
+	// which the status shows again on the next visit of the settings.
+	await control('scenario/showcase-error')
+	{
+		const { context, page } = await open(browser, admin, 'light', SETTINGS)
+		await page.locator('#paperless-sync-settings').waitFor()
+		page.once('dialog', (dialog) => dialog.accept())
+		await page.locator('#paperless-sync-run').click()
+		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		await context.close()
+	}
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, SETTINGS)
+		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		await settle(page)
+		save(`docs/images/status-error-${theme}.png`, await shot(page, page.locator('#paperless-sync-status')))
 		await context.close()
 	}
 } finally {

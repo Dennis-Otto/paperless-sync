@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Where the app keeps its data
+    accDescr: The settings page and the synchronization read and save the configuration, which keeps the settings in the app configuration of Nextcloud and the API token in its credentials manager. The synchronization keeps the state of every exported document and every file of the inbox in two tables of the database, and the status of the latest run in the app configuration.
+
+    settings["Settings page<br>and controllers"]
+    sync["Synchronization"]
+    config["Configuration"]
+    state["State"]
+    status["Status"]
+    appconfig[("App<br>configuration")]
+    credentials[("Credentials<br>manager:<br>API token")]
+    database[("Database:<br>two tables")]
+
+    settings --> config
+    sync --> config & state & status
+    config --> credentials & appconfig
+    status --> appconfig
+    state --> database
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class appconfig,credentials,database nextcloud

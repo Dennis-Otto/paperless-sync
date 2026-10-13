@@ -1,11 +1,13 @@
 # The answers of the blueprint (https://github.com/Dennis-Otto/repo-blueprint);
 # `copier update` reads them to bring the repository up to the latest release.
 # Change them only with `copier update --data name=value`.
-_commit: v0.10.1
+_commit: v0.11.1
 _src_path: https://github.com/Dennis-Otto/repo-blueprint.git
 author: Dennis Otto
 copyright: 2026 Dennis Otto
-description: Native Nextcloud synchronization for Paperless-ngx documents
+description: Nextcloud app that syncs Paperless-ngx documents into Nextcloud Files,
+    by correspondent, type and year, and sends an inbox folder to Paperless. No WebDAV,
+    no Nextcloud password.
 discussions: true
 homepage: https://dennis-otto.github.io/paperless-sync/
 languages:
@@ -20,4 +22,6 @@ project_type: nextcloud-app
 sample_code: false
 sponsor: Dennis-Otto
 successor: true
-topics: document-management, nextcloud, paperless-ngx, php, synchronization
+test_workflows: ''
+topics: dms, document-archive, document-management, homelab, nextcloud, nextcloud-app,
+    paperless, paperless-ngx, php, self-hosted, selfhosted, synchronization

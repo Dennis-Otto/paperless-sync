@@ -20,6 +20,25 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
 const FAILING = new Set(['serious', 'critical'])
 const THEMES = ['light', 'dark']
 
+const FAILED_STATUS = {
+	lastStarted: 1791880000,
+	lastCompleted: 1791876400,
+	lastEnded: 1791880060,
+	lastSuccess: 1791876400,
+	state: 'failed',
+	summary: {},
+	error: 'Paperless could not list documents: HTTP 502.',
+	report: {
+		dryRun: false,
+		completedAt: 0,
+		errors: 51,
+		omittedActions: 3,
+		errorMessages: ['P123: Not enough free space in Nextcloud for Documents/Paperless/Archive/invoice [P123].pdf.'],
+		actions: ['ERROR: P123: Not enough free space in Nextcloud for Documents/Paperless/Archive/invoice [P123].pdf.'],
+	},
+	nextRun: null,
+}
+
 // The pages of the app, each with the element that holds its markup and what to do
 // before the check, such as opening a section or showing a result.
 const PAGES = [
@@ -41,6 +60,32 @@ const PAGES = [
 			await page.locator('#paperless-sync-dry-run').click()
 			await page.locator('#paperless-sync-report').waitFor({ state: 'visible' })
 			await page.locator('#paperless-sync-dry-run:enabled').waitFor()
+		},
+	},
+	{
+		// The status of a run that failed after errors of single documents, which no run of
+		// the mock leaves: the page gets it as the answer to Refresh.
+		name: 'status of a failed run',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: FAILED_STATUS }))
+			await page.locator('#paperless-sync-refresh-status').click()
+			await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		},
+	},
+	{
+		// The note about unsaved changes and an error next to the buttons, here the answer
+		// of Nextcloud to a session that ended.
+		name: 'unsaved changes and an error',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.locator('[data-setting="batch_size"]').fill('7')
+			await page.locator('#paperless-sync-unsaved').waitFor({ state: 'visible' })
+			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ status: 412, json: { message: 'CSRF check failed' } }))
+			await page.locator('#paperless-sync-refresh-status').click()
+			await page.locator('#paperless-sync-message.paperless-sync-message--error').waitFor()
 		},
 	},
 ]

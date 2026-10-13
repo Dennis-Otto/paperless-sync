@@ -40,6 +40,8 @@ final class SyncConfig implements \JsonSerializable {
 		public readonly string $emptyDocumentType,
 		public readonly string $emptyDate,
 		public readonly string $untitled,
+		/** Whether Nextcloud may connect to Paperless at an address of the local network, such as http://paperless:8000. */
+		public readonly bool $paperlessLocalNetwork = false,
 	) {
 	}
 

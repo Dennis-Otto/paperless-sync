@@ -33,8 +33,7 @@ $stateLabels = [
 	data-save-url="<?php p($_['saveUrl']); ?>"
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
-	data-status-url="<?php p($_['statusUrl']); ?>"
-	data-token-configured="<?php p($config->tokenConfigured ? 'true' : 'false'); ?>">
+	data-status-url="<?php p($_['statusUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -43,16 +42,35 @@ $stateLabels = [
 		</div>
 	</div>
 
-	<div class="paperless-sync-status-card" aria-live="polite">
-		<div>
-			<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
-			<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>"><?php p($stateLabels[$state] ?? $state); ?></strong>
+	<div id="paperless-sync-status" class="paperless-sync-status">
+		<div class="paperless-sync-status-card">
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
+				<span class="paperless-sync-status-value">
+					<span id="paperless-sync-running" class="paperless-sync-spinner icon-loading-small" <?php if (!str_ends_with($state, 'running')) {
+						print_unescaped('hidden');
+					} ?>></span>
+					<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>" aria-live="polite"><?php p($stateLabels[$state] ?? $state); ?></strong>
+				</span>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Last finished')); ?></span>
+				<strong id="paperless-sync-last-ended">—</strong>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Last successful run')); ?></span>
+				<strong id="paperless-sync-last-success">—</strong>
+			</div>
+			<div>
+				<span class="paperless-sync-status-label"><?php p($l->t('Next scheduled run')); ?></span>
+				<strong id="paperless-sync-next-run">—</strong>
+			</div>
+			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
 		</div>
-		<div>
-			<span class="paperless-sync-status-label"><?php p($l->t('Last completed')); ?></span>
-			<strong id="paperless-sync-last-completed" data-timestamp="<?php p((string)($status['lastCompleted'] ?? 0)); ?>">—</strong>
+		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
+			<h3 id="paperless-sync-errors-title"></h3>
+			<ul id="paperless-sync-errors-list"></ul>
 		</div>
-		<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
 	</div>
 
 	<form id="paperless-sync-form">
@@ -68,7 +86,7 @@ $stateLabels = [
 				</label>
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Paperless API token')); ?></span>
-					<input id="paperless-sync-token" type="password" autocomplete="new-password" placeholder="<?php p($config->tokenConfigured ? $l->t('Configured — leave blank to keep it') : $l->t('Required')); ?>">
+					<input id="paperless-sync-token" type="password" autocomplete="new-password" aria-describedby="paperless-sync-token-hint" placeholder="<?php p($config->tokenConfigured ? $l->t('Configured — leave blank to keep it') : $l->t('Required')); ?>"<?php if (!$config->tokenConfigured) { ?> required<?php } ?>>
 				</label>
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Nextcloud target user ID')); ?></span>
@@ -79,7 +97,13 @@ $stateLabels = [
 					<input data-setting="base_path" type="text" value="<?php p($config->basePath); ?>" required>
 				</label>
 			</div>
-			<p class="settings-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?></p>
+			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving or disconnecting may ask for your password.')); ?></p>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Paperless runs in my local network')); ?></span></label>
+			</div>
+			<p class="settings-hint" id="paperless-sync-local-network-hint"><?php p($l->t('Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">
@@ -219,13 +243,16 @@ $stateLabels = [
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
 			<button id="paperless-sync-reset" type="button" class="paperless-sync-reset"><?php p($l->t('Disconnect')); ?></button>
+			<p id="paperless-sync-unsaved" class="paperless-sync-unsaved" hidden><?php p($l->t('Unsaved changes: "Run dry-run" uses the saved settings, and "Synchronize now" waits until you save.')); ?></p>
+			<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite" tabindex="-1"></p>
 		</div>
 	</form>
 
-	<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite"></p>
 	<div id="paperless-sync-report" class="paperless-sync-report" hidden>
 		<h3><?php p($l->t('Run report')); ?></h3>
+		<p id="paperless-sync-report-meta" class="paperless-sync-report-meta"></p>
 		<div id="paperless-sync-report-summary" class="paperless-sync-report-summary"></div>
 		<pre id="paperless-sync-report-actions" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>"></pre>
+		<p id="paperless-sync-report-omitted" class="paperless-sync-report-omitted" hidden></p>
 	</div>
 </div>

@@ -9,12 +9,15 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Controller;
 
+use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 use OCP\Lock\LockedException;
 
@@ -25,6 +28,8 @@ final class SyncController extends Controller {
 		IRequest $request,
 		private SyncService $syncService,
 		private StatusService $statusService,
+		private IL10N $l10n,
+		private ConfigService $configService,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -35,6 +40,11 @@ final class SyncController extends Controller {
 			return new JSONResponse($this->syncService->run($dryRun));
 		} catch (LockedException) {
 			return new JSONResponse(['message' => 'Another synchronization run is already active.'], Http::STATUS_CONFLICT);
+		} catch (PaperlessLocalNetworkException $exception) {
+			return new JSONResponse(
+				['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING],
+				Http::STATUS_INTERNAL_SERVER_ERROR,
+			);
 		} catch (\Throwable $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
@@ -42,6 +52,6 @@ final class SyncController extends Controller {
 
 	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
 	public function status(): JSONResponse {
-		return new JSONResponse($this->statusService->get());
+		return new JSONResponse($this->statusService->overview($this->configService->get()));
 	}
 }

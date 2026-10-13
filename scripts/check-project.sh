@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
-# end-to-end tests, the rules that decide when they run, and the JavaScript of the
-# settings and the translations, which have no build step.
+# end-to-end tests, the rules that decide when they run, the icon and the hook of the
+# website, the versions in the README, the description of the app, and the JavaScript
+# of the settings and the translations, which have no build step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -43,6 +44,8 @@ for path in lib/Service/SyncService.php appinfo/routes.php templates/settings.ph
 done
 for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e2e/README.md \
   tests/e2e/MANUAL_ACCEPTANCE_TESTS.md tests/Unit/Service/SyncServiceTest.php scripts/check.sh \
+  mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
+  .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
   composer.lock screenshots/01-admin-settings.png; do
   expect skip "$path"
@@ -60,10 +63,15 @@ expect_variants() {
     problems=$((problems + 1))
   fi
 }
-for path in lib/Migration/Version000110Date20261008000000.php lib/Service/SyncStateRepository.php   lib/Service/SyncStateRepositoryInterface.php lib/Service/NextcloudStorageService.php   lib/Service/NextcloudStorageInterface.php lib/Service/PaperlessApiService.php   tests/e2e/compose.s3.yaml tests/e2e/run-all.sh .github/workflows/e2e.yml; do
+for path in lib/Migration/Version000110Date20261008000000.php lib/Service/SyncStateRepository.php \
+  lib/Service/SyncStateRepositoryInterface.php lib/Service/NextcloudStorageService.php \
+  lib/Service/NextcloudStorageInterface.php lib/Service/PaperlessApiService.php \
+  tests/e2e/compose.s3.yaml tests/e2e/run-all.sh .github/workflows/e2e.yml; do
   expect_variants run "$path"
 done
-for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php   lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json   tests/e2e/README.md README.md; do
+for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
+  lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
+  tests/e2e/README.md README.md; do
   expect_variants skip "$path"
 done
 
@@ -115,13 +123,11 @@ decision() {
   rm -f "$output"
   echo "$result"
 }
-if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true
-variants=true' ]]; then
+if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true\nvariants=true' ]]; then
   echo "tests/e2e/affected.sh should run the end-to-end tests when it can't compare the commits."
   problems=$((problems + 1))
 fi
-if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false
-variants=false' ]]; then
+if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false\nvariants=false' ]]; then
   echo "tests/e2e/affected.sh HEAD HEAD should find nothing that runs the end-to-end tests."
   problems=$((problems + 1))
 fi
@@ -129,6 +135,119 @@ if ((problems > 0)); then
   exit 1
 fi
 echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads."
+
+printf '\n== %s\n' "Icon of the website"
+# The website shows the icon of the app as its logo, its favicon and on its preview
+# cards, from a copy in docs/images, since MkDocs publishes only what is in docs/.
+if ! cmp -s img/app.svg docs/images/app.svg; then
+  echo "docs/images/app.svg differs from the icon of the app; copy it: cp img/app.svg docs/images/app.svg"
+  exit 1
+fi
+echo "The website shows the icon of the app, img/app.svg."
+
+printf '\n== %s\n' "Hook of the website"
+# The hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the
+# pages of the website. Its tests need Python alone, no MkDocs.
+if command -v python3 >/dev/null 2>&1; then
+  python3 -B tests/website/test_mkdocs_project.py
+else
+  echo "Python 3 is not installed here; the CI tests the hook of the website."
+fi
+
+printf '\n== %s\n' "Versions in the README"
+# The first screen of the README shows the version in the App Store and the versions of
+# Nextcloud in badges that read appinfo/info.xml on main, so that they follow every
+# release and every raise of max-version by the upstream bot without an edit. The
+# fields such as <span data-app="nextcloud">33–35</span> in README.md, docs/index.md and
+# docs/alternatives.md are text on GitHub, which the hook of the website fills with the
+# versions of info.xml. They may lag behind a max-version that the upstream bot raised,
+# so that its pull request passes on its own, but they never name another minimum or
+# more than info.xml.
+dash="$(printf '\342\200\223')"
+info_versions() {
+  local lowest="$1" highest="$2"
+  if [[ -z "$highest" ]]; then
+    echo "$lowest+"
+  elif [[ "$highest" == "$lowest" ]]; then
+    echo "$lowest"
+  else
+    echo "$lowest$dash$highest"
+  fi
+}
+attribute() {
+  sed -nE "s/.* $1=\"([^\"]*)\".*/\1/p" <<<"$2"
+}
+nextcloud="$(grep -oE '<nextcloud [^>]*>' appinfo/info.xml | head -n 1 || true)"
+php="$(grep -oE '<php [^>]*>' appinfo/info.xml | head -n 1 || true)"
+nextcloud_min="$(attribute min-version "$nextcloud")"
+nextcloud_max="$(attribute max-version "$nextcloud")"
+php_min="$(attribute min-version "$php")"
+if [[ -z "$nextcloud_min" || -z "$php_min" ]]; then
+  echo "appinfo/info.xml names no min-version of Nextcloud or of PHP."
+  exit 1
+fi
+nextcloud_text="$(info_versions "$nextcloud_min" "$nextcloud_max")"
+php_text="$(info_versions "$php_min" "$(attribute max-version "$php")")"
+problems=0
+info_xml='https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml'
+for query in '%2Finfo%2Fversion' \
+  'concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29'; do
+  if ! grep -qF "https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&" README.md; then
+    echo "README.md has no badge that reads $query from appinfo/info.xml on main: https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&label=..."
+    problems=$((problems + 1))
+  fi
+done
+fields=0
+while IFS= read -r field; do
+  file="${field%%:*}"
+  name="$(sed -E 's/^[^:]*:data-app="([^"]*)">.*/\1/' <<<"$field")"
+  text="$(sed -E 's/^[^:]*:data-app="[^"]*">([^<]*)<$/\1/' <<<"$field")"
+  fields=$((fields + 1))
+  case "$name" in
+    php) expected="$php_text" label=PHP ;;
+    nextcloud) expected="$nextcloud_text" label=Nextcloud ;;
+    *)
+      echo "$file has the field data-app=\"$name\", which the hook of the website doesn't know."
+      problems=$((problems + 1))
+      continue
+      ;;
+  esac
+  if [[ "$text" == "$expected" ]]; then
+    continue
+  fi
+  # Only the highest version of Nextcloud may lag, and only behind info.xml.
+  highest="${text#"$nextcloud_min$dash"}"
+  if [[ "$name" == nextcloud && -n "$nextcloud_max" && "$highest" != "$text" && "$highest" =~ ^[0-9]+$ ]] &&
+    ((highest >= nextcloud_min && highest < nextcloud_max)); then
+    echo "Note: $file names Nextcloud $text, appinfo/info.xml $expected; the website shows $expected, and the next edit of $file can catch up."
+    continue
+  fi
+  echo "$file names $label $text, but appinfo/info.xml says $expected; write $expected."
+  problems=$((problems + 1))
+done < <(grep -oE 'data-app="[^"]*">[^<]*<' README.md docs/index.md docs/alternatives.md || true)
+if ! grep -qF 'data-app="nextcloud">' README.md || ! grep -qF 'data-app="php">' README.md; then
+  echo "The requirements in README.md name the versions in the fields <span data-app=\"nextcloud\"> and <span data-app=\"php\">; one of them is missing."
+  problems=$((problems + 1))
+fi
+if ((problems > 0)); then
+  exit 1
+fi
+echo "The badges of the README read appinfo/info.xml on main, and the $fields field(s) of versions in README.md, docs/index.md and docs/alternatives.md agree with Nextcloud $nextcloud_text and PHP $php_text."
+
+printf '\n== %s\n' "Description of the app"
+# GitHub, the website and Composer describe the app in the same words, those that people
+# search for: the answer description of .copier-answers.yml, which the blueprint writes
+# into .github/repository.toml for the settings bot. Change it with
+#   copier update --defaults --vcs-ref <_commit of .copier-answers.yml> --data description=...
+# and then in mkdocs.yml and composer.json.
+description="$(sed -n 's/^description = "\(.*\)"$/\1/p' .github/repository.toml)"
+website="$(sed -n 's/^site_description: "\(.*\)"$/\1/p' mkdocs.yml)"
+composer="$(sed -n 's/^[[:space:]]*"description": "\(.*\)",$/\1/p' composer.json)"
+if [[ -z "$description" || "$website" != "$description" || "$composer" != "$description" ]]; then
+  echo "The repository has the description \"${description:-none}\", mkdocs.yml the site_description \"${website:-none}\" and composer.json the description \"${composer:-none}\"; give all three the same."
+  exit 1
+fi
+echo "GitHub, the website and Composer describe the app in the same words."
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then

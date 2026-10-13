@@ -2,8 +2,8 @@
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>paperless_sync</id>
 	<name>Paperless Sync</name>
-	<summary>Synchronize finalized Paperless-ngx documents into a structured Nextcloud archive</summary>
-	<summary lang="de">Fertig bearbeitete Paperless-ngx-Dokumente in ein strukturiertes Nextcloud-Archiv synchronisieren</summary>
+	<summary>Mirror Paperless-ngx documents into Nextcloud Files and send files from Nextcloud to Paperless</summary>
+	<summary lang="de">Paperless-ngx-Dokumente nach Nextcloud spiegeln und Dateien aus Nextcloud an Paperless senden</summary>
 	<description><![CDATA[
 ### A native bridge between Paperless-ngx and Nextcloud
 
@@ -30,7 +30,7 @@ The Paperless API token is stored server-side in Nextcloud's credentials manager
 ### Requirements
 
 - Nextcloud 33 to 35 with reliable cron background jobs
-- A reachable Paperless-ngx instance with API access
+- A reachable Paperless-ngx instance, version 2.10 or newer, 3.x included, with API access
 - A dedicated Paperless service account with only the permissions needed for the enabled features
 
 Paperless Sync is independent from [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Both apps understand stable document markers such as `[P123]` and can be installed separately.
@@ -61,7 +61,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 ### Voraussetzungen
 
 - Nextcloud 33 bis 35 mit zuverlässig laufenden Cron-Hintergrundjobs
-- Eine erreichbare Paperless-ngx-Instanz mit API-Zugriff
+- Eine erreichbare Paperless-ngx-Instanz ab Version 2.10, auch 3.x, mit API-Zugriff
 - Ein eigener Paperless-Dienstbenutzer mit ausschließlich den für die aktivierten Funktionen benötigten Rechten
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
@@ -78,11 +78,13 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<category>integration</category>
 	<category>files</category>
 	<website>https://dennis-otto.github.io/paperless-sync/</website>
+	<discussion>https://github.com/Dennis-Otto/paperless-sync/discussions</discussion>
 	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
 	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.10/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
 	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.10/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
 	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.1.10/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
+	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
 		<php min-version="8.2"/>
 		<nextcloud min-version="33" max-version="35"/>

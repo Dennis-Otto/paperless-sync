@@ -133,10 +133,7 @@ if ((${#reaching[@]} > 0)); then
 		message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
 		echo "${message}"
 		if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-			printf '### E2E on SQLite with local storage only
-
-%s
-' "${message}" >>"${GITHUB_STEP_SUMMARY}"
+			printf '### E2E on SQLite with local storage only\n\n%s\n' "${message}" >>"${GITHUB_STEP_SUMMARY}"
 		fi
 		decide true false
 	fi

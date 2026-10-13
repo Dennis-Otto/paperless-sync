@@ -1,0 +1,23 @@
+flowchart TB
+    accTitle: The way of a change into a release
+    accDescr: A change on a branch passes bash scripts/check.sh and the end-to-end tests in Docker on the machine of its author. Its pull request, titled as a Conventional Commit, passes the required checks: the CI, the end-to-end tests against every supported Nextcloud version when the change can affect the app, CodeQL, the secret scan, the licenses of every file and the sign-off. A failed check sends it back to the branch. Once every check passes, it is squashed into main, and the release bot adds it to the pull request of the next release; merging that one publishes the signed package on GitHub and in the Nextcloud App Store. Your steps are orange, the checks and the bots blue, and the release green.
+
+    change["A change<br>on a branch"]
+    local["bash scripts/check.sh<br>bash tests/e2e/run.sh"]
+    request["A pull request with a<br>Conventional Commit title"]
+    checks{"The required checks:<br>CI, end-to-end tests,<br>CodeQL, secret scan,<br>licenses, sign-off"}
+    main["Squashed<br>into main"]
+    bot["chore: release x.y.z<br>by the release bot"]
+    release(["The signed package<br>on GitHub and in the<br>Nextcloud App Store"])
+
+    change --> local --> request --> checks
+    checks -- "a check fails" --> change
+    checks -- "every check passes" --> main --> bot
+    bot -- "merged" --> release
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class change,local,request yours
+    class checks,main,bot bots
+    class release result

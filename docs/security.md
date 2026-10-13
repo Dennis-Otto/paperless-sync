@@ -7,38 +7,34 @@ What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.m
 ## What you can expect
 
 - Only administrators of Nextcloud can see and change the settings, start a run and read its status. Every request passes Nextcloud's login and its CSRF check.
-- The Paperless API token is stored in Nextcloud's credentials manager and never leaves the server: no response, page or message of the app contains it.
+- The Paperless API token is stored in Nextcloud's credentials manager, together with the Paperless URL that it was saved with, and leaves the server only in the requests to that URL: no response, page, message or log entry of the app contains it. Another URL needs the token again, also when it was set past the settings page, with `occ` or Nextcloud's provisioning API.
+- Saving the settings and disconnecting Paperless ask for the password of the administrator, unless it was confirmed in the last 30 minutes.
 - Synchronization stays off until an administrator has saved a configuration that works with Paperless and Nextcloud. A dry run changes nothing.
 - The app writes only below the configured base folder of the target user, through Nextcloud's file API. Every path is built from cleaned metadata and can't leave that folder.
 - Nothing is deleted for good unless an administrator turns permanent deletion on; even then, only after the document was missing from Paperless and its trash for the configured number of complete runs in a row. A run whose list of Paperless came back incomplete counts no document as missing.
 - Requests to Paperless go through Nextcloud's HTTP client, which checks TLS certificates.
+- Nextcloud's protection against server-side request forgery stays on for the whole server. A Paperless at an address of the local network is reached only after an administrator turns on *Paperless runs in my local network*, and then only by the requests of the app to the saved Paperless URL.
 
 ## What is protected
 
 | Asset | Where it lives | Protection |
 | --- | --- | --- |
-| The Paperless API token | Nextcloud's credentials manager | Stored only there; the settings carry only whether a token is configured; saving without a new token keeps the stored one |
+| The Paperless API token | Nextcloud's credentials manager | Stored only there, together with the URL that it was saved with, and used only for that URL; the settings carry only whether a token is configured; saving without a new token keeps the stored one for the same URL only; kept out of the traces of errors in the log |
 | Documents and their metadata | Paperless, and their copies in the folders of the target user | Read only with the token of a dedicated Paperless account; written only through Nextcloud's file API |
 | The files of the target user | Nextcloud | Only below the base folder; files are replaced or moved only as the conflict policy allows; deletion only as configured |
 | The configuration | Nextcloud's app configuration | Changed only by administrators; every value checked before it is saved |
 
 ## Trust boundaries
 
-```mermaid
-flowchart LR
-    browser(["Browser of an<br>administrator"]) -->|1| app["Paperless Sync<br>in Nextcloud"]
-    app -->|2| paperless[("Paperless-ngx")]
-    app -->|3| files[("Files below the base folder<br>of the target user")]
-    writers(["Whoever may write<br>to the inbox folder"]) -->|4| files
-    app --- credentials[("Credentials manager<br>API token")]
-    classDef untrusted stroke:#c9302c,stroke-width:2px,stroke-dasharray:4 3
-    class browser,writers,paperless untrusted
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-trust-boundaries-of-paperless-sync.dark.svg">
+  <img src="images/diagrams/the-trust-boundaries-of-paperless-sync.svg" alt="The trust boundaries of Paperless Sync: Four numbered arrows cross a trust boundary. 1: the browser of an administrator sends requests to Paperless Sync in Nextcloud. 2: the app calls Paperless-ngx. 3: the app writes the files below the base folder of the target user. 4: whoever may write to the inbox folder puts files there. The app keeps the API token in the credentials manager. The browser, the writers of the inbox and Paperless-ngx are untrusted and have a dashed red border.">
+</picture>
 
 Each numbered arrow crosses one of the boundaries below; the app checks whatever comes from the parties with a dashed red border.
 
-1. **Browser → app.** Requests pass Nextcloud's login, its CSRF check and the check of the administrator. The app checks every setting against what it may be: URLs with `http` or `https` and without credentials, a query or a fragment; numbers within their ranges; policies from a fixed list; folder names and paths without `.`, `..` or empty parts; a path template with known variables and the marker `{{ id }}`.
-2. **App → Paperless.** Every answer is untrusted input. JSON must have the expected shape, document IDs must be numbers, and every part of a path is cleaned of control characters, separators and names that Windows reserves, and kept within the bytes that Nextcloud accepts. A download goes to a temporary file first and follows at most three redirects, only to `http` or `https`.
+1. **Browser → app.** Requests pass Nextcloud's login, its CSRF check and the check of the administrator; saving the settings and disconnecting also need the password of the administrator, confirmed in the last 30 minutes. The app checks every setting against what it may be: URLs with `http` or `https` and without credentials, a query or a fragment; numbers within their ranges; policies from a fixed list; folder names and paths without `.`, `..` or empty parts; a path template with known variables and the marker `{{ id }}`.
+2. **App → Paperless.** Requests go only to the Paperless URL of the settings, and to an address of the local network only when the settings allow it. Every answer is untrusted input. JSON must have the expected shape, document IDs must be numbers, and every part of a path is cleaned of control characters, separators and names that Windows reserves, and kept within the bytes that Nextcloud accepts. A download goes to a temporary file first and follows at most three redirects, only to `http` or `https`; while the setting is off, the app refuses a redirect to an address of the local network itself, as Nextcloud does for its own redirects, also when an administrator turned off Nextcloud's `dns_pinning`.
 3. **App → files of Nextcloud.** Only below the base folder of the target user, with the permissions of that user.
 4. **Inbox folder → Paperless.** Every file that someone puts into the inbox folder is uploaded to Paperless as a new document, when the inbox import is on.
 
@@ -47,7 +43,9 @@ Each numbered arrow crosses one of the boundaries below; the app checks whatever
 | Threat | Countermeasure | Evidence |
 | --- | --- | --- |
 | Another site uses the session of an administrator | Nextcloud checks the CSRF token of every request; no route of the app opts out of it or of the check of the administrator | the controllers in `lib/Controller/`, which carry no `NoCSRFRequired`, `NoAdminRequired` or `PublicPage` attribute |
-| The API token reaches the browser or a log | The token stays in the credentials manager; the settings and the status carry only whether one is configured | `tests/Unit/Service/ConfigServiceTest.php`, `tests/Unit/Settings/AdminSettingsTest.php` |
+| The API token reaches the browser | The token stays in the credentials manager; the settings and the status carry only whether one is configured | `tests/Unit/Service/ConfigServiceTest.php`, `tests/Unit/Settings/AdminSettingsTest.php` |
+| The API token reaches the log of Nextcloud, which writes the arguments of every frame of the trace of an error, when Paperless can't be reached for example | Every parameter that takes the token is marked `#[\SensitiveParameter]`; a request to Paperless that fails ends in an error with only the cleaned message of the HTTP client, without the error of the client, whose trace holds the token in the options of the request; the scheduled job logs only the message of a failed run | `testFailedRequestKeepsTheTokenOutOfTheLog` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `tests/Unit/SensitiveParametersTest.php`, the run without Paperless at the end of `tests/e2e/run.sh` |
+| Someone with the session of an administrator points the Paperless URL at a server of their own and receives the stored token with the test of the connection, or with the next run after changing the URL through `occ` or Nextcloud's provisioning API, which can set any value of the app | The token is stored together with the URL that it was saved with and goes only to that URL, compared as a whole, path included, at every save and every request; another URL needs the token again, and until then the runs stop; saving and disconnecting need the password of the administrator | `testANewUrlNeedsTheTokenAgain` and `testAUrlChangedElsewhereGetsNoToken` in `tests/Unit/Service/ConfigServiceTest.php`, `testAUrlChangedElsewhereNeverGetsTheToken` in `tests/Unit/Service/SyncServiceTest.php`, `testStoredTokenNeverGoesToANewUrl` and `testChangesOfTheConnectionNeedThePassword` in `tests/Unit/Controller/SettingsControllerTest.php`, the change of the URL through the provisioning API at the end of `tests/e2e/run.sh` |
 | Metadata of Paperless or a setting leads a path out of the base folder | The path template accepts only known variables; every part is cleaned and `.`, `..` and empty parts are rejected | `testRejectsTraversalAndUnknownVariables`, `testCleansComponents` and `testRelativePathMustNotContainEmptyComponents` in `tests/Unit/Service/PathTemplateServiceTest.php`, `testEveryPathConsistsOfNamesThatNextcloudAccepts` in `tests/Unit/Service/PathTemplatePropertiesTest.php` |
 | A title or name of Paperless makes the path of one document that of another, whose file is then replaced | Every value goes into the template as plain text in one pass; only the free text is shortened, so that every file name keeps its marker `[P<ID>]` and its extension | `testInsertsValuesAsTheyAre` and `testLongValuesKeepTheMarkerAndTheExtensionOfEveryDocument` in `tests/Unit/Service/PathTemplateServiceTest.php`, `testDocumentsWithTheSameMetadataGetDifferentPaths` in `tests/Unit/Service/PathTemplatePropertiesTest.php` |
 | A malformed or hostile answer of Paperless | JSON is checked for its shape and types; a document without a numeric ID fails the run instead of writing a file | `testInvalidMetadataIsRejected` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `testDocumentWithoutAValidIdFailsTheRun` in `tests/Unit/Service/SyncServiceTest.php` |
@@ -55,8 +53,31 @@ Each numbered arrow crosses one of the boundaries below; the app checks whatever
 | A short or empty page of Paperless, or a list that changes during a scan, makes existing documents look deleted | The documents are read in the order of their IDs; a scan counts only when every page came back full with the same count and every listed document arrived; after an incomplete scan, no document counts as missing | `testScanThatMayHaveMissedDocumentsIsIncomplete` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `testIncompleteScanCountsNoDocumentAsMissing` in `tests/Unit/Service/SyncServiceTest.php`, the step `scan-incomplete` of `tests/e2e/run.sh` |
 | A short page of tags makes a document with an excluded tag look untagged | The lists of tags, correspondents, document types and storage paths must be complete as well; an incomplete one fails the run before it changes anything | `testIncompleteListOfNamesFailsTheRun` in `tests/Unit/Service/PaperlessApiServiceTest.php` |
 | Text from Paperless runs as script on the settings page | The template escapes every value, and the script of the page writes text only as text | `templates/settings.php`, `js/settings.js` |
+| Someone makes the server send requests into its own network, server-side request forgery | Nextcloud's HTTP client refuses addresses of the local network. The app lifts that only for its own requests to the saved Paperless URL, and only while *Paperless runs in my local network* is on: off by default, turned on only by a clear yes, saved only with the password of an administrator. The app never needs `allow_local_remote_servers`, and its end-to-end tests run without it | `testRequestsAllowTheLocalNetworkOnlyWithTheSetting` and `testDownloadRefusesARedirectIntoTheLocalNetwork` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `testOnlyAClearYesAllowsTheLocalNetwork` in `tests/Unit/Service/ConfigServiceTest.php`, `testARefusedLocalAddressSaysWhatToDo` in `tests/Unit/Controller/SettingsControllerTest.php`, the refused save at the start of `tests/e2e/run.sh` and the one in `tests/e2e/settings.mjs` |
 | Two runs at once break the state | A lock lets only one run at a time, and the background job never runs in parallel | `testRunWhileAnotherRunIsActiveIsAConflict`, `testCronChecksEveryFiveMinutesAndNeverRunsTwice` |
 | A slow or huge Paperless, or a storage that can't be written, ties up Nextcloud | Timeouts for every request; the batch size for the changes of one run, failed ones included; the free space is checked before every write, and the first write that a full, read-only or unavailable storage refuses ends the exports and moves of the run | `testBatchSizeLimitsTheChangesOfOneRun`, `testFailedExportsTakeTheirPlaceInTheBatch` and `testStorageThatCannotBeWrittenEndsTheExportsOfTheRun` in `tests/Unit/Service/SyncServiceTest.php`, `testWriteThatExceedsTheFreeSpaceIsRefusedBeforeAnyFolderIsCreated` in `tests/Unit/Service/NextcloudStorageServiceTest.php`, the step `export-stopped` of `tests/e2e/run.sh` |
+
+### Which token a save tests
+
+With scheduled synchronization on, or a token entered, saving tests the connection to Paperless first, with the token that goes with the URL. With the schedule off and no token entered, a save only checks that the URL is the one that the stored token was saved with, and no request leaves the server:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/which-token-a-save-of-the-settings-tests.dark.svg">
+  <img src="images/diagrams/which-token-a-save-of-the-settings-tests.svg" alt="Which token a save of the settings tests: Nextcloud first asks for the password of the administrator, unless it was confirmed in the last 30 minutes. A token that was entered is tested with the URL of the form. Without one, the stored token goes only to the URL that it was saved with: for that URL, the save tests it when scheduled synchronization is on, and otherwise stores the settings without a request to Paperless; for another URL, the save is refused with the message to enter the token again, and no request leaves the server.">
+</picture>
+
+Every run checks the same before its first request: when the configured URL is not the one that the token was saved with, because it was changed with `occ` or Nextcloud's provisioning API, the run stops without sending the token, and the settings page asks for it again.
+
+### A Paperless in the local network
+
+Nextcloud checks the address of every request of its HTTP client and refuses one of the local network, such as `paperless`, `paperless.lan` or `192.168.1.20`, unless the request allows it. The app allows it in exactly one place, for the requests to the saved Paperless URL, and only with the setting on:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/when-a-request-of-paperless-sync-may-reach-an-address-of-the-local.dark.svg">
+  <img src="images/diagrams/when-a-request-of-paperless-sync-may-reach-an-address-of-the-local.svg" alt="When a request of Paperless Sync may reach an address of the local network: Every request of the app goes to the saved Paperless URL. With the setting Paperless runs in my local network on, Nextcloud allows a local address for this request and sends it. With the setting off, Nextcloud sends it only when the address is not a local one; a local address is refused, and the app says to turn the setting on. The requests of other apps keep Nextcloud's protection either way.">
+</picture>
+
+The system switch `allow_local_remote_servers` would allow local addresses for every app and every request that a user can start, such as link previews, calendar subscriptions, federation and external storage. [Decision 0008](decisions/0008-local-network-per-request.md) records why the app asks for its own setting instead.
 
 The Docker end-to-end tests run the app in real Nextcloud containers of every supported version against a mock of the Paperless API, and the newest version also on PostgreSQL, and on MariaDB with S3 object storage. They check, among others, that the token appears in no response and no log line, that a document missing from Paperless keeps its copy for the grace runs and is never deleted without direct deletion, and that a file of the user at the path of a document stays when conflicts are skipped ([tests/e2e/README.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md)).
 
@@ -64,6 +85,8 @@ The Docker end-to-end tests run the app in real Nextcloud containers of every su
 
 - The permissions of the Paperless account decide what the app can read and do. Use a dedicated account with only the permissions of the features you use, as the [README](https://github.com/Dennis-Otto/paperless-sync#paperless-connection) describes.
 - An `http` URL is allowed, for a Paperless in a trusted local network; then the token and the documents travel unencrypted. Use `https` whenever the connection leaves such a network.
+- With *Paperless runs in my local network* on, an administrator can point the app at any address of the network of the server, and Paperless can redirect the requests of the app, downloads included, to other devices there, whose answer may then land in the archive. Turn the setting on only for a Paperless that you run and trust. It belongs to the URL that an administrator saves: a future mode in which users enter their own Paperless URLs must never apply it to those.
+- Versions up to 0.1.10 wrote the token into the log of Nextcloud whenever a run couldn't reach Paperless. After the update, create a new token in Paperless, enter it in the settings, and delete the old logs of Nextcloud and their copies, such as in backups or log collectors.
 - Everyone who can write to the inbox folder can add documents to Paperless while the inbox import is on. Share the inbox folder only with people who may do that.
 - The mirrored files follow Nextcloud's sharing: whoever the target user shares the archive with sees the documents.
 - Paperless remains the source of truth. With permanent deletion on, a document deleted in Paperless is deleted in Nextcloud too, after the grace runs. Keep independent backups.

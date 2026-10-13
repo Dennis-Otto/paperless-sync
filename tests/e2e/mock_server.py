@@ -13,6 +13,8 @@ from urllib.parse import parse_qs, urlparse
 import showcase
 
 TOKEN = "e2e-only-token"
+# The content of P123 after /control/content/revised, as after a new scan in Paperless.
+REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised.\n%%EOF\n"
 LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
@@ -26,6 +28,9 @@ def reset_state():
         STATE.update(
             {
                 "scenario": "active",
+                "content": "original",
+                # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0.
+                "checksum": "sha256",
                 "downloads": 0,
                 "metadataRequests": 0,
                 "invalidAuth": 0,
@@ -53,8 +58,23 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
     }
 
 
-def document_content(document_id):
+def original_content(document_id):
+    """The content of a document as the mock first serves it."""
     return f"%PDF-1.4\nSynthetic Paperless archive document P{document_id}.\n%%EOF\n".encode("utf-8")
+
+
+def document_content(document_id):
+    """The content of a document, that of P123 the revised one after /control/content/revised."""
+    with LOCK:
+        revised = STATE["content"] == "revised"
+    return REVISED_CONTENT if document_id == 123 and revised else original_content(document_id)
+
+
+def paperless_checksum(data):
+    """The checksum of a document as the Paperless-ngx of the test reports it, MD5 or SHA-256."""
+    with LOCK:
+        algorithm = STATE["checksum"]
+    return hashlib.new(algorithm, data).hexdigest()
 
 
 def restored():
@@ -103,7 +123,9 @@ def scenario_documents():
     if scenario == "active":
         return [document()], []
     if scenario == "renamed":
-        return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")], []
+        # A new content is a new revision of the document.
+        modified = "2026-08-26T12:00:00+02:00" if STATE["content"] == "revised" else "2026-08-26T11:00:00+02:00"
+        return [document("Monthly invoice corrected", modified)], []
     if scenario == "excluded":
         return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00", [9])], []
     if scenario == "trash":
@@ -178,12 +200,12 @@ class Handler(BaseHTTPRequestHandler):
                 checksum = showcase.checksum(document_id)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif self._scenario() == "names" and re.fullmatch(r"/api/documents/20[1-4]/(download|metadata)/", parsed.path):
-            # The documents with long or unusual names carry the content of P123.
-            data = document_content(123)
+            # The documents with long or unusual names carry the first content of P123.
+            data = original_content(123)
             if parsed.path.endswith("/download/"):
                 self._bytes(200, data, "application/pdf")
             else:
-                checksum = hashlib.sha256(data).hexdigest()
+                checksum = paperless_checksum(data)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif match := re.fullmatch(r"/api/documents/(123|124)/(download|metadata)/", parsed.path):
             data = document_content(int(match.group(1)))
@@ -192,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["downloads"] += 1
                 self._bytes(200, data, "application/pdf")
             else:
-                checksum = hashlib.sha256(data).hexdigest()
+                checksum = paperless_checksum(data)
                 with LOCK:
                     STATE["metadataRequests"] += 1
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
@@ -209,6 +231,24 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["scenario"] = scenario
             self._json(200, {"scenario": scenario})
+            return
+        if parsed.path.startswith("/control/content/"):
+            content = parsed.path.rsplit("/", 1)[-1]
+            if content not in {"original", "revised"}:
+                self._json(400, {"detail": "Unknown content"})
+                return
+            with LOCK:
+                STATE["content"] = content
+            self._json(200, {"content": content})
+            return
+        if parsed.path.startswith("/control/checksum/"):
+            algorithm = parsed.path.rsplit("/", 1)[-1]
+            if algorithm not in {"md5", "sha256"}:
+                self._json(400, {"detail": "Unknown checksum"})
+                return
+            with LOCK:
+                STATE["checksum"] = algorithm
+            self._json(200, {"checksum": algorithm})
             return
         if parsed.path.startswith("/control/tasks/"):
             status = parsed.path.rsplit("/", 1)[-1].upper()

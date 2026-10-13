@@ -31,19 +31,17 @@ final class SyncJob extends TimedJob {
 	}
 
 	protected function run(mixed $argument): void {
-		$config = $this->configService->get();
-		if (!$config->enabled) {
-			return;
-		}
-		$status = $this->statusService->get();
-		$lastCompleted = max($status['lastCompleted'], $status['lastStarted']);
-		if ($lastCompleted > 0 && $this->time->getTime() - $lastCompleted < $config->syncIntervalMinutes * 60) {
+		// The settings page shows the same time as the next scheduled run.
+		$nextRun = $this->statusService->nextRun($this->configService->get());
+		if ($nextRun === null || $this->time->getTime() < $nextRun) {
 			return;
 		}
 		try {
 			$this->syncService->run(false);
 		} catch (\Throwable $exception) {
-			$this->logger->error('Scheduled Paperless synchronization failed', ['exception' => $exception]);
+			// Only the message: the synchronization has logged the failure of a run with its trace
+			// already. A run that didn't start, because another one holds the lock, is named here.
+			$this->logger->error('Scheduled Paperless synchronization failed: {error}', ['error' => $exception->getMessage()]);
 		}
 	}
 }

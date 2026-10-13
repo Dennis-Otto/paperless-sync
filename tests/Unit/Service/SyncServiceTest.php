@@ -10,8 +10,11 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use LogicException;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
@@ -48,13 +51,12 @@ final class SyncServiceTest extends TestCase {
 	private SyncService $service;
 
 	protected function setUp(): void {
-		$this->token = 'test-token';
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$this->state = new TestStateRepository();
 		$paths = new PathTemplateService();
 		$this->configService = $this->configService($paths);
-		$this->configService->save(self::validSettings());
+		$this->configService->save(self::validSettings(), 'test-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->service = new SyncService(
@@ -140,6 +142,71 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('Paperless Sync is not completely configured.', $this->settings['status_last_error']);
 	}
 
+	public function testFailedRunKeepsTheReportOfWhatItDidInTheStatus(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
+
+		try {
+			$this->service->run();
+			self::fail('A document without a valid ID fails the run.');
+		} catch (RuntimeException) {
+		}
+
+		$report = json_decode((string)$this->settings['status_last_report'], true, 512, JSON_THROW_ON_ERROR);
+		self::assertSame(['IMPORT: Dokumente/Paperless/Eingang/scan.pdf'], $report['actions'], 'The import before the failure stays in the report.');
+		self::assertSame(0, $report['completedAt']);
+		self::assertSame('Paperless returned a document without a valid ID.', $this->settings['status_last_error']);
+		self::assertArrayNotHasKey('status_last_completed', $this->settings, 'A run that failed completed nothing.');
+	}
+
+	/**
+	 * The provisioning API of Nextcloud may change the URL in the app configuration without the
+	 * settings page, which asks for the token again. The next run must not send the token there.
+	 */
+	public function testAUrlChangedElsewhereNeverGetsTheToken(): void {
+		$this->exportDocument();
+		self::assertSame([['https://paperless.example.test', 'test-token', false]], $this->paperless->connections);
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		try {
+			$this->service->run();
+			self::fail('A URL that the token was not saved with must not get it.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
+		}
+
+		self::assertCount(1, $this->paperless->connections);
+		self::assertSame(1, $this->paperless->downloads);
+	}
+
+	public function testARunReachesPaperlessInTheLocalNetworkWhenTheSettingsAllowIt(): void {
+		$this->configService->save(['paperless_url' => 'http://paperless:8000', 'paperless_local_network' => true] + self::validSettings(), 'test-token');
+
+		$this->service->run(true);
+
+		self::assertSame([['http://paperless:8000', 'test-token', true]], $this->paperless->connections);
+	}
+
+	/**
+	 * A run that Nextcloud doesn't let reach Paperless in the local network, after an update that
+	 * turned allow_local_remote_servers off for example, records what to do in the status.
+	 */
+	public function testARunRefusedInTheLocalNetworkRecordsWhatToDo(): void {
+		$this->paperless->connectionException = new PaperlessLocalNetworkException('paperless');
+
+		try {
+			$this->service->run();
+			self::fail('A refused connection must fail the run.');
+		} catch (PaperlessLocalNetworkException) {
+		}
+
+		self::assertSame('failed', $this->settings['status_last_state']);
+		self::assertSame(
+			'Nextcloud blocks connections to local addresses such as paperless. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
+			$this->settings['status_last_error'],
+		);
+	}
+
 	public function testCompletedRunIsLoggedAndRecordedInTheStatus(): void {
 		$this->exportDocument();
 		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization completed', self::callback(
@@ -183,8 +250,32 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('original:2026-08-26T10:00:00+02:00', $this->state->exports[123]['source_revision']);
 	}
 
-	public function testChangedContentIsDownloadedAgainAndTheOldCopyRemoved(): void {
+	/**
+	 * A new content replaces the content of the file in place, so that it keeps its file ID in
+	 * Nextcloud, with its shares, comments, tags, favorites and versions. Before, the file was
+	 * deleted and written anew, which lost all of these and left the old copy in the trash bin.
+	 */
+	public function testChangedContentUpdatesTheFileInPlace(): void {
 		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame(1, $report->exported);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH));
+		self::assertSame([[self::EXPORTED_PATH, 'created'], [self::EXPORTED_PATH, 'updated']], $this->storage->writes);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** A change of the content and of the path moves the file first, which keeps its ID, and then updates it in place. */
+	public function testChangedContentAndPathMoveTheFileAndUpdateItInPlace(): void {
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
 		$this->paperless->documents[0]['title'] = 'Strom August neu';
 		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
 		$this->paperless->contents[123] = '%PDF-content-v2';
@@ -192,13 +283,251 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run();
 
 		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
 		self::assertSame(1, $report->exported);
 		self::assertSame(0, $report->moved);
 		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId($newPath));
+		self::assertSame([[self::EXPORTED_PATH, 'created'], [$newPath, 'updated']], $this->storage->writes);
 		self::assertSame(2, $this->paperless->downloads);
 		self::assertSame([self::EXPORTED_PATH, self::ARCHIVE], $this->storage->prunes[0]);
 		self::assertSame(1, $report->foldersPruned);
-		self::assertSame(hash('sha256', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+		self::assertSame($newPath, $this->state->exports[123]['path']);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** When the download fails after the move, the state knows the new path of the file, and the next run updates it there. */
+	public function testFileMovedBeforeAFailedDownloadIsUpdatedAtItsNewPathInTheNextRun(): void {
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+
+		$failed = $this->service->run();
+
+		self::assertSame(['ERROR: P123: Paperless is unavailable'], $failed->actions);
+		self::assertSame([$newPath => '%PDF-content'], $this->storage->files);
+		self::assertSame($newPath, $this->state->exports[123]['path']);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint'], 'The fingerprint still names the content of the file.');
+		self::assertSame([self::EXPORTED_PATH, self::ARCHIVE], $this->storage->prunes[0], 'The folder that the file left is pruned at once.');
+
+		$this->paperless->downloadException = null;
+		$retried = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . $newPath], $retried->actions);
+		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId($newPath));
+		self::assertCount(1, $this->storage->prunes, 'The file stayed where it is.');
+	}
+
+	/**
+	 * Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0. Before, a change of the
+	 * title on 2.x downloaded the document again and replaced the file, which lost its shares,
+	 * comments and versions in Nextcloud.
+	 */
+	public function testMetadataChangeOnPaperless2MovesTheFileWithoutADownload(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		$renamedPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(1, $report->moved);
+		self::assertSame(0, $report->exported);
+		self::assertSame([$renamedPath => '%PDF-content'], $this->storage->files);
+		self::assertSame(1, $this->paperless->downloads, 'A change of the metadata alone must not download the document again.');
+		self::assertSame(1, $this->paperless->checksumRequests);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint'], 'A move keeps the checksums of the file.');
+	}
+
+	/** An earlier version stored the SHA-256 alone, which Paperless-ngx 3 still recognizes. */
+	public function testFingerprintOfAnEarlierVersionStillMovesTheFileOnPaperless3(): void {
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->moved);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame([], $this->storage->reads, 'A SHA-256 of Paperless needs no read of the mirrored file.');
+		self::assertSame(hash('sha256', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/**
+	 * On Paperless-ngx 2, the SHA-256 alone of an earlier version can't tell an unchanged document.
+	 * Before, the first change of the metadata after the update downloaded every such document once
+	 * more and replaced its file; now the run reads the mirrored file instead, whose SHA-256 shows
+	 * that it still has the content of that download, and keeps its MD5 for the changes after it.
+	 */
+	public function testFingerprintOfAnEarlierVersionGainsTheMd5OfTheMirroredFileOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+
+		$first = $this->service->run();
+		$this->paperless->documents[0]['title'] = 'Strom August final';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T12:00:00+02:00';
+		$second = $this->service->run();
+
+		self::assertSame([1, 0], [$first->moved, $first->exported]);
+		self::assertSame([1, 0], [$second->moved, $second->exported]);
+		self::assertSame(1, $this->paperless->downloads, 'A change of the metadata alone must not download the document again.');
+		self::assertSame([self::EXPORTED_PATH], $this->storage->reads, 'Only the first change reads the mirrored file.');
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+		self::assertSame([self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August final [P123].pdf' => '%PDF-content'], $this->storage->files);
+	}
+
+	public function testFingerprintOfAnEarlierVersionGainsTheMd5AlsoWhenThePathStaysOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * A move that waits for the next run, because the batch is full or Nextcloud refused a write,
+	 * keeps the MD5 that the read of its mirrored file found, so every mirrored file is read once,
+	 * also when the moves of a large archive take many runs. A dry-run saves nothing.
+	 */
+	public function testFingerprintOfAnEarlierVersionReadsTheMirroredFileOnceWhenTheMoveWaitsOnPaperless2(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocuments([$this->document(123), $this->document(124)]);
+		$this->configService->save(['batch_size' => 1]);
+		foreach ($this->paperless->documents as $index => $document) {
+			$this->state->exports[(int)$document['id']]['fingerprint'] = hash('sha256', '%PDF-content');
+			$this->paperless->documents[$index]['title'] = 'Strom August korrigiert';
+			$this->paperless->documents[$index]['modified'] = '2026-08-26T11:00:00+02:00';
+		}
+
+		$dryRun = $this->service->run(true);
+		self::assertSame(1, $dryRun->moved);
+		self::assertSame([hash('sha256', '%PDF-content'), hash('sha256', '%PDF-content')], [$this->state->exports[123]['fingerprint'], $this->state->exports[124]['fingerprint']], 'A dry-run saves nothing.');
+		$this->storage->reads = [];
+		$first = $this->service->run();
+		$second = $this->service->run();
+
+		self::assertSame([1, 1, 0], [$first->moved, $first->skipped, $first->exported]);
+		self::assertSame([1, 1, 0], [$second->moved, $second->unchanged, $second->exported]);
+		self::assertSame(2, $this->paperless->downloads, 'A change of the metadata alone must not download the documents again.');
+		self::assertEqualsCanonicalizing([$this->archivePath(123), $this->archivePath(124)], $this->storage->reads, 'Each mirrored file is read once.');
+		foreach ([123, 124] as $documentId) {
+			self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[$documentId]['fingerprint']);
+		}
+	}
+
+	/**
+	 * A mirrored file with other content than the download that the earlier version saved, or one
+	 * that Nextcloud can't read, can't vouch for the document, so the document is downloaded again:
+	 * the file moves to its new path and gets the content of the download there.
+	 */
+	#[DataProvider('mirroredFilesThatCantVouchForTheDocument')]
+	public function testFingerprintOfAnEarlierVersionDownloadsWhenTheMirroredFileCantVouchForIt(string $content, ?\Throwable $readFailure): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->storage->files[self::EXPORTED_PATH] = $content;
+		$this->storage->readException = $readFailure;
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+
+		$report = $this->service->run();
+
+		self::assertSame([0, 1], [$report->moved, $report->exported]);
+		self::assertSame(0, $report->errors);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([self::EXPORTED_PATH], $this->storage->reads);
+		self::assertSame([self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf' => '%PDF-content'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** @return array<string, array{string, ?\Throwable}> */
+	public static function mirroredFilesThatCantVouchForTheDocument(): array {
+		return [
+			'changed in Nextcloud' => ['%PDF-changed-in-nextcloud', null],
+			'not readable' => ['%PDF-content', new RuntimeException('Storage is not available.')],
+		];
+	}
+
+	public function testFingerprintOfAnEarlierVersionDownloadsWhenTheMirroredFileIsGone(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		unset($this->storage->files[self::EXPORTED_PATH]);
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([], $this->storage->reads, 'A file that is gone is not read.');
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+	}
+
+	/** New content in Paperless downloads the document, also when the mirrored file still has the old one. */
+	public function testFingerprintOfAnEarlierVersionDownloadsNewContentOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	public function testNewRevisionOnPaperless2WithTheSameContentOnlyRecordsTheRevision(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * Before, an export read the whole document into a string to compute its checksum, so that a
+	 * document larger than the free memory of PHP ended the run with a fatal error, before it saved
+	 * its state, and every run after it died on the same document.
+	 */
+	public function testExportPassesTheDocumentToNextcloudWithoutHoldingItInMemory(): void {
+		$this->configService->save(['inbox_enabled' => false]);
+		$size = 16 * 1024 * 1024;
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = str_repeat('%PDF-large', intdiv($size, 10));
+		$written = hash_init('sha256');
+		$storage = $this->createMock(NextcloudStorageInterface::class);
+		$storage->expects(self::once())->method('writeStream')->willReturnCallback(
+			/** @param resource $source */
+			static function (string $userId, string $path, $source) use ($written): void {
+				hash_update_stream($written, $source);
+			},
+		);
+		$service = new SyncService(
+			$this->configService,
+			$this->paperless,
+			$storage,
+			$this->state,
+			new PathTemplateService(),
+			new StatusService($this->appConfig()),
+			$this->locking,
+			$this->logger,
+		);
+		memory_reset_peak_usage();
+		$before = memory_get_usage();
+
+		$report = $service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(hash('sha256', $this->paperless->contents[123]), hash_final($written), 'Nextcloud receives the whole document.');
+		self::assertLessThan($size / 2, memory_get_peak_usage() - $before, 'The document must reach Nextcloud in chunks.');
 	}
 
 	public function testDocumentsThatShareAFileAreDownloadedAgainInsteadOfMoved(): void {
@@ -484,6 +813,52 @@ final class SyncServiceTest extends TestCase {
 		self::assertStringStartsWith('SCAN INCOMPLETE:', $report->actions[100], 'A hundred imports do not hide that the run counted no document as missing.');
 	}
 
+	public function testDryRunShowsTheTrashAlsoBehindAHundredImports(): void {
+		$this->exportDocument();
+		$this->trashDocument();
+		foreach (range(1, 100) as $number) {
+			$this->storage->files["Dokumente/Paperless/Eingang/scan{$number}.pdf"] = "%PDF-{$number}";
+		}
+
+		$report = $this->service->run(true);
+
+		self::assertSame(100, $report->importsSubmitted);
+		self::assertCount(100, $report->actions);
+		self::assertSame('TRASH P123: ' . $this->trashFolderPath(), $report->actions[99], 'The move to the deleted folder takes the place of the last import.');
+		self::assertSame(1, $report->omittedActions);
+	}
+
+	public function testErrorOfADocumentIsLoggedOnceUntilItChanges(): void {
+		$warnings = [];
+		$this->logger->method('warning')->willReturnCallback(static function (string $message, array $context) use (&$warnings): void {
+			$warnings[] = [$message, $context];
+		});
+		$unavailable = new RuntimeException('Paperless is unavailable');
+		$this->paperless->downloadException = $unavailable;
+
+		$this->exportDocument();
+		$this->service->run();
+		$timedOut = new RuntimeException('Paperless timed out');
+		$this->paperless->downloadException = $timedOut;
+		$this->service->run();
+
+		$message = 'Paperless Sync could not synchronize the document P{documentId}: {error}';
+		self::assertSame([
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless is unavailable']],
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless timed out']],
+		], $warnings, 'The second run fails as the first did, so only the first and the third are logged, without the trace of the exception.');
+	}
+
+	public function testDryRunLogsTheErrorOfADocumentThatNoRunRecorded(): void {
+		$this->paperless->documents = [['id' => 12.5] + $this->document()];
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			self::callback(static fn (array $context): bool => $context['documentId'] === 12 && $context['path'] === ''),
+		);
+
+		$this->service->run(true);
+	}
+
 	public function testDocumentWithoutAValidIdFailsTheRun(): void {
 		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
 
@@ -538,6 +913,147 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('a file of the user', $this->storage->files[self::EXPORTED_PATH]);
 		self::assertSame('Nextcloud file conflict at ' . self::EXPORTED_PATH . '.', $this->state->exports[123]['last_error']);
 		self::assertSame(0, $this->paperless->downloads, 'The file stays, so the download would be in vain.');
+	}
+
+	/** The skip policy protects the files of the user, not the copy that the app wrote itself (#98). */
+	public function testOwnCopyIsUpdatedInPlaceWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH));
+		self::assertNull($this->state->exports[123]['last_error']);
+	}
+
+	/** A copy whose content Paperless changed while the document was missing is its own as well. */
+	public function testReturningDocumentUpdatesItsOwnCopyWhenConflictsAreSkipped(): void {
+		$this->configService->save(['trash_mode' => 'keep', 'missing_grace_runs' => 1, 'conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$listed = $this->paperless->documents;
+		$this->paperless->documents = [];
+		$this->service->run();
+		$listed[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->documents = $listed;
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame('active', $this->state->exports[123]['state']);
+	}
+
+	/** A copy that the user changed in Nextcloud is no longer the app's own, and the skip policy leaves it alone. */
+	public function testCopyThatTheUserChangedIsAConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-annotated by the user';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-annotated by the user'], $this->storage->files);
+		self::assertSame(1, $this->paperless->downloads, 'The file stays, so the download would be in vain.');
+	}
+
+	public function testCopyThatCantBeReadIsAConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->storage->readException = new RuntimeException('The storage is not available');
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+	}
+
+	/** The move takes the own copy to a free path, so the update in place that follows is no conflict. */
+	public function testChangedContentAndPathMoveTheOwnCopyWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId($newPath));
+	}
+
+	/** The move would take a copy that someone changed along, and the new content would replace their edit. */
+	public function testChangedCopyStaysWhenContentAndPathChangeAndConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-annotated by the user';
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$dryRun = $this->service->run(true);
+		$report = $this->service->run();
+
+		$conflict = 'ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.';
+		self::assertSame([$conflict], $dryRun->actions);
+		self::assertSame([$conflict], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-annotated by the user'], $this->storage->files);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		self::assertSame(1, $this->paperless->downloads, 'The copy stays, so the download would be in vain.');
+	}
+
+	/** A write in place that fails halfway leaves the own copy incomplete, which the next run writes again. */
+	public function testOwnCopyThatAFailedUpdateLeftIncompleteIsWrittenAgainWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$this->storage->writeFailures[self::EXPORTED_PATH] = new RuntimeException('The disk is full');
+
+		$failed = $this->service->run();
+		self::assertSame(['ERROR: P123: The disk is full'], $failed->actions);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[123]['fingerprint']);
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-cont';
+		$this->storage->writeFailures = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** The state records the new path after the move and the write in place before it starts, so a failed write leaves the moved copy the app's own. */
+	public function testMovedCopyThatAFailedUpdateLeftIncompleteIsWrittenAgainWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		$this->storage->writeFailures[$newPath] = new RuntimeException('The disk is full');
+
+		$this->service->run();
+		self::assertSame(['path' => $newPath, 'fingerprint' => DocumentFingerprint::PENDING], array_intersect_key($this->state->exports[123], ['path' => true, 'fingerprint' => true]));
+		$this->storage->files[$newPath] = '%PDF-cont';
+		$this->storage->writeFailures = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
 	}
 
 	public function testMoveOntoAnExistingFileIsAConflictWhenConflictsAreSkipped(): void {
@@ -619,12 +1135,20 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
-		$this->paperless->taskException = new RuntimeException('Paperless timed out');
+		$timedOut = new RuntimeException('Paperless timed out');
+		$this->paperless->taskException = $timedOut;
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not check the import of the inbox file {path}: {error}',
+			['path' => $path, 'error' => 'Paperless timed out'],
+		);
 
 		$report = $this->service->run();
+		$this->service->run();
+		$this->service->run(true);
 
 		self::assertSame(['ERROR: Import task ' . $path . ': Paperless timed out'], $report->actions);
 		self::assertSame('pending', $this->state->imports[$path]['status']);
+		self::assertSame('Paperless timed out', $this->state->imports[$path]['last_error']);
 		self::assertCount(1, $this->paperless->uploads);
 	}
 
@@ -1036,8 +1560,10 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents[0]['tags'] = [9];
 		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
 		$this->storage->deleteException = new RuntimeException('File is locked');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'File is locked');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Excluded P123: File is locked'], $report->actions);
 		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
@@ -1098,8 +1624,10 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$this->trashDocument();
 		$this->storage->moveException = new RuntimeException('Storage is full');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'Storage is full');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Trash P123: Storage is full'], $report->actions);
 		self::assertSame('Storage is full', $this->state->exports[123]['last_error']);
@@ -1118,6 +1646,75 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('trash', $this->state->exports[123]['state']);
 		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
 		self::assertSame(strtotime('2026-08-27T08:00:00+02:00'), $this->state->exports[123]['trash_date']);
+	}
+
+	/**
+	 * A document restored from the Paperless trash finds its copy where the keep policy left it,
+	 * with the same content, so nothing is downloaded or written. Before, the copy was downloaded
+	 * and written again, which gave it a new file ID.
+	 */
+	public function testRestoredDocumentKeepsItsCopyUnderTheKeepPolicy(): void {
+		$this->configService->save(['trash_mode' => 'keep']);
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$restored = $this->paperless->documents;
+		$this->trashDocument();
+		$this->service->run();
+		$this->paperless->documents = $restored;
+		$this->paperless->trash = [];
+
+		$report = $this->service->run();
+
+		self::assertSame([], $report->actions);
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame([[self::EXPORTED_PATH, 'created']], $this->storage->writes);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH));
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertNull($this->state->exports[123]['trash_date']);
+		self::assertSame(0, $this->state->exports[123]['missing_runs']);
+	}
+
+	/** Also with conflicts skipped: the copy at the path of the document is its own. */
+	#[DataProvider('conflictModes')]
+	public function testDocumentListedAgainKeepsItsCopyUnderTheKeepPolicy(string $conflictMode): void {
+		$this->configService->save(['trash_mode' => 'keep', 'missing_grace_runs' => 1, 'conflict_mode' => $conflictMode]);
+		$this->exportDocument();
+		$listed = $this->paperless->documents;
+		$this->paperless->documents = [];
+		$this->service->run();
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		$this->paperless->documents = $listed;
+
+		$report = $this->service->run();
+
+		self::assertSame([], $report->actions);
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame([[self::EXPORTED_PATH, 'created']], $this->storage->writes);
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertSame(0, $this->state->exports[123]['missing_runs']);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function conflictModes(): array {
+		return ['replace' => ['replace'], 'skip' => ['skip']];
+	}
+
+	public function testDryRunKeepsTheStateOfARestoredDocument(): void {
+		$this->configService->save(['trash_mode' => 'keep']);
+		$this->exportDocument();
+		$restored = $this->paperless->documents;
+		$this->trashDocument();
+		$this->service->run();
+		$this->paperless->documents = $restored;
+		$this->paperless->trash = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame([], $report->actions);
+		self::assertSame(1, $report->unchanged);
+		self::assertSame('trash', $this->state->exports[123]['state']);
 	}
 
 	public function testDryRunReportsNothingWhenTheKeepPolicyLeavesTheCopyInPlace(): void {
@@ -1480,8 +2077,10 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$this->paperless->documents = [];
 		$this->storage->deleteException = new RuntimeException('File is locked');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'File is locked');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Missing P123: File is locked'], $report->actions);
 		self::assertSame(0, $report->permanentlyDeleted);
@@ -1575,9 +2174,28 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayNotHasKey('enabled', $this->settings);
 	}
 
+	/** Expects the warning about the error of the document P123, once in every run that follows. */
+	private function expectDocumentWarning(string $path, string $error): void {
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			['documentId' => 123, 'path' => $path, 'error' => $error],
+		);
+	}
+
 	/** @param array<string, mixed>|null $document */
 	private function exportDocument(?array $document = null): SyncReport {
 		return $this->exportDocuments([$document ?? $this->document()]);
+	}
+
+	/**
+	 * A document that an earlier version exported, with the SHA-256 alone as its fingerprint, on a
+	 * Paperless-ngx 2 that reports MD5 checksums, after a new revision of the document.
+	 */
+	private function exportWithFingerprintOfAnEarlierVersionOnPaperless2(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
 	}
 
 	/** @param list<array<string, mixed>> $documents */

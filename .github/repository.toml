@@ -3,9 +3,9 @@
 # https://github.com/Dennis-Otto/repo-blueprint#settings
 
 [repository]
-description = "Native Nextcloud synchronization for Paperless-ngx documents"
+description = "Nextcloud app that syncs Paperless-ngx documents into Nextcloud Files, by correspondent, type and year, and sends an inbox folder to Paperless. No WebDAV, no Nextcloud password."
 homepage = "https://dennis-otto.github.io/paperless-sync/"
-topics = ["document-management", "nextcloud", "paperless-ngx", "php", "synchronization"]
+topics = ["dms", "document-archive", "document-management", "homelab", "nextcloud", "nextcloud-app", "paperless", "paperless-ngx", "php", "self-hosted", "selfhosted", "synchronization"]
 has_issues = true
 has_discussions = true
 has_projects = false
@@ -45,6 +45,7 @@ required_checks = [
   "workflow-lint",
   "reuse",
   "markdown",
+  "diagrams",
   "docs",
   "dco",
   "issue-assistant",

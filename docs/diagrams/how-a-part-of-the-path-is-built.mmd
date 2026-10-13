@@ -1,0 +1,16 @@
+flowchart TB
+    accTitle: How a part of the path is built
+    accDescr: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.
+
+    part["A part of the template<br>{{ created }} -<br>{{ title }}<br>[P{{ id }}]"]
+    values["The values as plain text,<br>cleaned for Nextcloud,<br>macOS and Windows"]
+    fits{"At most 200 bytes<br>for a folder, 217<br>for the file name?"}
+    shorten["Shorten the longest<br>free text: title,<br>correspondent,<br>document type,<br>storage path,<br>original file name"]
+    name["📄 2026-08-26 -<br>Example invoice<br>[P123].pdf"]
+
+    part --> values --> fits
+    fits -- "no" --> shorten --> fits
+    fits -- "yes" --> name
+
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class name done

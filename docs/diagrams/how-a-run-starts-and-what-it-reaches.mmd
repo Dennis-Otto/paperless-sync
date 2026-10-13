@@ -1,0 +1,36 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How a run starts and what it reaches
+    accDescr: An administrator configures the app, starts a dry run or a run on the settings page, whose controllers start the synchronization. Nextcloud's cron starts the background job, which starts the synchronization as well. The synchronization builds the path of every document with the path templates, reads Paperless-ngx through the Paperless client, which calls its REST API with the token, and writes the files of the target user through the storage. Everything but the administrator and Paperless-ngx runs inside the Nextcloud server.
+
+    admin(["Administrator"])
+    subgraph nextcloud ["Nextcloud server"]
+        settings["Settings page<br>and controllers"]
+        cron(["Nextcloud cron"])
+        job["Background<br>job"]
+        sync["Synchronization"]
+        template["Path<br>templates"]
+        storage["Storage"]
+        client["Paperless<br>client"]
+        files[("Files of the<br>target user")]
+    end
+    paperless[("Paperless-ngx")]
+
+    admin -- "configure,<br>dry run, run" ---> settings
+    cron --> job
+    settings --> sync
+    job --> sync
+    sync --> template & storage & client
+    storage --> files
+    client -- "REST API<br>with the token" --> paperless
+    %% An invisible link draws Paperless-ngx below the Nextcloud server, not beside it.
+    files ~~~ paperless
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class paperless paperless
+    class files nextcloud

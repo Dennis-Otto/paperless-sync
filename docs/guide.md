@@ -1,8 +1,10 @@
 # Guide
 
-How to install and set up Paperless Sync, what it does, how to use it, and what each part of its configuration means.
+How Paperless Sync works, what it needs, how to install and set it up, what it does, how to use it, and what each part of its configuration means.
 
 --8<-- "README.md:how-it-works"
+
+--8<-- "README.md:requirements"
 
 --8<-- "README.md:quick-start-section"
 
@@ -25,9 +27,9 @@ The archive in Files, one folder per correspondent, document type and year:
 
 ## The settings, section by section
 
-The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows the state and the end of the last run; below them, the buttons save the settings after a test of the connection, start a dry-run or a run, and disconnect Paperless.
+The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps.
 
-**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, and the base folder in the files of that user.
+**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-connection-dark.png">
@@ -41,7 +43,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Schedule and modules: switches for the scheduled synchronization, the archive export and the inbox import, the interval in minutes and the maximum changes per module and run" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Structured archive:** the archive folder, what happens when a file is in the way, the path template, the archive version or the original, and which documents stay out.
+**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the path template, the archive version or the original, and which documents stay out.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
@@ -64,9 +66,26 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 ## The report of a run
 
-A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and for a dry-run a line for every file that a run would write, move or delete. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
+A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">
   <img alt="The report of a dry-run: the counts of exported, moved, trashed and excluded documents and of finished imports, and a list with one line for every file change" src="images/report-light.png">
 </picture>
+
+## Status, report and log
+
+--8<-- "README.md:status"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/status-error-dark.png">
+  <img alt="The status of Paperless Sync after a run with an error: the state Completed with errors in red, the times of the last run, of the last successful run and of the next scheduled run, and below them a box that names the document whose download failed" src="images/status-error-light.png">
+</picture>
+
+--8<-- "README.md:status-report"
+
+## FAQ and troubleshooting
+
+The [FAQ](faq.md) answers the common questions, such as what happens to an edit of a mirrored file, where deleted files go and how long the first synchronization takes. [Troubleshooting](troubleshooting.md) leads from an error message, a run that fails or a file that is missing to its cause and its fix.
+
+--8<-- "README.md:help"
