@@ -94,6 +94,14 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
 
     [:octicons-arrow-right-24: Read the guide](guide.md)
 
+- :material-lifebuoy:{ .lg .middle } **FAQ and troubleshooting**
+
+    ---
+
+    What happens to edits and deletions, how long the first synchronization takes, and the fixes for the error messages.
+
+    [:octicons-arrow-right-24: FAQ](faq.md) · [Troubleshooting](troubleshooting.md)
+
 - :material-sitemap-outline:{ .lg .middle } **Architecture**
 
     ---

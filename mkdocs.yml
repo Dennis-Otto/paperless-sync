@@ -60,6 +60,9 @@ hooks:
 nav:
   - Home: index.md
   - Guide: guide.md
+  - Help:
+      - FAQ: faq.md
+      - Troubleshooting: troubleshooting.md
   - Architecture: architecture.md
   - Security design: security.md
   - Roadmap: roadmap.md
