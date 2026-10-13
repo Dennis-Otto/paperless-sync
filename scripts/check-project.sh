@@ -51,6 +51,30 @@ for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e
   expect skip "$path"
 done
 
+# Of those, a change that can behave differently on another database or storage runs
+# PostgreSQL, MariaDB and the object store as well.
+expect_variants() {
+  local expected="$1" path="$2" actual=skip
+  if path_affects_variants "$path"; then
+    actual=run
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    echo "A change of $path should $expected the other databases and the object store, but tests/e2e/affected.sh says $actual."
+    problems=$((problems + 1))
+  fi
+}
+for path in lib/Migration/Version000110Date20261008000000.php lib/Service/SyncStateRepository.php \
+  lib/Service/SyncStateRepositoryInterface.php lib/Service/NextcloudStorageService.php \
+  lib/Service/NextcloudStorageInterface.php lib/Service/PaperlessApiService.php \
+  tests/e2e/compose.s3.yaml tests/e2e/run-all.sh .github/workflows/e2e.yml; do
+  expect_variants run "$path"
+done
+for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
+  lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
+  tests/e2e/README.md README.md; do
+  expect_variants skip "$path"
+done
+
 # A change of appinfo/info.xml, as git diff --unified=0 shows it. A release writes
 # only its version and must skip the tests; the upstream bot raises max-version, and
 # that must run them, as any other change of the file.
@@ -99,18 +123,18 @@ decision() {
   rm -f "$output"
   echo "$result"
 }
-if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != affected=true ]]; then
+if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true\nvariants=true' ]]; then
   echo "tests/e2e/affected.sh should run the end-to-end tests when it can't compare the commits."
   problems=$((problems + 1))
 fi
-if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != affected=false ]]; then
+if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false\nvariants=false' ]]; then
   echo "tests/e2e/affected.sh HEAD HEAD should find nothing that runs the end-to-end tests."
   problems=$((problems + 1))
 fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest."
+echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads."
 
 printf '\n== %s\n' "Icon of the website"
 # The website shows the icon of the app as its logo, its favicon and on its preview

@@ -2,24 +2,26 @@
 
 Run this matrix in an isolated Nextcloud/Paperless lab before a release that changes synchronization, deletion, path generation, permissions, or background jobs. Use only synthetic accounts and documents.
 
-| Area | Required behavior |
-| --- | --- |
-| Configuration | Connection test succeeds with a least-privilege Paperless service account; the saved token is never returned to the browser or written to logs. With Paperless stopped, unchecking *Enable scheduled synchronization* and saving works, and *Disconnect* keeps every setting but the token, the schedule and *Paperless runs in my local network*. |
-| Local network | With `allow_local_remote_servers` off, a Paperless at an address of the local network is refused with the advice to turn on *Paperless runs in my local network*, and works once it is on; other apps still can't reach local addresses. |
-| Dry-run | Reports all expected actions without creating, moving, uploading, or deleting a file. |
-| Export | Archive PDF and original-file modes create the expected correspondent-first hierarchy and stable `[P123]` marker. |
-| Metadata | Title, correspondent, document type, storage path, and date changes move the existing file without leaving duplicate or empty paths, and without a new download, on Paperless-ngx 2.x and 3.x alike. |
-| File identity | A new archive version of a shared document updates the mirrored file in place: its share, public link, comments, tags and favorites stay, and after a scheduled run its versions list the previous content. |
-| Exclusions | Paperless inbox and configured exclusion tags prevent export and remove an existing synchronized copy. |
-| Trash | Moving a document to the Paperless trash moves the Nextcloud copy to the configured deleted folder; restoring it moves the same file back. With *Keep archive file in place*, restoring it downloads nothing and leaves the same file in place. |
-| Missing documents | A document that disappears from Paperless without passing through its trash moves the Nextcloud copy to the deleted folder after the configured number of complete scans, also when a run reaches its batch size first: the copy then moves in a later run. |
-| Permanent deletion | No Nextcloud file is permanently deleted before the configured number of complete missing-document scans. Direct deletion remains blocked unless explicitly enabled. |
-| Inbox import | Recursive import submits each source once, keeps it while the task is pending, removes it after success, and moves failures plus diagnostics to the error folder. |
-| Conflicts | `skip` preserves an unrelated Nextcloud file, and a mirrored copy that someone changed, and reports the conflict without downloading the document, while the app's own copy still gets a new content; `replace` changes only the managed destination. |
-| Full storage | With the quota of the target user used up, a run reports one export error and `EXPORT STOPPED`, downloads no further document, and exports the rest once space is free again. |
-| Permissions | The configured target user owns the files; an unrelated Nextcloud user cannot read them unless they are explicitly shared. |
-| Scheduling | System cron invokes the registered background job, respects the configured interval, and does not run in parallel. |
-| Run visibility | After a scheduled run with an error of a document, a reload of the settings shows the error, the report and *Completed with errors*; the Nextcloud log has one warning for the error, and none for the same error in the runs after it. |
-| Clients | Files remain readable through Nextcloud Web, desktop sync, iOS, and Android after exports, moves, and trash restoration. |
+The column *Docker E2E* names what the end-to-end tests of `run.sh` already check on their own, on every supported Nextcloud version, and on PostgreSQL and on MariaDB with S3 object storage as well ([README](README.md)). The rest, and real Paperless and clients, stays for the lab.
+
+| Area | Required behavior | Docker E2E |
+| --- | --- | --- |
+| Configuration | Connection test succeeds with a least-privilege Paperless service account; the saved token is never returned to the browser or written to logs. With Paperless stopped, unchecking *Enable scheduled synchronization* and saving works, and *Disconnect* keeps every setting but the token, the schedule and *Paperless runs in my local network*. | Partly: the token is in no response and no log line, also of a run that can't reach Paperless, and *Disconnect* keeps the other settings; the service account and a stopped Paperless are for the lab |
+| Local network | With `allow_local_remote_servers` off, a Paperless at an address of the local network is refused with the advice to turn on *Paperless runs in my local network*, and works once it is on; other apps still can't reach local addresses. | Partly: the refused address and the setting; other apps are for the lab |
+| Dry-run | Reports all expected actions without creating, moving, uploading, or deleting a file. | Yes |
+| Export | Archive PDF and original-file modes create the expected correspondent-first hierarchy and stable `[P123]` marker. | Partly: archive PDFs |
+| Metadata | Title, correspondent, document type, storage path, and date changes move the existing file without leaving duplicate or empty paths, and without a new download, on Paperless-ngx 2.x and 3.x alike. | Partly: a new title, without a download, with the checksums of 2.x and 3.x |
+| File identity | A new archive version of a shared document updates the mirrored file in place: its share, public link, comments, tags and favorites stay, and after a scheduled run its versions list the previous content. | Mostly: the ID, a share and the version of a scheduled run; public links, comments, tags and favorites are for the lab |
+| Exclusions | Paperless inbox and configured exclusion tags prevent export and remove an existing synchronized copy. | Partly: the inbox tag |
+| Trash | Moving a document to the Paperless trash moves the Nextcloud copy to the configured deleted folder; restoring it moves the same file back. With *Keep archive file in place*, restoring it downloads nothing and leaves the same file in place. | Partly: without *Keep archive file in place* |
+| Missing documents | A document that disappears from Paperless without passing through its trash moves the Nextcloud copy to the deleted folder after the configured number of complete scans, also when a run reaches its batch size first: the copy then moves in a later run. | Partly: without the batch size, which the unit tests check |
+| Permanent deletion | No Nextcloud file is permanently deleted before the configured number of complete missing-document scans. Direct deletion remains blocked unless explicitly enabled. | Yes |
+| Inbox import | Recursive import submits each source once, keeps it while the task is pending, removes it after success, and moves failures plus diagnostics to the error folder. | Yes, also from S3 object storage |
+| Conflicts | `skip` preserves an unrelated Nextcloud file, and a mirrored copy that someone changed, and reports the conflict without downloading the document, while the app's own copy still gets a new content; `replace` changes only the managed destination. | Partly: an unrelated file of the user; a changed mirrored copy is for the unit tests and the lab |
+| Full storage | With the quota of the target user used up, a run reports one export error and `EXPORT STOPPED`, downloads no further document, and exports the rest once space is free again. | Partly: the export error, `EXPORT STOPPED` and the export once space is free; that no further document is downloaded, the unit tests check |
+| Permissions | The configured target user owns the files; an unrelated Nextcloud user cannot read them unless they are explicitly shared. | Yes: ownership, isolation and a share of a mirrored file |
+| Scheduling | System cron invokes the registered background job, respects the configured interval, and does not run in parallel. | Partly: the job runs and respects the interval; `occ` starts it instead of system cron |
+| Run visibility | After a scheduled run with an error of a document, a reload of the settings shows the error, the report and *Completed with errors*; the Nextcloud log has one warning for the error, and none for the same error in the runs after it. | Partly: the status keeps the error of a document; the scheduled run, the reload and the log are for the lab |
+| Clients | Files remain readable through Nextcloud Web, desktop sync, iOS, and Android after exports, moves, and trash restoration. | No |
 
 Record the Paperless version, Nextcloud version, app version, client versions, chosen configuration, and sanitized result summaries. Never attach a production token, hostname, document, path, or log containing personal metadata to an issue.
