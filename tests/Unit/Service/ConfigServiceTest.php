@@ -61,20 +61,131 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame(15, $config->syncIntervalMinutes);
 		self::assertSame('Ohne_ Korrespondent', $config->emptyCorrespondent);
 		self::assertTrue($config->tokenConfigured);
-		self::assertSame('secret-token', $this->token);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
 		self::assertSame(15, $this->settings['sync_interval_minutes']);
 		self::assertArrayNotHasKey('not_a_setting', $this->settings);
 	}
 
-	public function testSavingWithoutATokenKeepsTheStoredOne(): void {
+	/** @return array<string, array{string}> the stored URL as an administrator may enter it again */
+	public static function sameUrls(): array {
+		return [
+			'unchanged' => ['https://paperless.example.test'],
+			'with a slash and spaces' => [' https://paperless.example.test/ '],
+		];
+	}
+
+	#[DataProvider('sameUrls')]
+	public function testSavingTheSameUrlWithoutATokenKeepsTheStoredOne(string $url): void {
 		$this->service->save(self::validSettings(), 'secret-token');
 
-		$config = $this->service->save(['batch_size' => 50]);
+		$config = $this->service->save(['paperless_url' => $url, 'batch_size' => 50]);
 
 		self::assertSame(50, $config->batchSize);
+		self::assertSame('https://paperless.example.test', $config->paperlessUrl);
 		self::assertSame('secret-token', $this->service->getToken());
-		self::assertSame('secret-token', $this->service->resolveToken(' '));
-		self::assertSame('other-token', $this->service->resolveToken(' other-token '));
+		self::assertSame('secret-token', $this->service->resolveToken(' ', 'https://paperless.example.test'));
+	}
+
+	public function testATokenThatIsEnteredIsUsedForAnyUrl(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+
+		self::assertSame('other-token', $this->service->resolveToken(' other-token ', 'https://other.example.test'));
+		$config = $this->service->save(['paperless_url' => 'https://other.example.test'], 'other-token');
+
+		self::assertSame('https://other.example.test', $config->paperlessUrl);
+		self::assertSame(['url' => 'https://other.example.test', 'token' => 'other-token'], $this->credential);
+	}
+
+	/** @return array<string, array{string}> URLs that may lead to another server or another app than the stored one */
+	public static function otherUrls(): array {
+		return [
+			'another host' => ['https://attacker.example.test'],
+			'another port' => ['https://paperless.example.test:8443'],
+			'another scheme' => ['http://paperless.example.test'],
+			'another path on the same host' => ['https://paperless.example.test/other-app'],
+		];
+	}
+
+	/**
+	 * The stored token goes only to the URL that it was saved with. Otherwise, whoever can change
+	 * the settings could point the URL at a server of their own and receive the token with the test
+	 * of the connection, without knowing it.
+	 */
+	#[DataProvider('otherUrls')]
+	public function testANewUrlNeedsTheTokenAgain(string $url): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$stored = $this->settings;
+		$calls = [
+			'validate' => fn (): mixed => $this->service->validate(['paperless_url' => $url], ' '),
+			'save' => fn (): mixed => $this->service->save(['paperless_url' => $url]),
+			'resolveToken' => fn (): mixed => $this->service->resolveToken('', $url),
+		];
+
+		foreach ($calls as $method => $call) {
+			try {
+				$call();
+				self::fail("{$method}() must refuse a new URL without a token.");
+			} catch (InvalidArgumentException $exception) {
+				self::assertSame('Enter the API token again to connect to another Paperless URL.', $exception->getMessage());
+			}
+		}
+		self::assertSame($stored, $this->settings);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+	}
+
+	/**
+	 * The provisioning API of Nextcloud and occ may change the URL without the settings page. The
+	 * next run must not send the stored token there.
+	 */
+	public function testAUrlChangedElsewhereGetsNoToken(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		self::assertSame('', $this->service->getToken());
+		self::assertFalse($this->service->get()->tokenConfigured);
+		try {
+			$this->service->validate([]);
+			self::fail('The settings page must not take over a URL that was changed elsewhere without the token.');
+		} catch (InvalidArgumentException $exception) {
+			self::assertSame('Enter the API token again to connect to another Paperless URL.', $exception->getMessage());
+		}
+		self::assertSame('secret-token', $this->service->resolveToken('', 'https://paperless.example.test'), 'The URL that the token was saved with still gets it.');
+
+		$this->settings['paperless_url'] = 'https://paperless.example.test/';
+		self::assertSame('secret-token', $this->service->getToken());
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+	}
+
+	/** A token that an earlier version stored without its URL waits for the update to bind it to one. */
+	public function testATokenWithoutItsUrlIsNotUsed(): void {
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		$this->credential = 'secret-token';
+
+		self::assertSame('', $this->service->getToken());
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('A Paperless API token is required.');
+		$this->service->validate(self::validSettings());
+	}
+
+	/** @return array<string, array{mixed}> what else the store of credentials may hold */
+	public static function unusableCredentials(): array {
+		return [
+			'without a URL' => [['token' => 'secret-token']],
+			'without a token' => [['url' => 'https://paperless.example.test']],
+			'with an empty token' => [['url' => 'https://paperless.example.test', 'token' => '']],
+			'with a token that is no text' => [['url' => 'https://paperless.example.test', 'token' => 42]],
+		];
+	}
+
+	#[DataProvider('unusableCredentials')]
+	public function testAnIncompleteCredentialIsNoToken(mixed $credential): void {
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		$this->credential = $credential;
+
+		self::assertSame('', $this->service->getToken());
+		self::assertFalse($this->service->bindUnboundToken());
+		self::assertSame($credential, $this->credential);
 	}
 
 	public function testATokenIsRequired(): void {
@@ -89,7 +200,7 @@ final class ConfigServiceTest extends TestCase {
 
 		self::assertSame(7, $config->batchSize);
 		self::assertSame([], $this->settings);
-		self::assertSame('', $this->token);
+		self::assertNull($this->credential);
 	}
 
 	public function testResetRemovesEverySettingAndTheToken(): void {
@@ -98,7 +209,7 @@ final class ConfigServiceTest extends TestCase {
 		$config = $this->service->reset();
 
 		self::assertSame([], $this->settings);
-		self::assertSame('', $this->token);
+		self::assertNull($this->credential);
 		self::assertSame('', $config->paperlessUrl);
 		self::assertFalse($config->tokenConfigured);
 	}
