@@ -252,6 +252,8 @@ STATEMENT_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-
 cd "${REPOSITORY_ROOT}"
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
+# The seconds since the start at the end of each phase show where a slow run spends them.
+echo "The containers run after ${SECONDS} s."
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!
@@ -317,6 +319,7 @@ occ background:cron >/dev/null
 occ app:disable firstrunwizard >/dev/null 2>&1 || true
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
+echo "Nextcloud and the app are set up after ${SECONDS} s."
 
 # The administration settings render the form with all of its routes.
 curl --fail-with-body --silent --show-error \
@@ -590,11 +593,14 @@ for path in "${NAMED_PATHS[@]}"; do
 	assert_dav_file sync-target "${path}" 'Synthetic Paperless archive document P123.'
 done
 
+echo "The scenarios pass after ${SECONDS} s."
+
 # The administration settings and the report of a dry-run over a larger archive meet
 # WCAG 2.1 AA.
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	control /control/scenario/archive >/dev/null
 	accessibility
+	echo "The accessibility check passes after ${SECONDS} s."
 fi
 
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
