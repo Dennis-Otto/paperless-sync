@@ -2,14 +2,30 @@
 hide:
   - navigation
   - toc
+# A link to the home page shows the social preview of the repository, with the layout
+# in .github/social-cards/preview.yml.
+social:
+  cards_layout: preview
 ---
 
-# Paperless Sync
+# <img src="images/app.svg" alt="" class="off-glb" width="64" height="64"> Paperless Sync { .ps-hero-title }
+
+**Your finished Paperless-ngx documents, as a tidy archive in Nextcloud.**
+{ .ps-hero-tagline }
 
 A native Nextcloud app that mirrors finalized Paperless-ngx documents into a structured Nextcloud archive and can submit files from a Nextcloud inbox to Paperless. Paperless remains the source of truth.
 
+<!-- On the website, the hook in .github/mkdocs_project.py writes the versions of appinfo/info.xml into the fields. -->
+<ul class="ps-requirements" aria-label="Requirements">
+  <li>Nextcloud <span data-app="nextcloud">33–35</span></li>
+  <li>PHP <span data-app="php">8.2+</span></li>
+  <li>Paperless-ngx with an API token</li>
+  <li>Nextcloud's system cron</li>
+</ul>
+
 [Get it from the App Store](https://apps.nextcloud.com/apps/paperless_sync){ .md-button .md-button--primary }
 [Quick start](#quick-start){ .md-button }
+{ .ps-hero-actions }
 
 ![The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud](images/archive.gif)
 
