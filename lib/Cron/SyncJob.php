@@ -39,7 +39,9 @@ final class SyncJob extends TimedJob {
 		try {
 			$this->syncService->run(false);
 		} catch (\Throwable $exception) {
-			$this->logger->error('Scheduled Paperless synchronization failed', ['exception' => $exception]);
+			// Only the message: the synchronization has logged the failure of a run with its trace
+			// already. A run that didn't start, because another one holds the lock, is named here.
+			$this->logger->error('Scheduled Paperless synchronization failed: {error}', ['error' => $exception->getMessage()]);
 		}
 	}
 }

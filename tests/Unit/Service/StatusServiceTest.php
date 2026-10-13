@@ -215,8 +215,6 @@ final class StatusServiceTest extends TestCase {
 	}
 
 	private function config(bool $enabled): SyncConfig {
-		$this->token = 'secret-token';
-
-		return $this->configService()->save(['enabled' => $enabled, 'sync_interval_minutes' => 15] + self::validSettings());
+		return $this->configService()->save(['enabled' => $enabled, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 	}
 }

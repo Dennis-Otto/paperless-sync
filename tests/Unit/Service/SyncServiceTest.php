@@ -48,13 +48,12 @@ final class SyncServiceTest extends TestCase {
 	private SyncService $service;
 
 	protected function setUp(): void {
-		$this->token = 'test-token';
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$this->state = new TestStateRepository();
 		$paths = new PathTemplateService();
 		$this->configService = $this->configService($paths);
-		$this->configService->save(self::validSettings());
+		$this->configService->save(self::validSettings(), 'test-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->service = new SyncService(
@@ -155,6 +154,26 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $report['completedAt']);
 		self::assertSame('Paperless returned a document without a valid ID.', $this->settings['status_last_error']);
 		self::assertArrayNotHasKey('status_last_completed', $this->settings, 'A run that failed completed nothing.');
+	}
+
+	/**
+	 * The provisioning API of Nextcloud may change the URL in the app configuration without the
+	 * settings page, which asks for the token again. The next run must not send the token there.
+	 */
+	public function testAUrlChangedElsewhereNeverGetsTheToken(): void {
+		$this->exportDocument();
+		self::assertSame([['https://paperless.example.test', 'test-token']], $this->paperless->connections);
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		try {
+			$this->service->run();
+			self::fail('A URL that the token was not saved with must not get it.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
+		}
+
+		self::assertCount(1, $this->paperless->connections);
+		self::assertSame(1, $this->paperless->downloads);
 	}
 
 	public function testCompletedRunIsLoggedAndRecordedInTheStatus(): void {
@@ -534,7 +553,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([
 			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless is unavailable']],
 			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless timed out']],
-		], $warnings, 'The second run fails as the first did, so only the first and the third are logged, without the exception, whose trace can hold the token.');
+		], $warnings, 'The second run fails as the first did, so only the first and the third are logged, without the trace of the exception.');
 	}
 
 	public function testDryRunLogsTheErrorOfADocumentThatNoRunRecorded(): void {

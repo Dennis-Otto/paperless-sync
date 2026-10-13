@@ -14,6 +14,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\ITempManager;
 use RuntimeException;
 use UnexpectedValueException;
@@ -34,7 +35,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$this->client = $clientService->newClient();
 	}
 
-	public function testConnection(string $url, string $token): void {
+	public function testConnection(string $url, #[\SensitiveParameter] string $token): void {
 		$this->requestPage($url, $token, '/api/documents/', ['page' => 1, 'page_size' => 1]);
 	}
 
@@ -89,10 +90,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		chmod($temporaryPath, 0600);
 		try {
-			$response = $this->client->get(
+			$response = $this->send(
+				'GET',
 				$this->url('/api/documents/' . $documentId . '/download/'),
+				$this->configService->getToken(),
 				[
-					'headers' => $this->headers(),
 					'query' => ['original' => $original ? 'true' : 'false'],
 					'allow_redirects' => ['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']],
 					'connect_timeout' => 10,
@@ -121,10 +123,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function documentChecksum(int $documentId, bool $original): string {
-		$response = $this->client->get(
+		$response = $this->send(
+			'GET',
 			$this->url('/api/documents/' . $documentId . '/metadata/'),
+			$this->configService->getToken(),
 			[
-				'headers' => $this->headers(),
 				'connect_timeout' => 10,
 				'timeout' => 60,
 			],
@@ -183,10 +186,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** @param resource $upload */
 	private function postDocument($upload, string $filename): string {
 		try {
-			$response = $this->client->post(
+			$response = $this->send(
+				'POST',
 				$this->url('/api/documents/post_document/'),
+				$this->configService->getToken(),
 				[
-					'headers' => $this->headers(false),
 					'multipart' => [[
 						'name' => 'document',
 						'contents' => $upload,
@@ -197,9 +201,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 					// An error comes back as a response, so that the reason in its body can be read.
 					'http_errors' => false,
 				],
+				false,
 			);
-		} catch (\Throwable $exception) {
-			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false, 0, $exception);
+		} catch (PaperlessRequestException $exception) {
+			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false);
 		}
 		$status = $response->getStatusCode();
 		if ($status < 200 || $status >= 300) {
@@ -343,14 +348,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool}
 	 * @psalm-suppress MixedAssignment
 	 */
-	private function requestPage(string $url, string $token, string $path, array $query): array {
+	private function requestPage(string $url, #[\SensitiveParameter] string $token, string $path, array $query): array {
 		if ($url === '' || $token === '') {
 			throw new UnexpectedValueException('Paperless is not configured.');
 		}
-		$response = $this->client->get(
+		$response = $this->send(
+			'GET',
 			rtrim($url, '/') . '/' . ltrim($path, '/'),
+			$token,
 			[
-				'headers' => $this->headersForToken($token),
 				'query' => $query,
 				'connect_timeout' => 10,
 				'timeout' => 60,
@@ -389,13 +395,37 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return rtrim($this->configService->get()->paperlessUrl, '/') . '/' . ltrim($path, '/');
 	}
 
-	/** @return array<string, string> */
-	private function headers(bool $acceptJson = true): array {
-		return $this->headersForToken($this->configService->getToken(), $acceptJson);
+	/**
+	 * Every request to Paperless, with the token in its header Authorization. When the HTTP client
+	 * fails before Paperless answers, as when Paperless can't be reached, only the message of its
+	 * exception goes on, in a PaperlessRequestException: the trace of the exception of the client
+	 * holds the options of the request with the token, which Nextcloud's log would write, and no
+	 * attribute can leave them out of it.
+	 *
+	 * @param 'GET'|'POST' $method
+	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
+	 */
+	private function send(string $method, string $url, #[\SensitiveParameter] string $token, #[\SensitiveParameter] array $options, bool $acceptJson = true): IResponse {
+		$options['headers'] = $this->headersForToken($token, $acceptJson);
+		try {
+			return $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
+		} catch (\Throwable $exception) {
+			throw new PaperlessRequestException($this->failureMessage($exception->getMessage(), $token));
+		}
+	}
+
+	/**
+	 * The message of a failed request without the queries of its URLs, such as ?page=2 or the ID of
+	 * a task, which the log doesn't need, and without the token, should a server repeat it.
+	 */
+	private function failureMessage(string $message, #[\SensitiveParameter] string $token): string {
+		$message = (string)preg_replace('~(https?://[^\s?#`\'"<>]*)\?[^\s#`\'"<>]*~i', '$1', $message);
+
+		return str_replace($token, '[redacted]', $message);
 	}
 
 	/** @return array<string, string> */
-	private function headersForToken(string $token, bool $acceptJson = true): array {
+	private function headersForToken(#[\SensitiveParameter] string $token, bool $acceptJson = true): array {
 		$headers = [
 			'Authorization' => 'Token ' . $token,
 			'User-Agent' => AppConstants::USER_AGENT,

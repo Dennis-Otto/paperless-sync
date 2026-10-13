@@ -715,9 +715,9 @@ final class SyncService {
 	 * Logs the error of a document as a warning, unless its state keeps the same error from an
 	 * earlier run: an error that recurs in every run is logged once, when it first occurs or changes.
 	 *
-	 * The warning carries the message of the error but not the exception: Nextcloud would log its
-	 * trace, and the trace of a failed request to Paperless can hold the arguments of the request,
-	 * the API token among them.
+	 * The warning carries the message of the error but not the exception: its trace would add little
+	 * to the message, for every document, and leaving it out keeps the log safe should a request to
+	 * Paperless ever put the API token into a trace again.
 	 *
 	 * @param array<string, int|string|null>|null $entry the state of the document
 	 */

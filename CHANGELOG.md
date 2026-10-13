@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Security
+
+- A run that can't reach Paperless, because Paperless is down or its name or certificate fails, no longer writes the Paperless API token into the Nextcloud log. Before, the log received the token in plain text with the trace of the error, with every failed run by hand or by the schedule, and so did everyone who reads the log or receives a copy of it. **Every earlier version is affected: create a new API token in Paperless, enter it in the settings, and delete the old Nextcloud logs and their copies, such as in backups or log collectors.**
+- The API token goes only to the Paperless URL that it was saved with, so another URL needs the token again. Before, saving without a token sent the stored token to the new URL to test the connection, so whoever could save the settings, with the session of an administrator for example, could receive it at a server of their own. The settings page asks for the token as soon as the URL changes. A URL changed past the settings page, with `occ` or Nextcloud's provisioning API, doesn't get the token either: synchronization pauses until the token is entered again. The update keeps the stored token for the URL that is configured.
+- Saving the settings and disconnecting Paperless ask for the password of the administrator, as Nextcloud does for its own sensitive settings, unless it was confirmed in the last 30 minutes.
+
 ### Features
 
 - The settings page shows how the last run ended at every visit, also a scheduled run that nobody watched: its state, in red when it failed or had errors, when it finished, the last successful run, the next scheduled run, the errors of the run in a box of their own, and its report. While a run is active, the page follows it until it ends.

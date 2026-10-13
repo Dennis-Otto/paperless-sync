@@ -35,9 +35,8 @@ final class SyncControllerTest extends TestCase {
 	private SyncController $controller;
 
 	protected function setUp(): void {
-		$this->token = 'secret-token';
 		$configService = $this->configService();
-		$configService->save(self::validSettings());
+		$configService->save(self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$status = new StatusService($this->appConfig());
 		$sync = new SyncService(

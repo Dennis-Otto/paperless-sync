@@ -36,8 +36,7 @@ final class AdminSettingsTest extends TestCase {
 	}
 
 	public function testFormShowsTheConfigurationTheStatusAndTheActions(): void {
-		$this->token = 'secret-token';
-		$this->configService()->save(self::validSettings());
+		$this->configService()->save(self::validSettings(), 'secret-token');
 		$this->settings['status_last_state'] = 'completed-with-errors';
 		$this->settings['status_last_report'] = '{"errors":1,"errorMessages":["P123: Paperless is unavailable"]}';
 		$this->lazyKeys['status_last_report'] = true;

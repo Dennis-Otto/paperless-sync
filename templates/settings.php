@@ -87,7 +87,7 @@ $stateLabels = [
 				</label>
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Paperless API token')); ?></span>
-					<input id="paperless-sync-token" type="password" autocomplete="new-password" placeholder="<?php p($config->tokenConfigured ? $l->t('Configured — leave blank to keep it') : $l->t('Required')); ?>">
+					<input id="paperless-sync-token" type="password" autocomplete="new-password" aria-describedby="paperless-sync-token-hint" placeholder="<?php p($config->tokenConfigured ? $l->t('Configured — leave blank to keep it') : $l->t('Required')); ?>"<?php if (!$config->tokenConfigured) { ?> required<?php } ?>>
 				</label>
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Nextcloud target user ID')); ?></span>
@@ -98,7 +98,7 @@ $stateLabels = [
 					<input data-setting="base_path" type="text" value="<?php p($config->basePath); ?>" required>
 				</label>
 			</div>
-			<p class="settings-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?></p>
+			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving or disconnecting may ask for your password.')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">
