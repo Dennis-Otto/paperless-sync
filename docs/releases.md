@@ -3,20 +3,35 @@
 Releases follow the [repository blueprint](https://github.com/Dennis-Otto/repo-blueprint): nobody chooses a version or writes release notes by hand.
 
 ```mermaid
+---
+config:
+  flowchart:
+    rankSpacing: 30
+---
 flowchart TB
+    accTitle: From pull requests to a published release
+    accDescr: Pull requests titled fix, feat or feat! are merged into main, and the release bot keeps the pull request chore: release x.y.z with the version and the changelog. Once the maintainer merges it, a draft release with its tag is created, the package is built and checked, signed with the app's certificate, and gets its signature, SBOM and provenance. Then the release is published and immutable, delivered to the Nextcloud App Store, and verified, and every week again.
+
     subgraph request ["The release pull request"]
-        direction LR
-        prs["Pull requests<br>fix: · feat: · feat!:"] -->|merged into main| bot["chore: release x.y.z<br>version and changelog"]
+        direction TB
+        prs["Pull requests<br>fix: · feat: · feat!:"] -- "merged<br>into main" --> bot["chore: release x.y.z<br>version and changelog"]
     end
     subgraph build ["Once the maintainer merges it"]
-        direction LR
+        direction TB
         draft["Draft release<br>with its tag"] --> package["Package built<br>and checked"] --> sign["Signed with the<br>app's certificate"] --> assets["Signature, SBOM,<br>provenance"]
     end
     subgraph publication ["Publication"]
-        direction LR
-        published["Release published,<br>immutable"] --> store["Nextcloud App Store"] --> verify["Release verified,<br>and every week again"]
+        direction TB
+        published["Release published,<br>immutable"] --> store["Nextcloud<br>App Store"] --> verify["Release verified,<br>and every week again"]
     end
     request --> build --> publication
+
+    classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class prs person
+    class bot,draft,package,sign,assets bot
+    class published,store,verify done
 ```
 
 ## The release pull request
