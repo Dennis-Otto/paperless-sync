@@ -246,7 +246,8 @@ final class StatusServiceTest extends TestCase {
 
 	/**
 	 * The status of an earlier version, which didn't tell runs and dry-runs apart, counts from the
-	 * last run of any kind until the first run after the update.
+	 * last run of any kind; the first run after the update takes that run over, also a dry-run, so
+	 * that a dry-run after the update doesn't count either.
 	 */
 	public function testStatusOfAnEarlierVersionCountsFromItsLastRun(): void {
 		$config = $this->config(true);
@@ -256,6 +257,50 @@ final class StatusServiceTest extends TestCase {
 
 		$this->settings['status_last_ended'] = 10_120;
 		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config));
+
+		$this->service->started(true);
+		self::assertSame(10_000, $this->settings['status_last_sync_started'], 'The first run after the update takes the last run over.');
+		self::assertSame(10_120, $this->settings['status_last_sync_ended']);
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config), 'A dry-run after the update leaves the schedule alone.');
+
+		$this->service->started(true);
+		self::assertSame(10_000, $this->settings['status_last_sync_started'], 'Only the first run after the update takes the last run over.');
+	}
+
+	/**
+	 * A status of an earlier version without the end of every run takes the end of its last
+	 * completed run over.
+	 */
+	public function testStatusOfAnEarlierVersionWithoutTheEndOfEveryRunTakesItsLastCompletedRunOver(): void {
+		$this->settings['status_last_started'] = 10_000;
+		$this->settings['status_last_completed'] = 10_060;
+
+		$this->service->started(true);
+
+		self::assertSame(10_000, $this->settings['status_last_sync_started']);
+		self::assertSame(10_060, $this->settings['status_last_sync_ended']);
+	}
+
+	/**
+	 * A new installation runs dry-runs first and turns scheduled runs on after that, as the
+	 * settings page recommends. It has no earlier run to take over, so once a dry-run has ended,
+	 * the next background job starts the first scheduled run, however long the interval.
+	 */
+	public function testDryRunsOfANewInstallationDoNotPostponeTheFirstScheduledRun(): void {
+		$config = $this->config(true);
+
+		$this->service->started(true);
+		self::assertSame(0, $this->settings['status_last_sync_started'], 'A new installation has no real run yet.');
+		self::assertSame(0, $this->settings['status_last_sync_ended']);
+		self::assertSame((int)$this->settings['status_last_started'] + 15 * 60, $this->service->nextRun($config), 'An active dry-run holds the lock, so the first run waits for it.');
+
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		self::assertSame(0, $this->service->nextRun($config), 'After the dry-run, the next background job starts the first run.');
+
+		$this->service->started(true);
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(true, time()));
+		self::assertSame(0, $this->service->nextRun($config), 'A dry-run that failed changes that neither.');
 	}
 
 	public function testNextScheduledRunLeavesTheLazyReportUnloaded(): void {

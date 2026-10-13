@@ -129,6 +129,20 @@ final class SyncJobTest extends TestCase {
 		self::assertSame('completed', $this->settings['status_last_state'], 'Fifteen minutes after the last real run, the next one is due, after a dry-run too.');
 	}
 
+	/**
+	 * A new installation runs a dry-run first, as the settings page recommends, and turns scheduled
+	 * runs on after that: the next background job starts the first run, however long the interval.
+	 */
+	public function testADryRunBeforeTheFirstRunDoesNotPostponeIt(): void {
+		$this->configService->save(['enabled' => false]);
+		$this->sync->run(true);
+		self::assertSame('dry-run-completed', $this->settings['status_last_state']);
+
+		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => ConfigService::MAXIMUM_INTERVAL_MINUTES]);
+		$this->start();
+		self::assertSame('completed', $this->settings['status_last_state'], 'The first scheduled run does not wait for a dry-run.');
+	}
+
 	/** A real run, also one started with "Synchronize now", is the one that the schedule counts from. */
 	public function testARealRunPostponesTheScheduledRun(): void {
 		$this->settings['status_last_sync_started'] = $this->now - 16 * 60;

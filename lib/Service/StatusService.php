@@ -54,6 +54,7 @@ final class StatusService {
 
 	public function started(bool $dryRun): void {
 		$now = time();
+		$this->carryOverTheLastRun();
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now);
 		if (!$dryRun) {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $now);
@@ -141,8 +142,9 @@ final class StatusService {
 		}
 		$started = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0);
 		$ended = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0));
-		// A status from before runs and dry-runs were told apart counts from the last run of any
-		// kind, until the first run after the update.
+		// A status of an earlier version, which didn't tell runs and dry-runs apart, counts from its
+		// last run of any kind until the first run after the update takes that run over.
+		// started() writes both keys from then on, also on a new installation.
 		$last = max(
 			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $started),
 			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $ended),
@@ -152,6 +154,21 @@ final class StatusService {
 		}
 
 		return $last > 0 ? $last + $config->syncIntervalMinutes * 60 : 0;
+	}
+
+	/**
+	 * Before the first run of this version, of either kind, takes over the last run of the status
+	 * as the last real run, once: an earlier version didn't tell runs and dry-runs apart, so its
+	 * last run counts for the schedule, as it did then. A new installation takes over no run, so
+	 * that the dry-runs it starts first, before scheduled runs are turned on, never count once they
+	 * have ended.
+	 */
+	private function carryOverTheLastRun(): void {
+		if ($this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, -1) >= 0) {
+			return;
+		}
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0));
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0)));
 	}
 
 	/**
