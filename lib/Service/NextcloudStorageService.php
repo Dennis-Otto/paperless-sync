@@ -69,7 +69,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	}
 
 	/** @psalm-suppress DocblockTypeContradiction */
-	public function writeAtomic(string $userId, string $path, $source, string $conflictMode): void {
+	public function writeStream(string $userId, string $path, $source, string $conflictMode): void {
 		if (!is_resource($source)) {
 			throw new RuntimeException('A readable source stream is required.');
 		}
@@ -169,7 +169,14 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	}
 
 	/**
-	 * Write next to the target first and then move into place, so readers never see a partial file.
+	 * An existing file is updated in place, under the exclusive lock that Nextcloud holds while it
+	 * writes, so that it keeps its file ID with its shares, comments, tags, favorites and versions,
+	 * and the versions app can keep its previous content. Deleting it and moving a new file into its
+	 * place would lose all of these and leave the old copy in the trash bin. On local storage, an
+	 * update that fails halfway leaves the file incomplete until the next run writes it again.
+	 *
+	 * A new file is written next to its path first and then moved into place, so that readers never
+	 * see a partial file. A folder in its place is deleted.
 	 *
 	 * @param resource|string $content
 	 */
@@ -178,8 +185,14 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		[$parentPath, $name] = $this->split($path);
 		$this->requireSpace($userId, $parentPath, is_string($content) ? strlen($content) : $this->streamSize($content));
 		$parent = $this->ensureFolder($userId, $parentPath);
-		if ($parent->nodeExists($name) && $conflictMode === 'skip') {
+		$existing = $parent->nodeExists($name) ? $parent->get($name) : null;
+		if ($existing !== null && $conflictMode === 'skip') {
 			throw new RuntimeException("Nextcloud file conflict at {$path}.");
+		}
+		if ($existing instanceof File) {
+			$existing->putContent($content);
+
+			return;
 		}
 
 		$temporaryName = '.' . $name . '.paperless-' . bin2hex(random_bytes(8)) . '.part';
@@ -202,7 +215,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 
 	/**
 	 * Nextcloud applies no quota to a file whose name ends in .part, such as the temporary file of a
-	 * write, so the write checks the free space itself: in the deepest folder of the path that
+	 * new file, so the write checks the free space itself: in the deepest folder of the path that
 	 * exists, before it creates a folder, because a full quota refuses new folders as well.
 	 * Unlimited, unknown and not yet computed space is negative and not checked.
 	 *

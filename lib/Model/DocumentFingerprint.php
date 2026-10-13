@@ -20,6 +20,13 @@ use RuntimeException;
  * the document again.
  */
 final class DocumentFingerprint {
+	/**
+	 * The value of the column fingerprint while the app replaces the content of its copy: it names
+	 * no checksum, so the next run downloads the document again, and the file at the recorded path
+	 * stays the app's own, also when a failed write left it incomplete.
+	 */
+	public const PENDING = 'pending';
+
 	/** The bytes that one read hashes: the document never is in memory as a whole. */
 	private const CHUNK_SIZE = 1024 * 1024;
 
