@@ -13,6 +13,24 @@ from urllib.parse import parse_qs, urlparse
 import showcase
 
 TOKEN = "e2e-only-token"
+# The token of an account that may view the documents, correspondents, document types and
+# storage paths, but neither the tags nor add documents: the connection checklist names
+# both permissions, and notes that it sees only its own documents in the trash.
+VIEW_ONLY_TOKEN = "e2e-view-only-token"
+FORBIDDEN = {"detail": "You do not have permission to perform this action."}
+# What /api/ui_settings/ says of the account of each token, as Paperless-ngx does.
+ACCOUNTS = {
+    TOKEN: {
+        "user": {"id": 1, "username": "nextcloud", "is_staff": True, "is_superuser": True, "groups": []},
+        "settings": {},
+        "permissions": ["add_document", "view_document", "change_document", "delete_document", "view_tag", "view_correspondent"],
+    },
+    VIEW_ONLY_TOKEN: {
+        "user": {"id": 2, "username": "nextcloud-view-only", "is_staff": False, "is_superuser": False, "groups": []},
+        "settings": {},
+        "permissions": ["view_document", "view_correspondent", "view_documenttype", "view_storagepath"],
+    },
+}
 DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
 LOCK = threading.Lock()
 STATE = {}
@@ -123,11 +141,16 @@ class Handler(BaseHTTPRequestHandler):
         if not parsed.path.startswith("/api/"):
             self._json(404, {"detail": "Not found"})
             return
-        if not self._authorized():
+        token = self._authorized()
+        if token is None:
             return
 
         documents, trash = scenario_documents()
-        if parsed.path == "/api/documents/":
+        if parsed.path == "/api/ui_settings/":
+            self._json(200, ACCOUNTS[token])
+        elif token == VIEW_ONLY_TOKEN and parsed.path == "/api/tags/":
+            self._json(403, FORBIDDEN)
+        elif parsed.path == "/api/documents/":
             # An incomplete answer, as of a proxy or a permission glitch: an empty page whose count
             # still lists the document.
             self._page(documents, 1 if STATE["scenario"] == "incomplete" else None)
@@ -215,7 +238,11 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path != "/api/documents/post_document/":
             self._json(404, {"detail": "Not found"})
             return
-        if not self._authorized():
+        token = self._authorized()
+        if token is None:
+            return
+        if token == VIEW_ONLY_TOKEN:
+            self._json(403, FORBIDDEN)
             return
 
         # Like Django under Paperless, read a body only as long as its Content-Length: a
@@ -254,15 +281,24 @@ class Handler(BaseHTTPRequestHandler):
             return STATE["scenario"]
 
     def _authorized(self):
+        """The token of a request with a valid token and the User-Agent of the app, or None."""
+        authorization = self.headers.get("Authorization", "")
+        token = authorization.removeprefix("Token ")
         valid = (
-            self.headers.get("Authorization") == f"Token {TOKEN}"
+            authorization.startswith("Token ")
+            and token in ACCOUNTS
             and self.headers.get("User-Agent", "").startswith("Nextcloud-Paperless-Sync/")
         )
         if not valid:
             with LOCK:
                 STATE["invalidAuth"] += 1
             self._json(401, {"detail": "Invalid synthetic credentials"})
-        return valid
+            return None
+        # Paperless-ngx names its version in every answer to an authenticated request: 2.x with
+        # the MD5 checksums of the test, 3.x with SHA-256.
+        with LOCK:
+            self.paperless_version = "2.20.15" if STATE["checksum"] == "md5" else "3.3.0"
+        return token
 
     def _page(self, results, count=None):
         self._json(200, {"count": len(results) if count is None else count, "next": None, "previous": None, "results": results})
@@ -273,6 +309,9 @@ class Handler(BaseHTTPRequestHandler):
     def _bytes(self, status, body, content_type):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
+        version = getattr(self, "paperless_version", None)
+        if version is not None:
+            self.send_header("X-Version", version)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

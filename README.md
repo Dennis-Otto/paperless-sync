@@ -80,7 +80,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - **Nextcloud <span data-app="nextcloud">33–35</span>**, with the system cron for its background jobs, as Nextcloud recommends: *Administration settings → Basic settings → Background jobs → Cron*. Every run of the app is one of these jobs.
 - **PHP <span data-app="php">8.2+</span>** on the Nextcloud server.
 - **Paperless-ngx 2.10 or newer, 3.x included**; 2.10 is the first version with a trash, which the app mirrors. Paperless needs an address that the Nextcloud server reaches over HTTP or HTTPS; for an address of your local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, turn on the setting [Paperless runs in my local network](#paperless-in-your-local-network).
-- **A Paperless account for the app**, with an API token. It needs to view and download the documents to mirror, to see them in the trash for the deleted folder, and the permission `documents.add_document` for the inbox; [Paperless connection](#paperless-connection) has the details.
+- **A Paperless account for the app**, with an API token. It needs to view the documents to mirror and their correspondents, document types, storage paths and tags, to own them for the deleted folder, and to add documents for the inbox; [Paperless connection](#paperless-connection) lists the exact permissions, and **Test connection** checks every one of them.
 
 <!-- --8<-- [end:requirements] -->
 <!-- --8<-- [start:quick-start-section] -->
@@ -90,8 +90,8 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 <!-- --8<-- [start:quick-start] -->
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
-2. In Paperless-ngx, create a dedicated account with view and download access to the documents to mirror, and an API token for it.
-3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first.
+2. In Paperless-ngx, create a dedicated account for the app under *Users & Groups*, with the permission **View** for Documents, Correspondents, Document Types, Storage Paths and Tags, and **Add** for Documents if you use the inbox. Make it the owner of the documents to mirror, or give it access to them, and create its API token under *My Profile*.
+3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, and click **Test connection**: the checklist below it shows every permission that the account lacks, and what to grant. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first. Leave synchronization disabled, and save; saving runs the same checks.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
 
@@ -247,9 +247,42 @@ flowchart TB
 
 ### Paperless connection
 
-Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used. Trash synchronization requires visibility of the corresponding trashed documents.
+Use a dedicated Paperless service account with only the permissions of the features you use. In Paperless, they are under *Users & Groups*, in the permissions of the account:
 
-The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+| Feature | Permission in Paperless | What the app does with it |
+| --- | --- | --- |
+| Always | **View** for Documents, and access to every document to mirror: as its owner, through its permissions, or with a workflow that sets them | lists and downloads the documents |
+| Archive export | **View** for Correspondents, Document Types, Storage Paths and Tags | builds the paths and skips the excluded tags |
+| Deleted folder | ownership of the documents, or a superuser account | sees them in the trash of Paperless |
+| Nextcloud inbox | **Add** for Documents | uploads the files of the inbox |
+
+Paperless lists in its trash only the documents that the account owns and those without an owner, unless the account is a superuser. A document of another owner that goes to the trash looks to the app as if it were deleted without the trash: its copy moves to the deleted folder only after the required missing scans, and with permanent deletion on, it is deleted only when direct deletion is allowed too. So make the account of the app the owner of the documents to mirror, such as with a workflow of Paperless that sets the owner of every new document, or, if you accept its wider rights, use a superuser account. A dry-run says `TRASH EMPTY` when documents go missing while the trash lists none.
+
+The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings, **Test connection** and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+
+#### Connection checklist
+
+**Test connection**, below the connection settings, checks the settings of the form without saving them, and lists what it found, with what to do for every check that fails:
+
+<!-- --8<-- [end:configuration] -->
+
+<!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks two permissions. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-checklist-dark.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees only its own documents there, and the tags and the upload from the inbox failed, each with the permission to grant in Paperless" src="docs/images/settings-checklist-light.png">
+</picture>
+
+<!-- --8<-- [start:configuration-checklist] -->
+
+| Line | What it checks | When it fails |
+| --- | --- | --- |
+| Paperless | Paperless answers at the URL with its API and takes the token; a version older than 2.10 gets a note | not saved |
+| Documents | the account may view documents, and how many it sees; none at all gets a note | not saved |
+| Trash, Correspondents, Document types, Storage paths, Tags | with the archive export on: the account may view each list, and sees the trash of every owner | saved with the failure |
+| Upload from the inbox | with the inbox on: the account has the permission **Add** for Documents | saved with the failure |
+| Nextcloud folder | the target user may create files in the base folder | not saved |
+
+Each line has its state as a word, *Passed*, *Note* or *Failed*, next to its sign. A failure names the cause, such as a token that Paperless refuses, a certificate that Nextcloud doesn't trust, an address in your network, or a URL without a Paperless API, such as the login page of a proxy, and what to do. A change of the URL, the token, the target user, the base folder, the local network or the modules takes the checklist away, until the next test.
 
 #### Paperless in your local network
 
@@ -265,7 +298,7 @@ If you turned on `allow_local_remote_servers` for this app before, turn on the s
 
 ### Saving, pausing and disconnecting
 
-**Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
+**Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also runs the [connection checklist](#connection-checklist). It refuses settings with which no run can work, such as a token that Paperless refuses or a base folder that the target user can't write, so that the schedule never runs with them. A permission that only one module lacks, such as the one for the tags, is saved with the settings, and the checklist names it, so that you can grant it in Paperless afterwards. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
 
 ```mermaid
 ---
@@ -275,13 +308,15 @@ config:
 ---
 flowchart TB
     accTitle: What saving the settings tests
-    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
+    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving runs the connection checklist. When Paperless can't be reached, refuses the token or doesn't let the account view documents, or the target user can't create files in the base folder, the settings are not saved; the page says why and, when only the schedule asked for the test, that turning it off saves the settings. When only a permission of one module is missing, such as the one for the tags, the settings are saved, and the checklist names the permission to grant. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
 
     save(["💾 Test connection<br>and save"])
     check{"Is every<br>setting valid?"}
     scheduled{"Schedule on,<br>or a token entered?"}
-    test{"Do Paperless and<br>the base folder work?"}
+    test{"Paperless, its documents<br>and the base folder work?"}
+    modules{"Every permission<br>of the modules?"}
     tested["✅ Saved and tested"]
+    partly["⚠️ Saved; the checklist<br>names what to grant"]
     untested["✅ Saved without a test<br><i>the schedule pauses</i>"]
     refused["❌ Not saved:<br>the page says why"]
 
@@ -290,14 +325,18 @@ flowchart TB
     check -- "yes" --> scheduled
     scheduled -- "yes" --> test
     scheduled -- "no" --> untested
-    test -- "yes" --> tested
+    test -- "yes" --> modules
     test -- "no" --> refused
+    modules -- "yes" --> tested
+    modules -- "no" --> partly
 
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef note fill:#d977062e,stroke:#d97706,stroke-width:2px
     classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class save,check,scheduled,test nextcloud
+    class save,check,scheduled,test,modules nextcloud
     class tested,untested done
+    class partly note
     class refused refused
 ```
 
@@ -475,7 +514,7 @@ The run takes the most recently added documents first, so a new document doesn't
 
 The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval is enforced by the app; each run limits its changes in Nextcloud, and its uploads to Paperless, to the configured [batch size](#batch-size) each.
 
-<!-- --8<-- [end:configuration] -->
+<!-- --8<-- [end:configuration-checklist] -->
 
 ## Status, report and log
 

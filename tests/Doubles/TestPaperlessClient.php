@@ -9,8 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
+use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 
 /**
@@ -58,6 +60,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		if ($this->connectionException !== null) {
 			throw $this->connectionException;
 		}
+	}
+
+	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array {
+		return [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
 	}
 
 	public function documents(): PaperlessScan {

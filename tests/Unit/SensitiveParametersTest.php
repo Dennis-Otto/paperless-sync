@@ -70,14 +70,21 @@ final class SensitiveParametersTest extends TestCase {
 			'ConfigService::save($tokenCandidate)',
 			'ConfigService::storeToken($token)',
 			'ConfigService::validate($tokenCandidate)',
+			'PaperlessApiService::account($token)',
 			'PaperlessApiService::failureMessage($token)',
 			'PaperlessApiService::headersForToken($token)',
+			'PaperlessApiService::listCheck($token)',
+			'PaperlessApiService::preflight($token)',
+			'PaperlessApiService::probe($token)',
 			'PaperlessApiService::requestPage($token)',
 			'PaperlessApiService::send($options)',
 			'PaperlessApiService::send($token)',
 			'PaperlessApiService::testConnection($token)',
+			'PaperlessClientInterface::preflight($token)',
 			'PaperlessClientInterface::testConnection($token)',
+			'SettingsController::checks($token)',
 			'SettingsController::save($token)',
+			'SettingsController::test($token)',
 		], array_keys(self::parametersWithTheToken()));
 	}
 

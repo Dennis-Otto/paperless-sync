@@ -54,6 +54,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame(['P123: Paperless is unavailable'], $this->initialState['status']['report']['errorMessages']);
 		self::assertNull($this->initialState['status']['nextRun']);
 		self::assertSame('/route/paperless_sync.settings.save', $parameters['saveUrl']);
+		self::assertSame('/route/paperless_sync.settings.test', $parameters['testUrl']);
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);

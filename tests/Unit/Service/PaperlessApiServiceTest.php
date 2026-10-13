@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
@@ -36,10 +37,18 @@ final class PaperlessApiServiceTest extends TestCase {
 	use InMemoryConfiguration;
 
 	private const URL = 'https://paperless.example.test';
+	/** What the checklist says of a trash that lists only the documents of the account. */
+	private const TRASH_HINT = 'Paperless shows the account only the trashed documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans, and are deleted only with direct deletion allowed. Make the account their owner, or a superuser.';
+	/** What the checklist says when no Paperless answers at the URL. */
+	private const NO_API_HINT = 'Check the URL: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path, and a proxy in front of Paperless may answer with its login page.';
+	/** What the checklist says when Paperless answers with an error of its own. */
+	private const STATUS_HINT = 'Check that Paperless runs, and the log of Paperless or of the proxy in front of it.';
+	/** What the checklist says of a certificate that Nextcloud doesn't trust. */
+	private const CERTIFICATE_HINT = 'Nextcloud does not trust the certificate of Paperless. Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.';
 
 	/** @var list<array{method: string, url: string, options: array<string, mixed>}> */
 	private array $requests = [];
-	/** @var list<array{int, mixed}|Closure> the status and body of each response, or a closure that returns them */
+	/** @var list<array{0: int, 1: mixed, 2?: array<string, string>}|Closure> the status, body and headers of each response, or a closure that returns them */
 	private array $responses = [];
 	/** @var ITempManager&MockObject */
 	private ITempManager $tempManager;
@@ -933,6 +942,395 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	/**
+	 * The checklist reads one entry of every list that the enabled modules need, as a run reads
+	 * them, and asks Paperless about the account of the token, with the token and its timeouts.
+	 * Each line says how many entries the account sees, and the version of Paperless.
+	 */
+	public function testPreflightChecksEveryListThatTheModulesNeed(): void {
+		$this->responses[] = [200, self::page(12), ['X-Version' => '2.20.15']];
+		$this->responses[] = [200, self::account(false, ['view_document', 'add_document'])];
+		foreach ([2, 3, 4, 0, 5] as $count) {
+			$this->responses[] = [200, self::page($count)];
+		}
+
+		$checks = $this->preflight();
+
+		self::assertEquals([
+			ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['2.20.15']),
+			ConnectionCheck::passed('documents', 'Visible to the account: %s', ['12']),
+			ConnectionCheck::warning('trash', 'Visible to the account: %s', ['2'], self::TRASH_HINT),
+			ConnectionCheck::passed('correspondents', 'Visible to the account: %s', ['3']),
+			ConnectionCheck::passed('document_types', 'Visible to the account: %s', ['4']),
+			ConnectionCheck::passed('storage_paths', 'Visible to the account: %s', ['0']),
+			ConnectionCheck::passed('tags', 'Visible to the account: %s', ['5']),
+			ConnectionCheck::passed('upload', 'The account may add documents.'),
+		], $checks);
+		self::assertSame([
+			self::URL . '/api/documents/',
+			self::URL . '/api/ui_settings/',
+			self::URL . '/api/trash/',
+			self::URL . '/api/correspondents/',
+			self::URL . '/api/document_types/',
+			self::URL . '/api/storage_paths/',
+			self::URL . '/api/tags/',
+		], array_column($this->requests, 'url'));
+		self::assertSame(['page' => 1, 'page_size' => 1], $this->requests[0]['options']['query']);
+		self::assertSame([], $this->requests[1]['options']['query']);
+		foreach ($this->requests as $request) {
+			self::assertSame('GET', $request['method']);
+			self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
+			self::assertFalse($request['options']['http_errors'], 'An answer with an error is a line of the checklist.');
+			self::assertSame(30, $request['options']['timeout']);
+			self::assertArrayNotHasKey('nextcloud', $request['options']);
+		}
+	}
+
+	/** @return array<string, array{array<string, bool>, list<string>, list<string>}> the modules, the requests and the lines */
+	public static function modules(): array {
+		return [
+			'neither module' => [['export_enabled' => false, 'inbox_enabled' => false], ['documents'], ['paperless', 'documents']],
+			'the export alone' => [['inbox_enabled' => false], ['documents', 'ui_settings', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags'], ['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags']],
+			'the inbox alone' => [['export_enabled' => false], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
+		];
+	}
+
+	/**
+	 * @param array<string, bool> $settings
+	 * @param list<string> $requests
+	 * @param list<string> $lines
+	 */
+	#[DataProvider('modules')]
+	public function testPreflightChecksOnlyWhatTheEnabledModulesNeed(array $settings, array $requests, array $lines): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(true, [])];
+		for ($list = 0; $list < 5; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight($settings);
+
+		self::assertSame($lines, array_map(static fn (ConnectionCheck $check): string => $check->id, $checks));
+		self::assertSame($requests, array_map(static fn (array $request): string => explode('/', $request['url'])[4], $this->requests));
+	}
+
+	/**
+	 * A token without the permission for the tags passes the test of the documents, but every
+	 * export would fail on its list of tags. The checklist names it and the permission to grant.
+	 */
+	public function testATokenWithoutThePermissionForTagsIsReportedWithTheFix(): void {
+		$this->responses[] = [200, self::page(12)];
+		$this->responses[] = [200, self::account(false, ['view_document'])];
+		foreach ([0, 1, 1, 1] as $count) {
+			$this->responses[] = [200, self::page($count)];
+		}
+		$this->responses[] = [403, ['detail' => 'You do not have permission to perform this action.']];
+
+		$checks = $this->preflight();
+
+		self::assertEquals(
+			ConnectionCheck::failed('tags', 'The account may not view them (HTTP 403).', [], 'In Paperless, under Users & Groups, give the account the permission View for Tags.'),
+			$checks[6],
+		);
+		self::assertFalse($checks[6]->blocks(), 'The other settings may be saved, and the permission granted afterwards.');
+		self::assertEquals(
+			ConnectionCheck::failed('upload', 'The account may not add documents.', [], 'In Paperless, under Users & Groups, give the account the permission Add for Documents.'),
+			$checks[7],
+		);
+	}
+
+	/** @return array<string, array{string, string}> the list and what to grant for it */
+	public static function listsWithoutThePermission(): array {
+		return [
+			'trash' => ['trash', 'In Paperless, under Users & Groups, give the account the permission View for Documents.'],
+			'correspondents' => ['correspondents', 'In Paperless, under Users & Groups, give the account the permission View for Correspondents.'],
+			'document types' => ['document_types', 'In Paperless, under Users & Groups, give the account the permission View for Document Types.'],
+			'storage paths' => ['storage_paths', 'In Paperless, under Users & Groups, give the account the permission View for Storage Paths.'],
+		];
+	}
+
+	#[DataProvider('listsWithoutThePermission')]
+	public function testEveryListThatTheAccountMayNotViewNamesItsPermission(string $list, string $hint): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(true, [])];
+		foreach (['trash', 'correspondents', 'document_types', 'storage_paths', 'tags'] as $path) {
+			$this->responses[] = $path === $list ? [403, ['detail' => 'You do not have permission to perform this action.']] : [200, self::page(1)];
+		}
+
+		$checks = $this->preflight(['inbox_enabled' => false]);
+
+		$failed = array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => $check->status === ConnectionCheck::FAILED));
+		self::assertEquals([ConnectionCheck::failed($list, 'The account may not view them (HTTP 403).', [], $hint)], $failed);
+	}
+
+	/** @return array<string, array{int, mixed, ConnectionCheck}> an answer to the first request that is not a page of Paperless, and its line */
+	public static function answersThatAreNoPage(): array {
+		$noApi = static fn (string $status): ConnectionCheck => ConnectionCheck::failed('paperless', 'No Paperless API answered at this URL (HTTP %s).', [$status], self::NO_API_HINT, true);
+		$status = static fn (string $status): ConnectionCheck => ConnectionCheck::failed('paperless', 'Paperless answered with HTTP %s.', [$status], self::STATUS_HINT, true);
+
+		return [
+			'a refused token' => [401, ['detail' => 'Invalid token.'], ConnectionCheck::failed(
+				'paperless',
+				'Paperless refused the API token (HTTP 401).',
+				[],
+				'Copy the token again from Paperless, under My Profile in the menu of its account, and check that the account is active.',
+				true,
+			)],
+			'a path without Paperless' => [404, ['detail' => 'Not found.'], $noApi('404')],
+			'the login page of a proxy' => [200, '<html><title>Sign in</title></html>', $noApi('200')],
+			'JSON of another app' => [200, ['status' => 'ok'], $noApi('200')],
+			'a proxy that forbids the path' => [403, '<html><title>403 Forbidden</title></html>', $noApi('403')],
+			'a Paperless that is down behind its proxy' => [502, '<html><title>502 Bad Gateway</title></html>', $status('502')],
+			'an error of Paperless' => [500, ['detail' => 'Server error'], $status('500')],
+			'too many requests' => [429, ['detail' => 'Request was throttled.'], $status('429')],
+		];
+	}
+
+	/** Without the documents, nothing else of Paperless works, so the checklist ends there and blocks a save. */
+	#[DataProvider('answersThatAreNoPage')]
+	public function testAnAnswerThatIsNoPageOfPaperlessEndsTheChecklist(int $status, mixed $body, ConnectionCheck $line): void {
+		$this->responses[] = [$status, $body];
+
+		$checks = $this->preflight();
+
+		self::assertEquals([$line], $checks);
+		self::assertTrue($checks[0]->blocks());
+		self::assertCount(1, $this->requests);
+	}
+
+	/** An account that may not view documents can't mirror any: a save refuses it, and the other lines say what else it lacks. */
+	public function testAnAccountWithoutTheDocumentsBlocksTheSave(): void {
+		$this->responses[] = [403, ['detail' => 'You do not have permission to perform this action.'], ['X-Version' => '3.3.0']];
+		$this->responses[] = [200, self::account(false, [])];
+
+		$checks = $this->preflight(['export_enabled' => false]);
+
+		self::assertEquals([
+			ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['3.3.0']),
+			ConnectionCheck::failed('documents', 'The account may not view them (HTTP 403).', [], 'In Paperless, under Users & Groups, give the account the permission View for Documents.', true),
+			ConnectionCheck::failed('upload', 'The account may not add documents.', [], 'In Paperless, under Users & Groups, give the account the permission Add for Documents.'),
+		], $checks);
+	}
+
+	/** An account that sees no document usually lacks the permissions of the documents themselves. */
+	public function testAnAccountThatSeesNoDocumentGetsANote(): void {
+		$this->responses[] = [200, self::page(0)];
+
+		$checks = $this->preflight(['export_enabled' => false, 'inbox_enabled' => false]);
+
+		self::assertEquals(ConnectionCheck::warning(
+			'documents',
+			'Visible to the account: %s',
+			['0'],
+			'Paperless shows an account only the documents that it owns, that have no owner, or that are shared with it. Give the account access to the documents to mirror: as their owner, through their permissions, or with a workflow of Paperless that sets them.',
+		), $checks[1]);
+	}
+
+	/** @return array<string, array{string, ConnectionCheck}> the header X-Version and the line of Paperless */
+	public static function versions(): array {
+		return [
+			'Paperless-ngx 3' => ['3.3.0', ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['3.3.0'])],
+			'the first version with a trash' => ['2.10.0', ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['2.10.0'])],
+			'a version with a v' => [' v2.20.15 ', ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['2.20.15'])],
+			'a version without a trash' => ['2.9.1', ConnectionCheck::warning(
+				'paperless',
+				'Paperless-ngx %s answers at this URL, but Paperless Sync needs 2.10 or newer.',
+				['2.9.1'],
+				'Update Paperless-ngx: the export mirrors its trash, which came with 2.10.',
+			)],
+			'no version, behind a proxy that drops the header' => ['', ConnectionCheck::passed('paperless', 'Paperless answers at this URL.')],
+			'a version that is no number' => ['dev', ConnectionCheck::passed('paperless', 'Paperless answers at this URL.')],
+		];
+	}
+
+	#[DataProvider('versions')]
+	public function testTheLineOfPaperlessNamesItsVersion(string $version, ConnectionCheck $line): void {
+		$this->responses[] = [200, self::page(1), ['X-Version' => $version]];
+
+		self::assertEquals($line, $this->preflight(['export_enabled' => false, 'inbox_enabled' => false])[0]);
+	}
+
+	/** @return array<string, array{string, string}> the failure of the HTTP client and the hint of its line */
+	public static function unreachablePaperless(): array {
+		return [
+			'no connection' => ['cURL error 7: Failed to connect to paperless.example.test port 443', 'Check the Paperless URL, and that the Nextcloud server reaches it through its network, firewall and proxy.'],
+			'a name without an address' => ['cURL error 6: Could not resolve host: paperless.example.test', 'Check the Paperless URL, and that the Nextcloud server reaches it through its network, firewall and proxy.'],
+			'a self-signed certificate' => ['cURL error 60: SSL certificate problem: self-signed certificate', self::CERTIFICATE_HINT],
+			'a failed handshake' => ['cURL error 35: OpenSSL SSL_connect: SSL_ERROR_SYSCALL', self::CERTIFICATE_HINT],
+		];
+	}
+
+	#[DataProvider('unreachablePaperless')]
+	public function testUnreachablePaperlessSaysWhatToCheck(string $failure, string $hint): void {
+		$this->responses[] = static function () use ($failure): array {
+			throw new RuntimeException($failure . ' for https://paperless.example.test/api/documents/?page=1&page_size=1');
+		};
+
+		$checks = $this->preflight();
+
+		self::assertEquals([ConnectionCheck::failed(
+			'paperless',
+			'Paperless could not be reached: %s',
+			[$failure . ' for https://paperless.example.test/api/documents/'],
+			$hint,
+			true,
+		)], $checks);
+	}
+
+	/** The message of a failure goes into the checklist as the log gets it: without the token, should a server repeat it. */
+	public function testTheChecklistKeepsTheTokenOutOfItsLines(): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('Server error: rejected "Token secret-token"');
+		};
+
+		$checks = $this->preflight();
+
+		self::assertSame(['Server error: rejected "Token [redacted]"'], $checks[0]->parameters);
+	}
+
+	/**
+	 * Nextcloud refuses an address of the local network unless the setting allows it: the line
+	 * says what to do and names the setting, which a save moves the focus to.
+	 */
+	public function testARefusedLocalAddressNamesTheSetting(): void {
+		$this->responses[] = static function (): array {
+			throw new LocalServerException('Host "paperless" violates local access rules');
+		};
+
+		$checks = $this->preflight(['paperless_url' => 'http://paperless:8000']);
+
+		self::assertEquals([new ConnectionCheck(
+			'paperless',
+			ConnectionCheck::FAILED,
+			'Nextcloud blocks connections to local addresses such as %s. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
+			['paperless'],
+			blocking: true,
+			setting: 'paperless_local_network',
+		)], $checks);
+	}
+
+	/** Every request of the checklist allows the local network as the settings of the form do. */
+	public function testThePreflightAllowsTheLocalNetworkAsTheFormAsks(): void {
+		$this->responses[] = [200, self::page(1)];
+
+		$this->preflight(['paperless_url' => 'http://paperless:8000', 'paperless_local_network' => true, 'export_enabled' => false, 'inbox_enabled' => false]);
+
+		self::assertSame('http://paperless:8000/api/documents/', $this->requests[0]['url']);
+		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
+	}
+
+	/** @return array<string, array{array<string, mixed>|null, list<int|string|array<string, mixed>>, ConnectionCheck, ConnectionCheck}> what Paperless says of the account, and the lines of the trash and the inbox */
+	public static function accounts(): array {
+		$trashOfOwners = ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], self::TRASH_HINT);
+		$trashOfAll = ConnectionCheck::passed('trash', 'Visible to the account: %s', ['1']);
+		$mayAdd = ConnectionCheck::passed('upload', 'The account may add documents.');
+		$unknown = ConnectionCheck::warning(
+			'upload',
+			'Paperless did not say whether the account may add documents.',
+			[],
+			'The first upload from the inbox shows it; the account needs the permission Add for Documents.',
+		);
+
+		return [
+			'a superuser' => [self::account(true, []), [200], $trashOfAll, $mayAdd],
+			'the permission with its app' => [self::account(false, ['documents.add_document']), [200], $trashOfOwners, $mayAdd],
+			'a Paperless without the page' => [null, [404, ['detail' => 'Not found.']], $trashOfOwners, $unknown],
+			'a page without permissions' => [['user' => ['is_superuser' => true]], [200], $trashOfOwners, $unknown],
+			'a page that fails' => [null, [500, '<html>Server Error</html>'], $trashOfOwners, $unknown],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed>|null $account
+	 * @param list<int|string|array<string, mixed>> $answer
+	 */
+	#[DataProvider('accounts')]
+	public function testTheAccountDecidesTheLinesOfTheTrashAndTheInbox(?array $account, array $answer, ConnectionCheck $trash, ConnectionCheck $upload): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [$answer[0], $answer[1] ?? $account];
+		for ($list = 0; $list < 5; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight();
+
+		self::assertEquals($trash, $checks[2]);
+		self::assertEquals($upload, $checks[7]);
+	}
+
+	public function testAnAccountThatCannotBeAskedForIsUnknown(): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 28: Operation timed out');
+		};
+
+		$checks = $this->preflight(['export_enabled' => false]);
+
+		self::assertSame(ConnectionCheck::WARNING, $checks[2]->status);
+		self::assertSame('Paperless did not say whether the account may add documents.', $checks[2]->message);
+	}
+
+	/** @return array<string, array{int, mixed, ConnectionCheck}> an answer for the trash that is no page, and its line */
+	public static function trashesThatAreNoPage(): array {
+		return [
+			'a Paperless older than 2.10' => [404, ['detail' => 'Not found.'], ConnectionCheck::failed('trash', 'Paperless has no trash (HTTP 404).', [], 'Update Paperless-ngx to 2.10 or newer, the first version with a trash.')],
+			'an error of Paperless' => [500, '<html>Server Error</html>', ConnectionCheck::failed('trash', 'Paperless answered without the list (HTTP %s).', ['500'], self::STATUS_HINT)],
+			'no list' => [200, ['detail' => 'ok'], ConnectionCheck::failed('trash', 'Paperless answered without the list (HTTP %s).', ['200'], self::STATUS_HINT)],
+		];
+	}
+
+	#[DataProvider('trashesThatAreNoPage')]
+	public function testATrashThatIsNoPageIsReported(int $status, mixed $body, ConnectionCheck $line): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(true, [])];
+		$this->responses[] = [$status, $body];
+		for ($list = 0; $list < 4; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight(['inbox_enabled' => false]);
+
+		self::assertEquals($line, $checks[2]);
+		self::assertFalse($checks[2]->blocks());
+	}
+
+	/** A list that can't be reached after the documents could is reported on its own line, and the others are still checked. */
+	public function testAListThatCannotBeReachedIsReportedOnItsLine(): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(true, [])];
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 28: Operation timed out');
+		};
+		for ($list = 0; $list < 3; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight(['inbox_enabled' => false]);
+
+		self::assertEquals(ConnectionCheck::failed(
+			'correspondents',
+			'Paperless could not be reached: %s',
+			['cURL error 28: Operation timed out'],
+			'Check the Paperless URL, and that the Nextcloud server reaches it through its network, firewall and proxy.',
+		), $checks[3]);
+		self::assertCount(7, $checks);
+	}
+
+	/** An answer may come as a stream, as Nextcloud's HTTP client gives it. */
+	public function testThePreflightReadsAnAnswerFromAStream(): void {
+		$this->responses[] = static function (): array {
+			$stream = fopen('php://memory', 'w+b');
+			self::assertIsResource($stream);
+			fwrite($stream, (string)json_encode(['count' => 7, 'results' => [['id' => 1]]]));
+			rewind($stream);
+
+			return [200, $stream];
+		};
+
+		self::assertEquals(ConnectionCheck::passed('documents', 'Visible to the account: %s', ['7']), $this->preflight(['export_enabled' => false, 'inbox_enabled' => false])[1]);
+	}
+
+	/**
 	 * Calls an operation of the client that sends the token, with arguments that work; the test of
 	 * the connection allows the local network as $localNetwork says, the others as the settings do.
 	 */
@@ -964,6 +1362,37 @@ final class PaperlessApiServiceTest extends TestCase {
 		return $json;
 	}
 
+	/**
+	 * The checklist of Paperless for the valid settings with $settings, with the token of the tests.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @return list<ConnectionCheck>
+	 */
+	private function preflight(array $settings = []): array {
+		$config = $this->configService()->validate($settings + self::validSettings(), 'secret-token');
+
+		return $this->service->preflight($config, 'secret-token');
+	}
+
+	/** @return array<string, mixed> the first page of a list of Paperless with one entry, that counts $count */
+	private static function page(int $count): array {
+		return ['count' => $count, 'next' => null, 'previous' => null, 'results' => $count > 0 ? [['id' => 1]] : []];
+	}
+
+	/**
+	 * What Paperless says of the account of a token in /api/ui_settings/.
+	 *
+	 * @param list<string> $permissions
+	 * @return array<string, mixed>
+	 */
+	private static function account(bool $superuser, array $permissions): array {
+		return [
+			'user' => ['id' => 3, 'username' => 'nextcloud', 'is_staff' => false, 'is_superuser' => $superuser, 'groups' => []],
+			'settings' => [],
+			'permissions' => $permissions,
+		];
+	}
+
 	/** @return list<array{id: int}> the documents with the IDs from $first to $last */
 	private static function entries(int $first, int $last): array {
 		return array_map(static fn (int $id): array => ['id' => $id], range($first, $last));
@@ -974,13 +1403,16 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->requests[] = ['method' => $method, 'url' => $url, 'options' => $options];
 		$next = array_shift($this->responses);
 		self::assertNotNull($next, "Unexpected request {$method} {$url}");
-		[$status, $body] = $next instanceof Closure ? $next($options) : $next;
+		$answer = $next instanceof Closure ? $next($options) : $next;
+		[$status, $body] = $answer;
+		$headers = $answer[2] ?? [];
 		if (is_array($body)) {
 			$body = json_encode($body, JSON_THROW_ON_ERROR);
 		}
 		$response = $this->createMock(IResponse::class);
 		$response->method('getStatusCode')->willReturn($status);
 		$response->method('getBody')->willReturn($body);
+		$response->method('getHeader')->willReturnCallback(static fn (string $name): string => $headers[$name] ?? '');
 
 		return $response;
 	}

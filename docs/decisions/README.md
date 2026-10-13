@@ -14,3 +14,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0006](0006-every-file-name-keeps-its-marker.md) | Every file name keeps its marker and its extension, within the bytes of Nextcloud | accepted |
 | [0008](0008-local-network-per-request.md) | Reach a Paperless in the local network per request, never for the whole server | accepted |
 | [0009](0009-checksums-of-paperless-2-and-3.md) | Keep the SHA-256 and the MD5 of every download, for Paperless-ngx 2 and 3 | accepted |
+| [0011](0011-check-every-permission-before-a-run.md) | Check every permission that a run needs before the settings are saved, and block only what no run survives | accepted |

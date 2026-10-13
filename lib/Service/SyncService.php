@@ -314,6 +314,8 @@ final class SyncService {
 			}
 		}
 
+		// The exported documents that the run counts as missing without having seen them in the trash.
+		$missingActive = 0;
 		foreach ($this->state->allExports($config->targetUser) as $entry) {
 			$documentId = (int)($entry['document_id'] ?? 0);
 			if (isset($seen[$documentId])) {
@@ -331,6 +333,9 @@ final class SyncService {
 			$missingRuns = (int)($entry['missing_runs'] ?? 0) + 1;
 			$state = (string)($entry['state'] ?? 'active');
 			$path = (string)($entry['path'] ?? '');
+			if ($state === 'active') {
+				++$missingActive;
+			}
 			if ($missingRuns < $config->missingGraceRuns) {
 				if (!$report->dryRun) {
 					$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => $missingRuns]);
@@ -404,6 +409,22 @@ final class SyncService {
 				}
 			}
 		}
+		$this->checkInvisibleTrash($config, $report, $missingActive, count($trash));
+	}
+
+	/**
+	 * Paperless lists in its trash only the documents that the account of the app owns and those
+	 * without an owner, unless it is a superuser. So with an account of too few rights, documents
+	 * that someone moved to the trash look gone without the trash: they reach the deleted folder
+	 * only after the missing scans, and are deleted only with direct deletion allowed. A dry-run,
+	 * which an administrator reads before turning the schedule on, says so when documents go
+	 * missing while the trash lists none.
+	 */
+	private function checkInvisibleTrash(SyncConfig $config, SyncReport $report, int $missing, int $trashed): void {
+		if (!$report->dryRun || $missing === 0 || $trashed > 0 || $config->trashMode !== 'move') {
+			return;
+		}
+		$report->notice("TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, unless it is a superuser. Documents in the trash of other owners count as missing: they move to the deleted folder only after the required missing scans ({$config->missingGraceRuns} in a row), as documents deleted without the trash do.");
 	}
 
 	/**

@@ -25,11 +25,18 @@ The archive in Files, one folder per correspondent, document type and year:
 
 --8<-- "README.md:configuration"
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/settings-checklist-dark.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees only its own documents there, and the tags and the upload from the inbox failed, each with the permission to grant in Paperless" src="images/settings-checklist-light.png">
+</picture>
+
+--8<-- "README.md:configuration-checklist"
+
 ## The settings, section by section
 
 The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps.
 
-**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses.
+**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses. **Test connection** below them checks these settings without saving them, and lists every Paperless permission that the enabled modules need, as *Connection checklist* above describes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-connection-dark.png">

@@ -9,7 +9,10 @@
 // stored token goes only to the URL that it was saved with, so the page asks for the
 // token as soon as the URL changes. Nextcloud refuses the mock at its address of the
 // network of Compose unless "Paperless runs in my local network" is on, and the page
-// leads there. The form always shows what the server stored, says when it holds unsaved
+// leads there. Test connection lists every Paperless permission that the modules need,
+// with what to grant, for the token of an account with too few permissions as well, and
+// the checklist goes when a setting that it checked changes. The form always shows what
+// the server stored, says when it holds unsaved
 // changes, and shows every result and error next to the buttons, translated, also when
 // a proxy answers with a page of its own. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
@@ -23,6 +26,8 @@ const USER = process.env.E2E_USER ?? 'e2e-admin'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
 // The synthetic token of the mock, which run.sh saved, to connect again after Disconnect.
 const TOKEN = process.env.E2E_TOKEN ?? 'e2e-only-token'
+// The synthetic token of an account of the mock that may neither view the tags nor add documents.
+const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
 const PAGE = '/index.php/settings/admin/paperless_sync'
 const SETTINGS = '/apps/paperless_sync/settings'
 const RUN = '/apps/paperless_sync/sync/run'
@@ -72,6 +77,10 @@ try {
 	const localNetwork = page.locator('[data-setting="paperless_local_network"]')
 	const batchSize = page.locator('[data-setting="batch_size"]')
 	const save = page.locator('#paperless-sync-save')
+	const test = page.locator('#paperless-sync-test')
+	const checklist = page.locator('#paperless-sync-checks')
+	// The state of a line of the checklist, from its class: passed, warning or failed.
+	const lineState = (id) => page.locator(`[data-check="${id}"]`).evaluate((line) => line.className.replace(/.*paperless-sync-check--/, ''))
 	const dryRun = page.locator('#paperless-sync-dry-run')
 	const run = page.locator('#paperless-sync-run')
 	const reset = page.locator('#paperless-sync-reset')
@@ -195,6 +204,36 @@ try {
 	expect((await message.textContent()) === SAVED, `The save with the local network allowed failed: ${await message.textContent()}`)
 	expect((await token.inputValue()) === '', 'The page forgets the token once it is saved.')
 	console.log('Settings: Nextcloud refuses a Paperless in the local network until its setting allows it, and the page leads there.')
+
+	// The save tested every permission that the export and the inbox need, and shows how.
+	const lines = await page.locator('#paperless-sync-checks-list > li').evaluateAll((items) => items.map((item) => item.dataset.check))
+	expect(await checklist.isVisible(), 'A save that tested the connection shows its checklist.')
+	expect(
+		JSON.stringify(lines) === JSON.stringify(['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags', 'upload', 'folder']),
+		`The checklist must list every check of the export and the inbox: ${JSON.stringify(lines)}`,
+	)
+	expect((await page.locator('.paperless-sync-check--passed').count()) === lines.length, 'Every check passes with the token of the mock.')
+
+	// The token of an account that may view the documents but not the tags passed the old test
+	// of the documents alone; every export failed afterwards. Test connection names the
+	// permissions to grant, without saving anything.
+	await token.fill(VIEW_ONLY_TOKEN)
+	expect(await checklist.isHidden(), 'A new token makes the checklist outdated.')
+	await test.click()
+	await settle()
+	const tested = await message.textContent()
+	expect(tested === '2 checks failed. The connection checklist says what to do.', `The test must count the failed checks: ${tested}`)
+	expect(await lineState('tags') === 'failed' && await lineState('upload') === 'failed', 'The tags and the upload must fail.')
+	expect(
+		(await page.locator('[data-check="tags"] .paperless-sync-check-hint').textContent()) === 'In Paperless, under Users & Groups, give the account the permission View for Tags.',
+		'The line of the tags must name the permission to grant.',
+	)
+	expect(await lineState('trash') === 'warning', 'An account that is no superuser sees only its own documents in the trash.')
+	expect((await page.locator('[data-check="tags"] .paperless-sync-check-state').textContent()) === 'Failed', 'The state of a line is a word, not a color alone.')
+	expect(await unsaved.isVisible(), 'The test saves nothing: the token stays an unsaved change.')
+	await token.fill('')
+	expect(await unsaved.isHidden() && await checklist.isHidden(), 'Without the token, nothing is unsaved, and the checklist of the other token is gone.')
+	console.log('Settings: Test connection names every Paperless permission that a token lacks, with what to grant, and saves nothing.')
 
 	// The message sits next to the buttons, which stick to the bottom of the window, also
 	// while the top of the long page is in view.
