@@ -86,6 +86,7 @@ final class SyncService {
 		$archiveRoot = $this->join($config->basePath, $config->archiveFolder);
 		/** @var list<string> $excludedNames */
 		$excludedNames = array_values(array_map('mb_strtolower', array_filter(array_map('trim', explode(',', $config->excludedTags)))));
+		$sharedPaths = $this->sharedPaths($config);
 
 		foreach ($documents as $document) {
 			$documentId = $this->documentId($document);
@@ -166,6 +167,7 @@ final class SyncService {
 				$canMove = $entry !== null
 					&& $oldPath !== ''
 					&& $oldPath !== $target
+					&& !isset($sharedPaths[$oldPath])
 					&& $storedFingerprint !== ''
 					&& $storedFingerprint === $fingerprint
 					&& $this->storage->exists($config->targetUser, $oldPath);
@@ -577,6 +579,26 @@ final class SyncService {
 		$message = trim($exception->getMessage());
 
 		return $message !== '' ? $message : $exception::class;
+	}
+
+	/**
+	 * The paths that the state gives to more than one document. Older versions could cut the
+	 * marker [P123] off two long names, and then both documents wrote to one file, which keeps
+	 * the content of the one written last. Such a file is not moved to either of them; each
+	 * document is downloaded again.
+	 *
+	 * @return array<string, true>
+	 */
+	private function sharedPaths(SyncConfig $config): array {
+		$counts = [];
+		foreach ($this->state->allExports($config->targetUser) as $entry) {
+			$path = $entry['path'] ?? null;
+			if (is_string($path) && $path !== '') {
+				$counts[$path] = ($counts[$path] ?? 0) + 1;
+			}
+		}
+
+		return array_fill_keys(array_keys(array_filter($counts, static fn (int $count): bool => $count > 1)), true);
 	}
 
 	/** @param array<string, mixed> $document */

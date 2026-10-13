@@ -11,7 +11,7 @@ All notable changes to this project are documented in this file.
 - A long title, correspondent or original file name no longer cuts the marker `[P123]` and the extension off a file name. Before, two such documents could get the same path, and with *Replace synchronized file* the second one replaced the file of the first. Now only the free text is shortened, the longest first, and a template that leaves out the marker or the extension gets them added at the end of the file name.
 - The path template accepts variables without spaces, such as `{{id}}` for `{{ id }}`, and the message about an unknown variable names it as `{{ owner }}`.
 - Control characters beyond ASCII and invalid bytes become `_` in names too, and names of Windows devices such as `COM0`, `LPT¹` or `CONIN$` get a leading `_` as well.
-- The next run moves the files whose names these fixes change once to their corrected path.
+- The next run moves the files whose names these fixes change once to their corrected path. Two documents that shared one file are downloaded again instead, so that each gets its own content back.
 
 ## [0.1.10](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.9...v0.1.10) (2026-10-08)
 
