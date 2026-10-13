@@ -11,6 +11,12 @@ stays as it is. The text in the Markdown is what github.com shows, and it may la
 behind the website until the next edit of the page; scripts/check-project.sh makes
 sure that it never claims more than info.xml. A field that this hook doesn't know or
 can't read fails the build.
+
+The hook also shows an alert of GitHub as an admonition of Material: a quote that
+begins with [!NOTE], [!TIP], [!IMPORTANT], [!WARNING] or [!CAUTION], such as the
+warning about edits of the archive that the guide takes from the README. Without it,
+the website would show the marker as text in a plain quote. An alert with a quote
+inside fails the build, since the end of the inner quote would end the admonition.
 tests/website/test_mkdocs_project.py tests the hook.
 """
 
@@ -28,6 +34,21 @@ FIELD = re.compile(r'<span data-app="([^"]*)">[^<]*</span>')
 # An element of the HTML with a data-app attribute, which must be a field. In code,
 # the HTML has &lt; for <, so that a field shown as code is no element.
 ELEMENT = re.compile(r"<[a-zA-Z][^<>]*\sdata-app=")
+# An alert of GitHub, as Markdown writes it in HTML: a quote whose first paragraph
+# begins with the kind of the alert, such as [!WARNING], then the rest of the quote.
+ALERT = re.compile(
+    r"<blockquote>\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*\n?(.*?)</blockquote>",
+    re.DOTALL | re.IGNORECASE,
+)
+# The admonition of Material for each kind of alert, the one whose color comes
+# closest to that of GitHub.
+ADMONITIONS = {
+    "NOTE": "note",
+    "TIP": "tip",
+    "IMPORTANT": "info",
+    "WARNING": "warning",
+    "CAUTION": "danger",
+}
 # The versions for the fields, by name, read at the start of the last build.
 VALUES: dict[str, str] = {}
 
@@ -58,7 +79,8 @@ def on_config(config: Any) -> None:
 
 
 def on_page_content(html: str, *, page: Any, **_: Any) -> str:
-    """Write the versions into the fields of a page, those of its snippets included."""
+    """Write the versions into the fields of a page, those of its snippets included,
+    and show its alerts of GitHub as admonitions."""
     source = page.file.src_uri
 
     def fill(field: re.Match[str]) -> str:
@@ -72,4 +94,20 @@ def on_page_content(html: str, *, page: Any, **_: Any) -> str:
         raise PluginError(
             f'{source} has a field that isn\'t <span data-app="name">text</span>.'
         )
-    return html
+    return ALERT.sub(lambda alert: admonition(alert, source), html)
+
+
+def admonition(alert: re.Match[str], source: str) -> str:
+    """The admonition of Material for an alert of GitHub, titled with its kind."""
+    kind = alert[1].upper()
+    body = alert[2].strip()
+    if "<blockquote" in body:
+        raise PluginError(f"{source} has a quote inside the alert [!{kind}].")
+    # The marker alone in its paragraph, before a blank line of the quote, leaves the
+    # end of that paragraph; otherwise, the text of the alert goes on in it.
+    body = body.removeprefix("</p>").lstrip() if body.startswith("</p>") else f"<p>{body}"
+    return (
+        f'<div class="admonition {ADMONITIONS[kind]}">\n'
+        f'<p class="admonition-title">{kind.title()}</p>\n'
+        f"{body}\n</div>"
+    )
