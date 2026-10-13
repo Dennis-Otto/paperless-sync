@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
-# end-to-end tests, the rules that decide when they run, and the JavaScript of the
-# settings and the translations, which have no build step.
+# end-to-end tests, the rules that decide when they run, the icon of the website,
+# and the JavaScript of the settings and the translations, which have no build step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -43,6 +43,8 @@ for path in lib/Service/SyncService.php appinfo/routes.php templates/settings.ph
 done
 for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e2e/README.md \
   tests/e2e/MANUAL_ACCEPTANCE_TESTS.md tests/Unit/Service/SyncServiceTest.php scripts/check.sh \
+  mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
+  .github/social-cards/preview.yml \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
   composer.lock screenshots/01-admin-settings.png; do
   expect skip "$path"
@@ -108,6 +110,15 @@ if ((problems > 0)); then
   exit 1
 fi
 echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest."
+
+printf '\n== %s\n' "Icon of the website"
+# The website shows the icon of the app as its logo, its favicon and on its preview
+# cards, from a copy in docs/images, since MkDocs publishes only what is in docs/.
+if ! cmp -s img/app.svg docs/images/app.svg; then
+  echo "docs/images/app.svg differs from the icon of the app; copy it: cp img/app.svg docs/images/app.svg"
+  exit 1
+fi
+echo "The website shows the icon of the app, img/app.svg."
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then
