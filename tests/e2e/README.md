@@ -48,7 +48,7 @@ The scenario verifies:
 - a Paperless in the local network without `allow_local_remote_servers`: Nextcloud refuses the mock at its address of the network of Compose, the save says how to allow it and the page moves the focus to *Paperless runs in my local network*, and with that setting on, the whole scenario runs
 - dry-run behavior without filesystem mutations
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
-- metadata-only moves without downloading the PDF again
+- metadata-only moves without downloading the PDF again, with the SHA-256 checksums of Paperless-ngx 3 and, in a mode of the mock, the MD5 checksums of Paperless-ngx 2
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete

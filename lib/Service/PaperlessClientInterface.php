@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 
 interface PaperlessClientInterface {
@@ -38,9 +39,16 @@ interface PaperlessClientInterface {
 	/** @return array{names: array<string, string>, inbox: list<string>} */
 	public function tags(): array;
 
-	/** @param resource $sink */
-	public function downloadDocument(int $documentId, bool $original, $sink): void;
+	/**
+	 * Downloads the original or the archived version of a document to a temporary file, computes its
+	 * checksums in one pass and hands the file to $consume as a readable stream at its start, which
+	 * $consume may close; the temporary file is gone afterwards, also when $consume fails.
+	 *
+	 * @param callable(resource): void $consume
+	 */
+	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint;
 
+	/** The checksum that Paperless reports for a version of a document: MD5 up to Paperless-ngx 2.x, SHA-256 since 3.0. */
 	public function documentChecksum(int $documentId, bool $original): string;
 
 	/**
