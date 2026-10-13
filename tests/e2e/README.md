@@ -28,7 +28,7 @@ The scenario verifies:
 
 - administrator configuration and server-side token handling
 - dry-run behavior without filesystem mutations
-- archive export through the Paperless download API
+- archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete

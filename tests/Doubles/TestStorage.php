@@ -25,8 +25,14 @@ final class TestStorage implements NextcloudStorageInterface {
 	public ?\Throwable $writeTextException = null;
 	public ?\Throwable $moveException = null;
 	public ?\Throwable $deleteException = null;
+	/** @var array<string, \Throwable> the failure of the write of one path, such as of a name that Nextcloud refuses */
+	public array $writeFailures = [];
 	/** @var list<array{string, string}> the file paths and roots that pruneEmptyParents was asked about */
 	public array $prunes = [];
+	/** Whether the user may create files in every folder, or the failure of that check. */
+	public bool|\Throwable $writable = true;
+	/** @var list<string> the folders that isWritableFolder was asked about */
+	public array $writableChecks = [];
 
 	public function test(string $userId, string $basePath): void {
 	}
@@ -39,9 +45,18 @@ final class TestStorage implements NextcloudStorageInterface {
 		return array_key_exists($path, $this->files);
 	}
 
+	public function isWritableFolder(string $userId, string $path): bool {
+		$this->writableChecks[] = $path;
+		if ($this->writable instanceof \Throwable) {
+			throw $this->writable;
+		}
+		return $this->writable;
+	}
+
 	public function writeAtomic(string $userId, string $path, $source, string $conflictMode): void {
-		if ($this->writeException !== null) {
-			throw $this->writeException;
+		$failure = $this->writeFailures[$path] ?? $this->writeException;
+		if ($failure !== null) {
+			throw $failure;
 		}
 		if ($conflictMode === 'skip' && isset($this->files[$path])) {
 			throw new RuntimeException('conflict');

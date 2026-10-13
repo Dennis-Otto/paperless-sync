@@ -66,11 +66,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		/** @var array<string, string> $names */
 		$names = [];
 		$inbox = [];
-		foreach ($this->getAll('/api/tags/') as $tag) {
-			if (!isset($tag['id']) || !is_scalar($tag['id'])) {
-				continue;
-			}
-			$id = (string)$tag['id'];
+		foreach ($this->getAll('/api/tags/') as $key => $tag) {
+			$id = (string)$key;
 			$name = $tag['name'] ?? null;
 			$names[$id] = is_string($name) ? $name : $id;
 			if (($tag['is_inbox_tag'] ?? false) === true) {
@@ -251,24 +248,46 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return ['status' => $status, 'message' => $message];
 	}
 
-	/** @return list<array<string, mixed>> */
+	/**
+	 * Every entry of a small list of Paperless, such as its tags, by its ID. Without every tag, a
+	 * document with an excluded tag or in the inbox would be exported, and without every
+	 * correspondent, document type or storage path, documents would move to other paths. So a list
+	 * that came back incomplete fails the run, before it changes anything in the archive.
+	 *
+	 * @return array<array-key, array<string, mixed>>
+	 */
 	private function getAll(string $path): array {
-		return $this->scan($path)->documents;
+		$scan = $this->pages($path);
+		if (!$scan['complete']) {
+			$received = count($scan['results']);
+			throw new UnexpectedValueException("Paperless's list {$path} came back incomplete or changed while the run read it ({$received} of {$scan['listed']} received).");
+		}
+
+		return $scan['byId'];
+	}
+
+	/** @param array<string, string> $query */
+	private function scan(string $path, array $query = []): PaperlessScan {
+		$scan = $this->pages($path, $query);
+
+		return new PaperlessScan($scan['results'], $scan['complete'], $scan['listed']);
 	}
 
 	/**
-	 * Every page of a list. The scan is complete only when every page carries the same count of
-	 * Paperless, every page before the last is full, and the run received as many documents with
-	 * different IDs as Paperless listed: a page that came back short or empty, or a list that
-	 * changed while the run read it, may have left documents out.
+	 * Every page of a list, its entries in the order of Paperless and by their IDs. The scan is
+	 * complete only when every page carries the same count of Paperless, every page before the last
+	 * is full, and the run received as many entries with different IDs as Paperless listed: a page
+	 * that came back short or empty, or a list that changed while the run read it, may have left
+	 * entries out.
 	 *
 	 * @param array<string, string> $query
+	 * @return array{results: list<array<string, mixed>>, byId: array<array-key, array<string, mixed>>, complete: bool, listed: int}
 	 */
-	private function scan(string $path, array $query = []): PaperlessScan {
+	private function pages(string $path, array $query = []): array {
 		$url = $this->configService->get()->paperlessUrl;
 		$token = $this->configService->getToken();
 		$results = [];
-		$ids = [];
+		$byId = [];
 		$complete = true;
 		$listed = 0;
 		$pages = 1;
@@ -286,12 +305,17 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			foreach ($next['results'] as $result) {
 				$results[] = $result;
 				if (isset($result['id']) && (is_int($result['id']) || is_string($result['id']))) {
-					$ids[(string)$result['id']] = true;
+					$byId[(string)$result['id']] = $result;
 				}
 			}
 		}
 
-		return new PaperlessScan($results, $complete && count($ids) === $listed && count($results) === $listed, $listed);
+		return [
+			'results' => $results,
+			'byId' => $byId,
+			'complete' => $complete && count($byId) === $listed && count($results) === $listed,
+			'listed' => $listed,
+		];
 	}
 
 	/**
@@ -301,10 +325,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private function namedMap(string $path): array {
 		/** @var array<string, string> $map */
 		$map = [];
-		foreach ($this->getAll($path) as $item) {
-			$id = $item['id'] ?? null;
+		foreach ($this->getAll($path) as $id => $item) {
 			$name = $item['name'] ?? null;
-			if (is_scalar($id) && is_string($name)) {
+			if (is_string($name)) {
 				$map[(string)$id] = $name;
 			}
 		}

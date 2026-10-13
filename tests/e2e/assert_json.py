@@ -37,6 +37,14 @@ elif mode == "export":
     expect("errors", 0)
     if not any(str(action).startswith("EXPORT P123:") for action in payload.get("actions", [])):
         raise AssertionError(f"The run lists no export: {payload!r}")
+elif mode == "export-stopped":
+    expect("exported", 0)
+    expect("errors", 1)
+    actions = [str(action) for action in payload.get("actions", [])]
+    if not any(action.startswith("ERROR: P123: Not enough free space in Nextcloud") for action in actions):
+        raise AssertionError(f"The full quota is not reported as the error of the document: {payload!r}")
+    if not any(action.startswith("EXPORT STOPPED:") for action in actions):
+        raise AssertionError(f"The full quota does not stop the exports: {payload!r}")
 elif mode == "move":
     expect("moved", 1)
     expect("exported", 0)
@@ -98,7 +106,8 @@ elif mode == "mock-after-move":
         raise AssertionError(f"Metadata-only move did not request a checksum: {payload!r}")
     expect("invalidAuth", 0)
 elif mode == "mock-final":
-    expect("downloads", 2)
+    # The first export, the one that the full quota stopped after its download, and the export after it.
+    expect("downloads", 3)
     expect("invalidAuth", 0)
     uploads = payload.get("uploads", [])
     if [item.get("filename") for item in uploads] != ["policy.pdf", "broken.pdf"]:

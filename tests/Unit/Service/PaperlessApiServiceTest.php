@@ -193,7 +193,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testNamesOfCorrespondentsDocumentTypesAndStoragePaths(): void {
-		$entries = ['results' => [['id' => 4, 'name' => 'Energie GmbH'], ['id' => 5], ['name' => 'without an ID'], ['id' => [6], 'name' => 'list as ID']]];
+		$entries = ['count' => 3, 'results' => [['id' => 4, 'name' => 'Energie GmbH'], ['id' => 5], ['id' => '6', 'name' => ['not a name']]]];
 		$this->responses = [[200, $entries], [200, $entries], [200, $entries]];
 
 		self::assertSame(['4' => 'Energie GmbH'], $this->service->correspondents());
@@ -206,18 +206,48 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testTagsWithTheirNamesAndInboxFlags(): void {
-		$this->responses[] = [200, ['results' => [
+		$this->responses[] = [200, ['count' => 3, 'results' => [
 			['id' => 9, 'name' => 'Inbox', 'is_inbox_tag' => true],
 			['id' => 10, 'name' => 'Steuer', 'is_inbox_tag' => false],
 			['id' => 11, 'is_inbox_tag' => 'yes'],
-			['name' => 'without an ID'],
-			['id' => null, 'name' => 'null ID'],
 		]]];
 
 		self::assertSame([
 			'names' => ['9' => 'Inbox', '10' => 'Steuer', '11' => '11'],
 			'inbox' => ['9'],
 		], $this->service->tags());
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function smallLists(): array {
+		return [
+			'tags' => ['tags', '/api/tags/'],
+			'correspondents' => ['correspondents', '/api/correspondents/'],
+			'document types' => ['documentTypes', '/api/document_types/'],
+			'storage paths' => ['storagePaths', '/api/storage_paths/'],
+		];
+	}
+
+	/**
+	 * Without every tag, a document with an excluded tag would be exported; without every
+	 * correspondent, document type or storage path, documents would move to other paths.
+	 */
+	#[DataProvider('smallLists')]
+	public function testIncompleteListOfNamesFailsTheRun(string $method, string $path): void {
+		$this->responses[] = [200, ['count' => 2, 'results' => [['id' => 9, 'name' => 'Privat']]]];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage("Paperless's list {$path} came back incomplete or changed while the run read it (1 of 2 received).");
+		$this->service->{$method}();
+	}
+
+	#[DataProvider('smallLists')]
+	public function testListOfNamesWithoutTheCountOfPaperlessFailsTheRun(string $method, string $path): void {
+		$this->responses[] = [200, [['id' => 9, 'name' => 'Privat']]];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage("Paperless's list {$path} came back incomplete or changed while the run read it (1 of 1 received).");
+		$this->service->{$method}();
 	}
 
 	public function testDownloadCopiesTheDocumentIntoTheSinkAndRemovesTheTemporaryFile(): void {

@@ -209,12 +209,20 @@ final class SyncServiceTest extends TestCase {
 		$first = $this->service->run();
 		self::assertSame(1, $first->exported);
 		self::assertSame(1, $first->skipped);
-		self::assertArrayNotHasKey(124, $this->state->exports);
+		self::assertArrayNotHasKey(123, $this->state->exports);
 
 		$second = $this->service->run();
 		self::assertSame(1, $second->unchanged);
 		self::assertSame(1, $second->exported);
-		self::assertArrayHasKey(124, $this->state->exports);
+		self::assertArrayHasKey(123, $this->state->exports);
+	}
+
+	public function testMostRecentlyAddedDocumentsComeFirst(): void {
+		$this->configService->save(['batch_size' => 2]);
+
+		$report = $this->exportDocuments([$this->document(5), $this->document(9), $this->document(7)]);
+
+		self::assertSame(['EXPORT P9: ' . $this->archivePath(9), 'EXPORT P7: ' . $this->archivePath(7)], $report->actions, 'A new document does not wait behind a backlog.');
 	}
 
 	public function testFailedExportsTakeTheirPlaceInTheBatch(): void {
@@ -226,14 +234,60 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(5, $this->paperless->downloads, 'A run that cannot write downloads no more documents than the batch size allows.');
 		self::assertSame(5, $first->errors);
 		self::assertSame(45, $first->skipped);
-		self::assertSame('The file name is not allowed', $this->state->exports[5]['last_error']);
-		self::assertArrayNotHasKey(6, $this->state->exports);
+		self::assertSame('The file name is not allowed', $this->state->exports[46]['last_error']);
+		self::assertArrayNotHasKey(45, $this->state->exports);
 
 		$second = $this->service->run();
 
 		self::assertSame(10, $this->paperless->downloads);
 		self::assertSame(45, $second->skipped);
-		self::assertSame(array_map(static fn (int $id): string => "ERROR: P{$id}: The file name is not allowed", range(6, 10)), $second->actions, 'The documents that failed wait behind the others.');
+		self::assertSame(array_map(static fn (int $id): string => "ERROR: P{$id}: The file name is not allowed", range(45, 41)), $second->actions, 'The documents that failed wait behind the others.');
+	}
+
+	public function testExportsThatKeepFailingLeaveTheBatchToTrashedDocuments(): void {
+		$this->exportDocuments([$this->document(123), $this->document(124)]);
+		$this->configService->save(['batch_size' => 1, 'conflict_mode' => 'skip']);
+		$this->paperless->documents = [$this->document(122), $this->document(123)];
+		$this->storage->files[$this->archivePath(122)] = 'a file of the user';
+		$this->paperless->trash = [$this->document(124) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$trashPath = self::ARCHIVE . '/_Gelöscht/2026-08-27/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P124].pdf';
+
+		$report = $this->service->run();
+
+		self::assertSame([
+			'ERROR: P122: Nextcloud file conflict at ' . $this->archivePath(122) . '.',
+			'TRASH P124: ' . $trashPath,
+		], $report->actions, 'A failed export is no change, so the trashed document still moves.');
+		self::assertSame(1, $report->movedToTrash);
+	}
+
+	public function testExportsThatKeepFailingLeaveTheBatchToMissingDocuments(): void {
+		$this->exportDocuments([$this->document(123)]);
+		$this->configService->save(['batch_size' => 1, 'conflict_mode' => 'skip', 'missing_grace_runs' => 1]);
+		$this->paperless->documents = [$this->document(122)];
+		$this->storage->files[$this->archivePath(122)] = 'a file of the user';
+
+		$report = $this->service->run();
+
+		self::assertSame([
+			'ERROR: P122: Nextcloud file conflict at ' . $this->archivePath(122) . '.',
+			'MISSING P123: ' . $this->deletedToday(),
+		], $report->actions);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+	}
+
+	public function testFailedMovesToTheDeletedFolderTakeTheirPlaceInTheBatch(): void {
+		$documents = $this->documents(5);
+		$this->exportDocuments($documents);
+		$this->configService->save(['batch_size' => 2]);
+		$this->paperless->documents = [];
+		$this->paperless->trash = array_map(static fn (array $document): array => $document + ['deleted_at' => '2026-08-27T08:00:00+02:00'], $documents);
+		$this->storage->moveException = new RuntimeException('The file is locked');
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: Trash P1: The file is locked', 'ERROR: Trash P2: The file is locked'], $report->actions, 'A run that cannot move tries no more moves than the batch size allows.');
+		self::assertSame(3, $report->skipped);
 	}
 
 	public function testDocumentWhoseExportFailedWaitsBehindTheOthers(): void {
@@ -267,11 +321,11 @@ final class SyncServiceTest extends TestCase {
 
 		$third = $this->service->run();
 
-		self::assertSame(['ERROR: P1: The file name is not allowed', 'ERROR: P2: The file name is not allowed'], $third->actions);
+		self::assertSame(['ERROR: P2: The file name is not allowed', 'ERROR: P1: The file name is not allowed'], $third->actions);
 
 		$fourth = $this->service->run();
 
-		self::assertSame(['ERROR: P3: The file name is not allowed', 'ERROR: P4: The file name is not allowed'], $fourth->actions);
+		self::assertSame(['ERROR: P4: The file name is not allowed', 'ERROR: P3: The file name is not allowed'], $fourth->actions);
 	}
 
 	/** @return array<string, array{\Throwable}> */
@@ -291,8 +345,9 @@ final class SyncServiceTest extends TestCase {
 	#[DataProvider('storageFailures')]
 	public function testStorageThatCannotBeWrittenEndsTheExportsOfTheRun(\Throwable $failure): void {
 		$this->storage->writeException = $failure;
+		$this->storage->writable = false;
 		$this->logger->expects(self::once())->method('warning')->with(
-			'Nextcloud cannot store files in the archive, so this run exports no further documents: {error}',
+			'Nextcloud cannot store files in the archive, so this run exports and moves no further documents: {error}',
 			['error' => $failure->getMessage(), 'exception' => $failure],
 		);
 
@@ -303,30 +358,106 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $report->errors);
 		self::assertSame(2, $report->skipped);
 		self::assertSame([
-			"ERROR: P1: {$error}",
+			"ERROR: P3: {$error}",
 			'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.',
 		], $report->actions);
-		self::assertSame($error, $this->state->exports[1]['last_error']);
+		self::assertSame($error, $this->state->exports[3]['last_error']);
 		self::assertArrayNotHasKey(2, $this->state->exports);
 	}
 
+	/** @return array<string, array{bool|\Throwable}> */
+	public static function archiveChecks(): array {
+		return [
+			'an archive that can still be written' => [true],
+			'a check that fails' => [new RuntimeException('The storage is not available')],
+		];
+	}
+
+	#[DataProvider('archiveChecks')]
+	public function testPathThatNextcloudRefusesConcernsOnlyItsDocument(bool|\Throwable $writable): void {
+		$this->storage->writeFailures[$this->archivePath(3)] = new NotPermittedException('Could not create folder');
+		$this->storage->writable = $writable;
+
+		$report = $this->exportDocuments($this->documents(3));
+
+		$stopped = $writable instanceof \Throwable;
+		self::assertSame(['ERROR: P3: Could not create folder', ...($stopped
+			? ['EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.']
+			: ['EXPORT P2: ' . $this->archivePath(2), 'EXPORT P1: ' . $this->archivePath(1)])], $report->actions);
+		self::assertSame([self::ARCHIVE], $this->storage->writableChecks, 'Only the archive folder tells whether the whole archive refuses files.');
+	}
+
 	public function testStorageThatCannotBeWrittenStillRemovesExcludedCopies(): void {
-		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->exportDocuments([$this->document(122), $this->document()]);
 		$this->configService->save(['excluded_tags' => 'Privat']);
 		$this->paperless->tagInfo = ['names' => ['9' => 'Privat'], 'inbox' => []];
 		$this->paperless->documents = [$this->document(122), $this->document(123), $this->document(124)];
-		$this->paperless->documents[2]['tags'] = [9];
-		$this->paperless->contents[122] = '%PDF-122';
-		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->paperless->documents[0]['tags'] = [9];
+		$this->paperless->contents[124] = '%PDF-124';
 		$this->storage->writeException = new NotEnoughSpaceException('Not enough free space');
 
 		$report = $this->service->run();
 
 		self::assertSame(3, $this->paperless->downloads, 'Only the first document of this run is downloaded.');
-		self::assertSame(1, $report->removedExcluded, 'Removing a copy frees space, so it goes on.');
-		self::assertArrayNotHasKey($this->archivePath(124), $this->storage->files);
-		self::assertSame(1, $report->errors);
-		self::assertSame(2, $report->skipped, 'The excluded document and the export that waits for the next run.');
+		self::assertSame(['ERROR: P124: Not enough free space', 'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.', 'REMOVE EXCLUDED P122: ' . $this->archivePath(122)], $report->actions, 'Removing a copy frees space, so it goes on.');
+		self::assertArrayNotHasKey($this->archivePath(122), $this->storage->files);
+		self::assertSame(1, $report->unchanged);
+	}
+
+	public function testStorageThatCannotBeWrittenMovesNoDocumentToTheDeletedFolder(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocuments([$this->document(122), $this->document(123)]);
+		$this->paperless->documents = [$this->document(124)];
+		$this->paperless->contents[124] = '%PDF-124';
+		$this->paperless->trash = [$this->document(122) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$this->storage->writeException = new NotEnoughSpaceException('Not enough free space');
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: P124: Not enough free space', 'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.'], $report->actions);
+		self::assertSame(2, $report->skipped, 'The trashed and the missing document wait for the next run.');
+		self::assertSame('active', $this->state->exports[122]['state']);
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertSame(0, $this->state->exports[123]['missing_runs']);
+	}
+
+	/** @return array<string, array{bool, string}> */
+	public static function phasesThatMove(): array {
+		return [
+			// The trash in the order of Paperless, the missing documents in the order of their state.
+			'trash' => [true, 'Trash P122'],
+			'missing' => [false, 'Missing P123'],
+		];
+	}
+
+	#[DataProvider('phasesThatMove')]
+	public function testStorageThatCannotBeWrittenEndsTheMovesToTheDeletedFolder(bool $trashed, string $error): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocuments([$this->document(122), $this->document(123)]);
+		$this->paperless->documents = [];
+		if ($trashed) {
+			$this->paperless->trash = array_map(fn (int $id): array => $this->document($id) + ['deleted_at' => '2026-08-27T08:00:00+02:00'], [122, 123]);
+		}
+		$this->storage->moveException = new NotPermittedException('Could not create folder');
+		$this->storage->writable = false;
+
+		$report = $this->service->run();
+
+		self::assertSame(["ERROR: {$error}: Could not create folder", 'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.'], $report->actions);
+		self::assertSame(1, $report->skipped, 'The other document waits for the next run.');
+	}
+
+	public function testNoticesOfTheRunAreKeptPastTheLimitOfTheReport(): void {
+		$this->configService->save(['batch_size' => 100]);
+		foreach (range(1, 100) as $number) {
+			$this->storage->files["Dokumente/Paperless/Eingang/scan{$number}.pdf"] = "%PDF-{$number}";
+		}
+		$this->paperless->documentsListed = 1;
+
+		$report = $this->service->run();
+
+		self::assertCount(101, $report->actions);
+		self::assertStringStartsWith('SCAN INCOMPLETE:', $report->actions[100], 'A hundred imports do not hide that the run counted no document as missing.');
 	}
 
 	public function testDocumentWithoutAValidIdFailsTheRun(): void {
@@ -1262,7 +1393,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run();
 
-		self::assertSame(['ERROR: Missing P123: conflict', 'MISSING P124: ' . $this->deletedToday(124)], $report->actions);
+		self::assertSame(['MISSING P124: ' . $this->deletedToday(124), 'ERROR: Missing P123: conflict'], $report->actions);
 		self::assertSame(1, $report->movedToTrash, 'The other missing document still moves.');
 		self::assertSame('%PDF-content', $this->storage->files[$this->deletedToday(124)]);
 		self::assertSame('%PDF-content', $this->storage->files[self::EXPORTED_PATH]);
