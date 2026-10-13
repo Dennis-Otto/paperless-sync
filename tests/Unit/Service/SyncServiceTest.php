@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use LogicException;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -263,7 +264,170 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(2, $this->paperless->downloads);
 		self::assertSame([self::EXPORTED_PATH, self::ARCHIVE], $this->storage->prunes[0]);
 		self::assertSame(1, $report->foldersPruned);
-		self::assertSame(hash('sha256', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/**
+	 * Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0. Before, a change of the
+	 * title on 2.x downloaded the document again and replaced the file, which lost its shares,
+	 * comments and versions in Nextcloud.
+	 */
+	public function testMetadataChangeOnPaperless2MovesTheFileWithoutADownload(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		$renamedPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(1, $report->moved);
+		self::assertSame(0, $report->exported);
+		self::assertSame([$renamedPath => '%PDF-content'], $this->storage->files);
+		self::assertSame(1, $this->paperless->downloads, 'A change of the metadata alone must not download the document again.');
+		self::assertSame(1, $this->paperless->checksumRequests);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint'], 'A move keeps the checksums of the file.');
+	}
+
+	/** An earlier version stored the SHA-256 alone, which Paperless-ngx 3 still recognizes. */
+	public function testFingerprintOfAnEarlierVersionStillMovesTheFileOnPaperless3(): void {
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->moved);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame([], $this->storage->reads, 'A SHA-256 of Paperless needs no read of the mirrored file.');
+		self::assertSame(hash('sha256', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/**
+	 * On Paperless-ngx 2, the SHA-256 alone of an earlier version can't tell an unchanged document.
+	 * Before, the first change of the metadata after the update downloaded every such document once
+	 * more and replaced its file; now the run reads the mirrored file instead, whose SHA-256 shows
+	 * that it still has the content of that download, and keeps its MD5 for the changes after it.
+	 */
+	public function testFingerprintOfAnEarlierVersionGainsTheMd5OfTheMirroredFileOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+
+		$first = $this->service->run();
+		$this->paperless->documents[0]['title'] = 'Strom August final';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T12:00:00+02:00';
+		$second = $this->service->run();
+
+		self::assertSame([1, 0], [$first->moved, $first->exported]);
+		self::assertSame([1, 0], [$second->moved, $second->exported]);
+		self::assertSame(1, $this->paperless->downloads, 'A change of the metadata alone must not download the document again.');
+		self::assertSame([self::EXPORTED_PATH], $this->storage->reads, 'Only the first change reads the mirrored file.');
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+		self::assertSame([self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August final [P123].pdf' => '%PDF-content'], $this->storage->files);
+	}
+
+	public function testFingerprintOfAnEarlierVersionGainsTheMd5AlsoWhenThePathStaysOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * A mirrored file with other content than the download that the earlier version saved, or one
+	 * that Nextcloud can't read, can't vouch for the document, so the download replaces it as before.
+	 */
+	#[DataProvider('mirroredFilesThatCantVouchForTheDocument')]
+	public function testFingerprintOfAnEarlierVersionDownloadsWhenTheMirroredFileCantVouchForIt(string $content, ?\Throwable $readFailure): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->storage->files[self::EXPORTED_PATH] = $content;
+		$this->storage->readException = $readFailure;
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+
+		$report = $this->service->run();
+
+		self::assertSame([0, 1], [$report->moved, $report->exported]);
+		self::assertSame(0, $report->errors);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([self::EXPORTED_PATH], $this->storage->reads);
+		self::assertSame([self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf' => '%PDF-content'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/** @return array<string, array{string, ?\Throwable}> */
+	public static function mirroredFilesThatCantVouchForTheDocument(): array {
+		return [
+			'changed in Nextcloud' => ['%PDF-changed-in-nextcloud', null],
+			'not readable' => ['%PDF-content', new RuntimeException('Storage is not available.')],
+		];
+	}
+
+	/** New content in Paperless downloads the document, also when the mirrored file still has the old one. */
+	public function testFingerprintOfAnEarlierVersionDownloadsNewContentOnPaperless2(): void {
+		$this->exportWithFingerprintOfAnEarlierVersionOnPaperless2();
+		$this->paperless->contents[123] = '%PDF-content-v2';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	public function testNewRevisionOnPaperless2WithTheSameContentOnlyRecordsTheRevision(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * Before, an export read the whole document into a string to compute its checksum, so that a
+	 * document larger than the free memory of PHP ended the run with a fatal error, before it saved
+	 * its state, and every run after it died on the same document.
+	 */
+	public function testExportPassesTheDocumentToNextcloudWithoutHoldingItInMemory(): void {
+		$this->configService->save(['inbox_enabled' => false]);
+		$size = 16 * 1024 * 1024;
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = str_repeat('%PDF-large', intdiv($size, 10));
+		$written = hash_init('sha256');
+		$storage = $this->createMock(NextcloudStorageInterface::class);
+		$storage->expects(self::once())->method('writeAtomic')->willReturnCallback(
+			/** @param resource $source */
+			static function (string $userId, string $path, $source) use ($written): void {
+				hash_update_stream($written, $source);
+			},
+		);
+		$service = new SyncService(
+			$this->configService,
+			$this->paperless,
+			$storage,
+			$this->state,
+			new PathTemplateService(),
+			new StatusService($this->appConfig()),
+			$this->locking,
+			$this->logger,
+		);
+		memory_reset_peak_usage();
+		$before = memory_get_usage();
+
+		$report = $service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(hash('sha256', $this->paperless->contents[123]), hash_final($written), 'Nextcloud receives the whole document.');
+		self::assertLessThan($size / 2, memory_get_peak_usage() - $before, 'The document must reach Nextcloud in chunks.');
 	}
 
 	public function testDocumentsThatShareAFileAreDownloadedAgainInsteadOfMoved(): void {
@@ -1711,6 +1875,17 @@ final class SyncServiceTest extends TestCase {
 	/** @param array<string, mixed>|null $document */
 	private function exportDocument(?array $document = null): SyncReport {
 		return $this->exportDocuments([$document ?? $this->document()]);
+	}
+
+	/**
+	 * A document that an earlier version exported, with the SHA-256 alone as its fingerprint, on a
+	 * Paperless-ngx 2 that reports MD5 checksums, after a new revision of the document.
+	 */
+	private function exportWithFingerprintOfAnEarlierVersionOnPaperless2(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
 	}
 
 	/** @param list<array<string, mixed>> $documents */

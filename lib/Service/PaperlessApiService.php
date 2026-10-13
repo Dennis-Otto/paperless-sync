@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Service;
 
 use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\Http\Client\IClient;
@@ -83,11 +84,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return ['names' => $names, 'inbox' => $inbox];
 	}
 
-	/** @psalm-suppress DocblockTypeContradiction */
-	public function downloadDocument(int $documentId, bool $original, $sink): void {
-		if (!is_resource($sink)) {
-			throw new UnexpectedValueException('A writable download stream is required.');
-		}
+	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint {
 		$temporaryPath = $this->tempManager->getTemporaryFile();
 		if ($temporaryPath === false) {
 			throw new RuntimeException('Could not create a temporary Paperless download file.');
@@ -113,14 +110,19 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			if (!is_resource($download)) {
 				throw new RuntimeException('Could not open the temporary Paperless download.');
 			}
+			// The temporary file goes on to Nextcloud as it is: no copy of the document, neither in
+			// memory nor on disk, whatever its size.
 			try {
-				if (stream_copy_to_stream($download, $sink) === false) {
-					throw new RuntimeException('Could not copy the Paperless download.');
-				}
+				$fingerprint = DocumentFingerprint::of($download);
+				$consume($download);
 			} finally {
-				fclose($download);
+				/** @psalm-suppress RedundantCondition Nextcloud may close the stream that it writes. */
+				if (is_resource($download)) {
+					fclose($download);
+				}
 			}
-			rewind($sink);
+
+			return $fingerprint;
 		} finally {
 			if (is_file($temporaryPath)) {
 				unlink($temporaryPath);

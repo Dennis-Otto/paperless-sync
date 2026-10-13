@@ -25,6 +25,10 @@ final class TestStorage implements NextcloudStorageInterface {
 	public ?\Throwable $writeTextException = null;
 	public ?\Throwable $moveException = null;
 	public ?\Throwable $deleteException = null;
+	/** The failure of every read of a file, such as of a storage that is not available. */
+	public ?\Throwable $readException = null;
+	/** @var list<string> the paths that openRead was asked for */
+	public array $reads = [];
 	/** @var array<string, \Throwable> the failure of the write of one path, such as of a name that Nextcloud refuses */
 	public array $writeFailures = [];
 	/** @var list<array{string, string}> the file paths and roots that pruneEmptyParents was asked about */
@@ -107,6 +111,10 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function openRead(string $userId, string $path) {
+		$this->reads[] = $path;
+		if ($this->readException !== null) {
+			throw $this->readException;
+		}
 		$stream = fopen('php://temp', 'w+b');
 		fwrite($stream, $this->files[$path]);
 		rewind($stream);

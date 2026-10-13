@@ -8,7 +8,7 @@ Run this matrix in an isolated Nextcloud/Paperless lab before a release that cha
 | Local network | With `allow_local_remote_servers` off, a Paperless at an address of the local network is refused with the advice to turn on *Paperless runs in my local network*, and works once it is on; other apps still can't reach local addresses. |
 | Dry-run | Reports all expected actions without creating, moving, uploading, or deleting a file. |
 | Export | Archive PDF and original-file modes create the expected correspondent-first hierarchy and stable `[P123]` marker. |
-| Metadata | Title, correspondent, document type, storage path, and date changes move the existing file without leaving duplicate or empty paths. |
+| Metadata | Title, correspondent, document type, storage path, and date changes move the existing file without leaving duplicate or empty paths, and without a new download, on Paperless-ngx 2.x and 3.x alike. |
 | Exclusions | Paperless inbox and configured exclusion tags prevent export and remove an existing synchronized copy. |
 | Trash | Moving a document to the Paperless trash moves the Nextcloud copy to the configured deleted folder; restoring it moves the same file back. |
 | Missing documents | A document that disappears from Paperless without passing through its trash moves the Nextcloud copy to the deleted folder after the configured number of complete scans, also when a run reaches its batch size first: the copy then moves in a later run. |
