@@ -102,6 +102,14 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
 
     [:octicons-arrow-right-24: FAQ](faq.md) · [Troubleshooting](troubleshooting.md)
 
+- :material-compare-horizontal:{ .lg .middle } **How it compares**
+
+    ---
+
+    Paperless Sync next to Nextcloud's Paperless integration, the WebDAV container, rclone and a mount, and how to move over.
+
+    [:octicons-arrow-right-24: Compare](alternatives.md)
+
 - :material-sitemap-outline:{ .lg .middle } **Architecture**
 
     ---
@@ -133,6 +141,14 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
     The decisions that shape the project, each with its reasons.
 
     [:octicons-arrow-right-24: Decisions](decisions/README.md)
+
+- :material-robot-outline:{ .lg .middle } **Automation**
+
+    ---
+
+    The bots that check every change, release and verify the app, answer issues and keep the repository current.
+
+    [:octicons-arrow-right-24: Automation](automation.md)
 
 - :material-hammer-wrench:{ .lg .middle } **Development and releases**
 

@@ -1,0 +1,217 @@
+---
+description: "The automation behind Paperless Sync: about 30 GitHub Actions workflows and bots that check every pull request, test every supported Nextcloud version, release signed packages to the Nextcloud App Store, verify them, answer issues and keep the repository current."
+---
+
+# Automation
+
+[← README](https://github.com/Dennis-Otto/paperless-sync) · [Development](development.md) · [Releases](releases.md) · [Security design](security.md)
+
+Paperless Sync has one maintainer and about 30 workflows of GitHub Actions that do the rest. They check every change before it reaches `main`, the end-to-end tests against every supported version of Nextcloud included, make a signed release of what reaches `main`, deliver it to the Nextcloud App Store and check it there as you can, answer and close issues, and keep the repository, its dependencies and its settings current, every night and every week. Most of them come from the [Repo Blueprint](https://github.com/Dennis-Otto/repo-blueprint), which brings every improvement to each repository made from it; the end-to-end tests, the canary of the coming Nextcloud and the upstream bot are those of a Nextcloud app.
+
+What it means for you:
+
+- Every change passed the same 13 required checks before it reached `main`, the end-to-end tests in Docker against every supported version of Nextcloud included.
+- Every release is built in isolation, signed, delivered to the App Store and then checked there as you can check it; [SECURITY.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SECURITY.md) says how.
+- The coming version of Nextcloud is tested every week, long before its release, and the app supports it as soon as the end-to-end tests pass against it.
+- An issue gets a first answer within minutes and closes with the release that fixes it.
+
+In the pictures, you and what is yours are orange, the bots blue, and what comes out green.
+
+## An issue
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of an issue
+    accDescr: You open an issue. The issue assistant labels it from its form and gives a first analysis, written by an AI that only reads. When it needs more information, the issue lifecycle reminds you after 15 days and closes the issue after 30 days without an answer, and your answer goes back to the assistant; a possible duplicate closes after 3 days unless someone objects. Otherwise a pull request fixes the issue; when it merges, the issue gets the label fixed-in-next-release, and the release that ships the fix closes it with a link to the release, in the milestone of the release. You are orange, the bots blue, and the closed issue green.
+
+    issue(["You open<br>an issue"])
+    assistant["Issue assistant:<br>labels and a first<br>analysis by an AI<br>that only reads"]
+    lifecycle["Issue lifecycle:<br>asks for more, reminds<br>after 15 days, closes<br>after 30; a possible<br>duplicate after 3"]
+    fix["A pull request<br>with Fixes #123<br>merges: label<br>fixed-in-next-<br>release"]
+    release(["The release<br>closes the issue<br>with a link, in<br>its milestone"])
+
+    issue --> assistant
+    assistant --> lifecycle & fix
+    lifecycle -- "you<br>answer" --> assistant
+    fix --> release
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class issue yours
+    class assistant,lifecycle,fix bots
+    class release result
+```
+
+The [issue assistant](https://github.com/Dennis-Otto/issue-assistant) reads every new issue and every new comment. It sets the labels of the issue form, and an AI, which reads the code and the documentation but can't change anything, writes a first analysis: the likely cause with links to the lines of code, what to try, and the information still missing. A job without AI checks the answer before it is posted, such as [the first analysis of #84](https://github.com/Dennis-Otto/paperless-sync/issues/84#issuecomment-6125470710), less than three minutes after the issue was opened. The issue lifecycle does the waiting without AI: it reminds whoever was asked for information, closes the issues that get no answer and the duplicates that nobody objects to, marks the issues that a merged pull request fixes, and closes them once the release with the fix is out. Your question fits the [Q&A discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/q-a) better than an issue.
+
+## A pull request
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a pull request into main
+    accDescr: You open a pull request. The title check and the labeler give it the labels of its type and its areas, and the 13 required checks run. After they finish, the flaky-test bot runs a failed job once more, the cancelled-check bot restarts a run that a late run cancelled, and the coverage bot comments with the coverage against main; a job that runs again goes back to the checks. Once every check passes, the pull request merges if it is up to date with main; otherwise the branch bot updates its branch and the checks run again. It is then squashed into main. You are orange, the bots blue, and main green.
+
+    pr(["You open a<br>pull request"])
+    labels["Title check<br>and labeler:<br>type and area<br>labels"]
+    checks{"13 required<br>checks"}
+    after["After the checks:<br>flaky-test bot,<br>coverage bot,<br>cancelled-check bot"]
+    current{"Up to date<br>with main?"}
+    branch["Branch bot:<br>updates the<br>branch"]
+    main(["Squashed<br>into main"])
+
+    pr --> labels --> checks
+    checks -- "finished" --> after
+    after -. "a failed or<br>cancelled job<br>runs again" .-> checks
+    checks -- "every check<br>passes" --> current
+    current -- "no" --> branch
+    branch -- "the checks<br>run again" --> checks
+    current -- "yes" --> main
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class pr yours
+    class labels,checks,after,current,branch bots
+    class main result
+```
+
+The 13 required checks are those of the CI (`scripts/check.sh` with PHPUnit, which runs every line of `lib/`, Psalm and the coding standard), the end-to-end tests in Docker against every supported version of Nextcloud (`nextcloud`), the lint of the workflows, the licenses of every file, the Markdown and the sign-off of every commit, the strict build of the website, the setup of the issue assistant, the Conventional Commit title and the entry under *Unreleased* in `CHANGELOG.md` for every change for users, CodeQL, the dependency review and the secret scan. A pull request that changes only the documentation or other workflows skips the end-to-end tests and passes their check at once. OSV-Scanner checks a pull request that changes a lock file, and zizmor one that changes a workflow; both send their findings to code scanning. The link check fails a pull request with a broken link. The welcome bot greets a first pull request, and [CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md) has the rules.
+
+Renovate, which the blueprint runs for this repository every two hours as the release app, keeps the dependencies, the actions and the images current; Dependabot keeps the Features of the dev container. Their routine updates merge themselves once every check passes.
+
+## A release
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a release into the Nextcloud App Store
+    accDescr: A change reaches main. The release bot keeps the pull request of the next release, with the version from the titles of the merged pull requests and the notes from Unreleased. When it is merged, an isolated build makes the package, signed with the certificate of the app, its SBOMs, its VEX and its signed provenance. The release is published on GitHub and announced in the discussions, the issue lifecycle closes the issues that it fixes, and the package goes to the Nextcloud App Store. The release verification then checks the release as users can, and does so again every week. Main is orange, the bots blue, and the App Store green.
+
+    main(["A change<br>in main"])
+    pull["Release bot:<br>the pull request<br>of the next version,<br>with its notes"]
+    build["Isolated build:<br>the signed package,<br>SBOMs, VEX, signed<br>provenance"]
+    publish["The release<br>on GitHub, announced<br>in the discussions"]
+    close["Issue lifecycle:<br>closes the issues<br>it fixes"]
+    store(["The Nextcloud<br>App Store"])
+    verify["Release verification:<br>checks it as users<br>can, every week too"]
+
+    main --> pull -- "merged" --> build --> publish
+    publish --> close & store
+    store --> verify
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class main yours
+    class pull,build,publish,close,verify bots
+    class store result
+```
+
+The version follows from the titles of the merged pull requests: `fix` a patch, `feat` a minor, `!` a major version. The maintainer merges the pull request of the release; one that only updates dependencies merges itself once its checks pass. The [release guide](releases.md) describes every step and how to verify a release.
+
+## Every night and every week
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the bots do on their own
+    accDescr: Every night, the end-to-end tests run against every supported Nextcloud, as its images move with each point release. Every morning, the findings bot keeps every alert of code scanning fixed or accepted, and the issue lifecycle sends its reminders and closes what is due. Every week, the upstream bot and the blueprint bot open pull requests for a new Nextcloud and a new blueprint, and the canary tests the coming Nextcloud; the link check, the mutation tests, the OpenSSF Scorecard, the release verification, CodeQL, OSV-Scanner, the secret scan of the whole history, the SBOM and zizmor check the repository; the clean-up bot and the settings bot tidy it up. All of it ends in a pull request that merges itself, an issue that closes itself once fixed, or a report. The bots are blue, and what comes out green.
+
+    night(["Every night"])
+    e2e["End-to-end tests<br>against every<br>supported Nextcloud"]
+    morning(["Every morning"])
+    findings["Findings: every<br>alert of code<br>scanning fixed<br>or accepted"]
+    lifecycle["Issue lifecycle:<br>reminders and<br>closing"]
+    week(["Every week"])
+    keep["Keep up and tidy up:<br>upstream bot,<br>blueprint bot, canary,<br>clean-up bot,<br>settings bot"]
+    check["Check: links,<br>mutation tests,<br>Scorecard, release<br>verification, CodeQL,<br>OSV, secret scan,<br>SBOM, zizmor"]
+    out(["A pull request that<br>merges itself, an issue<br>that closes itself once<br>fixed, or a report"])
+
+    night --> e2e
+    %% Invisible links stack the three times, so that the diagram stays narrow.
+    e2e ~~~ morning
+    morning --> findings & lifecycle
+    lifecycle ~~~ week
+    week --> keep & check
+    keep & check --> out
+
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class e2e,findings,lifecycle,keep,check bots
+    class out result
+```
+
+- **Upstream bot:** when Nextcloud has a new major version, a pull request raises `max-version` in `appinfo/info.xml` and merges itself once every check, the end-to-end tests against the new version included, passes.
+- **Canary:** the end-to-end tests against the beta or release candidate of the next major version of Nextcloud, or its daily build, keep one issue open while they fail. It blocks nothing and gives notice while there is time.
+- **Blueprint bot:** brings the repository up to the latest release of the blueprint with `copier update`, in a pull request that merges itself without conflicts.
+- **Link check:** keeps one issue open while a link of the documentation is broken.
+- **Settings bot:** brings the settings of the repository on GitHub in line with the settings as code in `.github/repository.toml`.
+
+## Every workflow
+
+Each workflow says in its first lines what it does. An environment holds the secrets of the jobs that need them, and only `main` may use it; the release app is a GitHub App that the jobs of the environment `release` act as, so that the pull requests they open run their checks.
+
+| Workflow | What it does | When | Environment |
+| --- | --- | --- | --- |
+| [CI (php)](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/ci.yml) | `scripts/check.sh`: Composer, the schema of `appinfo/info.xml`, the coding standard, Psalm, PHPUnit with every line of `lib/` covered, the package | every pull request, every push to `main` | — |
+| [Docker E2E](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/e2e.yml) | the end-to-end tests against every supported Nextcloud; on Monday also the canary against the coming one | pull requests that can affect the app, every push to `main`, every night, every Monday | — |
+| [Lint](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/lint.yml) | the workflows, the licenses (REUSE), the Markdown, the sign-off of every commit (DCO), the setup of the issue assistant, and hints at spelling and style | every pull request | — |
+| [Pull request title](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/pull-request-title.yml) | a Conventional Commit title, the label of its type, and an entry under *Unreleased* for `feat`, `fix` and `perf` | a pull request opened, edited or pushed | — |
+| [Area labels](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/area-labels.yml) | the labels of the areas whose files a pull request changes | a pull request opened or pushed | — |
+| [Welcome](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/welcome.yml) | a comment with what helps a first pull request along | the first pull request of a person | — |
+| [Docs](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/docs.yml) | builds this website strictly, and publishes it on GitHub Pages | every pull request, every push to `main` | `github-pages` |
+| [Links](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/links.yml) | lychee checks every link of the documentation; the weekly run keeps one issue open while one is broken | a change of a Markdown file, every week | — |
+| [CodeQL](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/codeql.yml) | the static analysis of the JavaScript and of the workflows | every pull request, every push to `main`, every week | — |
+| [Dependency review](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/dependency-review.yml) | the vulnerabilities and licenses of the dependencies that a pull request brings in | every pull request | — |
+| [Secret scan](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/secret-scan.yml) | gitleaks looks for secrets in the commits of a pull request, and every week in the whole history of `main` | every pull request, every week | — |
+| [OSV-Scanner](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/osv-scanner.yml) | every lock file against the OSV database of known vulnerabilities | a pull request that changes a lock file, every push to `main`, every week | — |
+| [Workflow security](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/zizmor.yml) | zizmor audits every workflow for injection, wide permissions and unpinned actions | a pull request that changes a workflow, every push to `main`, every week | — |
+| [SBOM](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/sbom.yml) | a software bill of materials of the repository in SPDX; every release brings its own | every week | — |
+| [After the checks](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/after-checks.yml) | the flaky-test bot, the coverage bot, the cancelled-check bot, and the bot that runs a failed release once more where it stopped | after every run of the checks and of the release | — |
+| [Update branches](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/update-branches.yml) | the branch bot: brings every pull request that waits for auto-merge up to date, and labels one that conflicts with `main` | every push to `main`, every 30 minutes | `release` |
+| [Dependabot maintenance](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/dependabot-automerge.yml) | merges the routine updates of Dependabot once every check passes | a pull request of Dependabot | — |
+| [Issue assistant](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/issue-assistant.yml) | the labels of the issue forms and a first analysis by an AI that only reads, on a runner whose firewall lets through only the hosts it needs | a new or edited issue, a new comment | `issue-assistant` |
+| [Issue lifecycle](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/issue-lifecycle.yml) | reminders, closing without an answer or as a duplicate, the label of fixed issues, and closing them with the release | every morning, a merged pull request, a release | — |
+| [Labels](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/labels.yml) | creates and updates the labels of `.github/labels.toml` | a change of the labels | — |
+| [Release](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/release.yml) | the release bot: the pull request of the next release; once merged, the release, its announcement and the delivery to the App Store | every push to `main`, every hour | `release` |
+| [Build the release](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/build-release.yml) | the isolated build: the signed package, SBOMs, the licenses of its components, VEX and signed provenance (SLSA Build Level 3) | called by the release | `release` |
+| [Release verification](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/verify-release.yml) | checks the latest release as users can: provenance, SBOM, immutable release, signed commit, the same package in the App Store | after every release, every week | — |
+| [Register the app](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/register-app.yml) | registers the app id with its certificate in the Nextcloud App Store | by hand, once | `release` |
+| [Upstream](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/upstream.yml) | the upstream bot: a pull request for a new major version of Nextcloud | every week | `release` |
+| [Blueprint update](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/blueprint-update.yml) | the blueprint bot: a pull request with the latest release of the blueprint | every week, after every release of the blueprint | `release` |
+| [Settings](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/settings.yml) | the settings bot: the settings as code on GitHub | a change of the settings, every week | `release` |
+| [Clean-up](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/cleanup.yml) | deletes the merged branches and the caches of closed pull requests, and lists old branches with work of their own | every week | — |
+| [Mutation](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/mutation.yml) | Infection changes the code in thousands of small ways and reports the changes that no test notices | every week, a pull request that changes how it runs | — |
+| [OpenSSF Scorecard](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/scorecard.yml) | rates the security practices of the repository | every push to `main`, every week | — |
+| [Findings](https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/findings.yml) | dismisses the alerts of code scanning that `.github/findings.toml` accepts, with the reason, and fails while another is open | every morning, after CodeQL and Scorecard | — |
+
+## Safe by design
+
+Bots with write access are a target, so they are built to give an attacker nothing:
+
+- Every action is pinned to the hash of a commit, which the settings of the repository require, and Renovate moves the pins.
+- The token of a workflow can only read by default; each job asks for the permissions it needs.
+- The secrets live in the environments `release` and `issue-assistant`, which only `main` may use, never in the repository.
+- The workflows of a pull request from a fork wait for the approval of the maintainer. The bots that act on pull requests never check out or run their code.
+- Harden-Runner records the network traffic of the jobs, the AI of the issue assistant runs behind a firewall that lets through only the hosts it needs, and zizmor and CodeQL audit the workflows themselves.
+
+The [security design](security.md) covers the app, and [SECURITY.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SECURITY.md) the repository and its releases. A repository made from the [Repo Blueprint](https://github.com/Dennis-Otto/repo-blueprint) gets the same automation.
