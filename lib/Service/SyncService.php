@@ -67,7 +67,7 @@ final class SyncService {
 
 			return $report;
 		} catch (\Throwable $exception) {
-			$this->status->failed($exception);
+			$this->status->failed($exception, $report);
 			$this->logger->error('Paperless synchronization failed', ['exception' => $exception]);
 			throw $exception;
 		} finally {
@@ -136,6 +136,7 @@ final class SyncService {
 				} catch (\Throwable $exception) {
 					$error = $this->exceptionMessage($exception);
 					$report->error("Excluded P{$documentId}: {$error}");
+					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry, $exception);
 					if (!$report->dryRun) {
 						$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
 					}
@@ -143,6 +144,7 @@ final class SyncService {
 				continue;
 			}
 
+			$target = '';
 			try {
 				$relative = $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths);
 				$target = $this->join($archiveRoot, $relative);
@@ -249,8 +251,11 @@ final class SyncService {
 				if (!$report->dryRun) {
 					$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
 				}
+				// The warning about the archive names the error that stops the writes.
 				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
+				} else {
+					$this->logDocumentError($documentId, $target !== '' ? $target : (string)($entry['path'] ?? ''), $error, $entry, $exception);
 				}
 			}
 		}
@@ -307,6 +312,8 @@ final class SyncService {
 				}
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
+				} else {
+					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry, $exception);
 				}
 			}
 		}
@@ -396,6 +403,8 @@ final class SyncService {
 				}
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
+				} else {
+					$this->logDocumentError($documentId, $path, $error, $entry, $exception);
 				}
 			}
 		}
@@ -562,7 +571,19 @@ final class SyncService {
 					unset($byPath[$path]);
 				}
 			} catch (\Throwable $exception) {
-				$report->error("Import task {$path}: {$this->exceptionMessage($exception)}");
+				$error = $this->exceptionMessage($exception);
+				$report->error("Import task {$path}: {$error}");
+				// The task stays pending, with its error, so that a lasting failure is logged once.
+				if ($this->changedError($pending, $error)) {
+					$this->logger->warning('Paperless Sync could not check the import of the inbox file {path}: {error}', [
+						'path' => $path,
+						'error' => $error,
+						'exception' => $exception,
+					]);
+				}
+				if (!$report->dryRun) {
+					$this->state->saveImport($config->targetUser, $path, ['last_error' => mb_substr($error, 0, 4000)]);
+				}
 			}
 		}
 
@@ -688,6 +709,33 @@ final class SyncService {
 		}
 
 		return false;
+	}
+
+	/**
+	 * Logs the error of a document as a warning, unless its state keeps the same error from an
+	 * earlier run: an error that recurs in every run is logged once, when it first occurs or changes.
+	 *
+	 * @param array<string, int|string|null>|null $entry the state of the document
+	 */
+	private function logDocumentError(int $documentId, string $path, string $error, ?array $entry, \Throwable $exception): void {
+		if (!$this->changedError($entry, $error)) {
+			return;
+		}
+		$this->logger->warning('Paperless Sync could not synchronize the document P{documentId}: {error}', [
+			'documentId' => $documentId,
+			'path' => $path,
+			'error' => $error,
+			'exception' => $exception,
+		]);
+	}
+
+	/**
+	 * Whether an error differs from the one that the state keeps.
+	 *
+	 * @param array<string, int|string|null>|null $entry
+	 */
+	private function changedError(?array $entry, string $error): bool {
+		return ($entry['last_error'] ?? null) !== mb_substr($error, 0, 4000);
 	}
 
 	private function exceptionMessage(\Throwable $exception): string {

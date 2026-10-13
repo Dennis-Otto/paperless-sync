@@ -140,6 +140,23 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('Paperless Sync is not completely configured.', $this->settings['status_last_error']);
 	}
 
+	public function testFailedRunKeepsTheReportOfWhatItDidInTheStatus(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
+
+		try {
+			$this->service->run();
+			self::fail('A document without a valid ID fails the run.');
+		} catch (RuntimeException) {
+		}
+
+		$report = json_decode((string)$this->settings['status_last_report'], true, 512, JSON_THROW_ON_ERROR);
+		self::assertSame(['IMPORT: Dokumente/Paperless/Eingang/scan.pdf'], $report['actions'], 'The import before the failure stays in the report.');
+		self::assertSame(0, $report['completedAt']);
+		self::assertSame('Paperless returned a document without a valid ID.', $this->settings['status_last_error']);
+		self::assertArrayNotHasKey('status_last_completed', $this->settings, 'A run that failed completed nothing.');
+	}
+
 	public function testCompletedRunIsLoggedAndRecordedInTheStatus(): void {
 		$this->exportDocument();
 		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization completed', self::callback(
@@ -484,6 +501,52 @@ final class SyncServiceTest extends TestCase {
 		self::assertStringStartsWith('SCAN INCOMPLETE:', $report->actions[100], 'A hundred imports do not hide that the run counted no document as missing.');
 	}
 
+	public function testDryRunShowsTheTrashAlsoBehindAHundredImports(): void {
+		$this->exportDocument();
+		$this->trashDocument();
+		foreach (range(1, 100) as $number) {
+			$this->storage->files["Dokumente/Paperless/Eingang/scan{$number}.pdf"] = "%PDF-{$number}";
+		}
+
+		$report = $this->service->run(true);
+
+		self::assertSame(100, $report->importsSubmitted);
+		self::assertCount(100, $report->actions);
+		self::assertSame('TRASH P123: ' . $this->trashFolderPath(), $report->actions[99], 'The move to the deleted folder takes the place of the last import.');
+		self::assertSame(1, $report->omittedActions);
+	}
+
+	public function testErrorOfADocumentIsLoggedOnceUntilItChanges(): void {
+		$warnings = [];
+		$this->logger->method('warning')->willReturnCallback(static function (string $message, array $context) use (&$warnings): void {
+			$warnings[] = [$message, $context];
+		});
+		$unavailable = new RuntimeException('Paperless is unavailable');
+		$this->paperless->downloadException = $unavailable;
+
+		$this->exportDocument();
+		$this->service->run();
+		$timedOut = new RuntimeException('Paperless timed out');
+		$this->paperless->downloadException = $timedOut;
+		$this->service->run();
+
+		$message = 'Paperless Sync could not synchronize the document P{documentId}: {error}';
+		self::assertSame([
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless is unavailable', 'exception' => $unavailable]],
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless timed out', 'exception' => $timedOut]],
+		], $warnings, 'The second run fails as the first did, so only the first and the third are logged.');
+	}
+
+	public function testDryRunLogsTheErrorOfADocumentThatNoRunRecorded(): void {
+		$this->paperless->documents = [['id' => 12.5] + $this->document()];
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			self::callback(static fn (array $context): bool => $context['documentId'] === 12 && $context['path'] === ''),
+		);
+
+		$this->service->run(true);
+	}
+
 	public function testDocumentWithoutAValidIdFailsTheRun(): void {
 		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
 
@@ -619,12 +682,20 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
-		$this->paperless->taskException = new RuntimeException('Paperless timed out');
+		$timedOut = new RuntimeException('Paperless timed out');
+		$this->paperless->taskException = $timedOut;
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not check the import of the inbox file {path}: {error}',
+			['path' => $path, 'error' => 'Paperless timed out', 'exception' => $timedOut],
+		);
 
 		$report = $this->service->run();
+		$this->service->run();
+		$this->service->run(true);
 
 		self::assertSame(['ERROR: Import task ' . $path . ': Paperless timed out'], $report->actions);
 		self::assertSame('pending', $this->state->imports[$path]['status']);
+		self::assertSame('Paperless timed out', $this->state->imports[$path]['last_error']);
 		self::assertCount(1, $this->paperless->uploads);
 	}
 
@@ -1036,8 +1107,10 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents[0]['tags'] = [9];
 		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
 		$this->storage->deleteException = new RuntimeException('File is locked');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'File is locked');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Excluded P123: File is locked'], $report->actions);
 		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
@@ -1098,8 +1171,10 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$this->trashDocument();
 		$this->storage->moveException = new RuntimeException('Storage is full');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'Storage is full');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Trash P123: Storage is full'], $report->actions);
 		self::assertSame('Storage is full', $this->state->exports[123]['last_error']);
@@ -1480,8 +1555,10 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$this->paperless->documents = [];
 		$this->storage->deleteException = new RuntimeException('File is locked');
+		$this->expectDocumentWarning(self::EXPORTED_PATH, 'File is locked');
 
 		$report = $this->service->run();
+		$this->service->run();
 
 		self::assertSame(['ERROR: Missing P123: File is locked'], $report->actions);
 		self::assertSame(0, $report->permanentlyDeleted);
@@ -1576,6 +1653,17 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	/** @param array<string, mixed>|null $document */
+	/** Expects the warning about the error of the document P123, once in every run that follows. */
+	private function expectDocumentWarning(string $path, string $error): void {
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			self::callback(static fn (array $context): bool => $context['documentId'] === 123
+				&& $context['path'] === $path
+				&& $context['error'] === $error
+				&& $context['exception'] instanceof RuntimeException),
+		);
+	}
+
 	private function exportDocument(?array $document = null): SyncReport {
 		return $this->exportDocuments([$document ?? $this->document()]);
 	}

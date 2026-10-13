@@ -360,6 +360,50 @@ The app uses Nextcloud's native cron scheduler. System cron must run reliably. T
 
 <!-- --8<-- [end:configuration] -->
 
+## Status, report and log
+
+<!-- --8<-- [start:status] -->
+Every run leaves its outcome in three places, also a scheduled run that nobody watched:
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Where the outcome of a run goes
+    accDescr: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.
+
+    run(["⚙️ Run<br><i>scheduled, by hand<br>or dry-run</i>"])
+    report["📋 Report<br><i>counts, up to 100 lines,<br>errors first</i>"]
+    status["🗂️ Status<br><i>state, times, errors<br>and report of the last run</i>"]
+    page["🖥️ Settings page<br><i>at every visit</i>"]
+    log["📜 Nextcloud log<br><i>a warning for each<br>new error of a document</i>"]
+
+    run --> report --> status --> page
+    run -- "errors" --> log
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,report,status,page nextcloud
+    class log warning
+```
+
+The top of the settings page shows how the last run ended, when it finished, the last run without errors and, roughly, the next scheduled run: Nextcloud's background jobs start it, so it follows a few minutes after the interval. A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
+<!-- --8<-- [end:status] -->
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/status-error-dark.png">
+  <img alt="The status of Paperless Sync after a run with an error: the state Completed with errors in red, the times of the last run, of the last successful run and of the next scheduled run, and below them a box that names the document whose download failed" src="docs/images/status-error-light.png">
+</picture>
+
+<!-- --8<-- [start:status-report] -->
+The report counts every change and lists up to 100 lines of them. A run with more lines lists its errors, deletions, removals of excluded copies, moves to the deleted folder and failed imports first, in place of exports, moves and imports, and says how many lines it leaves out, so that a dry-run never hides a deletion behind a hundred imports; `SCAN INCOMPLETE` and `EXPORT STOPPED` always stay. The status keeps the first 50 errors of the run and counts the others.
+
+The Nextcloud log has a warning, with the ID of the document and its path, when an error of a document first occurs or changes; an error that comes back in every run is logged once. A run that fails as a whole is logged as an error.
+<!-- --8<-- [end:status-report] -->
+
 ## Testing
 
 Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, incomplete scans of Paperless, the batch size with failing writes, inbox success and failure, dry-run behavior, and release version management.

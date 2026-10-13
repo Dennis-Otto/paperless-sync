@@ -102,6 +102,19 @@ final class SyncJobTest extends TestCase {
 		self::assertSame('completed', $this->settings['status_last_state'], 'Fifteen minutes after the last run, the next one is due.');
 	}
 
+	public function testRunAfterAFailedRunWaitsForTheConfiguredInterval(): void {
+		$this->settings['status_last_started'] = $this->now - 15 * 60;
+		$this->settings['status_last_ended'] = $this->now - 60;
+		$this->settings['status_last_state'] = 'failed';
+
+		$this->start();
+		self::assertSame('failed', $this->settings['status_last_state'], 'A run that failed one minute ago is too recent.');
+
+		$this->now += 14 * 60;
+		$this->start();
+		self::assertSame('completed', $this->settings['status_last_state']);
+	}
+
 	public function testFailedRunIsLogged(): void {
 		$locked = new LockedException('paperless_sync::synchronization');
 		$this->locking->method('acquireLock')->willThrowException($locked);

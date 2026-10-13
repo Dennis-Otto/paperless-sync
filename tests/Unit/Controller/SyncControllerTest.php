@@ -50,7 +50,7 @@ final class SyncControllerTest extends TestCase {
 			$this->locking,
 			$this->createMock(LoggerInterface::class),
 		);
-		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status);
+		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $configService);
 	}
 
 	public function testRunReturnsTheReport(): void {
@@ -92,5 +92,7 @@ final class SyncControllerTest extends TestCase {
 		self::assertIsArray($status);
 		self::assertSame('completed', $status['state']);
 		self::assertSame(0, $status['summary']['errors']);
+		self::assertSame([], $status['report']['errorMessages']);
+		self::assertNull($status['nextRun'], 'Scheduled runs are off until the settings turn them on.');
 	}
 }

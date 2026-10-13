@@ -5,13 +5,15 @@
 
 The scenario showcase is a small household archive in Paperless; showcase-update is
 the same archive a few days later, with one document renamed, one in the trash, one
-excluded by a tag and two new ones, so that a dry-run shows every kind of change.
-screenshots.mjs switches between them. Every name, date and text is invented.
+excluded by a tag and two new ones, so that a dry-run shows every kind of change;
+showcase-error adds a document whose file Paperless doesn't hand out, so that a run
+ends with an error. screenshots.mjs switches between them. Every name, date and text
+is invented.
 """
 
 import hashlib
 
-SCENARIOS = {"showcase", "showcase-update"}
+SCENARIOS = {"showcase", "showcase-update", "showcase-error"}
 
 CORRESPONDENTS = [
     {"id": 1, "name": "Example GmbH"},
@@ -63,6 +65,8 @@ LATER = [
     (143, "Electricity bill September", 3, 1, "2026-09-30"),
     (190, "Credit card terms", 4, 3, "2026-10-07"),
 ]
+# Listed by Paperless, but without a file: its download fails.
+UNAVAILABLE = (191, "Annual statement 2026", 4, 4, "2026-10-08")
 RENAMED = {132: "Premium adjustment 2026"}
 TRASHED = {142: "2026-10-06T09:30:00+02:00"}
 PRIVATE = {125}
@@ -99,6 +103,8 @@ def documents(scenario):
             trash.append(trashed)
         else:
             active.append(_document(entry, RENAMED.get(document_id), [2] if document_id in PRIVATE else None))
+    if scenario == "showcase-error":
+        active.append(_document(UNAVAILABLE))
     return active, trash
 
 

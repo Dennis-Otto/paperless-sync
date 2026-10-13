@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Controller;
 
+use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
@@ -25,6 +26,7 @@ final class SyncController extends Controller {
 		IRequest $request,
 		private SyncService $syncService,
 		private StatusService $statusService,
+		private ConfigService $configService,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -42,6 +44,6 @@ final class SyncController extends Controller {
 
 	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
 	public function status(): JSONResponse {
-		return new JSONResponse($this->statusService->get());
+		return new JSONResponse($this->statusService->overview($this->configService->get()));
 	}
 }

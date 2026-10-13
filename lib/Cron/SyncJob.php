@@ -31,13 +31,9 @@ final class SyncJob extends TimedJob {
 	}
 
 	protected function run(mixed $argument): void {
-		$config = $this->configService->get();
-		if (!$config->enabled) {
-			return;
-		}
-		$status = $this->statusService->get();
-		$lastCompleted = max($status['lastCompleted'], $status['lastStarted']);
-		if ($lastCompleted > 0 && $this->time->getTime() - $lastCompleted < $config->syncIntervalMinutes * 60) {
+		// The settings page shows the same time as the next scheduled run.
+		$nextRun = $this->statusService->nextRun($this->configService->get());
+		if ($nextRun === null || $this->time->getTime() < $nextRun) {
 			return;
 		}
 		try {

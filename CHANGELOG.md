@@ -4,8 +4,15 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Features
+
+- The settings page shows how the last run ended at every visit, also a scheduled run that nobody watched: its state, in red when it failed or had errors, when it finished, the last successful run, the next scheduled run, the errors of the run in a box of their own, and its report. While a run is active, the page follows it until it ends.
+- The Nextcloud log has a warning, with the ID and the path of the document, when an error of a document first occurs or changes. An error that comes back in every run is logged once.
+
 ### Bug fixes
 
+- The report of a run with more than 100 lines lists its errors, deletions, removals of excluded copies and moves to the deleted folder first and says how many lines it leaves out. Before, it dropped every line after the hundredth without a word, so that a dry-run with many files in the inbox could hide the deletions that the run would make.
+- A run that fails no longer counts as the last completed run; the status shows its end as *Last finished*.
 - A run no longer counts a document as missing when Paperless answered a page of its list incompletely, such as an empty page from a proxy, or when documents were added or deleted while the run read the pages. The report says `SCAN INCOMPLETE`, the Nextcloud log has a warning, and the next complete scan carries on. Before, a document that still existed in Paperless could move to the deleted folder, or be deleted when direct deletion is on.
 - A document that Paperless lists again starts its count of missing scans anew, also when its export fails or waits for the next run, so that only scans in a row count.
 - Every export that a run tries counts against the batch size, also one that fails, and a document whose export failed waits behind the others. Before, a run that couldn't write, against a full quota or a read-only storage for example, downloaded every pending document again in every run and failed on each one. Failed exports don't take the places of moves of trashed or missing documents, and a move or deletion that fails takes its place in the batch too.
