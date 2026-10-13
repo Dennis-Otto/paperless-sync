@@ -23,14 +23,15 @@ bash tests/e2e/run.sh
 
 Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, incomplete scans of Paperless, the batch size with failing writes, inbox success and failure, dry-run behavior, and release version management. `scripts/check.sh` fails when a line of `lib/` runs in no test.
 
-The Docker end-to-end suite mounts this checkout into real Nextcloud containers and uses a deterministic Paperless API mock. `run-all.sh` runs it against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, side by side; `run.sh` runs it against one version:
+The Docker end-to-end suite mounts this checkout into real Nextcloud containers and uses a deterministic Paperless API mock. It configures the app, runs dry-runs, exports, moves, the trash and its restore, conflicts, documents that vanish, guarded deletion and the inbox, and starts the background job as system cron would. `run-all.sh` runs it against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, side by side, and the newest of them also on PostgreSQL, and on MariaDB with S3 object storage; `run.sh` runs it against one version, on SQLite by default:
 
 ```bash
 bash tests/e2e/run-all.sh
 bash tests/e2e/run.sh
+E2E_DATABASE=mysql E2E_OBJECTSTORE=s3 bash tests/e2e/run.sh
 ```
 
-CI runs `run-all.sh` on every push to `main`, every night, and in every pull request that can affect the app; a pull request that changes only the documentation, other workflows or the version of a release passes the check at once. See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
+CI runs `run-all.sh` on every push to `main`, every night, and in every pull request that can affect the app; a pull request that changes only the documentation, other workflows or the version of a release passes the check at once. PostgreSQL, MariaDB and S3 run in a job of their own, a required check as well, on every push to `main`, every night, and in a pull request that changes the migrations, the state, the files in Nextcloud, the uploads to Paperless or the tests. See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
 
 ## Pictures
 

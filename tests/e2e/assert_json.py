@@ -8,6 +8,8 @@ import sys
 from urllib.parse import quote
 
 mode = sys.argv[1]
+# A value that the mode compares with, such as the time of an earlier run.
+argument = sys.argv[2] if len(sys.argv) > 2 else ""
 payload = json.load(sys.stdin)
 serialized = json.dumps(payload, sort_keys=True)
 
@@ -19,6 +21,14 @@ def expect(key, value):
     actual = payload.get(key)
     if actual != value:
         raise AssertionError(f"{mode}: expected {key}={value!r}, got {actual!r}; payload={payload!r}")
+
+
+def expect_action(action):
+    if action not in payload.get("actions", []):
+        raise AssertionError(f"{mode}: the run lists no action {action!r}: {payload!r}")
+
+
+ARCHIVE = "Documents/Paperless/Archive/Example GmbH/Invoice/2026"
 
 
 if mode == "config":
@@ -118,6 +128,66 @@ elif mode == "status-errors":
         raise AssertionError(f"The status keeps no report of the run: {payload!r}")
     if payload.get("lastEnded", 0) < payload.get("lastStarted", 0) or payload.get("lastSuccess", 0) < 1:
         raise AssertionError(f"The times of the runs are wrong: {payload!r}")
+elif mode == "enabled":
+    expect("enabled", True)
+elif mode == "disabled":
+    expect("enabled", False)
+elif mode == "job":
+    # The status after the background job: a complete run, not a dry-run, that exported
+    # the document, after the last run of an hour ago.
+    expect("state", "completed")
+    expect("error", "")
+    summary = payload.get("summary", {})
+    if summary.get("dryRun") is not False or summary.get("exported") != 1 or summary.get("errors") != 0:
+        raise AssertionError(f"The background job ran no complete export: {payload!r}")
+    if not payload.get("lastCompleted", 0) > int(argument):
+        raise AssertionError(f"The background job didn't complete a run after {argument}: {payload!r}")
+elif mode == "restored":
+    expect("moved", 1)
+    expect("exported", 0)
+    expect("movedToTrash", 0)
+    expect("errors", 0)
+    expect_action(f"MOVE P123: {ARCHIVE}/2026-08-26 - Monthly invoice corrected [P123].pdf")
+elif mode == "mock-no-download":
+    # A run that moved a copy back, or skipped a conflict, downloaded no document.
+    expect("downloads", int(argument))
+    expect("invalidAuth", 0)
+elif mode == "conflict-skip":
+    expect("conflictMode", "skip")
+elif mode == "conflict-replace":
+    expect("conflictMode", "replace")
+elif mode == "conflict":
+    expect("exported", 0)
+    expect("unchanged", 1)
+    expect("errors", 1)
+    expect_action(f"ERROR: P124: Nextcloud file conflict at {ARCHIVE}/2026-08-26 - Annual statement [P124].pdf.")
+elif mode == "conflict-replaced":
+    expect("exported", 1)
+    expect("unchanged", 1)
+    expect("errors", 0)
+    expect_action(f"EXPORT P124: {ARCHIVE}/2026-08-26 - Annual statement [P124].pdf")
+elif mode == "vanished-wait":
+    expect("movedToTrash", 0)
+    expect("permanentlyDeleted", 0)
+    expect("unchanged", 1)
+    expect("errors", 0)
+    expect_action("WAIT P123: missing run 1/2")
+elif mode == "vanished":
+    # After the grace runs, the copy of a document that vanished without the trash moves
+    # to the deleted folder; it is never deleted, as direct deletion is not allowed.
+    expect("movedToTrash", 1)
+    expect("permanentlyDeleted", 0)
+    expect("errors", 0)
+    if not any(
+        str(action).startswith("MISSING P123: Documents/Paperless/Archive/_Deleted/")
+        for action in payload.get("actions", [])
+    ):
+        raise AssertionError(f"The vanished document didn't move to the deleted folder: {payload!r}")
+elif mode == "vanished-kept":
+    expect("movedToTrash", 0)
+    expect("permanentlyDeleted", 0)
+    expect("unchanged", 1)
+    expect("errors", 0)
 elif mode == "status":
     expect("state", "completed")
     expect("error", "")
