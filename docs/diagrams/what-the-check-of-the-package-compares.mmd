@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the check of the package compares
+    accDescr: krankerl packages the commit in HEAD and leaves out what .nextcloudignore lists. scripts/check-package.sh takes the runtime files of the same commit, those in appinfo, css, img, js, l10n, lib and templates and CHANGELOG.md, LICENSE and README.md, and compares the package with them file by file. A file that the package lacks, a stray file, a changed file or a link fails the check with the list of the differences. A package that holds exactly these files, and its signature once it is signed, passes if its PHP and JavaScript parse, and otherwise fails with the file that doesn't. The release workflow checks the package again after signing.
+
+    head["The commit<br>in HEAD"]
+    krankerl["`krankerl packages it<br>*and leaves out*<br>*what it ignores*`"]
+    package["The package"]
+    runtime["Its runtime files:<br>appinfo · css · img<br>js · l10n · lib<br>templates<br>changelog, license<br>and README"]
+    same{"The same files,<br>each with the same content?"}
+    differences["❌ Fails with the list:<br>missing · stray · changed"]
+    parse{"Does its PHP and<br>JavaScript parse?"}
+    broken["❌ Fails with the file<br>that doesn't parse"]
+    passed["✅ Passes, and again<br>after signing"]
+
+    head --> krankerl --> package --> same
+    head --> runtime --> same
+    same -- "no" --> differences
+    same -- "yes" --> parse
+    parse -- "no" --> broken
+    parse -- "yes" --> passed
+
+    classDef source fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class head,runtime source
+    class krankerl,package,same,parse check
+    class passed done
+    class differences,broken refused
