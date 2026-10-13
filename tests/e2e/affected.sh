@@ -13,8 +13,10 @@
 #   bash tests/e2e/affected.sh [BASE [HEAD]]
 #
 # It names the changed files that reach the app and writes affected=true or
-# affected=false to $GITHUB_OUTPUT. scripts/check-project.sh sources it to test its
-# rules.
+# affected=false to $GITHUB_OUTPUT, and variants=true or variants=false: whether the
+# change can also behave differently on another database or storage, so that
+# run-all.sh runs PostgreSQL, MariaDB and the object store as well.
+# scripts/check-project.sh sources it to test its rules.
 
 # A file whose change can make the end-to-end tests pass or fail: the code, the
 # metadata and the assets of the app, the tests themselves and their workflow.
@@ -24,6 +26,20 @@ path_affects_app() {
 		tests/e2e/*.md) return 1 ;;
 		lib/* | appinfo/* | templates/* | js/* | css/* | l10n/* | img/* | composer.json | tests/e2e/*) return 0 ;;
 		.github/workflows/e2e.yml) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# A file whose change can behave differently on another database or storage than
+# SQLite and local storage: the migrations and the queries of the state, the files in
+# Nextcloud, the upload of a file of the inbox, whose stream on an object store has no
+# size (Dennis-Otto/paperless-sync#73), and the tests themselves and their workflow.
+# appinfo/info.xml, such as a new max-version, counts as for path_affects_app.
+path_affects_variants() {
+	case "$1" in
+		tests/e2e/*.md) return 1 ;;
+		lib/Migration/* | lib/Service/SyncStateRepository* | lib/Service/NextcloudStorage*) return 0 ;;
+		lib/Service/PaperlessApiService.php | tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -68,14 +84,14 @@ HEAD="${2:-HEAD}"
 
 decide() {
 	if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-		echo "affected=$1" >>"${GITHUB_OUTPUT}"
+		printf 'affected=%s\nvariants=%s\n' "$1" "$2" >>"${GITHUB_OUTPUT}"
 	fi
 }
 
 if ! git rev-parse --quiet --verify "${BASE}^{commit}" >/dev/null ||
 	! git rev-parse --quiet --verify "${HEAD}^{commit}" >/dev/null; then
-	echo "The commits ${BASE} and ${HEAD} aren't both here, so the end-to-end tests run."
-	decide true
+	echo "The commits ${BASE} and ${HEAD} aren't both here, so all end-to-end tests run."
+	decide true true
 	exit 0
 fi
 
@@ -87,15 +103,20 @@ git diff --name-only -z --no-renames "${BASE}" "${HEAD}" >"${CHANGED}"
 
 count=0
 reaching=()
+varying=()
 while IFS= read -r -d '' path; do
 	count=$((count + 1))
 	if [[ "${path}" == appinfo/info.xml ]]; then
 		info="$(git diff --unified=0 --no-color --no-ext-diff "${BASE}" "${HEAD}" -- appinfo/info.xml)"
 		if info_xml_change_affects_app <<<"${info}"; then
 			reaching+=("${path}")
+			varying+=("${path}")
 		fi
 	elif path_affects_app "${path}"; then
 		reaching+=("${path}")
+		if path_affects_variants "${path}"; then
+			varying+=("${path}")
+		fi
 	fi
 done <"${CHANGED}"
 
@@ -105,7 +126,20 @@ if ((${#reaching[@]} > 0)); then
 	if ((${#reaching[@]} > 20)); then
 		echo "  and $((${#reaching[@]} - 20)) more"
 	fi
-	decide true
+	if ((${#varying[@]} > 0)); then
+		echo "${#varying[@]} of them can behave differently on another database or storage, so PostgreSQL, MariaDB and the object store run as well."
+		decide true true
+	else
+		message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
+		echo "${message}"
+		if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+			printf '### E2E on SQLite with local storage only
+
+%s
+' "${message}" >>"${GITHUB_STEP_SUMMARY}"
+		fi
+		decide true false
+	fi
 	exit 0
 fi
 
@@ -114,4 +148,4 @@ echo "${message}"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 	printf '### E2E skipped: the change cannot affect the app\n\n%s\n' "${message}" >>"${GITHUB_STEP_SUMMARY}"
 fi
-decide false
+decide false false

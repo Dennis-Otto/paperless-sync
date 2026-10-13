@@ -13,9 +13,11 @@ from urllib.parse import parse_qs, urlparse
 import showcase
 
 TOKEN = "e2e-only-token"
-DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
 LOCK = threading.Lock()
 STATE = {}
+SCENARIOS = {
+    "active", "renamed", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
+}
 
 
 def reset_state():
@@ -49,6 +51,23 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "archived_file_name": "archive.pdf",
         "mime_type": "application/pdf",
     }
+
+
+def document_content(document_id):
+    return f"%PDF-1.4\nSynthetic Paperless archive document P{document_id}.\n%%EOF\n".encode("utf-8")
+
+
+def restored():
+    # Paperless writes the time of the restore into the document, so the app compares
+    # its checksum before it moves the copy back.
+    return document("Monthly invoice corrected", "2026-08-28T09:00:00+02:00")
+
+
+def statement():
+    # A second document, for the conflicts and the document that vanishes.
+    letter = document("Annual statement")
+    letter["id"] = 124
+    return letter
 
 
 def archived_letter(number):
@@ -91,6 +110,14 @@ def scenario_documents():
         trashed = document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")
         trashed["deleted_at"] = "2026-08-27T08:00:00+02:00"
         return [], [trashed]
+    if scenario == "restored":
+        return [restored()], []
+    if scenario == "conflict":
+        # A second document, at whose path in Nextcloud a file of the user waits.
+        return [restored(), statement()], []
+    if scenario == "vanished":
+        # The first document is gone from Paperless without passing through its trash.
+        return [statement()], []
     if scenario in ("empty", "incomplete"):
         return [], []
     if scenario == "archive":
@@ -151,20 +178,24 @@ class Handler(BaseHTTPRequestHandler):
                 checksum = showcase.checksum(document_id)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif self._scenario() == "names" and re.fullmatch(r"/api/documents/20[1-4]/(download|metadata)/", parsed.path):
+            # The documents with long or unusual names carry the content of P123.
+            data = document_content(123)
             if parsed.path.endswith("/download/"):
-                self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
+                self._bytes(200, data, "application/pdf")
             else:
-                checksum = hashlib.sha256(DOCUMENT_CONTENT).hexdigest()
+                checksum = hashlib.sha256(data).hexdigest()
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
-        elif parsed.path == "/api/documents/123/download/":
-            with LOCK:
-                STATE["downloads"] += 1
-            self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
-        elif parsed.path == "/api/documents/123/metadata/":
-            checksum = hashlib.sha256(DOCUMENT_CONTENT).hexdigest()
-            with LOCK:
-                STATE["metadataRequests"] += 1
-            self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
+        elif match := re.fullmatch(r"/api/documents/(123|124)/(download|metadata)/", parsed.path):
+            data = document_content(int(match.group(1)))
+            if match.group(2) == "download":
+                with LOCK:
+                    STATE["downloads"] += 1
+                self._bytes(200, data, "application/pdf")
+            else:
+                checksum = hashlib.sha256(data).hexdigest()
+                with LOCK:
+                    STATE["metadataRequests"] += 1
+                self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         else:
             self._json(404, {"detail": "Not found"})
 
@@ -172,7 +203,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "incomplete", "empty", "archive", "names"} | showcase.SCENARIOS:
+            if scenario not in SCENARIOS | showcase.SCENARIOS:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:
