@@ -278,7 +278,7 @@ After a save, the form shows the settings as Nextcloud stored them: the URL with
 
 **Disconnect** deletes the stored API token and turns off scheduled synchronization and **Paperless runs in my local network**. The other settings, the synchronized files and their state stay as they are; to connect again, enter the token, turn the local network on again if Paperless runs there, and save.
 
-Results and errors appear in the bar of the buttons, which stays at the bottom of the window. When a proxy or the web server stops waiting for a long run by hand, the page says that the run continues in the background, and the status follows it until it ends.
+Results and errors appear in the bar of the buttons, which stays at the bottom of the window. When a proxy or the web server answers for a long run by hand, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the run, the page says that the run continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how the run ended.
 
 ### Folder ownership
 

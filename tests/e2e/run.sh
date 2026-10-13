@@ -209,7 +209,9 @@ for attribute in \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
 	'data-status-url="/apps/paperless_sync/sync/status"' \
-	'id="initial-state-paperless_sync-status"' 	'data-setting="paperless_local_network"'; do
+	'id="initial-state-paperless_sync-status"' \
+	'id="initial-state-paperless_sync-config"' \
+	'data-setting="paperless_local_network"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1

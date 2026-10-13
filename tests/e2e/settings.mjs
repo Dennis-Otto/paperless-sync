@@ -83,6 +83,11 @@ try {
 	// The buttons are busy until an action has its answer; the save button stays enabled
 	// with unsaved changes, "Synchronize now" doesn't.
 	const settle = () => page.locator('#paperless-sync-save:enabled').waitFor()
+	// The message that follows the progress message of an action, once the page has its answers.
+	const messageAfter = async (progress) => {
+		await page.waitForFunction((text) => document.querySelector('#paperless-sync-message').textContent !== text, progress)
+		return message.textContent()
+	}
 	// What the form shows, as the page sends it.
 	const form = () => page.locator('#paperless-sync-settings').evaluate((root) => Object.fromEntries(
 		Array.from(root.querySelectorAll('[data-setting]'), (input) => [input.dataset.setting, input.type === 'checkbox' ? input.checked : input.value]),
@@ -149,6 +154,30 @@ try {
 	expect(!(await asksBeforeLeaving()), 'Leaving the page without a change asks nothing.')
 	console.log('Settings: a change shows the note, holds "Synchronize now" back and asks before leaving the page.')
 
+	// A change made while the server answers a save stays in the form, as an unsaved change.
+	let answer = () => {}
+	const answered = new Promise((resolve) => {
+		answer = resolve
+	})
+	await page.route(`**${SETTINGS}`, async (route) => {
+		if (route.request().method() === 'POST') {
+			await answered
+		}
+		await route.continue()
+	})
+	await save.click()
+	const changedBatchSize = String(Number(savedBatchSize) + 2)
+	await batchSize.fill(changedBatchSize)
+	answer()
+	await settle()
+	await page.unroute(`**${SETTINGS}`)
+	expect((await message.textContent()) === SAVED_UNTESTED, `The save failed: ${await message.textContent()}`)
+	expect((await batchSize.inputValue()) === changedBatchSize, 'A change made during the save must stay in the form.')
+	expect(await unsaved.isVisible() && await run.isDisabled(), 'A change made during the save is unsaved.')
+	await batchSize.fill(savedBatchSize)
+	expect(await unsaved.isHidden(), 'The saved settings are the ones that the save sent.')
+	console.log('Settings: a change made while the server answers a save stays, as an unsaved change.')
+
 	// A token that is entered is tested, also with the schedule off.
 	await token.fill(TOKEN)
 	await localNetwork.uncheck()
@@ -184,18 +213,33 @@ try {
 	console.log('Settings: an error appears next to the buttons, in view, and takes the focus.')
 
 	// A proxy in front of Nextcloud stops waiting for a long run and answers with a page of
-	// its own, while the run continues.
+	// its own, while the run continues, as the status shows.
 	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 504, contentType: 'text/html', body: GATEWAY_TIMEOUT }))
+	await page.route(`**${STATUS}`, async (route) => {
+		const response = await route.fetch()
+		await route.fulfill({ response, json: { ...(await response.json()), state: 'dry-run-running' } })
+	})
 	await dryRun.click()
+	const timeout = await messageAfter('Calculating synchronization changes…')
 	await settle()
-	const timeout = await message.textContent()
 	expect(
 		timeout === 'The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.',
 		`A gateway timeout must say that the run continues: ${timeout}`,
 	)
 	expect(!timeout.includes('<'), 'The page must never show the HTML of an answer.')
+	await page.unroute(`**${STATUS}`)
+	// A bad gateway after which the status shows no running run: PHP ended without an answer.
+	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 502, contentType: 'text/html', body: '<html><body><h1>502 Bad Gateway</h1></body></html>' }))
+	await dryRun.click()
+	const badGateway = await messageAfter('Calculating synchronization changes…')
+	await settle()
+	expect(
+		badGateway === 'The web server answered with status 502. The status above shows how the run ended.',
+		`A bad gateway after the run ended must not say that it continues: ${badGateway}`,
+	)
+	expect(await focused(message), 'The error of a bad gateway must take the focus.')
 	await page.unroute(`**${RUN}`)
-	console.log('Settings: a gateway timeout of a run says that it continues, without the page of the proxy.')
+	console.log('Settings: a gateway timeout of a run says that it continues while the status shows it running, without the page of the proxy.')
 
 	// A run with errors says how many, and a refresh of the status that fails afterwards
 	// leaves that message alone.

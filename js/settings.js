@@ -166,9 +166,10 @@
 		let tokenConfigured = false
 		let savedUrl = ''
 
-		function settings() {
+		// The settings that the form shows, or a copy of it, as the page sends them.
+		function settings(scope = root) {
 			const values = {}
-			root.querySelectorAll('[data-setting]').forEach(function(input) {
+			scope.querySelectorAll('[data-setting]').forEach(function(input) {
 				if (input.type === 'checkbox') {
 					values[input.dataset.setting] = input.checked
 				} else if (input.type === 'number') {
@@ -192,10 +193,9 @@
 			return url.trim().replace(/\/+$/, '')
 		}
 
-		// Shows the configuration that the server stored, normalized, as on load and in its answer
-		// to a save or a disconnect, and takes it as the saved state of the form.
-		function applyConfig(config) {
-			root.querySelectorAll('[data-setting]').forEach(function(input) {
+		// Shows the configuration in the inputs of the form, or of a copy of it.
+		function fill(scope, config) {
+			scope.querySelectorAll('[data-setting]').forEach(function(input) {
 				const value = config[property(input.dataset.setting)]
 				if (value === undefined) {
 					return
@@ -206,10 +206,34 @@
 					input.value = String(value)
 				}
 			})
-			token.value = ''
+		}
+
+		// What the form holds when a save or a disconnect starts, to tell the changes that the
+		// administrator makes while the server answers.
+		function snapshot() {
+			return { settings: settings(), token: token.value }
+		}
+
+		// Shows the configuration that the server stored, normalized, as on load and in its answer
+		// to a save or a disconnect, and takes it as the saved state of the form. A change made
+		// while the server answered, since the snapshot that the request started with, stays in
+		// the form as an unsaved change: a copy of the form shows the configuration instead.
+		function applyConfig(config, sent) {
+			const changed = sent !== undefined && JSON.stringify(settings()) !== JSON.stringify(sent.settings)
+			const tokenChanged = sent !== undefined && token.value !== sent.token
+			if (changed) {
+				const copy = form.cloneNode(true)
+				fill(copy, config)
+				savedSettings = JSON.stringify(settings(copy))
+			} else {
+				fill(root, config)
+				savedSettings = JSON.stringify(settings())
+			}
+			if (!tokenChanged) {
+				token.value = ''
+			}
 			tokenConfigured = config.tokenConfigured === true
 			savedUrl = normalizeUrl(String(config.paperlessUrl || ''))
-			savedSettings = JSON.stringify(settings())
 			updateForm()
 		}
 
@@ -429,27 +453,50 @@
 			setBusy(true)
 			showState(isDryRun ? 'dry-run-running' : 'running')
 			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), 'progress')
+			let gateway = 0
 			try {
 				const result = await request(root.dataset.runUrl, 'POST', { dryRun: isDryRun })
 				showReport(result, true)
 				showResult(result, isDryRun)
 			} catch (error) {
 				if (error.status === 502 || error.status === 504) {
-					// A proxy or the web server stopped waiting for the answer, while PHP carries on
-					// with the run, which the status then follows.
-					showMessage(translate('The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.'), 'progress')
+					gateway = error.status
 				} else {
 					showError(error, translate('Synchronization failed.'))
 				}
 			} finally {
 				setBusy(false)
 			}
+			if (gateway !== 0) {
+				await explainGateway(gateway)
+				return
+			}
 			// The status shows how the run ended, also when it failed, or follows it while it continues.
 			await refreshQuietly()
 		}
 
+		// A proxy or the web server answered for the app: it stopped waiting for a long run, while
+		// PHP carries on with it, or PHP ended without an answer, such as when the web server
+		// stopped it. The status tells which, and follows a run that continues.
+		async function explainGateway(status) {
+			let state = ''
+			try {
+				state = await refreshStatus()
+			} catch (error) {
+				// The status stays as it was, and the message says what is known.
+			}
+			if (state.endsWith('running')) {
+				showMessage(translate('The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.'), 'progress')
+			} else {
+				showError(requestError(translate('The web server answered with status {status}. The status above shows how the run ended.', { status }), status), '')
+			}
+		}
+
+		// Shows the status of the last run, and answers its state.
 		async function refreshStatus() {
-			updateStatus(await request(root.dataset.statusUrl, 'GET'))
+			const status = await request(root.dataset.statusUrl, 'GET')
+			updateStatus(status)
+			return status.state || 'never-run'
 		}
 
 		// After an action, the status follows it; when that fails, the message of the action stays,
@@ -470,9 +517,10 @@
 			const testing = schedule.checked || token.value.trim() !== ''
 			showMessage(testing ? translate('Testing Paperless and Nextcloud access…') : translate('Saving the settings…'), 'progress')
 			let saved = false
+			const sent = snapshot()
 			try {
-				const config = await request(root.dataset.saveUrl, 'POST', { settings: settings(), token: token.value })
-				applyConfig(config)
+				const config = await request(root.dataset.saveUrl, 'POST', sent)
+				applyConfig(config, sent)
 				showMessage(config.connectionTested ? translate('Connection successful. Configuration saved.') : translate('Saved. Scheduled synchronization is off; the connection was not tested.'), 'success')
 				saved = true
 			} catch (error) {
@@ -515,8 +563,9 @@
 			}
 			setBusy(true)
 			let disconnected = false
+			const before = snapshot()
 			try {
-				applyConfig(await request(root.dataset.resetUrl, 'DELETE'))
+				applyConfig(await request(root.dataset.resetUrl, 'DELETE'), before)
 				showMessage(translate('Paperless disconnected: the API token is deleted and scheduled synchronization is off. The other settings and the files are unchanged.'), 'success')
 				disconnected = true
 			} catch (error) {

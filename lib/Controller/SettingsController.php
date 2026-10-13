@@ -67,6 +67,8 @@ final class SettingsController extends Controller {
 				$effectiveToken = $this->configService->resolveToken($token, $config->paperlessUrl);
 				$this->paperless->testConnection($config->paperlessUrl, $effectiveToken, $config->paperlessLocalNetwork);
 				$this->storage->test($config->targetUser, $config->basePath);
+				// Both tests passed: when storing the settings fails, turning off the schedule doesn't help.
+				$onlyForTheSchedule = false;
 			}
 
 			return new JSONResponse([...$this->configService->save($settings, $token)->jsonSerialize(), 'connectionTested' => $tested]);

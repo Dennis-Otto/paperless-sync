@@ -12,15 +12,18 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
+use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -173,6 +176,33 @@ final class SettingsControllerTest extends TestCase {
 			'setting' => 'enabled',
 		], $response->getData());
 		self::assertSame($stored, $this->settings);
+	}
+
+	/**
+	 * A save that fails after both tests passed, such as in the credentials store, is no failure of
+	 * the schedule: the answer names no setting, so the page doesn't send the administrator to the
+	 * schedule, whose test passed.
+	 */
+	public function testASaveThatFailsAfterTheTestsDoesNotPointToTheSchedule(): void {
+		$this->configService()->save(self::validSettings() + ['enabled' => true], 'secret-token');
+		$credentials = $this->createMock(ICredentialsManager::class);
+		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
+		$credentials->method('store')->willThrowException(new RuntimeException('Unavailable.'));
+		$controller = new SettingsController(
+			AppConstants::APP_ID,
+			$this->createMock(IRequest::class),
+			new ConfigService($this->appConfig(), $credentials, new PathTemplateService()),
+			$this->paperless,
+			$this->storage,
+			$this->germanL10n(),
+		);
+		$this->paperless->expects(self::once())->method('testConnection');
+		$this->storage->expects(self::once())->method('test');
+
+		$response = $controller->save(self::validSettings() + ['enabled' => true]);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Could not validate the Paperless and Nextcloud configuration: Unavailable.'], $response->getData());
 	}
 
 	/** A token that was entered is tested, also with the schedule off, so a wrong one is never stored. */

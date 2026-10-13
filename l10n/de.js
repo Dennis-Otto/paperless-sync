@@ -137,7 +137,8 @@ OC.L10N.register(
 		"Could not disconnect Paperless.": "Paperless konnte nicht getrennt werden.",
 		"Nextcloud could not be reached. Check the connection and try again.": "Nextcloud war nicht erreichbar. Prüfe die Verbindung und versuche es noch einmal.",
 		"Your session has expired. Reload the page and try again.": "Deine Sitzung ist abgelaufen. Lade die Seite neu und versuche es noch einmal.",
-		"The server answered with status {status}.": "Der Server hat mit dem Status {status} geantwortet."
+		"The server answered with status {status}.": "Der Server hat mit dem Status {status} geantwortet.",
+		"The web server answered with status {status}. The status above shows how the run ended.": "Der Webserver hat mit dem Status {status} geantwortet. Der Status oben zeigt, wie der Lauf endete."
 	},
 	"nplurals=2; plural=(n != 1);"
 )
