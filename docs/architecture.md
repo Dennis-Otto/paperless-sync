@@ -91,7 +91,7 @@ sequenceDiagram
 ## Design decisions
 
 - **Paperless is the source of truth.** Nextcloud gets a mirror; the app sends no change of the mirrored files back to Paperless.
-- **The marker `[P<ID>]`** in every file name ties a file to its document, so a renamed document is found again, and [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) can open it.
+- **The marker `[P<ID>]`** in every file name ties a file to its document, so a renamed document is found again, and [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) can open it. The app adds it to a template that leaves it out, and it shortens only the free text of a name that would be too long, never the marker.
 - **No WebDAV and no password of Nextcloud.** The app writes through Nextcloud's file API in the name of the target user.
 - **Bounded and resumable runs.** The batch size limits the changes of one run, and the state lets the next run continue where it stopped.
 - **Safe by default.** Synchronization is off until a configuration works, and permanent deletion is off until an administrator turns it on.

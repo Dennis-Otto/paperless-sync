@@ -57,6 +57,26 @@ def archived_letter(number):
     return letter
 
 
+# Titles and a correspondent that a path template must take as they are: "$1" and
+# "{{ … }}" stay text, and the names in Chinese, emoji and Cyrillic are longer than the
+# 250 bytes that Nextcloud accepts.
+NAMED_DOCUMENTS = {
+    201: ("Refund $100 from Shop $1 ${1}0 {{ correspondent }}", 4),
+    202: ("株" * 120, 4),
+    203: ("😀" * 120, 4),
+    204: ("Monthly invoice", 5),
+}
+LONG_CORRESPONDENT = {"id": 5, "name": "Ж" * 120}
+
+
+def named_document(document_id):
+    title, correspondent = NAMED_DOCUMENTS[document_id]
+    named = document(title)
+    named["id"] = document_id
+    named["correspondent"] = correspondent
+    return named
+
+
 def scenario_documents():
     scenario = STATE["scenario"]
     if scenario in showcase.SCENARIOS:
@@ -76,6 +96,8 @@ def scenario_documents():
     if scenario == "archive":
         # A larger archive, whose dry-run lists more changes than the report shows at once.
         return [archived_letter(number) for number in range(1, 41)], []
+    if scenario == "names":
+        return [named_document(document_id) for document_id in NAMED_DOCUMENTS], []
     raise ValueError(f"Unknown scenario: {scenario}")
 
 
@@ -101,7 +123,10 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/trash/":
             self._page(trash)
         elif parsed.path == "/api/correspondents/":
-            self._page(showcase.CORRESPONDENTS if self._showcase() else [{"id": 4, "name": "Example GmbH"}])
+            correspondents = [{"id": 4, "name": "Example GmbH"}]
+            if self._scenario() == "names":
+                correspondents.append(LONG_CORRESPONDENT)
+            self._page(showcase.CORRESPONDENTS if self._showcase() else correspondents)
         elif parsed.path == "/api/document_types/":
             self._page(showcase.DOCUMENT_TYPES if self._showcase() else [{"id": 7, "name": "Invoice"}])
         elif parsed.path == "/api/storage_paths/":
@@ -123,6 +148,12 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 checksum = showcase.checksum(document_id)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
+        elif self._scenario() == "names" and re.fullmatch(r"/api/documents/20[1-4]/(download|metadata)/", parsed.path):
+            if parsed.path.endswith("/download/"):
+                self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
+            else:
+                checksum = hashlib.sha256(DOCUMENT_CONTENT).hexdigest()
+                self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif parsed.path == "/api/documents/123/download/":
             with LOCK:
                 STATE["downloads"] += 1
@@ -139,7 +170,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive"} | showcase.SCENARIOS:
+            if scenario not in {"active", "renamed", "excluded", "trash", "empty", "archive", "names"} | showcase.SCENARIOS:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:
@@ -196,8 +227,11 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, task_id)
 
     def _showcase(self):
+        return self._scenario() in showcase.SCENARIOS
+
+    def _scenario(self):
         with LOCK:
-            return STATE["scenario"] in showcase.SCENARIOS
+            return STATE["scenario"]
 
     def _authorized(self):
         valid = (
