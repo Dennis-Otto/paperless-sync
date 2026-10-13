@@ -201,6 +201,30 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(hash('sha256', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
 	}
 
+	public function testDocumentsThatShareAFileAreDownloadedAgainInsteadOfMoved(): void {
+		$this->paperless->documents = [$this->document(123), $this->document(456)];
+		$this->paperless->contents = [123 => '%PDF-content-123', 456 => '%PDF-content-456'];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->service->run();
+		// An older version rendered both documents to one path without their markers, so the
+		// second write replaced the first, and the file holds the content of P456 only.
+		$shared = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August.pdf';
+		$this->storage->files = [$shared => '%PDF-content-456'];
+		$this->state->exports[123]['path'] = $shared;
+		$this->state->exports[456]['path'] = $shared;
+
+		$report = $this->service->run();
+
+		self::assertSame(0, $report->moved, 'Moving the shared file would give P123 the content of P456.');
+		self::assertSame(2, $report->exported);
+		self::assertSame([
+			self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P456].pdf' => '%PDF-content-456',
+			self::EXPORTED_PATH => '%PDF-content-123',
+		], $this->storage->files, 'The most recently added document comes first.');
+		self::assertSame(4, $this->paperless->downloads);
+	}
+
 	public function testBatchSizeLimitsTheChangesOfOneRun(): void {
 		$this->configService->save(['batch_size' => 1]);
 		$this->paperless->documents = [$this->document(), $this->document(124)];

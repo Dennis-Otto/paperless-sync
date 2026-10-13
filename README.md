@@ -171,7 +171,32 @@ The configured Nextcloud target user owns the synchronized folders. The app oper
 - `{{ original_filename }}`
 - `{{ extension }}`
 
-The template must contain `{{ id }}`. Path components are normalized and sanitized for Nextcloud, macOS, and Windows clients.
+The template must contain `{{ id }}`. A variable may be written with or without spaces, such as `{{id}}`, and is saved as `{{ id }}`. Every value goes into the path as plain text, so a `$1` or a `{{ title }}` in a title stays as it is.
+
+Every file name keeps the marker `[P{{ id }}]` and ends with `{{ extension }}`: when the last part of the template leaves them out, the app adds them at its end. The marker keeps the paths of two documents apart and ties each file to its document.
+
+Each part of the path is cleaned for Nextcloud, macOS and Windows: control characters and `< > : " / \ | ? *` become `_`, runs of spaces become one, spaces and dots at the ends go, and the names of Windows devices, such as `CON`, `COM1` or `LPT¹`, get a leading `_`.
+
+Nextcloud accepts names of up to 250 bytes, and a character of Cyrillic takes two bytes, of Chinese three and an emoji four. So a folder name has at most 200 bytes and a file name at most 217, which leaves room for the temporary name of a write. A name that would be longer is shortened in its free text alone: the title, the correspondent, the document type, the storage path and the original file name, the longest first. The text of the template, the dates, the marker and the extension stay whole:
+
+```mermaid
+flowchart TB
+    accTitle: How a part of the path is built
+    accDescr: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.
+
+    part["A part of the template<br><code>{{ created }} - {{ title }} [P{{ id }}]</code>"]
+    values["The values as plain text<br>cleaned for Nextcloud, macOS and Windows"]
+    fits{"At most 200 bytes for a folder,<br>217 for the file name?"}
+    shorten["Shorten the longest free text:<br>title, correspondent, document type,<br>storage path, original file name"]
+    name["📄 2026-08-26 - Example invoice [P123].pdf"]
+
+    part --> values --> fits
+    fits -- "no" --> shorten --> fits
+    fits -- "yes" --> name
+
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class name done
+```
 
 ### Nextcloud inbox
 

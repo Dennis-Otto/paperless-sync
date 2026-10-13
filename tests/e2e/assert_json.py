@@ -5,6 +5,7 @@
 
 import json
 import sys
+from urllib.parse import quote
 
 mode = sys.argv[1]
 payload = json.load(sys.stdin)
@@ -105,6 +106,26 @@ elif mode == "mock-after-move":
     if payload.get("metadataRequests", 0) < 1:
         raise AssertionError(f"Metadata-only move did not request a checksum: {payload!r}")
     expect("invalidAuth", 0)
+elif mode == "names":
+    # Every name within the bytes of Nextcloud, with the marker and the extension whole;
+    # the paths go to standard output, for run.sh to read through WebDAV.
+    folder = "Example GmbH/Invoice/2026/2026-08-26 - "
+    expected = {
+        201: folder + "Refund $100 from Shop $1 ${1}0 {{ correspondent }} [P201].pdf",
+        202: folder + "株" * 64 + " [P202].pdf",
+        203: folder + "😀" * 48 + " [P203].pdf",
+        204: "Ж" * 100 + "/Invoice/2026/2026-08-26 - Monthly invoice [P204].pdf",
+    }
+    expect("exported", 4)
+    expect("errors", 0)
+    for document_id, relative in expected.items():
+        path = f"Documents/Paperless/Archive/{relative}"
+        if f"EXPORT P{document_id}: {path}" not in payload.get("actions", []):
+            raise AssertionError(f"names: no export of P{document_id} to {path}: {payload!r}")
+        *folders, name = relative.split("/")
+        if len(name.encode()) > 217 or any(len(part.encode()) > 200 for part in folders):
+            raise AssertionError(f"names: {relative} has a name longer than Nextcloud allows")
+        print(quote(path))
 elif mode == "mock-final":
     # The first export, the one that the full quota stopped after its download, and the export after it.
     expect("downloads", 3)

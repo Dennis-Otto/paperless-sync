@@ -378,6 +378,20 @@ assert_json status "${TMP_DIR}/status.json"
 	> "${TMP_DIR}/mock-final.json"
 assert_json mock-final "${TMP_DIR}/mock-final.json"
 
+# Titles and names that the path template must take as they are: "$1" and "{{ … }}"
+# stay text, and names in Chinese, emoji and Cyrillic shrink to the bytes that Nextcloud
+# accepts, also for the temporary name of each write.
+control /control/scenario/names >/dev/null
+sync_run false "${TMP_DIR}/names.json"
+mapfile -t NAMED_PATHS < <(assert_json names "${TMP_DIR}/names.json")
+if ((${#NAMED_PATHS[@]} != 4)); then
+	echo "The run wrote ${#NAMED_PATHS[@]} of the 4 documents with long or unusual names." >&2
+	exit 1
+fi
+for path in "${NAMED_PATHS[@]}"; do
+	assert_dav_file sync-target "${path}" 'Synthetic Paperless archive document P123.'
+done
+
 # The administration settings and the report of a dry-run over a larger archive meet
 # WCAG 2.1 AA.
 control /control/scenario/archive >/dev/null
@@ -386,4 +400,4 @@ accessibility
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
 
-echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, access isolation, and accessibility.'
+echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, and accessibility.'

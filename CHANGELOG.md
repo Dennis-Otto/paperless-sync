@@ -14,6 +14,12 @@ All notable changes to this project are documented in this file.
 - A run fails, before it changes anything in the archive, when Paperless answers its list of tags, correspondents, document types or storage paths incompletely. Before, a document with an excluded tag could be exported when the tag was missing from a short page.
 - The report keeps the lines `SCAN INCOMPLETE` and `EXPORT STOPPED` also after a hundred other lines.
 - With the conflict policy *Skip and report conflict*, a file in the way is reported before the document is downloaded, and a dry-run reports the conflict too. Before, the run downloaded the document in vain.
+- A `$` in a title or a name stays in the path of the file: "Refund $100 from Shop" no longer becomes "Refund 0 from Shop", and "Tarif $0 Basis" no longer takes in a piece of the template. A title that contains a variable, such as `{{ correspondent }}`, stays as it is too.
+- Documents with a long title or name in Cyrillic, Chinese, emoji or another script of several bytes per character reach Nextcloud again. Names are shortened to the bytes that Nextcloud accepts, with room for the temporary name of a write. Before, such a document failed in every run.
+- A long title, correspondent or original file name no longer cuts the marker `[P123]` and the extension off a file name. Before, two such documents could get the same path, and with *Replace synchronized file* the second one replaced the file of the first. Now only the free text is shortened, the longest first, and a template that leaves out the marker or the extension gets them added at the end of the file name.
+- The path template accepts variables without spaces, such as `{{id}}` for `{{ id }}`, and the message about an unknown variable names it as `{{ owner }}`.
+- Control characters beyond ASCII and invalid bytes become `_` in names too, and names of Windows devices such as `COM0`, `LPT¹` or `CONIN$` get a leading `_` as well.
+- The next run moves the files whose names these fixes change once to their corrected path. Two documents that shared one file are downloaded again instead, so that each gets its own content back.
 
 ## [0.1.10](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.9...v0.1.10) (2026-10-08)
 
