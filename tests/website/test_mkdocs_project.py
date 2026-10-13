@@ -206,6 +206,84 @@ def test_the_requirements_of_the_readme_get_both_fields() -> None:
     assert '**PHP <span data-app="php">PHP</span>**' in filled
 
 
+def test_an_alert_of_github_becomes_an_admonition() -> None:
+    known(nextcloud="33+", php="8.2+")
+    html = (
+        "<p>Before.</p>\n"
+        "<blockquote>\n<p>[!WARNING]\nThe files of the archive are a mirror.\n"
+        "An edit lasts until the next change.</p>\n</blockquote>\n"
+        "<p>After.</p>\n"
+    )
+    assert hook.on_page_content(html, page=page("guide.md")) == (
+        "<p>Before.</p>\n"
+        '<div class="admonition warning">\n<p class="admonition-title">Warning</p>\n'
+        "<p>The files of the archive are a mirror.\n"
+        "An edit lasts until the next change.</p>\n</div>\n"
+        "<p>After.</p>\n"
+    )
+
+
+def test_an_alert_whose_marker_stands_alone_keeps_its_paragraphs() -> None:
+    known(nextcloud="33+", php="8.2+")
+    html = (
+        "<blockquote>\n<p>[!TIP]</p>\n<p>The first paragraph.</p>\n"
+        "<ul>\n<li>A list</li>\n</ul>\n</blockquote>\n"
+    )
+    assert hook.on_page_content(html, page=page("faq.md")) == (
+        '<div class="admonition tip">\n<p class="admonition-title">Tip</p>\n'
+        "<p>The first paragraph.</p>\n<ul>\n<li>A list</li>\n</ul>\n</div>\n"
+    )
+
+
+def test_every_kind_of_alert_has_the_admonition_of_its_color() -> None:
+    known(nextcloud="33+", php="8.2+")
+    for kind, admonition in (
+        ("NOTE", "note"),
+        ("TIP", "tip"),
+        ("IMPORTANT", "info"),
+        ("WARNING", "warning"),
+        ("CAUTION", "danger"),
+        ("caution", "danger"),
+    ):
+        html = f"<blockquote>\n<p>[!{kind}] Text.</p>\n</blockquote>"
+        assert hook.on_page_content(html, page=page()) == (
+            f'<div class="admonition {admonition}">\n'
+            f'<p class="admonition-title">{kind.title()}</p>\n<p>Text.</p>\n</div>'
+        )
+
+
+def test_a_plain_quote_and_an_unknown_marker_stay_as_they_are() -> None:
+    known(nextcloud="33+", php="8.2+")
+    for html in (
+        "<blockquote>\n<p>Nextcloud blocks connections to local addresses.</p>\n</blockquote>\n",
+        "<blockquote>\n<p>[!DANGER] Not an alert of GitHub.</p>\n</blockquote>\n",
+        "<blockquote>\n<p>Text before [!WARNING] is no alert.</p>\n</blockquote>\n",
+        "<pre><code>&gt; [!WARNING]\n&gt; An alert shown as code.</code></pre>\n",
+    ):
+        assert hook.on_page_content(html, page=page()) == html
+
+
+def test_an_alert_with_a_quote_inside_fails() -> None:
+    known(nextcloud="33+", php="8.2+")
+    html = (
+        "<blockquote>\n<p>[!NOTE]</p>\n<blockquote>\n<p>Inner.</p>\n</blockquote>\n"
+        "<p>Outer.</p>\n</blockquote>\n"
+    )
+    with fails("faq.md has a quote inside the alert [!NOTE]."):
+        hook.on_page_content(html, page=page("faq.md"))
+
+
+def test_the_warning_about_edits_reaches_the_guide_as_an_alert() -> None:
+    # The guide takes the configuration from the README by a snippet, with the warning
+    # that the files of the archive are a mirror of Paperless.
+    guide = (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
+    assert '--8<-- "README.md:configuration"' in guide
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    start = readme.index("<!-- --8<-- [start:configuration] -->")
+    end = readme.index("<!-- --8<-- [end:configuration] -->")
+    assert "> [!WARNING]\n> The files of the archive are a mirror" in readme[start:end]
+
+
 def main() -> int:
     """Run every test of this file, as pytest would, and count the failures."""
     tests: list[tuple[str, Callable[[], None]]] = [
