@@ -27,6 +27,8 @@ if mode == "config":
     expect("tokenConfigured", True)
     expect("permanentDelete", True)
     expect("paperlessLocalNetwork", True)
+    # A save with a token entered tests the connection first.
+    expect("connectionTested", True)
 elif mode == "local-network-refused":
     expect(
         "message",

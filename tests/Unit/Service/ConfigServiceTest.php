@@ -203,13 +203,33 @@ final class ConfigServiceTest extends TestCase {
 		self::assertNull($this->credential);
 	}
 
-	public function testResetRemovesEverySettingAndTheToken(): void {
-		$this->service->save(self::validSettings() + ['enabled' => true], 'secret-token');
+	/**
+	 * Disconnecting deletes the token, as its button and its question say, and turns off the
+	 * schedule, which would fail without the token. The other settings stay, the deletion policy
+	 * of the administrator too, so that connecting again needs the token and not all of them.
+	 */
+	public function testDisconnectDeletesTheTokenAndTurnsOffTheSchedule(): void {
+		$this->service->save(self::validSettings() + ['enabled' => true, 'permanent_delete' => true, 'base_path' => 'Archive/Paperless', 'batch_size' => 20], 'secret-token');
+		$stored = $this->settings;
 
 		$config = $this->service->reset();
 
-		self::assertSame([], $this->settings);
 		self::assertNull($this->credential);
+		self::assertSame(array_replace($stored, ['sync_enabled' => false]), $this->settings);
+		self::assertFalse($config->tokenConfigured);
+		self::assertFalse($config->enabled);
+		self::assertSame('https://paperless.example.test', $config->paperlessUrl);
+		self::assertSame(['paperless', 'Archive/Paperless', 20], [$config->targetUser, $config->basePath, $config->batchSize]);
+		self::assertTrue($config->permanentDelete);
+		self::assertSame('', $this->service->getToken());
+	}
+
+	/** Disconnecting needs no saved settings, such as right after the installation. */
+	public function testDisconnectWithoutSettingsKeepsTheDefaults(): void {
+		$config = $this->service->reset();
+
+		self::assertSame(['sync_enabled' => false, 'paperless_local_network' => false], $this->settings);
+		self::assertSame($this->configService()->get()->jsonSerialize(), $config->jsonSerialize());
 		self::assertSame('', $config->paperlessUrl);
 		self::assertFalse($config->tokenConfigured);
 	}
@@ -229,7 +249,7 @@ final class ConfigServiceTest extends TestCase {
 		self::assertTrue($this->service->save(self::validSettings())->paperlessLocalNetwork, 'A save that leaves it out keeps it.');
 
 		self::assertFalse($this->service->reset()->paperlessLocalNetwork);
-		self::assertArrayNotHasKey('paperless_local_network', $this->settings);
+		self::assertFalse($this->settings['paperless_local_network']);
 	}
 
 	/** @return array<string, array{mixed, bool}> a value of the setting as a request may send it, and whether it allows the local network */

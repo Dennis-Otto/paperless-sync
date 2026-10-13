@@ -74,6 +74,20 @@ const PAGES = [
 			await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
 		},
 	},
+	{
+		// The note about unsaved changes and an error next to the buttons, here the answer
+		// of Nextcloud to a session that ended.
+		name: 'unsaved changes and an error',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.locator('[data-setting="batch_size"]').fill('7')
+			await page.locator('#paperless-sync-unsaved').waitFor({ state: 'visible' })
+			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ status: 412, json: { message: 'CSRF check failed' } }))
+			await page.locator('#paperless-sync-refresh-status').click()
+			await page.locator('#paperless-sync-message.paperless-sync-message--error').waitFor()
+		},
+	},
 ]
 
 // Signs in through the login form, as a person does, and keeps the session for every

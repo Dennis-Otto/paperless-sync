@@ -4,7 +4,7 @@ Run this matrix in an isolated Nextcloud/Paperless lab before a release that cha
 
 | Area | Required behavior |
 | --- | --- |
-| Configuration | Connection test succeeds with a least-privilege Paperless service account; the saved token is never returned to the browser or written to logs. |
+| Configuration | Connection test succeeds with a least-privilege Paperless service account; the saved token is never returned to the browser or written to logs. With Paperless stopped, unchecking *Enable scheduled synchronization* and saving works, and *Disconnect* keeps every setting but the token, the schedule and *Paperless runs in my local network*. |
 | Local network | With `allow_local_remote_servers` off, a Paperless at an address of the local network is refused with the advice to turn on *Paperless runs in my local network*, and works once it is on; other apps still can't reach local addresses. |
 | Dry-run | Reports all expected actions without creating, moving, uploading, or deleting a file. |
 | Export | Archive PDF and original-file modes create the expected correspondent-first hierarchy and stable `[P123]` marker. |

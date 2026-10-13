@@ -33,8 +33,7 @@ $stateLabels = [
 	data-save-url="<?php p($_['saveUrl']); ?>"
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
-	data-status-url="<?php p($_['statusUrl']); ?>"
-	data-token-configured="<?php p($config->tokenConfigured ? 'true' : 'false'); ?>">
+	data-status-url="<?php p($_['statusUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -244,10 +243,11 @@ $stateLabels = [
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
 			<button id="paperless-sync-reset" type="button" class="paperless-sync-reset"><?php p($l->t('Disconnect')); ?></button>
+			<p id="paperless-sync-unsaved" class="paperless-sync-unsaved" hidden><?php p($l->t('Unsaved changes: "Run dry-run" uses the saved settings, and "Synchronize now" waits until you save.')); ?></p>
+			<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite" tabindex="-1"></p>
 		</div>
 	</form>
 
-	<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite"></p>
 	<div id="paperless-sync-report" class="paperless-sync-report" hidden>
 		<h3><?php p($l->t('Run report')); ?></h3>
 		<p id="paperless-sync-report-meta" class="paperless-sync-report-meta"></p>
