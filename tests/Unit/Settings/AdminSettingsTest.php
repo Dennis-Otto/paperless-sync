@@ -93,6 +93,60 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame($values, $fields);
 	}
 
+	/**
+	 * Every section of the form links to its part of the guide on the website, which MkDocs builds
+	 * from docs/guide.md and the parts of README.md that it includes. The anchor of a part is its
+	 * heading as MkDocs turns it into one: in lowercase, without punctuation, and with hyphens
+	 * for spaces. The App Store links to the same guide.
+	 */
+	public function testEveryHelpLinkLeadsToAPartOfTheGuide(): void {
+		$root = __DIR__ . '/../../..';
+		$template = file_get_contents("{$root}/templates/settings.php");
+		$guide = file_get_contents("{$root}/docs/guide.md");
+		$readme = file_get_contents("{$root}/README.md");
+		self::assertIsString($template);
+		self::assertIsString($guide);
+		self::assertIsString($readme);
+		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
+		self::assertCount(5, $links[1], 'Each of the five sections links to the guide.');
+
+		$page = preg_replace_callback('/^--8<-- "README\.md:([a-z-]+)"$/m', static function (array $include) use ($readme): string {
+			$name = preg_quote($include[1], '/');
+			self::assertSame(1, preg_match("/\\[start:{$name}\\] -->\\n(.*?)<!-- --8<-- \\[end:{$name}\\]/s", $readme, $part), "README.md has no part {$include[1]}.");
+
+			return $part[1];
+		}, $guide);
+		self::assertIsString($page);
+		preg_match_all('/^#{1,6} (.+)$/m', $page, $headings);
+		$anchors = array_map(
+			static fn (string $heading): string => (string)preg_replace('/[\s-]+/', '-', trim((string)preg_replace('/[^\w\s-]/', '', strtolower($heading)))),
+			$headings[1],
+		);
+		foreach ($links[1] as $anchor) {
+			self::assertContains($anchor, $anchors, "The guide has no part #{$anchor}.");
+		}
+
+		$info = simplexml_load_file("{$root}/appinfo/info.xml");
+		self::assertNotFalse($info);
+		self::assertStringStartsWith(AppConstants::GUIDE_URL . '#', (string)$info->documentation->admin);
+	}
+
+	/** Every text of the page, of the template and of js/settings.js, has its German translation. */
+	public function testEveryTextOfThePageIsTranslatedIntoGerman(): void {
+		$root = __DIR__ . '/../../..';
+		$catalog = json_decode((string)file_get_contents("{$root}/l10n/de.json"), true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($catalog);
+		self::assertIsArray($catalog['translations']);
+		$texts = [];
+		foreach (['templates/settings.php' => '\$l->t', 'js/settings.js' => 'translate'] as $file => $call) {
+			preg_match_all("/{$call}\\('((?:[^'\\\\]|\\\\.)*)'/", (string)file_get_contents("{$root}/{$file}"), $matches);
+			self::assertNotEmpty($matches[1], "{$file} has no texts to translate.");
+			$texts = [...$texts, ...array_map(static fn (string $text): string => str_replace("\\'", "'", $text), $matches[1])];
+		}
+
+		self::assertSame([], array_values(array_diff(array_unique($texts), array_keys($catalog['translations']))), 'l10n/de.json and l10n/de.js have no translation of these texts.');
+	}
+
 	public function testFormBelongsToTheSectionOfTheApp(): void {
 		$settings = $this->adminSettings();
 		$l10n = $this->createMock(IL10N::class);

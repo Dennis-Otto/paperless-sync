@@ -517,12 +517,13 @@ assert_file_id "${RENAMED_PATH}"
 assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
 # The background job, as system cron starts it. Until synchronization is enabled, it does
 # nothing. Then it runs when the interval since the last run has passed, here as if that run was
-# an hour ago, and started again at once, it waits for the interval. In the job, the versions app
-# of Nextcloud also keeps the previous content as a version.
+# an hour ago, also right after a dry-run: a dry-run changes nothing, so it doesn't push the
+# schedule back. Started again at once, the job waits for the interval. In the job, the versions
+# app of Nextcloud also keeps the previous content as a version.
 VERSIONS_BEFORE="$(version_count)"
 control /control/content/original >/dev/null
 HOUR_AGO="$(($(date +%s) - 3600))"
-for key in status_last_started status_last_completed status_last_ended; do
+for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
 	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
 done
 JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
@@ -535,6 +536,7 @@ assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive docum
 # With the schedule on, saving tests the connection first.
 save_settings "${TMP_DIR}/enabled.json" enabled=1
 assert_json enabled "${TMP_DIR}/enabled.json"
+sync_run true "${TMP_DIR}/dry-run-before-job.json"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
 assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
 LAST_RUN="$(last_run)"

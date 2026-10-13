@@ -26,6 +26,7 @@ final class StatusService {
 	/** The most characters of an error and of a line of the kept report. */
 	private const LINE_LENGTH = 1000;
 
+	/** The start of the last run, also of a dry-run. */
 	private const LAST_STARTED = 'status_last_started';
 	/** The end of the last run that completed, also with errors. */
 	private const LAST_COMPLETED = 'status_last_completed';
@@ -38,6 +39,12 @@ final class StatusService {
 	private const LAST_ERROR = 'status_last_error';
 	/** The report of the last run; lazy, so that Nextcloud loads it only when it is asked for. */
 	private const LAST_REPORT = 'status_last_report';
+	/**
+	 * The start and the end of the last run that was not a dry-run, from which the schedule
+	 * counts: a dry-run changes nothing, so it doesn't push the next run back.
+	 */
+	private const LAST_SYNC_STARTED = 'status_last_sync_started';
+	private const LAST_SYNC_ENDED = 'status_last_sync_ended';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -46,7 +53,12 @@ final class StatusService {
 	}
 
 	public function started(bool $dryRun): void {
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, time());
+		$now = time();
+		$this->carryOverTheLastRun();
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now);
+		if (!$dryRun) {
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $now);
+		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running');
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
 	}
@@ -54,8 +66,11 @@ final class StatusService {
 	public function completed(SyncReport $report): void {
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, $report->completedAt);
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $report->completedAt);
-		if (!$report->dryRun && $report->errors === 0) {
-			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, $report->completedAt);
+		if (!$report->dryRun) {
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $report->completedAt);
+			if ($report->errors === 0) {
+				$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, $report->completedAt);
+			}
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'));
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
@@ -64,10 +79,15 @@ final class StatusService {
 
 	/**
 	 * A run that failed leaves the end of the last completed run as it is, and keeps the report of
-	 * what it did before it failed.
+	 * what it did before it failed. A failure without a report, which can't tell whether it was a
+	 * dry-run, counts for the schedule, as every run did before.
 	 */
 	public function failed(\Throwable $exception, ?SyncReport $report = null): void {
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, time());
+		$now = time();
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now);
+		if ($report === null || !$report->dryRun) {
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now);
+		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed');
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH));
 		if ($report !== null) {
@@ -107,8 +127,11 @@ final class StatusService {
 
 	/**
 	 * When the background job starts the next scheduled run: the interval of the settings after
-	 * the start or the end of the last run, whichever is later. A time that has passed, or 0 before
-	 * the first run, means the next background job. Null when scheduled runs are off.
+	 * the start or the end of the last run that was not a dry-run, whichever is later. A dry-run
+	 * counts only while it is active, because it holds the lock that the next run needs, and at
+	 * most from its start, so that one that never ended holds back no more. A time that has
+	 * passed, or 0 before the first run, means the next background job. Null when scheduled runs
+	 * are off.
 	 *
 	 * It reads only the times of the last run, because the background job asks for it in every
 	 * check, and the lazy report stays unloaded then.
@@ -117,13 +140,35 @@ final class StatusService {
 		if (!$config->enabled) {
 			return null;
 		}
+		$started = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0);
+		$ended = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0));
+		// A status of an earlier version, which didn't tell runs and dry-runs apart, counts from its
+		// last run of any kind until the first run after the update takes that run over.
+		// started() writes both keys from then on, also on a new installation.
 		$last = max(
-			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0),
-			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0),
-			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, 0),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $started),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $ended),
 		);
+		if ($started > $ended) {
+			$last = max($last, $started);
+		}
 
 		return $last > 0 ? $last + $config->syncIntervalMinutes * 60 : 0;
+	}
+
+	/**
+	 * Before the first run of this version, of either kind, takes over the last run of the status
+	 * as the last real run, once: an earlier version didn't tell runs and dry-runs apart, so its
+	 * last run counts for the schedule, as it did then. A new installation takes over no run, so
+	 * that the dry-runs it starts first, before scheduled runs are turned on, never count once they
+	 * have ended.
+	 */
+	private function carryOverTheLastRun(): void {
+		if ($this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, -1) >= 0) {
+			return;
+		}
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0));
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0)));
 	}
 
 	/**
