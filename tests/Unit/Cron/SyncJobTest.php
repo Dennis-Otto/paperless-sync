@@ -45,9 +45,8 @@ final class SyncJobTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->now = time();
-		$this->token = 'secret-token';
 		$this->configService = $this->configService();
-		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings());
+		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$time = $this->createMock(ITimeFactory::class);
@@ -102,10 +101,16 @@ final class SyncJobTest extends TestCase {
 		self::assertSame('completed', $this->settings['status_last_state'], 'Fifteen minutes after the last run, the next one is due.');
 	}
 
+	/**
+	 * Only the message: the synchronization logs a failed run with its trace already, and a second
+	 * copy of the trace in the log helps nobody.
+	 */
 	public function testFailedRunIsLogged(): void {
-		$locked = new LockedException('paperless_sync::synchronization');
-		$this->locking->method('acquireLock')->willThrowException($locked);
-		$this->logger->expects(self::once())->method('error')->with('Scheduled Paperless synchronization failed', ['exception' => $locked]);
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+		$this->logger->expects(self::once())->method('error')->with(
+			'Scheduled Paperless synchronization failed: {error}',
+			['error' => '"paperless_sync::synchronization" is locked'],
+		);
 
 		$this->start();
 	}

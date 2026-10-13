@@ -36,6 +36,8 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $tasks = [];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
+	/** @var list<array{string, string}> the URL and the token of every test of the connection */
+	public array $connections = [];
 	/** @var array{names: array<string, string>, inbox: list<string>} */
 	public array $tagInfo = ['names' => [], 'inbox' => []];
 	public ?\Throwable $downloadException = null;
@@ -46,7 +48,8 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
-	public function testConnection(string $url, string $token): void {
+	public function testConnection(string $url, #[\SensitiveParameter] string $token): void {
+		$this->connections[] = [$url, $token];
 	}
 
 	public function documents(): PaperlessScan {

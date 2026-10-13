@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\PaperlessApiService;
+use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\UnsizedStream;
@@ -44,9 +45,8 @@ final class PaperlessApiServiceTest extends TestCase {
 	private PaperlessApiService $service;
 
 	protected function setUp(): void {
-		$this->token = 'secret-token';
 		$configService = $this->configService();
-		$configService->save(self::validSettings());
+		$configService->save(self::validSettings(), 'secret-token');
 		$client = $this->createMock(IClient::class);
 		$client->method('get')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('GET', $url, $options));
 		$client->method('post')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('POST', $url, $options));
@@ -556,9 +556,84 @@ final class PaperlessApiServiceTest extends TestCase {
 			self::assertSame('Paperless could not be reached for the upload: cURL error 28: Operation timed out after 180001 milliseconds', $exception->getMessage());
 			self::assertFalse($exception->permanent);
 			self::assertSame(0, $exception->statusCode);
-			self::assertSame($timeout, $exception->getPrevious());
+			self::assertNull($exception->getPrevious(), 'The trace of the failure of the HTTP client holds the token.');
 		}
 		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	/** @return array<string, array{string}> every operation that sends the token to Paperless */
+	public static function requestsWithTheToken(): array {
+		return [
+			'connection test' => ['testConnection'],
+			'documents' => ['documents'],
+			'trash' => ['trash'],
+			'tags' => ['tags'],
+			'download' => ['downloadDocument'],
+			'checksum' => ['documentChecksum'],
+			'upload' => ['uploadDocument'],
+			'task' => ['taskStatus'],
+		];
+	}
+
+	/**
+	 * Nextcloud's log writes an exception with the arguments of every frame of its trace, and
+	 * those of the exceptions before it, as PHP records them unless zend.exception_ignore_args is
+	 * on. A run that can't reach Paperless, the most common failure, must not put the token there.
+	 */
+	#[DataProvider('requestsWithTheToken')]
+	public function testFailedRequestKeepsTheTokenOutOfTheLog(string $operation): void {
+		$ignoreArgs = ini_set('zend.exception_ignore_args', '0');
+		$failure = null;
+		$this->responses[] = static function (array $options) use (&$failure): array {
+			// The failure of the HTTP client, with the options of the request in its trace.
+			$failure = new RuntimeException('cURL error 6: Could not resolve host: paperless.example.test');
+			throw $failure;
+		};
+
+		try {
+			$this->call($operation);
+			self::fail('A request that failed must be reported.');
+		} catch (\Throwable $exception) {
+			self::assertInstanceOf(RuntimeException::class, $failure);
+			self::assertStringContainsString('secret-token', self::logged($failure), 'Without the protection, the log would hold the token.');
+			self::assertStringNotContainsString('secret-token', self::logged($exception));
+			self::assertStringContainsString('Could not resolve host: paperless.example.test', $exception->getMessage());
+		} finally {
+			ini_set('zend.exception_ignore_args', (string)$ignoreArgs);
+		}
+	}
+
+	/** @return array<string, array{string, string}> the message of the HTTP client and the one that the app keeps */
+	public static function failureMessages(): array {
+		return [
+			'the query of a URL' => [
+				'cURL error 6: Could not resolve host: paperless.example.test (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://paperless.example.test/api/documents/?page=1&page_size=1',
+				'cURL error 6: Could not resolve host: paperless.example.test (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://paperless.example.test/api/documents/',
+			],
+			'a URL in quotes' => [
+				"Client error: `GET https://paperless.example.test/api/tasks/?task_id=abc&page_size=10` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
+				"Client error: `GET https://paperless.example.test/api/tasks/` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
+			],
+			'a token that the server repeats' => [
+				'Server error: GET https://paperless.example.test/api/documents/ rejected "Token secret-token" and secret-token',
+				'Server error: GET https://paperless.example.test/api/documents/ rejected "Token [redacted]" and [redacted]',
+			],
+		];
+	}
+
+	#[DataProvider('failureMessages')]
+	public function testFailedRequestNamesItsReasonWithoutQueryAndToken(string $failure, string $message): void {
+		$this->responses[] = static function () use ($failure): array {
+			throw new RuntimeException($failure);
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A request that failed must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertSame($message, $exception->getMessage());
+			self::assertNull($exception->getPrevious());
+		}
 	}
 
 	public function testTaskStatusAndItsMessage(): void {
@@ -626,6 +701,35 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage('Paperless is not configured.');
 		$this->service->documents();
+	}
+
+	/** Calls an operation of the client that sends the token, with arguments that work. */
+	private function call(string $operation): void {
+		match ($operation) {
+			'testConnection' => $this->service->testConnection(self::URL, 'secret-token'),
+			'documents' => $this->service->documents(),
+			'trash' => $this->service->trash(),
+			'tags' => $this->service->tags(),
+			'downloadDocument' => $this->service->downloadDocument(123, true, $this->sink()),
+			'documentChecksum' => $this->service->documentChecksum(123, true),
+			'uploadDocument' => $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'),
+			'taskStatus' => $this->service->taskStatus('task-1'),
+		};
+	}
+
+	/**
+	 * What Nextcloud's log writes of an exception: its class, its message and its trace with the
+	 * arguments of every frame, and the same of every exception before it.
+	 */
+	private static function logged(\Throwable $exception): string {
+		$entries = [];
+		for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
+			$entries[] = ['class' => $current::class, 'message' => $current->getMessage(), 'trace' => $current->getTrace()];
+		}
+		$json = json_encode($entries, JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_UNESCAPED_SLASHES);
+		self::assertIsString($json);
+
+		return $json;
 	}
 
 	/** @return list<array{id: int}> the documents with the IDs from $first to $last */
