@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a pull request into main
+    accDescr: You open a pull request. The title check and the labeler give it the labels of its type and its areas, and the 13 required checks run. After they finish, the flaky-test bot runs a failed job once more, the cancelled-check bot restarts a run that a late run cancelled, and the coverage bot comments with the coverage against main; a job that runs again goes back to the checks. Once every check passes, the pull request merges if it is up to date with main; otherwise the branch bot updates its branch and the checks run again. It is then squashed into main. You are orange, the bots blue, and main green.
+
+    pr(["You open a<br>pull request"])
+    labels["Title check<br>and labeler:<br>type and area<br>labels"]
+    checks{"13 required<br>checks"}
+    after["After the checks:<br>flaky-test bot,<br>coverage bot,<br>cancelled-check bot"]
+    current{"Up to date<br>with main?"}
+    branch["Branch bot:<br>updates the<br>branch"]
+    main(["Squashed<br>into main"])
+
+    pr --> labels --> checks
+    checks -- "finished" --> after
+    after -. "a failed or<br>cancelled job<br>runs again" .-> checks
+    checks -- "every check<br>passes" --> current
+    current -- "no" --> branch
+    branch -- "the checks<br>run again" --> checks
+    current -- "yes" --> main
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class pr yours
+    class labels,checks,after,current,branch bots
+    class main result

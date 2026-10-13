@@ -44,30 +44,10 @@ It depends on what deletes them:
 
 Every copy that the app deletes in Nextcloud, and every folder that it empties, takes this way:
 
-```mermaid
-flowchart TB
-    accTitle: Where a copy goes that Paperless Sync deletes
-    accDescr: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, a scheduled run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends. A run started with Synchronize now deletes it for good, which issue 119 tracks.
-
-    deleted(["The app deletes<br>a copy"])
-    trashbin{"Deleted files<br>of Nextcloud on?"}
-    who{"Who started<br>the run?"}
-    kept["🗑️ Trash bin of the<br>target user, to restore<br>until its retention ends"]
-    gone["Gone for good"]
-
-    deleted --> trashbin
-    trashbin -- "no" --> gone
-    trashbin -- "yes" --> who
-    who -- "the schedule" --> kept
-    who -- "Synchronize now,<br>#119" --> gone
-
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class trashbin,who check
-    class kept kept
-    class gone refused
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.dark.svg">
+  <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.svg" alt="Where a copy goes that Paperless Sync deletes: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, a scheduled run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends. A run started with Synchronize now deletes it for good, which issue 119 tracks.">
+</picture>
 
 Only the target user sees that trash bin, under *Deleted files* in *Files*. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
 

@@ -1,0 +1,24 @@
+flowchart TB
+    accTitle: Where the website of Paperless Sync takes its look from
+    accDescr: The icon of the app, img/app.svg, is copied to docs/images/app.svg, which scripts/check-project.sh compares with it; the website shows the copy as its logo, its favicon and on the preview cards of its pages. The social preview of the repository, rendered from .github/social-preview.html, is the preview card of the home page. The colors come from docs/stylesheets/brand.css, and the hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the pages. The files of the repository are green, the parts of the website blue.
+
+    icon["img/app.svg<br>the icon of the app"]
+    copy["docs/images/app.svg"]
+    preview["social-preview.html<br>→ social-preview.png"]
+    colors["docs/stylesheets/<br>brand.css"]
+    info["appinfo/info.xml"]
+    logo(["Logo, favicon and<br>preview cards"])
+    home(["Preview card of<br>the home page"])
+    palette(["Colors, light<br>and dark"])
+    chips(["Versions of Nextcloud<br>and PHP on the pages"])
+
+    icon -- "copied, compared by<br>check-project.sh" --> copy
+    copy --> logo
+    preview --> home
+    colors --> palette
+    info -- "mkdocs_project.py" --> chips
+
+    classDef source fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef website fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class icon,copy,preview,colors,info source
+    class logo,home,palette,chips website

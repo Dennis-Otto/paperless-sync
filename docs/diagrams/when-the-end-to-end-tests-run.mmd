@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: When the end-to-end tests run
+    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. Every push to main and every night run them against every supported version, and every Monday the canary runs them against the coming Nextcloud.
+
+    pr["Pull request"]
+    main["Push to main,<br>every night,<br>by hand"]
+    affected{"affected.sh:<br>can the change<br>affect the app?"}
+    all["run-all.sh:<br>every supported<br>version side by side"]
+    skipped["nextcloud<br>passes in seconds"]
+    result["nextcloud:<br>passed or failed"]
+    monday["Every Monday,<br>by hand"]
+    canary["canary.sh:<br>the coming Nextcloud"]
+
+    pr --> affected
+    affected -- "lib/, appinfo/,<br>templates/, js/,<br>css/, l10n/, img/,<br>composer.json,<br>tests/e2e/, e2e.yml" --> all
+    affected -- "documentation,<br>other workflows,<br>the version<br>of a release" --> skipped
+    main --> all
+    %% Invisible links keep the triggers in one row and the canary below the rest.
+    main ~~~ affected
+    all --> result
+    result ~~~ monday
+    monday --> canary
+
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class pr person
+    class affected,all,canary bot
+    class skipped,result done

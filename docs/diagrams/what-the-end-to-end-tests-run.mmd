@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the end-to-end tests run
+    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs and screenshots.mjs against Nextcloud.
+
+    run["run.sh"]
+    subgraph compose ["Docker Compose project"]
+        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>settings.mjs,<br>screenshots.mjs"]
+        nextcloud["Nextcloud<br>this checkout<br>as a custom app"]
+        mock["Paperless mock<br>mock_server.py"]
+    end
+
+    run --> browser
+    run -- "occ, WebDAV,<br>the routes<br>of the app" --> nextcloud
+    run -- "scenario,<br>tasks" --> mock
+    browser --> nextcloud
+    nextcloud -- "REST API" --> mock
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class nextcloud nextcloud
+    class mock paperless

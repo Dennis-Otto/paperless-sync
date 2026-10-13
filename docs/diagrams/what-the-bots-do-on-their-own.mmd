@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the bots do on their own
+    accDescr: Every night, the end-to-end tests run against every supported Nextcloud, as its images move with each point release. Every morning, the findings bot keeps every alert of code scanning fixed or accepted, and the issue lifecycle sends its reminders and closes what is due. Every week, the upstream bot and the blueprint bot open pull requests for a new Nextcloud and a new blueprint, and the canary tests the coming Nextcloud; the link check, the mutation tests, the OpenSSF Scorecard, the release verification, CodeQL, OSV-Scanner, the secret scan of the whole history, the SBOM and zizmor check the repository; the clean-up bot and the settings bot tidy it up. All of it ends in a pull request that merges itself, an issue that closes itself once fixed, or a report. The bots are blue, and what comes out green.
+
+    night(["Every night"])
+    e2e["End-to-end tests<br>against every<br>supported Nextcloud"]
+    morning(["Every morning"])
+    findings["Findings: every<br>alert of code<br>scanning fixed<br>or accepted"]
+    lifecycle["Issue lifecycle:<br>reminders and<br>closing"]
+    week(["Every week"])
+    keep["Keep up and tidy up:<br>upstream bot,<br>blueprint bot, canary,<br>clean-up bot,<br>settings bot"]
+    check["Check: links,<br>mutation tests,<br>Scorecard, release<br>verification, CodeQL,<br>OSV, secret scan,<br>SBOM, zizmor"]
+    out(["A pull request that<br>merges itself, an issue<br>that closes itself once<br>fixed, or a report"])
+
+    night --> e2e
+    %% Invisible links stack the three times, so that the diagram stays narrow.
+    e2e ~~~ morning
+    morning --> findings & lifecycle
+    lifecycle ~~~ week
+    week --> keep & check
+    keep & check --> out
+
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class e2e,findings,lifecycle,keep,check bots
+    class out result

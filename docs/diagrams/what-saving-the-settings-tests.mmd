@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What saving the settings tests
+    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
+
+    save(["💾 Test connection<br>and save"])
+    check{"Is every<br>setting valid?"}
+    scheduled{"Schedule on,<br>or a token entered?"}
+    test{"Do Paperless and<br>the base folder work?"}
+    tested["✅ Saved and tested"]
+    untested["`✅ Saved without a test<br>*the schedule pauses*`"]
+    refused["❌ Not saved:<br>the page says why"]
+
+    save --> check
+    check -- "no" --> refused
+    check -- "yes" --> scheduled
+    scheduled -- "yes" --> test
+    scheduled -- "no" --> untested
+    test -- "yes" --> tested
+    test -- "no" --> refused
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class save,check,scheduled,test nextcloud
+    class tested,untested done
+    class refused refused

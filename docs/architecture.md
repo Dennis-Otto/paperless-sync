@@ -8,75 +8,17 @@ Paperless Sync is a Nextcloud app in PHP. It runs inside Nextcloud, reads Paperl
 
 How a run starts, and which systems it reaches:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: How a run starts and what it reaches
-    accDescr: An administrator configures the app, starts a dry run or a run on the settings page, whose controllers start the synchronization. Nextcloud's cron starts the background job, which starts the synchronization as well. The synchronization builds the path of every document with the path templates, reads Paperless-ngx through the Paperless client, which calls its REST API with the token, and writes the files of the target user through the storage. Everything but the administrator and Paperless-ngx runs inside the Nextcloud server.
-
-    admin(["Administrator"])
-    subgraph nextcloud ["Nextcloud server"]
-        settings["Settings page<br>and controllers"]
-        cron(["Nextcloud cron"])
-        job["Background<br>job"]
-        sync["Synchronization"]
-        template["Path<br>templates"]
-        storage["Storage"]
-        client["Paperless<br>client"]
-        files[("Files of the<br>target user")]
-    end
-    paperless[("Paperless-ngx")]
-
-    admin -- "configure,<br>dry run, run" ---> settings
-    cron --> job
-    settings --> sync
-    job --> sync
-    sync --> template & storage & client
-    storage --> files
-    client -- "REST API<br>with the token" --> paperless
-    %% An invisible link draws Paperless-ngx below the Nextcloud server, not beside it.
-    files ~~~ paperless
-
-    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class paperless paperless
-    class files nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/how-a-run-starts-and-what-it-reaches.dark.svg">
+  <img src="images/diagrams/how-a-run-starts-and-what-it-reaches.svg" alt="How a run starts and what it reaches: An administrator configures the app, starts a dry run or a run on the settings page, whose controllers start the synchronization. Nextcloud's cron starts the background job, which starts the synchronization as well. The synchronization builds the path of every document with the path templates, reads Paperless-ngx through the Paperless client, which calls its REST API with the token, and writes the files of the target user through the storage. Everything but the administrator and Paperless-ngx runs inside the Nextcloud server.">
+</picture>
 
 Where the app keeps its data in Nextcloud:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: Where the app keeps its data
-    accDescr: The settings page and the synchronization read and save the configuration, which keeps the settings in the app configuration of Nextcloud and the API token in its credentials manager. The synchronization keeps the state of every exported document and every file of the inbox in two tables of the database, and the status of the latest run in the app configuration.
-
-    settings["Settings page<br>and controllers"]
-    sync["Synchronization"]
-    config["Configuration"]
-    state["State"]
-    status["Status"]
-    appconfig[("App<br>configuration")]
-    credentials[("Credentials<br>manager:<br>API token")]
-    database[("Database:<br>two tables")]
-
-    settings --> config
-    sync --> config & state & status
-    config --> credentials & appconfig
-    status --> appconfig
-    state --> database
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class appconfig,credentials,database nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/where-the-app-keeps-its-data.dark.svg">
+  <img src="images/diagrams/where-the-app-keeps-its-data.svg" alt="Where the app keeps its data: The settings page and the synchronization read and save the configuration, which keeps the settings in the app configuration of Nextcloud and the API token in its credentials manager. The synchronization keeps the state of every exported document and every file of the inbox in two tables of the database, and the status of the latest run in the app configuration.">
+</picture>
 
 | Component | Files | What it does |
 | --- | --- | --- |
@@ -95,43 +37,10 @@ flowchart TB
 
 One run, from the background job to the status:
 
-```mermaid
----
-config:
-  sequence:
-    wrap: true
-    width: 120
-    actorMargin: 20
-    diagramMarginX: 8
----
-sequenceDiagram
-    accTitle: One run of the synchronization
-    accDescr: The background job or the settings page starts a run. Paperless Sync takes the lock, checks the configuration, and tests the connection to Paperless-ngx and the base folder in Nextcloud. Inbox: it asks Paperless for the tasks of earlier uploads, removes imported files from Nextcloud and moves failed ones, uploads new, changed and due files to Paperless, and stores their tasks, refusals and retries in the database. Export: it reads every page of the documents, the trash and the metadata from Paperless, checks that every list came back complete, compares their paths and checksums with those in the database, downloads new and changed documents, writes, moves, trashes and deletes their files, and saves paths, checksums and missing runs. Finally it prunes empty folders, records the status and releases the lock.
-    participant Paperless as Paperless-ngx
-    participant Sync as Paperless Sync
-    participant Nextcloud as Nextcloud
-    Note over Paperless,Nextcloud: started by the background job or on the settings page
-    Note over Sync: take the lock, check the configuration
-    Sync->>Paperless: test the connection
-    Sync->>Nextcloud: test the base folder
-    rect rgba(0, 130, 201, 0.12)
-        Note over Paperless,Nextcloud: Inbox
-        Sync->>Paperless: the tasks of earlier uploads
-        Sync->>Nextcloud: remove imported, move failed files
-        Sync->>Paperless: upload new, changed and due files
-        Sync->>Nextcloud: save tasks, refusals, retries
-    end
-    rect rgba(23, 128, 61, 0.12)
-        Note over Paperless,Nextcloud: Export
-        Sync->>Paperless: every page of documents, trash, metadata
-        Note over Sync: check that every list is complete
-        Sync->>Nextcloud: compare with saved paths, checksums
-        Sync->>Paperless: download new and changed ones
-        Sync->>Nextcloud: write, move, trash, delete files
-        Sync->>Nextcloud: save paths, checksums, missing runs
-    end
-    Note over Sync: prune folders, record the status, unlock
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/one-run-of-the-synchronization.dark.svg">
+  <img src="images/diagrams/one-run-of-the-synchronization.svg" alt="One run of the synchronization: The background job or the settings page starts a run. Paperless Sync takes the lock, checks the configuration, and tests the connection to Paperless-ngx and the base folder in Nextcloud. Inbox: it asks Paperless for the tasks of earlier uploads, removes imported files from Nextcloud and moves failed ones, uploads new, changed and due files to Paperless, and stores their tasks, refusals and retries in the database. Export: it reads every page of the documents, the trash and the metadata from Paperless, checks that every list came back complete, compares their paths and checksums with those in the database, downloads new and changed documents, writes, moves, trashes and deletes their files, and saves paths, checksums and missing runs. Finally it prunes empty folders, records the status and releases the lock.">
+</picture>
 
 1. Nextcloud's cron starts the background job every five minutes. It runs only when synchronization is enabled and the configured interval has passed. An administrator can start a run or a dry run on the settings page as well.
 2. The run takes a lock, checks that the app is configured, and tests the connection to Paperless and the base folder in Nextcloud.

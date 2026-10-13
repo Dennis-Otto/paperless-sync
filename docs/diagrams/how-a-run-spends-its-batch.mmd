@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: How a run spends its batch
+    accDescr: A document to export or move is skipped when the batch is full or Nextcloud cannot store files. Otherwise it takes a place in the batch. With the conflict policy skip, a file in the way that is not the app's own copy is reported as a conflict without a download. Otherwise the document is downloaded and written, or moved. A failure is reported, and the document waits behind the others in the next run; a full quota, a read-only or an unavailable storage also ends the exports of the run.
+
+    document["A new, changed or<br>renamed document"] --> full{"Batch full, or<br>exports stopped?"}
+    full -->|yes| skipped["Skipped: waits<br>for the next run"]
+    full -->|no| place["Takes a place<br>in the batch"]
+    place --> conflict{"Conflicts skipped and a<br>file in the way that isn't<br>the app's own copy?"}
+    conflict -->|yes| reported["ERROR: the conflict,<br>without a download"]
+    conflict -->|no| write["Downloaded and written,<br>or moved"]
+    write -->|done| done["EXPORT or MOVE"]
+    write -->|fails| failed["ERROR: waits behind<br>the others next run"]
+    failed -->|"full quota, read-only or<br>unavailable storage"| stopped["EXPORT STOPPED:<br>the others wait<br>for the next run"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class full,place,conflict,write check
+    class skipped,reported,failed,stopped waits
+    class done result

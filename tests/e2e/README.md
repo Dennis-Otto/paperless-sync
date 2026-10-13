@@ -2,34 +2,10 @@
 
 The suite mounts this checkout read-only as a Nextcloud Custom App and connects it to a deterministic local Paperless API mock.
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: What the end-to-end tests run
-    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs and screenshots.mjs against Nextcloud.
-
-    run["run.sh"]
-    subgraph compose ["Docker Compose project"]
-        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>settings.mjs,<br>screenshots.mjs"]
-        nextcloud["Nextcloud<br>this checkout<br>as a custom app"]
-        mock["Paperless mock<br>mock_server.py"]
-    end
-
-    run --> browser
-    run -- "occ, WebDAV,<br>the routes<br>of the app" --> nextcloud
-    run -- "scenario,<br>tasks" --> mock
-    browser --> nextcloud
-    nextcloud -- "REST API" --> mock
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    class nextcloud nextcloud
-    class mock paperless
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-the-end-to-end-tests-run.dark.svg">
+  <img src="../../docs/images/diagrams/what-the-end-to-end-tests-run.svg" alt="What the end-to-end tests run: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs and screenshots.mjs against Nextcloud.">
+</picture>
 
 `run-all.sh` runs the scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, side by side, as the CI does; `run.sh` runs it against one version, by default the one that `compose.yaml` pins, or the image in `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`. Every week, the CI also runs it against [the coming Nextcloud](#the-coming-nextcloud).
 
@@ -86,42 +62,10 @@ Ctrl-C ends every version, each with the cleanup of `run.sh`, and prints the log
 
 The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in one job, `nextcloud`, which is the required check of pull requests.
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: When the end-to-end tests run
-    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. Every push to main and every night run them against every supported version, and every Monday the canary runs them against the coming Nextcloud.
-
-    pr["Pull request"]
-    main["Push to main,<br>every night,<br>by hand"]
-    affected{"affected.sh:<br>can the change<br>affect the app?"}
-    all["run-all.sh:<br>every supported<br>version side by side"]
-    skipped["nextcloud<br>passes in seconds"]
-    result["nextcloud:<br>passed or failed"]
-    monday["Every Monday,<br>by hand"]
-    canary["canary.sh:<br>the coming Nextcloud"]
-
-    pr --> affected
-    affected -- "lib/, appinfo/,<br>templates/, js/,<br>css/, l10n/, img/,<br>composer.json,<br>tests/e2e/, e2e.yml" --> all
-    affected -- "documentation,<br>other workflows,<br>the version<br>of a release" --> skipped
-    main --> all
-    %% Invisible links keep the triggers in one row and the canary below the rest.
-    main ~~~ affected
-    all --> result
-    result ~~~ monday
-    monday --> canary
-
-    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class pr person
-    class affected,all,canary bot
-    class skipped,result done
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/when-the-end-to-end-tests-run.dark.svg">
+  <img src="../../docs/images/diagrams/when-the-end-to-end-tests-run.svg" alt="When the end-to-end tests run: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. Every push to main and every night run them against every supported version, and every Monday the canary runs them against the coming Nextcloud.">
+</picture>
 
 In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown, or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*. `scripts/check-project.sh` tests these rules with sample paths and changes.
 

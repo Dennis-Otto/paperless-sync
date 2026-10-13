@@ -32,41 +32,10 @@ The [documentation website](https://dennis-otto.github.io/paperless-sync/) has t
 
 ## How it works
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: How Paperless Sync moves documents
-    accDescr: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archiv of Nextcloud, by correspondent, type and year, and mirrors the trash into Archiv/_Gelöscht. The other way, it picks up the files of the folder Eingang and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Fehler. Paperless-ngx is green, the folders of Nextcloud are blue.
-
-    documents["Paperless-ngx<br>finished documents"]
-    trash["Paperless-ngx<br>trash"]
-    export(["Paperless Sync"])
-    archive["📁 Archiv<br>correspondent /<br>type / year"]
-    deleted["📁 Archiv/<br>_Gelöscht"]
-    inbox["📁 Eingang"]
-    import(["Paperless Sync"])
-    consume["Paperless-ngx<br>new documents"]
-    errors["📁 Fehler"]
-
-    documents -- "read through<br>the REST API" --> export
-    trash -- "read" --> export
-    export -- "write, rename,<br>move" --> archive
-    export -- "mirror<br>the trash" --> deleted
-    %% An invisible link puts the import below the export, so that the diagram stays narrow.
-    archive ~~~ inbox
-    inbox -- "pick up" --> import
-    import -- "upload through<br>the REST API" --> consume
-    import -- "failed<br>imports" --> errors
-
-    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class documents,trash,consume paperless
-    class archive,deleted,inbox,errors nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-paperless-sync-moves-documents.dark.svg">
+  <img src="docs/images/diagrams/how-paperless-sync-moves-documents.svg" alt="How Paperless Sync moves documents: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archiv of Nextcloud, by correspondent, type and year, and mirrors the trash into Archiv/_Gelöscht. The other way, it picks up the files of the folder Eingang and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Fehler. Paperless-ngx is green, the folders of Nextcloud are blue.">
+</picture>
 
 At the configured interval, Nextcloud's cron starts a run of the app inside Nextcloud. It reads the finished documents of Paperless and writes each one into the archive in the files of the configured Nextcloud target user, at the path that the path template builds from its metadata; other users see the archive when that user shares it with them. When the metadata changes in Paperless, the file moves; when a document goes to the Paperless trash, its copy goes to `_Gelöscht`. Files that someone puts into `Eingang` go the other way, to Paperless.
 
@@ -183,64 +152,19 @@ Dokumente/Paperless/Archiv/Example GmbH/Invoice/2026/2026-08-26 - Example invoic
 
 Each part of the template becomes a folder. The base folder holds the inbox folder, with the files for Paperless, and the error folder, with failed imports, next to the archive; the deleted folder in the archive holds the copies of the documents in the Paperless trash:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: The folders of the default path template
-    accDescr: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.
-
-    base["📁 Dokumente/Paperless<br><i>base folder</i>"]
-    inbox["📁 Eingang<br><i>inbox folder</i>"]
-    archive["📁 Archiv<br><i>archive folder</i>"]
-    errors["📁 Fehler<br><i>error folder</i>"]
-    correspondent["📁 Example GmbH<br><i>{{ correspondent }}</i>"]
-    deleted["📁 _Gelöscht<br><i>deleted folder</i>"]
-    type["📁 Invoice<br><i>{{ document_type }}</i>"]
-    year["📁 2026<br><i>{{ created_year }}</i>"]
-    file["📄 2026-08-26 -<br>Example invoice<br>[P123].pdf<br><i>{{ created }} -<br>{{ title }} [P{{ id }}]<br>{{ extension }}</i>"]
-
-    base --> inbox & archive & errors
-    archive --> correspondent & deleted
-    correspondent --> type --> year --> file
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class base,archive,inbox,errors,correspondent,deleted,type,year,file nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-folders-of-the-default-path-template.dark.svg">
+  <img src="docs/images/diagrams/the-folders-of-the-default-path-template.svg" alt="The folders of the default path template: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.">
+</picture>
 
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
 
 When you change the title, the tags, the correspondent or the type of a document in Paperless, its file moves to its new path and keeps its shares, comments and versions in Nextcloud, and the desktop and mobile clients only rename it. Only a change of the content, such as a new archive version after Paperless processed the document again, downloads it again, and the download goes into the same file, at its new path if it has one, so the file keeps its shares, comments and favorites; in a scheduled run, Nextcloud keeps the previous content as a version of the file. A run tells the two apart by the checksums of the file: it keeps the SHA-256 and the MD5 of every download and compares them with the checksum that Paperless reports, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0. For a file that an earlier version of the app exported, which has only its SHA-256 saved, the first change on Paperless-ngx 2.x reads the file in Nextcloud once to add its MD5, so that it moves without a download too. A download goes to Nextcloud in chunks, so a document of any size fits into the memory of PHP.
 
-```mermaid
-flowchart TB
-    accTitle: How a run tells new metadata from new content
-    accDescr: A document that was never exported is downloaded. For an exported document, a run compares the revision of Paperless with the one it saved. With a new revision, it asks Paperless for the checksum of the file, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0, and looks for it among the SHA-256 and the MD5 that it saved at the download. When the revision is the same, or the checksum is among them, the content is the same: the file stays where it is, or moves to its new path. When an earlier version of the app saved the SHA-256 alone and Paperless reports an MD5, the run computes both checksums of the mirrored file: when its SHA-256 is the saved one and its MD5 the one of Paperless, the content is the same too. Otherwise the run downloads the document to a temporary file, computes both checksums in one pass over it, writes it to Nextcloud in chunks, into the file of the document when it has one, which keeps its ID and moves to its new path first, and saves the checksums. The questions are indigo, the requests to Paperless-ngx green, and the results in Nextcloud blue.
-
-    document["A document that<br>Paperless lists"] --> exported{"Exported<br>before?"}
-    exported -->|no| download["Download to a<br>temporary file, SHA-256<br>and MD5 in one pass"]
-    exported -->|yes| revision{"Same revision<br>as saved?"}
-    revision -->|yes| same["Same content"]
-    revision -->|no| checksum["Checksum from Paperless:<br>MD5 up to 2.x,<br>SHA-256 since 3.0"]
-    checksum --> known{"Among the saved<br>SHA-256 and MD5?"}
-    known -->|yes| same
-    known -->|no| earlier{"Only the SHA-256 of<br>an earlier version? Is it<br>the mirrored file's, and<br>its MD5 Paperless's?"}
-    earlier -->|yes| same
-    earlier -->|no| download
-    same --> path{"Same path?"}
-    path -->|yes| unchanged["UNCHANGED"]
-    path -->|no| move["MOVE: the same file<br>at its new path"]
-    download --> export["EXPORT: written in chunks<br>into the same file, or<br>a new one; both<br>checksums saved"]
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class exported,revision,known,earlier,path check
-    class checksum,download paperless
-    class unchanged,move,export nextcloud
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.svg" alt="How a run tells new metadata from new content: A document that was never exported is downloaded. For an exported document, a run compares the revision of Paperless with the one it saved. With a new revision, it asks Paperless for the checksum of the file, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0, and looks for it among the SHA-256 and the MD5 that it saved at the download. When the revision is the same, or the checksum is among them, the content is the same: the file stays where it is, or moves to its new path. When an earlier version of the app saved the SHA-256 alone and Paperless reports an MD5, the run computes both checksums of the mirrored file: when its SHA-256 is the saved one and its MD5 the one of Paperless, the content is the same too. Otherwise the run downloads the document to a temporary file, computes both checksums in one pass over it, writes it to Nextcloud in chunks, into the file of the document when it has one, which keeps its ID and moves to its new path first, and saves the checksums. The questions are indigo, the requests to Paperless-ngx green, and the results in Nextcloud blue.">
+</picture>
 
 <!-- --8<-- [end:usage] -->
 <!-- --8<-- [start:configuration] -->
@@ -278,39 +202,10 @@ If you turned on `allow_local_remote_servers` for this app before, turn on the s
 
 **Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: What saving the settings tests
-    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
-
-    save(["💾 Test connection<br>and save"])
-    check{"Is every<br>setting valid?"}
-    scheduled{"Schedule on,<br>or a token entered?"}
-    test{"Do Paperless and<br>the base folder work?"}
-    tested["✅ Saved and tested"]
-    untested["✅ Saved without a test<br><i>the schedule pauses</i>"]
-    refused["❌ Not saved:<br>the page says why"]
-
-    save --> check
-    check -- "no" --> refused
-    check -- "yes" --> scheduled
-    scheduled -- "yes" --> test
-    scheduled -- "no" --> untested
-    test -- "yes" --> tested
-    test -- "no" --> refused
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class save,check,scheduled,test nextcloud
-    class tested,untested done
-    class refused refused
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-saving-the-settings-tests.dark.svg">
+  <img src="docs/images/diagrams/what-saving-the-settings-tests.svg" alt="What saving the settings tests: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.">
+</picture>
 
 To pause synchronization, such as while Paperless is down, its token is revoked or the target user is disabled, uncheck **Enable scheduled synchronization** and save. A save that fails while the schedule is on says so and moves the focus to that switch.
 
@@ -356,62 +251,19 @@ Each part of the path is cleaned for Nextcloud, macOS and Windows: control chara
 
 Nextcloud accepts names of up to 250 bytes, and a character of Cyrillic takes two bytes, of Chinese three and an emoji four. So a folder name has at most 200 bytes and a file name at most 217, which leaves room for the temporary name of a write. A name that would be longer is shortened in its free text alone: the title, the correspondent, the document type, the storage path and the original file name, the longest first. The text of the template, the dates, the marker and the extension stay whole:
 
-```mermaid
-flowchart TB
-    accTitle: How a part of the path is built
-    accDescr: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.
-
-    part["A part of the template<br><code>{{ created }} -<br>{{ title }}<br>[P{{ id }}]</code>"]
-    values["The values as plain text,<br>cleaned for Nextcloud,<br>macOS and Windows"]
-    fits{"At most 200 bytes<br>for a folder, 217<br>for the file name?"}
-    shorten["Shorten the longest<br>free text: title,<br>correspondent,<br>document type,<br>storage path,<br>original file name"]
-    name["📄 2026-08-26 -<br>Example invoice<br>[P123].pdf"]
-
-    part --> values --> fits
-    fits -- "no" --> shorten --> fits
-    fits -- "yes" --> name
-
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class name done
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.dark.svg">
+  <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.svg" alt="How a part of the path is built: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.">
+</picture>
 
 ### Nextcloud inbox
 
 Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is on, go to Paperless, at most as many in one run as the batch size allows. A file stays in the inbox until its Paperless task reports success:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: The way of a file from the inbox to Paperless
-    accDescr: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, it moves to the folder Fehler, next to a .error.txt with the reason.
-
-    %% The wait comes first, so that it is drawn above the upload and the diagram stays narrow.
-    retry["Paperless<br>unreachable or<br>overloaded: waits<br>15 minutes, then<br>twice as long,<br>up to a day"]
-    file["📄 A file in<br>📁 Eingang"]
-    upload{"Upload to<br>Paperless"}
-    task{"Its task,<br>in the<br>next runs"}
-    refused["Refused, such as<br>an unsupported<br>file type: stays<br>in Eingang,<br>skipped until<br>it changes"]
-    done["Success:<br>removed from<br>Eingang, or kept,<br>as configured"]
-    failed["Failure:<br>moved to<br>📁 Fehler, next<br>to a .error.txt<br>with the reason"]
-
-    retry -- "again" --> upload
-    file -- "next run" --> upload
-    upload --> retry
-    upload -- "accepted" --> task
-    upload --> refused
-    refused -- "saved anew,<br>renamed or<br>replaced" --> upload
-    task --> done
-    task --> failed
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    class file,refused,done,failed nextcloud
-    class upload,task paperless
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.dark.svg">
+  <img src="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.svg" alt="The way of a file from the inbox to Paperless: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, it moves to the folder Fehler, next to a .error.txt with the reason.">
+</picture>
 
 A failed file keeps its subfolder below the error folder.
 
@@ -425,20 +277,10 @@ Moving Paperless documents to its trash can be mirrored into the configured `_Ge
 
 A copy that a scheduled run deletes goes to the trash bin of the target user, *Deleted files* in Files, as do the folders that it empties: Nextcloud keeps them there for the retention of its trash bin, and the target user can restore them. A run started with *Synchronize now* deletes them for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks. The same holds for the copy that an excluded tag removes, for an inbox file after its import and for a file that the [conflict policy](#conflict-policy) replaces. Without the app *Deleted files* of Nextcloud, every deletion is for good.
 
-```mermaid
-stateDiagram-v2
-    direction TB
-    accTitle: What happens to the copy of a document
-    accDescr: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Gelöscht; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Gelöscht is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.
-    state "In the archive" as archive
-    state "In _Gelöscht" as deleted
-    state "Deleted in Nextcloud" as gone
-    [*] --> archive: exported
-    archive --> deleted: moved to the trash<br>in Paperless, or gone<br>without the trash<br>for N complete scans
-    deleted --> archive: restored<br>in Paperless
-    deleted --> gone: deleted for good<br>in Paperless, after<br>N complete scans, with<br>permanent deletion on
-    archive --> gone: gone without the trash<br>for N complete scans,<br>with permanent and<br>direct deletion on
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-happens-to-the-copy-of-a-document.dark.svg">
+  <img src="docs/images/diagrams/what-happens-to-the-copy-of-a-document.svg" alt="What happens to the copy of a document: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Gelöscht; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Gelöscht is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.">
+</picture>
 
 N is the number of *Required consecutive missing scans*, three by default. With the trash behavior *Keep archive file in place*, the copy stays in the archive instead of moving to `_Gelöscht`, and it is deleted from there when the rules allow it. A document that Paperless restores, or lists again, keeps that copy without a download.
 
@@ -448,51 +290,19 @@ Only a copy that is still there is moved or deleted: a document whose copy is al
 
 Only a complete scan counts. Paperless lists its documents page by page, and a page may come back short or empty, from a proxy in front of Paperless or a glitch of its permissions, or a document may be added or deleted while the run reads the pages. Then documents that still exist would look deleted. So a scan counts only when every page came back full, with the same count of Paperless, and the run received every document that Paperless listed; the run reads the documents in the order of their IDs, so that a new one joins the last page. After an incomplete scan of the documents or of the trash, the report says `SCAN INCOMPLETE`, the Nextcloud log has a warning, and the run counts no document as missing; the next complete scan carries on. A document that a scan lists again starts its count of missing scans anew. The lists of tags, correspondents, document types and storage paths are checked the same way: when one of them comes back incomplete, the run fails before it changes anything in the archive, so that a document is never exported for want of its excluded tag, and never moves for want of its correspondent.
 
-```mermaid
-flowchart TB
-    accTitle: When a document counts as missing
-    accDescr: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew, and one in neither list counts one more missing scan; after N scans in a row, its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.
-
-    scan["A run reads every page<br>of the documents and the trash"] --> complete{"Every page full<br>and the list unchanged?"}
-    complete -->|no| incomplete["SCAN INCOMPLETE:<br>no document counts<br>as missing in this run"]
-    complete -->|yes| listed{"Is the document<br>in one of the lists?"}
-    listed -->|yes| reset["Its count of missing<br>scans starts anew"]
-    listed -->|no| scans{"Missing in N<br>scans in a row?"}
-    scans -->|not yet| wait["WAIT: one more<br>missing scan"]
-    scans -->|yes| change["Moved to _Gelöscht,<br>or deleted when allowed,<br>within the batch size"]
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class scan,complete,listed,scans check
-    class incomplete,reset,wait kept
-    class change changed
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/when-a-document-counts-as-missing.dark.svg">
+  <img src="docs/images/diagrams/when-a-document-counts-as-missing.svg" alt="When a document counts as missing: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew, and one in neither list counts one more missing scan; after N scans in a row, its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.">
+</picture>
 
 ### Batch size
 
 The batch size limits the changes of one run: exports, moves, removals of excluded copies, moves to the deleted folder and deletions. A change that fails takes its place as well, so a run that can't write, such as one against a full quota or a file name that Nextcloud refuses, downloads no more documents than the batch size allows. An export that fails takes its place only among the exports, though, so documents whose export keeps failing never hold up the moves of trashed or missing documents. What doesn't fit into a run waits for the next one, and the report counts it as skipped. Uploads from the inbox have a batch of the same size of their own, so a run uploads at most that many files to Paperless as well.
 
-```mermaid
-flowchart TB
-    accTitle: How a run spends its batch
-    accDescr: A document to export or move is skipped when the batch is full or Nextcloud cannot store files. Otherwise it takes a place in the batch. With the conflict policy skip, a file in the way that is not the app's own copy is reported as a conflict without a download. Otherwise the document is downloaded and written, or moved. A failure is reported, and the document waits behind the others in the next run; a full quota, a read-only or an unavailable storage also ends the exports of the run.
-
-    document["A new, changed or<br>renamed document"] --> full{"Batch full, or<br>exports stopped?"}
-    full -->|yes| skipped["Skipped: waits<br>for the next run"]
-    full -->|no| place["Takes a place<br>in the batch"]
-    place --> conflict{"Conflicts skipped and a<br>file in the way that isn't<br>the app's own copy?"}
-    conflict -->|yes| reported["ERROR: the conflict,<br>without a download"]
-    conflict -->|no| write["Downloaded and written,<br>or moved"]
-    write -->|done| done["EXPORT or MOVE"]
-    write -->|fails| failed["ERROR: waits behind<br>the others next run"]
-    failed -->|"full quota, read-only or<br>unavailable storage"| stopped["EXPORT STOPPED:<br>the others wait<br>for the next run"]
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    class full,place,conflict,write check
-    class skipped,reported,failed,stopped waits
-    class done result
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-spends-its-batch.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-spends-its-batch.svg" alt="How a run spends its batch: A document to export or move is skipped when the batch is full or Nextcloud cannot store files. Otherwise it takes a place in the batch. With the conflict policy skip, a file in the way that is not the app's own copy is reported as a conflict without a download. Otherwise the document is downloaded and written, or moved. A failure is reported, and the document waits behind the others in the next run; a full quota, a read-only or an unavailable storage also ends the exports of the run.">
+</picture>
 
 The run takes the most recently added documents first, so a new document doesn't wait behind a backlog, such as the first export of a large archive. A document whose last export or move failed waits behind the others, the one that failed longest ago first, so documents that keep failing don't hold up the rest. When Nextcloud can't store files in the archive at all, because the quota is full or the archive is read-only or its storage unavailable, the run stops exporting and moving at the first failure and reports `EXPORT STOPPED`; the other documents follow in the next run, and removing copies, which frees space, goes on. Nextcloud applies no quota to the temporary file of a write, so the app checks the free space before every write itself. A path that Nextcloud refuses on its own, such as a forbidden file name or a read-only subfolder, concerns only its document. With the conflict policy *Skip and report conflict*, a file in the way is reported as a conflict before the document is downloaded, and a dry-run reports it too. The app's own copy of a document is not in the way: the state of the document records its path, and it still has the content of the last download, so it gets the new content. A copy that someone changed in Nextcloud counts as theirs and stays, also when the document gets a new path; a copy that a failed write left incomplete is still the app's own and gets the content in the next run.
 
@@ -509,30 +319,10 @@ A large archive takes many runs at first: about the number of documents divided 
 <!-- --8<-- [start:status] -->
 Every run leaves its outcome in three places, also a scheduled run that nobody watched:
 
-```mermaid
----
-config:
-  flowchart:
-    nodeSpacing: 24
----
-flowchart TB
-    accTitle: Where the outcome of a run goes
-    accDescr: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.
-
-    run(["⚙️ Run<br><i>scheduled, by hand<br>or dry-run</i>"])
-    report["📋 Report<br><i>counts, up to 100 lines,<br>errors first</i>"]
-    status["🗂️ Status<br><i>state, times, errors<br>and report of the last run</i>"]
-    page["🖥️ Settings page<br><i>at every visit</i>"]
-    log["📜 Nextcloud log<br><i>a warning for each<br>new error of a document</i>"]
-
-    run --> report --> status --> page
-    run -- "errors" --> log
-
-    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class run,report,status,page nextcloud
-    class log warning
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-outcome-of-a-run-goes.dark.svg">
+  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.">
+</picture>
 
 The top of the settings page shows how the last run ended, when it finished, the last run without errors and, roughly, the next scheduled run: Nextcloud's background jobs start it, so it follows a few minutes after the interval. A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
 <!-- --8<-- [end:status] -->

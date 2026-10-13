@@ -26,27 +26,10 @@ What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.m
 
 ## Trust boundaries
 
-```mermaid
-flowchart TB
-    accTitle: The trust boundaries of Paperless Sync
-    accDescr: Four numbered arrows cross a trust boundary. 1: the browser of an administrator sends requests to Paperless Sync in Nextcloud. 2: the app calls Paperless-ngx. 3: the app writes the files below the base folder of the target user. 4: whoever may write to the inbox folder puts files there. The app keeps the API token in the credentials manager. The browser, the writers of the inbox and Paperless-ngx are untrusted and have a dashed red border.
-
-    credentials[("Credentials<br>manager:<br>API token")]
-    browser(["Browser of an<br>administrator"])
-    app["Paperless Sync<br>in Nextcloud"]
-    writers(["Whoever may<br>write to the<br>inbox folder"])
-    paperless[("Paperless-ngx")]
-    files[("Files below<br>the base folder<br>of the target user")]
-
-    credentials --- app
-    browser -- "1" --> app
-    app -- "2" --> paperless
-    app -- "3" --> files
-    writers -- "4" --> files
-
-    classDef untrusted fill:#c9302c1f,stroke:#c9302c,stroke-width:2px,stroke-dasharray:4 3
-    class browser,writers,paperless untrusted
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-trust-boundaries-of-paperless-sync.dark.svg">
+  <img src="images/diagrams/the-trust-boundaries-of-paperless-sync.svg" alt="The trust boundaries of Paperless Sync: Four numbered arrows cross a trust boundary. 1: the browser of an administrator sends requests to Paperless Sync in Nextcloud. 2: the app calls Paperless-ngx. 3: the app writes the files below the base folder of the target user. 4: whoever may write to the inbox folder puts files there. The app keeps the API token in the credentials manager. The browser, the writers of the inbox and Paperless-ngx are untrusted and have a dashed red border.">
+</picture>
 
 Each numbered arrow crosses one of the boundaries below; the app checks whatever comes from the parties with a dashed red border.
 
@@ -78,37 +61,10 @@ Each numbered arrow crosses one of the boundaries below; the app checks whatever
 
 With scheduled synchronization on, or a token entered, saving tests the connection to Paperless first, with the token that goes with the URL. With the schedule off and no token entered, a save only checks that the URL is the one that the stored token was saved with, and no request leaves the server:
 
-```mermaid
-flowchart TB
-    accTitle: Which token a save of the settings tests
-    accDescr: Nextcloud first asks for the password of the administrator, unless it was confirmed in the last 30 minutes. A token that was entered is tested with the URL of the form. Without one, the stored token goes only to the URL that it was saved with: for that URL, the save tests it when scheduled synchronization is on, and otherwise stores the settings without a request to Paperless; for another URL, the save is refused with the message to enter the token again, and no request leaves the server.
-
-    save(["Save the settings"])
-    password{"Password confirmed<br>in the last<br>30 minutes?"}
-    confirm["Nextcloud asks<br>for the password"]
-    entered{"Token<br>entered?"}
-    same{"Same URL as the<br>stored token's?"}
-    schedule{"Scheduled<br>synchronization on?"}
-    typed["Test the entered<br>token with the URL"]
-    stored["Test the stored<br>token with the URL"]
-    untested["Saved without a<br>request to Paperless"]
-    refuse["Refused: enter the<br>API token again"]
-
-    save --> password
-    password -- "no" --> confirm --> password
-    password -- "yes" --> entered
-    entered -- "yes" --> typed
-    entered -- "no" --> same
-    same -- "yes" --> schedule
-    schedule -- "yes" --> stored
-    schedule -- "no" --> untested
-    same -- "no" --> refuse
-
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class typed,stored,untested done
-    class refuse refused
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/which-token-a-save-of-the-settings-tests.dark.svg">
+  <img src="images/diagrams/which-token-a-save-of-the-settings-tests.svg" alt="Which token a save of the settings tests: Nextcloud first asks for the password of the administrator, unless it was confirmed in the last 30 minutes. A token that was entered is tested with the URL of the form. Without one, the stored token goes only to the URL that it was saved with: for that URL, the save tests it when scheduled synchronization is on, and otherwise stores the settings without a request to Paperless; for another URL, the save is refused with the message to enter the token again, and no request leaves the server.">
+</picture>
 
 Every run checks the same before its first request: when the configured URL is not the one that the token was saved with, because it was changed with `occ` or Nextcloud's provisioning API, the run stops without sending the token, and the settings page asks for it again.
 
@@ -116,32 +72,10 @@ Every run checks the same before its first request: when the configured URL is n
 
 Nextcloud checks the address of every request of its HTTP client and refuses one of the local network, such as `paperless`, `paperless.lan` or `192.168.1.20`, unless the request allows it. The app allows it in exactly one place, for the requests to the saved Paperless URL, and only with the setting on:
 
-```mermaid
-flowchart TB
-    accTitle: When a request of Paperless Sync may reach an address of the local network
-    accDescr: Every request of the app goes to the saved Paperless URL. With the setting Paperless runs in my local network on, Nextcloud allows a local address for this request and sends it. With the setting off, Nextcloud sends it only when the address is not a local one; a local address is refused, and the app says to turn the setting on. The requests of other apps keep Nextcloud's protection either way.
-
-    request(["A request of the app<br>to the saved<br>Paperless URL"])
-    setting{"Paperless runs<br>in my local<br>network?"}
-    allowed["Nextcloud allows<br>a local address<br>for this request"]
-    local{"Is the address<br>a local one?"}
-    sent["Sent to Paperless"]
-    refused["Refused: turn on<br>Paperless runs in my<br>local network"]
-    others(["Requests of<br>other apps"])
-    protected["Nextcloud refuses<br>local addresses<br>as before"]
-
-    request --> setting
-    setting -- "on" --> allowed --> sent
-    setting -- "off" --> local
-    local -- "no" --> sent
-    local -- "yes" --> refused
-    others --> protected
-
-    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class sent,protected done
-    class refused refused
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/when-a-request-of-paperless-sync-may-reach-an-address-of-the-local.dark.svg">
+  <img src="images/diagrams/when-a-request-of-paperless-sync-may-reach-an-address-of-the-local.svg" alt="When a request of Paperless Sync may reach an address of the local network: Every request of the app goes to the saved Paperless URL. With the setting Paperless runs in my local network on, Nextcloud allows a local address for this request and sends it. With the setting off, Nextcloud sends it only when the address is not a local one; a local address is refused, and the app says to turn the setting on. The requests of other apps keep Nextcloud's protection either way.">
+</picture>
 
 The system switch `allow_local_remote_servers` would allow local addresses for every app and every request that a user can start, such as link previews, calendar subscriptions, federation and external storage. [Decision 0008](decisions/0008-local-network-per-request.md) records why the app asks for its own setting instead.
 
