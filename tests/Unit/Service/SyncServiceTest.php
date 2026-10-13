@@ -1117,6 +1117,173 @@ final class SyncServiceTest extends TestCase {
 		self::assertStringContainsString('Unsupported mime type', $this->storage->files[$errorPath . '.error.txt']);
 	}
 
+	public function testSuccessfulImportNamesTheDocumentThatPaperlessCreated(): void {
+		$this->configService->save(['delete_inbox_after_success' => false]);
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456];
+
+		$report = $this->service->run();
+
+		self::assertSame(['IMPORT SUCCESS: ' . $path . ' -> P456'], $report->actions);
+		self::assertSame(1, $report->importsSucceeded);
+		self::assertSame('success', $this->state->imports[$path]['status']);
+	}
+
+	/**
+	 * Every end of a task that created no document moves the file to the error folder, with what
+	 * Paperless said and the task to look it up by: a failure, a duplicate, which Paperless-ngx 3.x
+	 * also reports as a failure, and a task that Paperless revoked, which ends no other way.
+	 *
+	 * @return array<string, array{array{status: string, message: string}, string}>
+	 */
+	public static function failedTasks(): array {
+		return [
+			'a failure' => [
+				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream'],
+				"Paperless import failed\n\npolice.pdf: Unsupported mime type application/octet-stream\n\nPaperless task: task-1\n",
+			],
+			'a duplicate' => [
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123'],
+				"Paperless import failed\n\nNot consuming: It is a duplicate of document #123\n\nPaperless task: task-1\n",
+			],
+			'a revoked task' => [
+				['status' => 'REVOKED', 'message' => ''],
+				"Paperless import failed\n\nPaperless cancelled the task before it finished (REVOKED), so it created no document.\n\nPaperless task: task-1\n",
+			],
+			'a revoked task with a reason' => [
+				['status' => 'REVOKED', 'message' => 'Terminated'],
+				"Paperless import failed\n\nPaperless cancelled the task before it finished (REVOKED), so it created no document: Terminated\n\nPaperless task: task-1\n",
+			],
+			'a failure without a reason' => [
+				['status' => 'FAILURE', 'message' => ''],
+				"Paperless import failed\n\nPaperless gave no reason; its log may have one.\n\nPaperless task: task-1\n",
+			],
+		];
+	}
+
+	/** @param array{status: string, message: string} $task */
+	#[DataProvider('failedTasks')]
+	public function testFailedTaskMovesTheFileWithWhatPaperlessSaid(array $task, string $diagnostic): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = $task;
+
+		$report = $this->service->run();
+
+		$errorPath = 'Dokumente/Paperless/Fehler/police.pdf';
+		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
+		self::assertSame(1, $report->importsFailed);
+		self::assertSame(0, $report->errors);
+		self::assertArrayNotHasKey($path, $this->storage->files);
+		self::assertSame($diagnostic, $this->storage->files[$errorPath . '.error.txt']);
+		self::assertSame([], $this->state->imports);
+	}
+
+	/**
+	 * A task that Paperless doesn't list, or hasn't finished, a day after the upload: its queue may
+	 * have lost it, as after a restart of Redis, or someone removed it. Without an end, the file
+	 * would wait in the inbox for good, so it is uploaded again, as after a failed upload.
+	 *
+	 * @return array<string, array{array{status: string, message: string}, string}>
+	 */
+	public static function unfinishedTasks(): array {
+		return [
+			'not listed' => [['status' => 'PENDING', 'message' => 'Paperless does not list the task.'], 'PENDING: Paperless does not list the task.'],
+			'pending' => [['status' => 'PENDING', 'message' => ''], 'PENDING'],
+			'started' => [['status' => 'STARTED', 'message' => ''], 'STARTED'],
+			'a status of the future' => [['status' => 'RETRYING', 'message' => ''], 'RETRYING'],
+		];
+	}
+
+	/** @param array{status: string, message: string} $task */
+	#[DataProvider('unfinishedTasks')]
+	public function testTaskThatPaperlessHasNotFinishedADayAfterTheUploadIsUploadedAgain(array $task, string $state): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = $task;
+		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$error = "Paperless has not finished the import task task-1 a day after the upload ({$state})";
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless has not finished the import of the inbox file {path} a day after its upload; it is uploaded again in {minutes} minutes: {error}',
+			['path' => $path, 'error' => $error, 'task' => 'task-1', 'minutes' => 15],
+		);
+
+		$lost = $this->service->run();
+
+		self::assertSame(['ERROR: Import ' . $path . ': ' . $error . ' (attempt 1, the next in 15 minutes)'], $lost->actions);
+		self::assertSame(1, $lost->errors);
+		self::assertSame(0, $lost->importsFailed);
+		self::assertSame('retry', $this->state->imports[$path]['status']);
+		self::assertSame(1, $this->state->imports[$path]['attempts']);
+		self::assertSame(900, $this->state->imports[$path]['retry_at'] - $this->state->imports[$path]['submitted_at']);
+		self::assertSame($error, $this->state->imports[$path]['last_error']);
+		self::assertArrayHasKey($path, $this->storage->files, 'The file stays in the inbox.');
+		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts);
+
+		$this->state->imports[$path]['retry_at'] = time();
+		$again = $this->service->run();
+		self::assertSame(1, $again->importsSubmitted);
+		self::assertSame(['police.pdf', 'police.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame('pending', $this->state->imports[$path]['status']);
+	}
+
+	public function testTaskThatPaperlessHasNotFinishedYetWaitsForADay(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
+		// A minute before the day is over, so that the run doesn't reach it on a slow machine.
+		$this->state->imports[$path]['submitted_at'] = time() - 86400 + 60;
+		$this->logger->expects(self::never())->method('warning');
+
+		$report = $this->service->run();
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->errors);
+		self::assertSame('pending', $this->state->imports[$path]['status']);
+	}
+
+	public function testTaskOfAPaperlessThatDoesNotAnswerIsNotGivenUp(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->state->imports[$path]['submitted_at'] = time() - 3 * 86400;
+		$this->paperless->taskException = new RuntimeException('Paperless timed out');
+
+		$this->service->run();
+
+		self::assertSame('pending', $this->state->imports[$path]['status'], 'Only an answer of Paperless tells that it has not finished the task.');
+		self::assertCount(1, $this->paperless->uploadAttempts);
+	}
+
+	public function testDryRunReportsATaskThatPaperlessHasNotFinishedWithoutUploadingItAgain(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$imports = $this->state->imports;
+		$this->logger->expects(self::never())->method('warning');
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['ERROR: Import ' . $path . ': Paperless has not finished the import task task-1 a day after the upload (PENDING); a run uploads it again'], $report->actions);
+		self::assertSame($imports, $this->state->imports);
+		self::assertCount(1, $this->paperless->uploadAttempts);
+	}
+
+	public function testRunKeepsTheVersionOfPaperlessForTheStatus(): void {
+		$this->paperless->server = ['version' => '3.3.0', 'apiVersion' => '9'];
+
+		$this->service->run(true);
+
+		self::assertSame('3.3.0', $this->settings['status_paperless_version']);
+		self::assertSame('9', $this->settings['status_paperless_api_version']);
+	}
+
 	public function testFailedTaskIsNotSubmittedAgainWhenErrorHandlingThrows(): void {
 		$path = 'Dokumente/Paperless/Eingang/broken.pdf';
 		$this->storage->files[$path] = 'broken';

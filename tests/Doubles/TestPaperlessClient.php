@@ -33,8 +33,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $contents = [];
 	/** @var array<string, string> */
 	public array $uploads = [];
-	/** @var array<string, array{status: string, message: string}> */
+	/** @var array<string, array{status: string, message: string, documentId?: int|null}> */
 	public array $tasks = [];
+	/** @var array{version: string, apiVersion: string} the Paperless that every test of the connection reaches */
+	public array $server = ['version' => '2.20.15', 'apiVersion' => '9'];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
 	/** Paperless-ngx up to 2.x, whose checksums are MD5; 3.x reports SHA-256. */
@@ -53,11 +55,13 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void {
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
 		$this->connections[] = [$url, $token, $localNetwork];
 		if ($this->connectionException !== null) {
 			throw $this->connectionException;
 		}
+
+		return $this->server;
 	}
 
 	public function documents(): PaperlessScan {
@@ -129,7 +133,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		if ($this->taskException !== null) {
 			throw $this->taskException;
 		}
-		return $this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => ''];
+		return ($this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => '']) + ['documentId' => null];
 	}
 
 	/** @param list<array<string, mixed>> $documents */

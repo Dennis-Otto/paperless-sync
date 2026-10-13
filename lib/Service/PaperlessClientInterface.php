@@ -17,9 +17,14 @@ interface PaperlessClientInterface {
 	 * A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its
 	 * failure. $localNetwork allows an address of the local network for it.
 	 *
+	 * The answer names the version of Paperless-ngx as Paperless names itself, '' when it doesn't,
+	 * and the version of its API that the app uses.
+	 *
+	 * @return array{version: string, apiVersion: string}
 	 * @throws PaperlessLocalNetworkException when Nextcloud refuses the address as a local one
+	 * @throws PaperlessVersionException when Paperless doesn't serve the version of its API that the app uses
 	 */
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void;
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array;
 
 	/** The active documents, and whether the run received all of them. */
 	public function documents(): PaperlessScan;
@@ -57,6 +62,13 @@ interface PaperlessClientInterface {
 	 */
 	public function uploadDocument($source, string $filename): string;
 
-	/** @return array{status: string, message: string} */
+	/**
+	 * The state of the task of an upload: its status in upper case, as Paperless names it, such as
+	 * PENDING, STARTED, SUCCESS, FAILURE or REVOKED, PENDING also while Paperless doesn't list the
+	 * task; what Paperless says about its result, such as the reason of a failure; and the ID of
+	 * the document that it created, if it names one.
+	 *
+	 * @return array{status: string, message: string, documentId: int|null}
+	 */
 	public function taskStatus(string $taskId): array;
 }

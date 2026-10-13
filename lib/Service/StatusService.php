@@ -16,9 +16,10 @@ use OCP\IAppConfig;
 
 /**
  * The status of the latest run, kept in the app configuration: when it started and ended, how it
- * ended, its summary, its error, and its report for the settings page.
+ * ended, its summary, its error, its report for the settings page, and the Paperless that it
+ * reached.
  *
- * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>}
+ * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
  */
 final class StatusService {
 	/** The most lines of changes that the kept report holds. */
@@ -45,6 +46,9 @@ final class StatusService {
 	 */
 	private const LAST_SYNC_STARTED = 'status_last_sync_started';
 	private const LAST_SYNC_ENDED = 'status_last_sync_ended';
+	/** The version of Paperless-ngx that the last run reached, as Paperless names it, and the version of its API that the run used. */
+	private const PAPERLESS_VERSION = 'status_paperless_version';
+	private const PAPERLESS_API_VERSION = 'status_paperless_api_version';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -61,6 +65,17 @@ final class StatusService {
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running');
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
+	}
+
+	/**
+	 * The Paperless that a run reached, which the settings page names, so that an administrator
+	 * sees which version answers and a report of a problem can name it.
+	 *
+	 * @param array{version: string, apiVersion: string} $server
+	 */
+	public function connected(array $server): void {
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, $server['version']);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, $server['apiVersion']);
 	}
 
 	public function completed(SyncReport $report): void {
@@ -110,13 +125,15 @@ final class StatusService {
 			'summary' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_SUMMARY, '{}')),
 			'error' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR, ''),
 			'report' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_REPORT, '{}', lazy: true)),
+			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, ''),
+			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, ''),
 		];
 	}
 
 	/**
 	 * The status as the settings page shows it, with the time of the next scheduled run.
 	 *
-	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, nextRun: int|null}
+	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, nextRun: int|null}
 	 */
 	public function overview(SyncConfig $config): array {
 		$status = $this->get();

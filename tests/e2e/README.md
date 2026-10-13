@@ -29,13 +29,14 @@ The scenario verifies:
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete
-- successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
+- successful and failed Nextcloud inbox imports, with the ID of the new document and with the reason of Paperless in the `.error.txt`, a duplicate and a task that Paperless revoked, in the task shapes of Paperless-ngx 3.x and 2.20, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs
 - the background job as system cron starts it: once synchronization is enabled and the interval since the last run has passed, it runs, and started again at once, it waits
 - a document restored from the Paperless trash, whose copy moves back from the deleted folder without a download
 - conflicts: with `skip`, a file of the user at the path of a document stays and the run reports it; with `replace`, the document takes its place
 - a document that vanishes from Paperless without passing through its trash: its copy waits for the grace runs, then moves to the deleted folder, and stays there, as direct deletion is not allowed
+- version 9 of the Paperless API in every request, which the mock counts, the version of Paperless in the status, and a Paperless-ngx 2.15 without version 9, whose run says which Paperless the app needs
 - a run that can't reach Paperless, near the end, whose error the log of Nextcloud holds without the token, with the arguments of the frames of its trace that PHP replaced
 - a Paperless URL changed through Nextcloud's provisioning API, at the very end, which doesn't get the token until the URL that the token was saved with is back
 - accessibility of the administration settings and the run report, see [Accessibility](#accessibility)
@@ -52,7 +53,7 @@ Optional environment variables:
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 
-All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.`
+All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.` It plays Paperless-ngx 3.3.0, or 2.20.15 and 2.15.3 after `/control/paperless/<version>`: it serves the versions of the API that each of them serves, by the header `Accept` or its default, refuses the others with `406 Not Acceptable`, names itself in `X-Version` and `X-Api-Version`, and lists tasks in the shapes of their serializers. `/control/tasks/<end>` and `/control/task-of/<file>/<end>` end tasks with `success`, `failure`, `duplicate` or `revoked`, as Paperless-ngx 3.x stores them.
 
 ## Every supported version at once
 

@@ -9,6 +9,8 @@ OC.L10N.register(
 		"Last finished": "Zuletzt beendet",
 		"Last successful run": "Letzter erfolgreicher Lauf",
 		"Next scheduled run": "Nächster geplanter Lauf",
+		"The last run reached Paperless-ngx {version} through version {api} of its API.": "Der letzte Lauf hat Paperless-ngx {version} über Version {api} seiner API erreicht.",
+		"The last run reached Paperless-ngx, which named no version, through version {api} of its API.": "Der letzte Lauf hat Paperless-ngx, das keine Version nannte, über Version {api} seiner API erreicht.",
 		"Off": "Aus",
 		"With the next background job": "Mit dem nächsten Hintergrundjob",
 		"≈ {time}": "≈ {time}",
