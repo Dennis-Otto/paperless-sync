@@ -27,7 +27,7 @@ Every pull request that changes something for users describes it under `## Unrel
 - **The changelog:** the text of *Unreleased* becomes the section of the release; without one, the section lists the pull requests.
 - **The files of the version:** `appinfo/info.xml` (`<version>` and the screenshot URLs marked `x-release-please-version`), `version.txt` and `.release-please-manifest.json`.
 
-The pull request needs the same required checks as every other one, the Docker end-to-end tests against every supported Nextcloud version included. A release of dependency updates alone merges itself; every other release waits for the maintainer to merge it.
+The pull request needs the same required checks as every other one. Its Docker end-to-end tests pass at once, as a release changes nothing of the app but its version: they ran against every supported Nextcloud version in the pull requests of its changes and with every push to `main` ([decision 0005](decisions/0005-end-to-end-tests-where-they-can-fail.md)). A release of dependency updates alone merges itself; every other release waits for the maintainer to merge it.
 
 ## Publication
 

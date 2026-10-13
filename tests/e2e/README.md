@@ -13,13 +13,16 @@ flowchart LR
     run --> browser
 ```
 
-CI runs the same scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and every week against [the coming Nextcloud](#the-coming-nextcloud); set `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`, to choose one locally.
+`run-all.sh` runs the scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, side by side, as the CI does; `run.sh` runs it against one version, by default the one that `compose.yaml` pins, or the image in `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`. Every week, the CI also runs it against [the coming Nextcloud](#the-coming-nextcloud).
 
 Run locally:
 
 ```bash
+bash tests/e2e/run-all.sh
 bash tests/e2e/run.sh
 ```
+
+Both run in Git Bash on Windows too, with Docker Desktop.
 
 The scenario verifies:
 
@@ -44,6 +47,43 @@ Optional environment variables:
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 
 All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture and records whether uploads arrived intact. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.`
+
+## Every supported version at once
+
+`run-all.sh` starts `run.sh` for every supported version at the same time, each in a Compose project of its own, `paperless_sync_e2e_<version>`, on the port `18080 + <version>`, such as `18113` for Nextcloud 33. While one version downloads its image, another one installs, so that all versions take little longer than one. Each `run.sh` also downloads the image of Playwright in the background while Nextcloud installs, and the accessibility check at the end waits for it. When all versions are done, `run-all.sh` prints the log of each, in a group of its own in the CI, with a table of the results and the Nextcloud release that each version ran, and fails if one of them failed.
+
+- `E2E_VERSIONS`: the major versions to run instead, such as `"33 35"`
+- `E2E_VERSION_TIMEOUT`: the time after which a version that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all versions are still printed
+
+Ctrl-C ends every version, each with the cleanup of `run.sh`, and prints the logs so far.
+
+`KEEP_E2E=1` keeps the containers of every version. In the CI, the suite leaves its containers running, as the runner is thrown away with them. The suite turns off the password policy's look-up of new passwords at Have I Been Pwned: a request to the internet that the tests don't need and that can fail.
+
+## In the CI
+
+The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in one job, `nextcloud`, which is the required check of pull requests.
+
+```mermaid
+flowchart TB
+    accTitle: When the end-to-end tests run
+    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. Every push to main and every night run them against every supported version, and every Monday the canary runs them against the coming Nextcloud.
+    pr["Pull request"] --> affected{"affected.sh:<br>can the change<br>affect the app?"}
+    affected -->|"lib/, appinfo/, templates/,<br>js/, css/, l10n/, img/,<br>tests/e2e/, e2e.yml"| all["run-all.sh:<br>every supported version<br>side by side"]
+    affected -->|"documentation, other workflows,<br>the version of a release"| skipped["nextcloud passes<br>in seconds"]
+    main["Push to main,<br>every night, by hand"] --> all
+    monday["Every Monday,<br>by hand"] --> canary["canary.sh:<br>the coming Nextcloud"]
+    all --> result["nextcloud: passed<br>or failed"]
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class pr person
+    class affected,all,canary bot
+    class skipped,result done
+```
+
+In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown, or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*. `scripts/check-project.sh` tests these rules with sample paths and changes.
+
+Every push to `main`, a run by hand and every night run all versions in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
 ## Accessibility
 
