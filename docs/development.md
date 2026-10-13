@@ -94,6 +94,8 @@ flowchart TB
     class logo,home,palette,chips website
 ```
 
+The same hook shows an alert of GitHub, a quote that begins with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`, as an admonition of the website. So a page, or a part of the README that the website takes by a snippet, writes an alert once for both, such as the warning about edits of the archive in the [conflict policy](guide.md#conflict-policy).
+
 ## Code
 
 The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psalm analyzes the PHP code, CodeQL scans the JavaScript, and the SBOM workflow continuously inventories dependencies. The [architecture](architecture.md) describes the parts of the app, and the [decisions](decisions/README.md) why it works as it does.

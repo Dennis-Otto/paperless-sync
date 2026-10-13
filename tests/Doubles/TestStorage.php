@@ -15,11 +15,18 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use RuntimeException;
 
 /**
- * The files of the Nextcloud target user in memory, keyed by their path.
+ * The files of the Nextcloud target user in memory, keyed by their path, each with its file ID as
+ * Nextcloud gives it: a new file gets a new ID, a move takes the ID along, and a write over an
+ * existing file updates it in place and keeps its ID.
  */
 final class TestStorage implements NextcloudStorageInterface {
 	/** @var array<string, string> */
 	public array $files = [];
+	/** @var list<array{string, 'created'|'updated'}> every write of a file, with whether it created the file or updated it in place */
+	public array $writes = [];
+	/** @var array<string, int> the file ID of every file whose ID was asked for or that a write created */
+	private array $fileIds = [];
+	private int $lastFileId = 0;
 	/** The failure of every write of a document, such as of a full quota or a read-only storage. */
 	public ?\Throwable $writeException = null;
 	public ?\Throwable $writeTextException = null;
@@ -57,16 +64,13 @@ final class TestStorage implements NextcloudStorageInterface {
 		return $this->writable;
 	}
 
-	public function writeAtomic(string $userId, string $path, $source, string $conflictMode): void {
+	public function writeStream(string $userId, string $path, $source, string $conflictMode): void {
 		$failure = $this->writeFailures[$path] ?? $this->writeException;
 		if ($failure !== null) {
 			throw $failure;
 		}
-		if ($conflictMode === 'skip' && isset($this->files[$path])) {
-			throw new RuntimeException('conflict');
-		}
 		$content = stream_get_contents($source);
-		$this->files[$path] = is_string($content) ? $content : '';
+		$this->write($path, is_string($content) ? $content : '', $conflictMode);
 		fclose($source);
 	}
 
@@ -83,7 +87,8 @@ final class TestStorage implements NextcloudStorageInterface {
 			throw new RuntimeException('conflict');
 		}
 		$this->files[$destination] = $this->files[$source];
-		unset($this->files[$source]);
+		$this->fileIds[$destination] = $this->fileId($source);
+		unset($this->files[$source], $this->fileIds[$source]);
 		return true;
 	}
 
@@ -92,7 +97,7 @@ final class TestStorage implements NextcloudStorageInterface {
 		if ($this->deleteException !== null) {
 			throw $this->deleteException;
 		}
-		unset($this->files[$path]);
+		unset($this->files[$path], $this->fileIds[$path]);
 	}
 
 	public function listFiles(string $userId, string $path, bool $recursive): array {
@@ -125,12 +130,36 @@ final class TestStorage implements NextcloudStorageInterface {
 		if ($this->writeTextException !== null) {
 			throw $this->writeTextException;
 		}
-		$this->files[$path] = $content;
+		$this->write($path, $content, $conflictMode);
 	}
 
 	public function pruneEmptyParents(string $userId, string $filePath, string $stopAt): int {
 		$this->prunes[] = [$filePath, $stopAt];
 		return 1;
+	}
+
+	/** The file ID of the file at the path, which Nextcloud gives a file when it creates it. */
+	public function fileId(string $path): int {
+		if (!isset($this->files[$path])) {
+			throw new InvalidArgumentException("No file at {$path}.");
+		}
+		return $this->fileIds[$path] ??= ++$this->lastFileId;
+	}
+
+	/** Like the Nextcloud storage: a new file gets a new file ID, an existing one is updated in place. */
+	private function write(string $path, string $content, string $conflictMode): void {
+		$this->requirePath($path);
+		$exists = isset($this->files[$path]);
+		if ($exists && $conflictMode === 'skip') {
+			throw new RuntimeException('conflict');
+		}
+		$this->files[$path] = $content;
+		if ($exists) {
+			$this->writes[] = [$path, 'updated'];
+		} else {
+			$this->fileIds[$path] = ++$this->lastFileId;
+			$this->writes[] = [$path, 'created'];
+		}
 	}
 
 	/** Like the Nextcloud storage, which normalizes every path, refuse an empty one. */

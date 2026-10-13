@@ -32,6 +32,8 @@ ACCOUNTS = {
     },
 }
 DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
+# The content of P123 after /control/content/revised, as after a new scan in Paperless.
+REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised.\n%%EOF\n"
 LOCK = threading.Lock()
 STATE = {}
 
@@ -42,6 +44,7 @@ def reset_state():
         STATE.update(
             {
                 "scenario": "active",
+                "content": "original",
                 # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0.
                 "checksum": "sha256",
                 "downloads": 0,
@@ -69,6 +72,13 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "archived_file_name": "archive.pdf",
         "mime_type": "application/pdf",
     }
+
+
+def document_content():
+    """The content of P123, the revised one after /control/content/revised."""
+    with LOCK:
+        revised = STATE["content"] == "revised"
+    return REVISED_CONTENT if revised else DOCUMENT_CONTENT
 
 
 def paperless_checksum(data):
@@ -111,7 +121,9 @@ def scenario_documents():
     if scenario == "active":
         return [document()], []
     if scenario == "renamed":
-        return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")], []
+        # A new content is a new revision of the document.
+        modified = "2026-08-26T12:00:00+02:00" if STATE["content"] == "revised" else "2026-08-26T11:00:00+02:00"
+        return [document("Monthly invoice corrected", modified)], []
     if scenario == "excluded":
         return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00", [9])], []
     if scenario == "trash":
@@ -191,9 +203,9 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/documents/123/download/":
             with LOCK:
                 STATE["downloads"] += 1
-            self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
+            self._bytes(200, document_content(), "application/pdf")
         elif parsed.path == "/api/documents/123/metadata/":
-            checksum = paperless_checksum(DOCUMENT_CONTENT)
+            checksum = paperless_checksum(document_content())
             with LOCK:
                 STATE["metadataRequests"] += 1
             self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
@@ -210,6 +222,15 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["scenario"] = scenario
             self._json(200, {"scenario": scenario})
+            return
+        if parsed.path.startswith("/control/content/"):
+            content = parsed.path.rsplit("/", 1)[-1]
+            if content not in {"original", "revised"}:
+                self._json(400, {"detail": "Unknown content"})
+                return
+            with LOCK:
+                STATE["content"] = content
+            self._json(200, {"content": content})
             return
         if parsed.path.startswith("/control/checksum/"):
             algorithm = parsed.path.rsplit("/", 1)[-1]
