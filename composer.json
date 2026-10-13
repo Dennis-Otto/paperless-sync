@@ -1,6 +1,6 @@
 {
 	"name": "dennis-otto/paperless-sync",
-	"description": "Native Nextcloud synchronization for Paperless-ngx documents",
+	"description": "Nextcloud app that syncs Paperless-ngx documents into Nextcloud Files, by correspondent, type and year, and sends an inbox folder to Paperless. No WebDAV, no Nextcloud password.",
 	"type": "nextcloud-app",
 	"license": "AGPL-3.0-or-later",
 	"autoload": {

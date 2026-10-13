@@ -8,7 +8,7 @@
 # https://squidfunk.github.io/mkdocs-material/
 INHERIT: .github/mkdocs-blueprint.yml
 site_name: "Paperless Sync"
-site_description: "Native Nextcloud synchronization for Paperless-ngx documents"
+site_description: "Nextcloud app that syncs Paperless-ngx documents into Nextcloud Files, by correspondent, type and year, and sends an inbox folder to Paperless. No WebDAV, no Nextcloud password."
 site_url: https://dennis-otto.github.io/paperless-sync/
 repo_url: https://github.com/Dennis-Otto/paperless-sync
 repo_name: Dennis-Otto/paperless-sync
