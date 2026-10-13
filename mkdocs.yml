@@ -14,6 +14,48 @@ repo_url: https://github.com/Dennis-Otto/paperless-sync
 repo_name: Dennis-Otto/paperless-sync
 copyright: "© 2026 Dennis Otto"
 
+# The brand of the app: its icon, img/app.svg, as the logo and the favicon, and the
+# colors of the icon in docs/stylesheets/brand.css, light or dark with the switch in
+# the header, as the blueprint sets it. scripts/check-project.sh keeps the copy of
+# the icon in docs/images equal to that of the app.
+theme:
+  logo: images/app.svg
+  favicon: images/app.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra_css:
+  - stylesheets/brand.css
+
+plugins:
+  # The preview card of a page, which shows where a link to it is shared, in the dark
+  # blue of the social preview of the repository. The home page shows the social
+  # preview itself, .github/social-preview.png, with the layout in .github/social-cards.
+  social:
+    cards_layout_dir: .github/social-cards
+    cards_layout_options:
+      background_color: "#0c1424"
+      color: "#ffffff"
+
+# The hooks of the blueprint, and the one of this website, which fills in the
+# versions of Nextcloud and PHP from appinfo/info.xml.
+hooks:
+  - .github/mkdocs_blueprint.py
+  - .github/mkdocs_project.py
+
 # The menu. A tab in the header for each section.
 nav:
   - Home: index.md

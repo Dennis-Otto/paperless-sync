@@ -1,0 +1,125 @@
+/* The brand of Paperless Sync on its website: the colors of its icon, img/app.svg,
+   in shades that read well. mkdocs.yml sets primary and accent to custom in both
+   palettes, so these colors take the place of Material's indigo. Every pair passes
+   WCAG AA, most AAA:
+
+   - Header and primary button: a dark shade of the green of the icon, #145c4a, with
+     white text at 7.9:1.
+   - Links: a dark shade of the blue of Nextcloud, #006aa3, at 5.9:1 on white, and a
+     light one, #5cc4ff, at 8.3:1 on the dark background.
+   - Hover and focus: the green of the icon, #176954 at 6.6:1 on white, and a light
+     shade, #57dbb9 at 9.4:1 on the dark background. */
+
+[data-md-color-primary="custom"] {
+  --md-primary-fg-color: #145c4a;
+  --md-primary-fg-color--light: #1f8f72;
+  --md-primary-fg-color--dark: #0e4235;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffffb3;
+}
+
+[data-md-color-accent="custom"] {
+  --md-accent-fg-color: #176954;
+  --md-accent-fg-color--transparent: #1769541a;
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: #ffffffb3;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"] {
+  --md-typeset-a-color: #006aa3;
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
+  --md-typeset-a-color: #5cc4ff;
+}
+
+[data-md-color-scheme="slate"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: #57dbb9;
+  --md-accent-fg-color--transparent: #57dbb91a;
+  --md-accent-bg-color: hsla(var(--md-hue), 15%, 14%, 1);
+  --md-accent-bg-color--light: hsla(var(--md-hue), 15%, 14%, 0.7);
+}
+
+/* A button without a fill has the color of the links on the dark background, where
+   the dark green of the header would be too faint. */
+[data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary, :focus, :hover) {
+  color: var(--md-typeset-a-color);
+}
+
+/* The icon in the header, and in the menu of a phone, sits on a light tile, as on the
+   social preview, so that its green stands out from the green of the header. */
+.md-header__button.md-logo img,
+.md-nav__title .md-nav__button.md-logo img {
+  padding: 0.12rem;
+  border-radius: 0.3rem;
+  background-color: #eef6f2;
+}
+
+.md-header__button.md-logo img {
+  height: 1.6rem;
+}
+
+.md-header__button.md-logo {
+  margin: 0 0.2rem;
+}
+
+/* The top of the home page: the icon beside the name, the tagline, what the app needs
+   as a row of chips, and the two buttons with room between them, also when they
+   wrap on a phone. */
+.md-typeset .ps-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.4em;
+  color: var(--md-default-fg-color);
+  font-weight: 700;
+}
+
+.md-typeset .ps-hero-title img {
+  flex: none;
+  width: 1.6em;
+  height: 1.6em;
+}
+
+/* On a phone, the name stays on one line beside the icon. */
+@media screen and (max-width: 29.9375em) {
+  .md-typeset .ps-hero-title {
+    font-size: 1.6em;
+  }
+}
+
+.md-typeset .ps-hero-tagline {
+  margin-top: 0;
+  font-size: 1.25em;
+  line-height: 1.4;
+}
+
+.md-typeset ul.ps-requirements {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1em 0 1.5em;
+  padding: 0;
+  list-style: none;
+}
+
+.md-typeset ul.ps-requirements > li {
+  margin: 0;
+  padding: 0.25em 0.8em;
+  border: 0.05rem solid var(--md-accent-fg-color);
+  border-radius: 1em;
+  background-color: var(--md-accent-fg-color--transparent);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.md-typeset .ps-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5em;
+}
+
+.md-typeset .ps-hero-actions .md-button {
+  margin: 0;
+}
