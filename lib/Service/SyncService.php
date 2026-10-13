@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
@@ -154,21 +155,27 @@ final class SyncService {
 				$oldPathValue = $entry !== null ? ($entry['path'] ?? null) : null;
 				$fingerprintValue = $entry !== null ? ($entry['fingerprint'] ?? null) : null;
 				$oldPath = is_string($oldPathValue) ? $oldPathValue : '';
-				$storedFingerprint = is_string($fingerprintValue) ? $fingerprintValue : '';
-				$fingerprint = $storedFingerprint;
-				if ($entry !== null && ($entry['source_revision'] ?? '') !== $sourceRevision && $storedFingerprint !== '') {
-					$fingerprint = $this->paperless->documentChecksum($documentId, $useOriginal);
+				$fingerprint = is_string($fingerprintValue) ? $fingerprintValue : '';
+				// The mirrored file has the content of the document while its revision is the same, and
+				// after a change while Paperless reports one of its checksums, MD5 or SHA-256.
+				$sameContent = false;
+				if ($entry !== null && $fingerprint !== '') {
+					$sameContent = ($entry['source_revision'] ?? '') === $sourceRevision;
+					if (!$sameContent) {
+						$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
+						$fingerprint = $this->completedFingerprint($config, $oldPath, $fingerprint, $checksum);
+						$sameContent = DocumentFingerprint::matches($fingerprint, $checksum);
+					}
 				}
-				$unchanged = $entry !== null
+				$unchanged = $sameContent
 					&& ($entry['state'] ?? '') === 'active'
 					&& $oldPath === $target
-					&& $storedFingerprint !== ''
-					&& $storedFingerprint === $fingerprint
 					&& $this->storage->exists($config->targetUser, $target);
 				if ($unchanged) {
 					++$report->unchanged;
 					if (!$report->dryRun) {
 						$this->state->saveExport($config->targetUser, $documentId, [
+							'fingerprint' => $fingerprint,
 							'source_revision' => $sourceRevision,
 							'missing_runs' => 0,
 							'last_seen' => time(),
@@ -188,12 +195,10 @@ final class SyncService {
 					throw new RuntimeException("Nextcloud file conflict at {$target}.");
 				}
 
-				$canMove = $entry !== null
+				$canMove = $sameContent
 					&& $oldPath !== ''
 					&& $oldPath !== $target
 					&& !isset($sharedPaths[$oldPath])
-					&& $storedFingerprint !== ''
-					&& $storedFingerprint === $fingerprint
 					&& $this->storage->exists($config->targetUser, $oldPath);
 				if ($report->dryRun) {
 					$report->action(($canMove ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
@@ -206,25 +211,16 @@ final class SyncService {
 					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
 					++$report->moved;
 				} else {
-					$stream = fopen('php://temp', 'w+b');
-					if (!is_resource($stream)) {
-						// @codeCoverageIgnoreStart
-						// PHP opens php://temp in memory, so this fails only when memory runs out, which ends the request first.
-						throw new RuntimeException('Could not create a temporary document stream.');
-						// @codeCoverageIgnoreEnd
-					}
-					try {
-						$this->paperless->downloadDocument($documentId, $useOriginal, $stream);
-						$content = stream_get_contents($stream);
-						$fingerprint = hash('sha256', $content !== false ? $content : '');
-						rewind($stream);
-						$this->storage->writeAtomic($config->targetUser, $target, $stream, $config->conflictMode);
-					} finally {
-						/** @psalm-suppress RedundantCondition Nextcloud may close the source stream. */
-						if (is_resource($stream)) {
-							fclose($stream);
-						}
-					}
+					// The download goes to Nextcloud in chunks, so that a document of any size fits
+					// into the memory of PHP.
+					$fingerprint = $this->paperless->downloadDocument(
+						$documentId,
+						$useOriginal,
+						/** @param resource $download */
+						function ($download) use ($config, $target): void {
+							$this->storage->writeAtomic($config->targetUser, $target, $download, $config->conflictMode);
+						},
+					)->value();
 					if ($oldPath !== '' && $oldPath !== $target) {
 						$this->storage->delete($config->targetUser, $oldPath);
 					}
@@ -487,6 +483,31 @@ final class SyncService {
 
 	private function copyExists(SyncConfig $config, string $path): bool {
 		return $path !== '' && $this->storage->exists($config->targetUser, $path);
+	}
+
+	/**
+	 * The stored fingerprint, completed with the MD5 that Paperless-ngx 2 reports when an earlier
+	 * version saved the SHA-256 alone. The mirrored file still has the content of that download when
+	 * its SHA-256 is the saved one, so its checksums take the place of the download's, and the first
+	 * change of the metadata after the update moves the file instead of downloading the document
+	 * once more. A file that can't be read leaves the fingerprint as it is, and the download replaces it.
+	 */
+	private function completedFingerprint(SyncConfig $config, string $path, string $fingerprint, string $checksum): string {
+		if (str_contains($fingerprint, ' ') || strlen($checksum) !== 32 || !$this->copyExists($config, $path)) {
+			return $fingerprint;
+		}
+		try {
+			$stream = $this->storage->openRead($config->targetUser, $path);
+			try {
+				$mirrored = DocumentFingerprint::of($stream);
+			} finally {
+				fclose($stream);
+			}
+		} catch (\Throwable) {
+			return $fingerprint;
+		}
+
+		return $mirrored->sha256 === $fingerprint ? $mirrored->value() : $fingerprint;
 	}
 
 	private function syncInbox(SyncConfig $config, SyncReport $report): void {

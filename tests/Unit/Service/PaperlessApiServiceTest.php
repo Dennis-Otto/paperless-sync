@@ -256,17 +256,21 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->service->{$method}();
 	}
 
-	public function testDownloadCopiesTheDocumentIntoTheSinkAndRemovesTheTemporaryFile(): void {
+	public function testDownloadHandsTheTemporaryFileWithItsChecksumsToTheWriteAndRemovesIt(): void {
 		$this->responses[] = function (array $options): array {
 			file_put_contents($options['sink'], '%PDF-original');
 			return [200, null];
 		};
-		$sink = $this->sink();
+		$received = [];
 
-		$this->service->downloadDocument(123, true, $sink);
+		$fingerprint = $this->service->downloadDocument(123, true, static function ($download) use (&$received): void {
+			$received = [stream_get_meta_data($download)['uri'], stream_get_contents($download)];
+		});
 
-		self::assertSame('%PDF-original', stream_get_contents($sink));
 		$request = $this->requests[0];
+		self::assertSame([$request['options']['sink'], '%PDF-original'], $received, 'The write reads the temporary file itself, from its start, instead of a copy.');
+		self::assertSame(hash('sha256', '%PDF-original'), $fingerprint->sha256);
+		self::assertSame(hash('md5', '%PDF-original'), $fingerprint->md5);
 		self::assertSame(self::URL . '/api/documents/123/download/', $request['url']);
 		self::assertSame(['original' => 'true'], $request['options']['query']);
 		self::assertSame(180, $request['options']['timeout']);
@@ -276,6 +280,67 @@ final class PaperlessApiServiceTest extends TestCase {
 		unset($redirects['on_redirect']);
 		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $redirects);
 		self::assertFileDoesNotExist($request['options']['sink']);
+	}
+
+	/**
+	 * Before, the download was copied into a stream of PHP and then read into a string for its
+	 * checksum, so that a document larger than the free memory of PHP ended the run with a fatal
+	 * error, and every run after it on the same document.
+	 */
+	public function testDownloadOfALargeDocumentNeverHoldsItInMemory(): void {
+		$size = 16 * 1024 * 1024;
+		$content = str_repeat('%PDF-large', intdiv($size, 10));
+		$this->responses[] = static function (array $options) use ($content): array {
+			file_put_contents($options['sink'], $content);
+			return [200, null];
+		};
+		$written = hash_init('sha256');
+		memory_reset_peak_usage();
+		$before = memory_get_usage();
+
+		$fingerprint = $this->service->downloadDocument(123, true, static function ($download) use ($written): void {
+			hash_update_stream($written, $download);
+		});
+
+		self::assertLessThan($size / 2, memory_get_peak_usage() - $before, 'The download must be hashed and written in chunks.');
+		self::assertSame(hash('sha256', $content), $fingerprint->sha256);
+		self::assertSame(hash('md5', $content), $fingerprint->md5);
+		self::assertSame(hash('sha256', $content), hash_final($written), 'The write receives the whole document.');
+	}
+
+	/** Nextcloud may close the stream that it writes. */
+	public function testWriteMayCloseTheDownload(): void {
+		$this->responses[] = function (array $options): array {
+			file_put_contents($options['sink'], '%PDF-original');
+			return [200, null];
+		};
+
+		$fingerprint = $this->service->downloadDocument(123, true, static function ($download): void {
+			fclose($download);
+		});
+
+		self::assertSame(hash('md5', '%PDF-original'), $fingerprint->md5);
+		self::assertFileDoesNotExist($this->requests[0]['options']['sink']);
+	}
+
+	public function testFailedWriteRemovesTheTemporaryFile(): void {
+		$this->responses[] = function (array $options): array {
+			file_put_contents($options['sink'], '%PDF-original');
+			return [200, null];
+		};
+		$opened = null;
+
+		try {
+			$this->service->downloadDocument(123, true, static function ($download) use (&$opened): void {
+				$opened = $download;
+				throw new RuntimeException('Nextcloud refused the write.');
+			});
+			self::fail('A failed write must be reported.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Nextcloud refused the write.', $exception->getMessage());
+		}
+		self::assertFalse(is_resource($opened), 'The download is closed.');
+		self::assertFileDoesNotExist($this->requests[0]['options']['sink']);
 	}
 
 	/**
@@ -292,7 +357,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		};
 
 		try {
-			$this->service->downloadDocument(123, true, $this->sink());
+			$this->service->downloadDocument(123, true, self::noWrite());
 			self::fail('A refused redirect must be reported.');
 		} catch (PaperlessLocalNetworkException $exception) {
 			self::assertSame('192.168.1.20', $exception->host);
@@ -305,7 +370,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->settings['paperless_local_network'] = true;
 		$this->responses[] = [200, null];
 
-		$this->service->downloadDocument(123, true, $this->sink());
+		$this->service->downloadDocument(123, true, self::discard());
 
 		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $this->requests[0]['options']['allow_redirects']);
 		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
@@ -316,18 +381,15 @@ final class PaperlessApiServiceTest extends TestCase {
 			file_put_contents($options['sink'], '%PDF-archive');
 			return [200, null];
 		};
-		$sink = $this->sink();
+		$content = null;
 
-		$this->service->downloadDocument(123, false, $sink);
+		$fingerprint = $this->service->downloadDocument(123, false, static function ($download) use (&$content): void {
+			$content = stream_get_contents($download);
+		});
 
 		self::assertSame(['original' => 'false'], $this->requests[0]['options']['query']);
-		self::assertSame('%PDF-archive', stream_get_contents($sink));
-	}
-
-	public function testDownloadRequiresASink(): void {
-		$this->expectException(UnexpectedValueException::class);
-		$this->expectExceptionMessage('A writable download stream is required.');
-		$this->service->downloadDocument(123, true, 'not a stream');
+		self::assertSame('%PDF-archive', $content);
+		self::assertSame(hash('sha256', '%PDF-archive'), $fingerprint->sha256);
 	}
 
 	public function testDownloadNeedsATemporaryFile(): void {
@@ -339,14 +401,14 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Could not create a temporary Paperless download file.');
-		$service->downloadDocument(123, true, $this->sink());
+		$service->downloadDocument(123, true, self::noWrite());
 	}
 
 	public function testFailedDownloadRemovesTheTemporaryFile(): void {
 		$this->responses[] = [404, '{"detail": "Not found."}'];
 
 		try {
-			$this->service->downloadDocument(123, true, $this->sink());
+			$this->service->downloadDocument(123, true, self::noWrite());
 			self::fail('A failed download must be reported.');
 		} catch (RuntimeException $exception) {
 			self::assertSame('Paperless could not download document: HTTP 404.', $exception->getMessage());
@@ -366,7 +428,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		}, E_WARNING);
 
 		try {
-			$this->service->downloadDocument(123, true, $this->sink());
+			$this->service->downloadDocument(123, true, self::noWrite());
 			self::fail('A missing download must be reported.');
 		} catch (RuntimeException $exception) {
 			self::assertSame('Could not open the temporary Paperless download.', $exception->getMessage());
@@ -375,23 +437,6 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 		self::assertCount(1, $warnings);
 		self::assertStringContainsString('Failed to open stream', $warnings[0]);
-	}
-
-	public function testDownloadIntoAReadOnlySinkIsReported(): void {
-		$this->responses[] = function (array $options): array {
-			file_put_contents($options['sink'], '%PDF-original');
-			return [200, null];
-		};
-		$sink = fopen('php://memory', 'rb');
-		self::assertIsResource($sink);
-
-		try {
-			$this->service->downloadDocument(123, true, $sink);
-			self::fail('A download that cannot be copied must be reported.');
-		} catch (RuntimeException $exception) {
-			self::assertSame('Could not copy the Paperless download.', $exception->getMessage());
-		}
-		self::assertFileDoesNotExist($this->requests[0]['options']['sink']);
 	}
 
 	public function testChecksumOfTheOriginalAndTheArchiveVersion(): void {
@@ -897,7 +942,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'documents' => $this->service->documents(),
 			'trash' => $this->service->trash(),
 			'tags' => $this->service->tags(),
-			'downloadDocument' => $this->service->downloadDocument(123, true, $this->sink()),
+			'downloadDocument' => $this->service->downloadDocument(123, true, self::discard()),
 			'documentChecksum' => $this->service->documentChecksum(123, true),
 			'uploadDocument' => $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'),
 			'taskStatus' => $this->service->taskStatus('task-1'),
@@ -954,17 +999,23 @@ final class PaperlessApiServiceTest extends TestCase {
 		};
 	}
 
-	/** @return resource */
-	private function sink() {
-		$sink = fopen('php://temp', 'w+b');
-		self::assertIsResource($sink);
+	/** A write of a download that reads nothing. */
+	private static function discard(): Closure {
+		return static function ($download): void {
+		};
+	}
 
-		return $sink;
+	/** A write of a download that a failed download must never reach. */
+	private static function noWrite(): Closure {
+		return static function ($download): void {
+			self::fail('A failed download must not reach the write.');
+		};
 	}
 
 	/** @return resource a file of the inbox */
 	private function source(string $content) {
-		$source = $this->sink();
+		$source = fopen('php://temp', 'w+b');
+		self::assertIsResource($source);
 		fwrite($source, $content);
 		rewind($source);
 

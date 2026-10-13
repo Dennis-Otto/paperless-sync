@@ -30,7 +30,7 @@ The Paperless API token is stored server-side in Nextcloud's credentials manager
 ### Requirements
 
 - Nextcloud 33 to 35 with reliable cron background jobs
-- A reachable Paperless-ngx instance with API access
+- A reachable Paperless-ngx instance, version 2.10 or newer, 3.x included, with API access
 - A dedicated Paperless service account with only the permissions needed for the enabled features
 
 Paperless Sync is independent from [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Both apps understand stable document markers such as `[P123]` and can be installed separately.
@@ -61,7 +61,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 ### Voraussetzungen
 
 - Nextcloud 33 bis 35 mit zuverlässig laufenden Cron-Hintergrundjobs
-- Eine erreichbare Paperless-ngx-Instanz mit API-Zugriff
+- Eine erreichbare Paperless-ngx-Instanz ab Version 2.10, auch 3.x, mit API-Zugriff
 - Ein eigener Paperless-Dienstbenutzer mit ausschließlich den für die aktivierten Funktionen benötigten Rechten
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.

@@ -24,6 +24,8 @@ def reset_state():
         STATE.update(
             {
                 "scenario": "active",
+                # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0.
+                "checksum": "sha256",
                 "downloads": 0,
                 "metadataRequests": 0,
                 "invalidAuth": 0,
@@ -49,6 +51,13 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "archived_file_name": "archive.pdf",
         "mime_type": "application/pdf",
     }
+
+
+def paperless_checksum(data):
+    """The checksum of a document as the Paperless-ngx of the test reports it, MD5 or SHA-256."""
+    with LOCK:
+        algorithm = STATE["checksum"]
+    return hashlib.new(algorithm, data).hexdigest()
 
 
 def archived_letter(number):
@@ -154,14 +163,14 @@ class Handler(BaseHTTPRequestHandler):
             if parsed.path.endswith("/download/"):
                 self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
             else:
-                checksum = hashlib.sha256(DOCUMENT_CONTENT).hexdigest()
+                checksum = paperless_checksum(DOCUMENT_CONTENT)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif parsed.path == "/api/documents/123/download/":
             with LOCK:
                 STATE["downloads"] += 1
             self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
         elif parsed.path == "/api/documents/123/metadata/":
-            checksum = hashlib.sha256(DOCUMENT_CONTENT).hexdigest()
+            checksum = paperless_checksum(DOCUMENT_CONTENT)
             with LOCK:
                 STATE["metadataRequests"] += 1
             self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
@@ -178,6 +187,15 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["scenario"] = scenario
             self._json(200, {"scenario": scenario})
+            return
+        if parsed.path.startswith("/control/checksum/"):
+            algorithm = parsed.path.rsplit("/", 1)[-1]
+            if algorithm not in {"md5", "sha256"}:
+                self._json(400, {"detail": "Unknown checksum"})
+                return
+            with LOCK:
+                STATE["checksum"] = algorithm
+            self._json(200, {"checksum": algorithm})
             return
         if parsed.path.startswith("/control/tasks/"):
             status = parsed.path.rsplit("/", 1)[-1].upper()
