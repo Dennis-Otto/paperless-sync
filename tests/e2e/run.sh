@@ -48,6 +48,9 @@ cleanup() {
 	exit "${status}"
 }
 trap cleanup EXIT
+# A signal to stop, such as the time limit of run-all.sh, fails the suite, so that
+# cleanup shows the state of the containers.
+trap 'exit 143' TERM
 
 occ() {
 	"${COMPOSE[@]}" exec -T --user www-data nextcloud php occ "$@"

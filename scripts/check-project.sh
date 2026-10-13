@@ -109,7 +109,6 @@ if ((problems > 0)); then
 fi
 echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest."
 
-
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then
   echo "Node.js is not installed here; the CI checks the JavaScript and the translations."

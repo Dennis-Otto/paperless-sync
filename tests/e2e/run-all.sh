@@ -14,7 +14,9 @@
 #   bash tests/e2e/run-all.sh
 #
 # E2E_VERSIONS="33 35" chooses the versions instead; KEEP_E2E=1 keeps the
-# containers of each, as with run.sh.
+# containers of each, as with run.sh. E2E_VERSION_TIMEOUT, by default 15m, ends a
+# version that hangs before the job of the CI ends after 20 minutes, so that the
+# logs of all versions are still printed.
 
 set -euo pipefail
 
@@ -49,14 +51,25 @@ if ((${#versions[@]} == 0)); then
 	exit 1
 fi
 
+# The limit of one version: timeout of coreutils, which Git Bash has too, ends run.sh,
+# whose cleanup still shows the state of its containers. Where there is none, as on
+# macOS, the versions run without a limit.
+limit=()
+if timeout --version >/dev/null 2>&1; then
+	limit=(timeout --kill-after=30s "${E2E_VERSION_TIMEOUT:-15m}")
+fi
+
 # One version, with its log and its result in LOG_DIR: the exit code of run.sh and
-# the seconds it took.
+# the seconds it took. Its process ID, of run.sh or of the timeout around it, lets
+# stop() end it.
 run() {
 	local version="$1" started="${SECONDS}" status=0
 	NEXTCLOUD_IMAGE="nextcloud:${version}-apache" \
 		E2E_PORT="$((18080 + version))" \
 		E2E_PROJECT_NAME="paperless_sync_e2e_${version}" \
-		bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${version}.log" 2>&1 || status=$?
+		"${limit[@]}" bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${version}.log" 2>&1 &
+	echo "$!" >"${LOG_DIR}/${version}.pid"
+	wait "$!" || status=$?
 	echo "${status} $((SECONDS - started))" >"${LOG_DIR}/${version}.result"
 }
 
@@ -68,7 +81,42 @@ duration() {
 	fi
 }
 
+# The log of one version, in a group of its own in the CI.
+show() {
+	local version="$1" title="$2"
+	if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+		echo "::group::${title}"
+		cat "${LOG_DIR}/${version}.log" 2>/dev/null || true
+		echo "::endgroup::"
+	else
+		printf '\n== %s\n' "${title}"
+		cat "${LOG_DIR}/${version}.log" 2>/dev/null || true
+	fi
+}
+
+# Ctrl-C, or a signal to stop, ends every version, which runs in the background where
+# Ctrl-C doesn't reach it: run.sh still cleans up, and the logs that aren't printed
+# yet follow before LOG_DIR goes.
+stop() {
+	local code="$1" file index
+	trap - INT TERM
+	echo "The end-to-end tests are stopped; the logs so far follow." >&2
+	for file in "${LOG_DIR}"/*.pid; do
+		if [[ -f "${file}" ]]; then
+			kill -TERM "$(<"${file}")" 2>/dev/null || true
+		fi
+	done
+	wait || true
+	for ((index = printed; index < ${#versions[@]}; index++)); do
+		show "${versions[index]}" "Nextcloud ${versions[index]}: stopped"
+	done
+	exit "${code}"
+}
+
 echo "The end-to-end tests run against Nextcloud ${versions[*]} side by side; their logs follow when all are done."
+printed=0
+trap 'stop 130' INT
+trap 'stop 143' TERM
 pids=()
 for version in "${versions[@]}"; do
 	run "${version}" &
@@ -89,6 +137,10 @@ for index in "${!versions[@]}"; do
 	release="$(sed -nE 's/^The tests run against Nextcloud ([^ ]+)\.$/\1/p' "${LOG_DIR}/${version}.log" | head -n 1)"
 	if [[ "${status}" == 0 ]]; then
 		result=passed
+	elif [[ "${status}" == 124 ]]; then
+		# The exit code of timeout when the limit ended run.sh.
+		result="timed out"
+		failed+=("${version}")
 	else
 		result=failed
 		failed+=("${version}")
@@ -96,18 +148,13 @@ for index in "${!versions[@]}"; do
 	rows+=("| ${version} | ${release:-?} | ${result} | $(duration "${seconds}") |")
 
 	title="Nextcloud ${version} (${release:-?}): ${result} after $(duration "${seconds}")"
-	if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-		echo "::group::${title}"
-		cat "${LOG_DIR}/${version}.log"
-		echo "::endgroup::"
-		if [[ "${result}" == failed ]]; then
-			echo "::error title=Docker E2E::The end-to-end tests fail against Nextcloud ${version}; the group \"${title}\" of the log shows why."
-		fi
-	else
-		printf '\n== %s\n' "${title}"
-		cat "${LOG_DIR}/${version}.log"
+	show "${version}" "${title}"
+	if [[ "${GITHUB_ACTIONS:-}" == "true" && "${result}" != passed ]]; then
+		echo "::error title=Docker E2E::The end-to-end tests ${result} against Nextcloud ${version}; the group \"${title}\" of the log shows why."
 	fi
+	printed=$((index + 1))
 done
+trap - INT TERM
 
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 	{

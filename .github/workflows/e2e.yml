@@ -37,10 +37,11 @@ on:
 permissions: {}
 
 # A newer push to a pull request or to main replaces the run that is still going for
-# the older one. The scheduled runs have a group of their own and run to the end.
+# the older one. A scheduled run and a run by hand have a group of their own and run
+# to the end, so that neither a merge cancels the canary nor the canary a merge's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'schedule' && 'schedule' || github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  group: ${{ github.workflow }}-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && format('run-{0}', github.run_id) || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   nextcloud:

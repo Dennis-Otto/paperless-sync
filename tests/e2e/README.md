@@ -53,6 +53,9 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 `run-all.sh` starts `run.sh` for every supported version at the same time, each in a Compose project of its own, `paperless_sync_e2e_<version>`, on the port `18080 + <version>`, such as `18113` for Nextcloud 33. While one version downloads its image, another one installs, so that all versions take little longer than one. Each `run.sh` also downloads the image of Playwright in the background while Nextcloud installs, and the accessibility check at the end waits for it. When all versions are done, `run-all.sh` prints the log of each, in a group of its own in the CI, with a table of the results and the Nextcloud release that each version ran, and fails if one of them failed.
 
 - `E2E_VERSIONS`: the major versions to run instead, such as `"33 35"`
+- `E2E_VERSION_TIMEOUT`: the time after which a version that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all versions are still printed
+
+Ctrl-C ends every version, each with the cleanup of `run.sh`, and prints the logs so far.
 
 `KEEP_E2E=1` keeps the containers of every version. In the CI, the suite leaves its containers running, as the runner is thrown away with them. The suite turns off the password policy's look-up of new passwords at Have I Been Pwned: a request to the internet that the tests don't need and that can fail.
 
@@ -80,7 +83,7 @@ flowchart TB
 
 In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown, or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*. `scripts/check-project.sh` tests these rules with sample paths and changes.
 
-Every push to `main`, a run by hand and every night run all versions in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one.
+Every push to `main`, a run by hand and every night run all versions in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
 ## Accessibility
 
