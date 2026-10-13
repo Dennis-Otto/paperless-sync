@@ -18,6 +18,9 @@ interface NextcloudStorageInterface {
 
 	public function exists(string $userId, string $path): bool;
 
+	/** The ID of the file or folder at the path, which it keeps through moves and new content, or null when there is none. */
+	public function findFileId(string $userId, string $path): ?int;
+
 	/** Whether the path is a folder in which the user may create files and folders. */
 	public function isWritableFolder(string $userId, string $path): bool;
 

@@ -33,7 +33,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $contents = [];
 	/** @var array<string, string> */
 	public array $uploads = [];
-	/** @var array<string, array{status: string, message: string}> */
+	/** @var array<string, array{status: string, message: string, document?: int}> */
 	public array $tasks = [];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;

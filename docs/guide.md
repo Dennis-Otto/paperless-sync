@@ -84,6 +84,10 @@ A dry-run or a run by hand ends with its report: how many documents each kind of
 
 --8<-- "README.md:status-report"
 
+### Activity
+
+--8<-- "README.md:activity"
+
 ## FAQ and troubleshooting
 
 The [FAQ](faq.md) answers the common questions, such as what happens to an edit of a mirrored file, where deleted files go and how long the first synchronization takes. [Troubleshooting](troubleshooting.md) leads from an error message, a run that fails or a file that is missing to its cause and its fix.

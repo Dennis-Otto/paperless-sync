@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
@@ -39,6 +40,7 @@ final class SyncService {
 		private StatusService $status,
 		private ILockingProvider $lockingProvider,
 		private LoggerInterface $logger,
+		private ActivityPublisher $activity,
 	) {
 	}
 
@@ -46,6 +48,7 @@ final class SyncService {
 		$this->lockingProvider->acquireLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
 		$report = new SyncReport($dryRun, time());
 		$this->status->started($dryRun);
+		$config = null;
 		try {
 			$config = $this->configService->get();
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
@@ -72,6 +75,11 @@ final class SyncService {
 			$this->logger->error('Paperless synchronization failed', ['exception' => $exception]);
 			throw $exception;
 		} finally {
+			// The activity stream of the target user shows what the run changed, also when it failed
+			// after its first changes.
+			if ($config !== null) {
+				$this->activity->publish($config, $report);
+			}
 			$this->lockingProvider->releaseLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}
@@ -270,6 +278,7 @@ final class SyncService {
 				$moveOnly ? ++$report->moved : ++$report->exported;
 				++$changes;
 				$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+				$report->changedFile($target);
 				$this->state->saveExport($config->targetUser, $documentId, [
 					'path' => $target,
 					'fingerprint' => $fingerprint,
@@ -336,6 +345,7 @@ final class SyncService {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 						}
 						$report->action("TRASH P{$documentId}: {$target}");
+						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
 				}
@@ -427,6 +437,7 @@ final class SyncService {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 						}
 						$report->action("MISSING P{$documentId}: {$target}");
+						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
 				}
@@ -642,6 +653,7 @@ final class SyncService {
 					} elseif (!$report->dryRun) {
 						$this->state->deleteImport($config->targetUser, $path);
 					}
+					$report->importResult(SyncReport::IMPORTED, $path, $task['document'] ?? null);
 					++$report->importsSucceeded;
 					unset($byPath[$path]);
 				} elseif (in_array($task['status'], ['FAILURE', 'FAILED', 'ERROR'], true)) {
@@ -656,6 +668,7 @@ final class SyncService {
 						}
 					}
 					$report->action("IMPORT ERROR: {$path} -> {$destination}");
+					$report->importResult(SyncReport::IMPORT_FAILED, $destination, null, $task['message']);
 					++$report->importsFailed;
 					unset($byPath[$path]);
 				}
@@ -739,6 +752,7 @@ final class SyncService {
 			'last_error' => mb_substr($reason, 0, 4000),
 		]);
 		$report->action("IMPORT REJECTED: {$path}: {$reason}");
+		$report->importResult(SyncReport::IMPORT_REJECTED, $path, null, $reason);
 		++$report->importsFailed;
 		$this->logger->warning('Paperless refused the inbox file {path}; it stays in the inbox until it changes: {reason}', [
 			'path' => $path,

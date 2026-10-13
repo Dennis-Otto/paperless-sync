@@ -30,6 +30,7 @@ The scenario verifies:
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete
 - successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
+- the Activity stream of the target user, through the API of the Activity app: no entry for a dry-run, one entry for a run with the link of the file that it wrote, also for the background job without a user session, and one entry for each import that Paperless finished, with the link of the new document, failed, with its reason, or refused
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs
 - the background job as system cron starts it: once synchronization is enabled and the interval since the last run has passed, it runs, and started again at once, it waits

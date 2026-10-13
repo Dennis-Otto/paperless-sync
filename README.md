@@ -99,6 +99,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
 - Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run
+- The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
 <!-- --8<-- [end:features] -->
@@ -324,11 +325,11 @@ A large archive takes many runs at first: about the number of documents divided 
 ## Status, report and log
 
 <!-- --8<-- [start:status] -->
-Every run leaves its outcome in three places, also a scheduled run that nobody watched:
+Every run leaves its outcome in four places, also a scheduled run that nobody watched:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-outcome-of-a-run-goes.dark.svg">
-  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes.">
+  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes. A run that changed something, and every import that Paperless finished, failed or refused, adds an entry to the Activity stream of the target user, with links to the files, but a dry-run adds none.">
 </picture>
 
 The top of the settings page shows how the last run ended, when it finished, the last run without errors and, roughly, the next scheduled run: Nextcloud's background jobs start it, so it follows a few minutes after the interval. A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
@@ -344,6 +345,23 @@ The report counts every change and lists up to 100 lines of them. A run with mor
 
 The Nextcloud log has a warning, with the ID of the document and its path, when an error of a document first occurs or changes; an error that comes back in every run is logged once. A run that fails as a whole is logged as an error.
 <!-- --8<-- [end:status-report] -->
+
+### Activity
+
+<!-- --8<-- [start:activity] -->
+The *Activity* app of Nextcloud tells the target user what Paperless Sync did, in the language of the user, also in a scheduled run that nobody watched:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-the-activity-stream-shows.dark.svg">
+  <img src="docs/images/diagrams/what-the-activity-stream-shows.svg" alt="What the Activity stream shows: A run, scheduled or by hand, that changed something adds one entry for the target user, with the counts of its changes and links to its first five files and to the archive folder. Every file of the inbox that Paperless imported adds an entry with a link to its new document in Paperless, every file that Paperless failed to import one with the reason and a link to the file in the error folder, and every file that Paperless refused one with the reason, as the file stays in the inbox. A dry-run and a run without changes add none.">
+</picture>
+
+- **A run that changed something** has one entry, which counts its changes and links its first five files: *Paperless Sync added or updated 3 documents and moved 1 document to _Gelöscht: a.pdf, b.pdf, c.pdf and 1 more*. A link leads to its file also after the file moved again. The entry opens the archive folder, whose *Activity* tab in *Files* lists the runs.
+- **A file of the inbox that Paperless imported** has an entry with a link to its new document in Paperless: *scan.pdf was imported into Paperless as P123*.
+- **A file that Paperless failed to import** has an entry with the reason of Paperless and a link to the file in the error folder, and **a file that Paperless refused** has one with the reason, once: the file stays in the inbox until it changes.
+
+A dry-run and a run without changes add no entry. The filter *Paperless Sync* in the navigation of the Activity app shows the entries alone, and in the personal settings under *Activity*, each user can have them sent by mail or as notifications as well, which is off until then. Nextcloud's own entries of the *Files* app don't tell this story: they leave out the files of a run by hand, and they show those of a scheduled run as changes of a *remote account*.
+<!-- --8<-- [end:activity] -->
 
 ## FAQ and troubleshooting
 

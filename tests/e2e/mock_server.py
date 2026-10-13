@@ -256,9 +256,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"detail": "Unknown task status"})
                 return
             with LOCK:
-                for task in STATE["tasks"].values():
+                for task_id, task in STATE["tasks"].items():
                     task["status"] = status
                     task["message"] = "Synthetic unsupported mime type" if status == "FAILURE" else ""
+                    # Like Paperless-ngx, a finished task names the document that it created:
+                    # the upload task-1 becomes the document 501.
+                    if status == "SUCCESS":
+                        task["related_document"] = str(500 + int(task_id.rsplit("-", 1)[-1]))
+                    else:
+                        task.pop("related_document", None)
             self._json(200, {"status": status})
             return
         if parsed.path == "/control/reset":

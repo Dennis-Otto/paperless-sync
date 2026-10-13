@@ -236,5 +236,56 @@ elif mode == "mock-final":
     if not all(item.get("containsFixture") is True for item in uploads):
         raise AssertionError(f"Uploaded fixtures were not transferred intact: {uploads!r}")
     expect("refusedUploads", ["notes.bin"])
+elif mode == "activity-none":
+    entries = payload["ocs"]["data"]
+    if entries:
+        raise AssertionError(f"activity-none: the stream has entries: {entries!r}")
+elif mode == "activity-export":
+    # The run by hand of an administrator: one entry for the target user, which names the
+    # file that the run wrote, with its link, and belongs to the archive folder.
+    entries = payload["ocs"]["data"]
+    if len(entries) != 1:
+        raise AssertionError(f"activity-export: expected one entry, got {entries!r}")
+    entry = entries[0]
+    name = "2026-08-26 - Monthly invoice [P123].pdf"
+    if entry.get("app") != "paperless_sync" or entry.get("type") != "paperless_sync":
+        raise AssertionError(f"activity-export: the entry is not one of the app: {entry!r}")
+    if entry.get("subject") != f"Paperless Sync added or updated 1 document: {name}":
+        raise AssertionError(f"activity-export: unexpected subject: {entry!r}")
+    template, objects = entry["subject_rich"]
+    if template != "Paperless Sync added or updated 1 document: {file1}":
+        raise AssertionError(f"activity-export: unexpected rich subject: {entry!r}")
+    file = objects.get("file1", {})
+    if file.get("type") != "file" or file.get("path") != f"{ARCHIVE}/{name}" or not file.get("link", "").endswith(f"/f/{file.get('id')}"):
+        raise AssertionError(f"activity-export: the file has no link: {entry!r}")
+    if entry.get("user") != "e2e-admin":
+        raise AssertionError(f"activity-export: the run by hand names no author: {entry!r}")
+    if entry.get("object_type") != "files" or entry.get("object_name") != "Documents/Paperless/Archive":
+        raise AssertionError(f"activity-export: the entry does not belong to the archive folder: {entry!r}")
+    if not entry.get("icon", "").endswith("/img/app.svg"):
+        raise AssertionError(f"activity-export: the entry has no icon of the app: {entry!r}")
+elif mode == "activity-job":
+    entry = payload["ocs"]["data"][0]
+    if entry.get("user") != "" or not str(entry.get("subject", "")).startswith("Paperless Sync added or updated 1 document: "):
+        raise AssertionError(f"activity-job: the scheduled run has no entry of its own: {entry!r}")
+elif mode == "activity-imports":
+    entries = {str(entry.get("subject")): entry for entry in payload["ocs"]["data"]}
+    imported = entries.get("policy.pdf was imported into Paperless as P501")
+    if imported is None:
+        raise AssertionError(f"activity-imports: no entry of the import: {list(entries)!r}")
+    document = imported["subject_rich"][1].get("document", {})
+    if document.get("link") != "http://paperless-mock:8080/documents/501/details":
+        raise AssertionError(f"activity-imports: the new document has no link to Paperless: {imported!r}")
+    failed = entries.get("Paperless could not import broken.pdf")
+    if failed is None or failed.get("message") != "Synthetic unsupported mime type":
+        raise AssertionError(f"activity-imports: no entry of the failed import with its reason: {list(entries)!r}")
+    if failed["subject_rich"][1]["file"].get("path") != "Documents/Paperless/Errors/broken.pdf":
+        raise AssertionError(f"activity-imports: the failed import does not link the file in the error folder: {failed!r}")
+    refused = entries.get("Paperless refused notes.bin; it stays in the inbox until it changes")
+    if refused is None or "File type application/octet-stream not supported" not in str(refused.get("message")):
+        raise AssertionError(f"activity-imports: no entry of the refusal with its reason: {list(entries)!r}")
+    submitted = [subject for subject in entries if subject == "Paperless Sync sent 1 file to Paperless"]
+    if not submitted:
+        raise AssertionError(f"activity-imports: no entry of the uploads: {list(entries)!r}")
 else:
     raise AssertionError(f"Unknown assertion mode: {mode}")

@@ -891,6 +891,47 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(['status' => 'PENDING', 'message' => 'Task is not visible yet.'], $this->service->taskStatus('task-1'));
 	}
 
+	/**
+	 * Paperless-ngx names the new document of a finished task in related_document, as a string or a
+	 * number, and in the text of the result.
+	 *
+	 * @return array<string, array{array<string, mixed>, int}>
+	 */
+	public static function finishedTasks(): array {
+		return [
+			'related document as text' => [['status' => 'SUCCESS', 'result' => 'Success. New document id 123 created', 'related_document' => '123'], 123],
+			'related document as a number' => [['status' => 'SUCCESS', 'related_document' => 77], 77],
+			'only the result' => [['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => null], 456],
+		];
+	}
+
+	/** @param array<string, mixed> $task */
+	#[DataProvider('finishedTasks')]
+	public function testFinishedTaskNamesItsNewDocument(array $task, int $document): void {
+		$this->responses[] = [200, ['results' => [$task]]];
+
+		self::assertSame($document, $this->service->taskStatus('task-1')['document'] ?? null);
+	}
+
+	/** @return array<string, array{array<string, mixed>}> */
+	public static function tasksWithoutADocument(): array {
+		return [
+			'pending' => [['status' => 'PENDING', 'related_document' => null]],
+			'no number' => [['status' => 'SUCCESS', 'related_document' => 'P12', 'result' => 'Success.']],
+			'zero' => [['status' => 'SUCCESS', 'related_document' => '0', 'result' => 'New document id 0 created']],
+			'not a scalar' => [['status' => 'SUCCESS', 'related_document' => ['id' => 5]]],
+			'failure' => [['status' => 'FAILURE', 'result' => 'File type application/octet-stream not supported']],
+		];
+	}
+
+	/** @param array<string, mixed> $task */
+	#[DataProvider('tasksWithoutADocument')]
+	public function testTaskWithoutADocumentNamesNone(array $task): void {
+		$this->responses[] = [200, ['results' => [$task]]];
+
+		self::assertArrayNotHasKey('document', $this->service->taskStatus('task-1'));
+	}
+
 	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> */
 	public static function invalidResponses(): array {
 		return [

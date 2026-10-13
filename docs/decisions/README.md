@@ -16,3 +16,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0008](0008-local-network-per-request.md) | Reach a Paperless in the local network per request, never for the whole server | accepted |
 | [0009](0009-checksums-of-paperless-2-and-3.md) | Keep the SHA-256 and the MD5 of every download, for Paperless-ngx 2 and 3 | accepted |
 | [0010](0010-mirrored-files-keep-their-identity.md) | Mirrored files keep their identity: moved, and updated in place | accepted |
+| [0012](0012-the-activity-stream-tells-what-a-run-did.md) | The Activity stream tells the target user what a run did, one entry per run and per import | accepted |

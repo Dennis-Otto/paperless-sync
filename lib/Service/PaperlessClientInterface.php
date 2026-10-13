@@ -57,6 +57,11 @@ interface PaperlessClientInterface {
 	 */
 	public function uploadDocument($source, string $filename): string;
 
-	/** @return array{status: string, message: string} */
+	/**
+	 * The state of the task of an upload, its message, and the ID of the document that it created,
+	 * when Paperless names it.
+	 *
+	 * @return array{status: string, message: string, document?: int}
+	 */
 	public function taskStatus(string $taskId): array;
 }

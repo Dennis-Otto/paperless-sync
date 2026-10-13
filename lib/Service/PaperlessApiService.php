@@ -263,8 +263,29 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				break;
 			}
 		}
+		$result = ['status' => $status, 'message' => $message];
+		$document = self::createdDocument($task['related_document'] ?? null, $message);
+		if ($document !== null) {
+			$result['document'] = $document;
+		}
 
-		return ['status' => $status, 'message' => $message];
+		return $result;
+	}
+
+	/**
+	 * The ID of the document that a finished task created: Paperless names it in related_document,
+	 * as a number or a string of one, and in the result of the task, "Success. New document id 123
+	 * created".
+	 */
+	private static function createdDocument(mixed $related, string $message): ?int {
+		if ((is_int($related) || is_string($related)) && preg_match('/^[1-9]\d*$/', (string)$related) === 1) {
+			return (int)$related;
+		}
+		if (preg_match('/\bdocument id (\d+)/i', $message, $match) === 1 && (int)$match[1] > 0) {
+			return (int)$match[1];
+		}
+
+		return null;
 	}
 
 	/**
