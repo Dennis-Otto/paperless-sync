@@ -27,7 +27,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 ## The settings, section by section
 
-The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, the buttons save the settings after a test of the connection, start a dry-run or a run, and disconnect Paperless.
+The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps.
 
 **1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses.
 

@@ -18,15 +18,15 @@
 
 	function translatePlural(singular, plural, count) {
 		if (window.n) {
-			return window.n('paperless_sync', singular, plural, count)
+			return window.n('paperless_sync', singular, plural, count, undefined, { escape: false })
 		}
 		return (count === 1 ? singular : plural).replace('%n', String(count))
 	}
 
-	// The status that the server put into the page, as @nextcloud/initial-state reads it: JSON
-	// in Base64, in a hidden input.
-	function initialStatus() {
-		const input = document.getElementById('initial-state-paperless_sync-status')
+	// What the server put into the page, as @nextcloud/initial-state reads it: JSON in Base64, in
+	// a hidden input. The status of the last run, and the stored configuration without the token.
+	function initialState(key) {
+		const input = document.getElementById('initial-state-paperless_sync-' + key)
 		if (!input) {
 			return null
 		}
@@ -59,36 +59,63 @@
 		})
 	}
 
-	async function request(url, method, body, confirmed = false) {
-		const response = await window.fetch(url, {
-			method,
-			credentials: 'same-origin',
-			headers: {
-				'Content-Type': 'application/json',
-				requesttoken: window.OC.requestToken,
-			},
-			body: body === undefined ? undefined : JSON.stringify(body),
-		})
-		const text = await response.text()
-		let payload = {}
-		if (text !== '') {
-			try {
-				payload = JSON.parse(text)
-			} catch (error) {
-				payload = { message: text }
-			}
+	// An error with the text for the page, the HTTP status of the answer, 0 without one, and the
+	// setting that the text names as the way out, if any.
+	function requestError(text, status, setting) {
+		const error = new Error(text)
+		error.status = status
+		error.setting = setting
+		return error
+	}
+
+	// The data of an answer, or null when it has none. The app answers with JSON; a proxy, the web
+	// server or a login page in between answer with HTML, which the page never shows.
+	async function answerData(response) {
+		if (!(response.headers.get('Content-Type') || '').includes('application/json')) {
+			return null
 		}
-		if (response.status === 403 && payload.message === PASSWORD_CONFIRMATION_REQUIRED && !confirmed) {
+		try {
+			const data = await response.json()
+			return data !== null && typeof data === 'object' ? data : null
+		} catch (error) {
+			return null
+		}
+	}
+
+	async function request(url, method, body, confirmed = false) {
+		let response
+		try {
+			response = await window.fetch(url, {
+				method,
+				credentials: 'same-origin',
+				headers: {
+					Accept: 'application/json',
+					'Content-Type': 'application/json',
+					requesttoken: window.OC.requestToken,
+				},
+				body: body === undefined ? undefined : JSON.stringify(body),
+			})
+		} catch (error) {
+			// fetch() fails only when no answer arrives: the network or Nextcloud is down.
+			throw requestError(translate('Nextcloud could not be reached. Check the connection and try again.'), 0)
+		}
+		const data = await answerData(response)
+		if (response.status === 403 && data !== null && data.message === PASSWORD_CONFIRMATION_REQUIRED && !confirmed) {
 			await confirmPassword()
 			return request(url, method, body, true)
 		}
-		if (!response.ok) {
-			const error = new Error(payload.message || translate('The request failed.'))
-			// The setting that the message of the server names as the way out, if any.
-			error.setting = payload.setting
-			throw error
+		if (response.ok && data !== null) {
+			return data
 		}
-		return payload
+		// Nextcloud's answers when the session ended, "Current user is not logged in", and when the
+		// request token of the page is no longer valid, "CSRF check failed".
+		if (response.status === 401 || response.status === 412) {
+			throw requestError(translate('Your session has expired. Reload the page and try again.'), response.status)
+		}
+		if (data !== null && typeof data.message === 'string' && data.message !== '') {
+			throw requestError(data.message, response.status, data.setting)
+		}
+		throw requestError(translate('The server answered with status {status}.', { status: response.status }), response.status)
 	}
 
 	document.addEventListener('DOMContentLoaded', function() {
@@ -96,34 +123,48 @@
 		if (!root) {
 			return
 		}
-		const form = document.getElementById('paperless-sync-form')
-		const paperlessUrl = document.getElementById('paperless-sync-paperless-url')
-		const token = document.getElementById('paperless-sync-token')
-		const save = document.getElementById('paperless-sync-save')
-		const dryRun = document.getElementById('paperless-sync-dry-run')
-		const run = document.getElementById('paperless-sync-run')
-		const reset = document.getElementById('paperless-sync-reset')
-		const refresh = document.getElementById('paperless-sync-refresh-status')
-		const message = document.getElementById('paperless-sync-message')
-		const report = document.getElementById('paperless-sync-report')
-		const reportSummary = document.getElementById('paperless-sync-report-summary')
-		const reportActions = document.getElementById('paperless-sync-report-actions')
-		const reportMeta = document.getElementById('paperless-sync-report-meta')
-		const reportOmitted = document.getElementById('paperless-sync-report-omitted')
-		const lastState = document.getElementById('paperless-sync-last-state')
-		const running = document.getElementById('paperless-sync-running')
-		const lastEnded = document.getElementById('paperless-sync-last-ended')
-		const lastSuccess = document.getElementById('paperless-sync-last-success')
-		const nextRun = document.getElementById('paperless-sync-next-run')
-		const errors = document.getElementById('paperless-sync-errors')
-		const errorsTitle = document.getElementById('paperless-sync-errors-title')
-		const errorsList = document.getElementById('paperless-sync-errors-list')
+		// The elements of the page, only inside its root.
+		function element(name) {
+			return root.querySelector('#paperless-sync-' + name)
+		}
+		const form = element('form')
+		const paperlessUrl = element('paperless-url')
+		const token = element('token')
+		const schedule = root.querySelector('[data-setting="enabled"]')
+		const save = element('save')
+		const dryRun = element('dry-run')
+		const run = element('run')
+		const reset = element('reset')
+		const refresh = element('refresh-status')
+		const unsaved = element('unsaved')
+		const message = element('message')
+		const report = element('report')
+		const reportSummary = element('report-summary')
+		const reportActions = element('report-actions')
+		const reportMeta = element('report-meta')
+		const reportOmitted = element('report-omitted')
+		const lastState = element('last-state')
+		const running = element('running')
+		const lastEnded = element('last-ended')
+		const lastSuccess = element('last-success')
+		const nextRun = element('next-run')
+		const errors = element('errors')
+		const errorsTitle = element('errors-title')
+		const errorsList = element('errors-list')
 		const buttons = [save, dryRun, run, reset, refresh]
 		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
 		const pollInterval = 5000
 		const pollLimit = 60
 		let pollTimer = 0
 		let polls = 0
+		let busy = false
+		// The settings that the server stored, as settings() reads them from the form, to tell
+		// unsaved changes.
+		let savedSettings = ''
+		// Whether the server holds a token, and the URL that it belongs to. The server sends the
+		// stored token only there, so another URL needs the token again.
+		let tokenConfigured = false
+		let savedUrl = ''
 
 		function settings() {
 			const values = {}
@@ -139,20 +180,47 @@
 			return values
 		}
 
+		// The name of a setting in the configuration of the server: paperless_url is paperlessUrl.
+		function property(setting) {
+			return setting.replace(/_([a-z])/g, function(underscore, letter) {
+				return letter.toUpperCase()
+			})
+		}
+
 		// The URL as the server compares it with the stored one.
 		function normalizeUrl(url) {
 			return url.trim().replace(/\/+$/, '')
 		}
 
-		// The URL that the stored token belongs to. The server sends the stored token only there, so
-		// another URL needs the token again.
-		let savedUrl = normalizeUrl(paperlessUrl.defaultValue)
+		// Shows the configuration that the server stored, normalized, as on load and in its answer
+		// to a save or a disconnect, and takes it as the saved state of the form.
+		function applyConfig(config) {
+			root.querySelectorAll('[data-setting]').forEach(function(input) {
+				const value = config[property(input.dataset.setting)]
+				if (value === undefined) {
+					return
+				}
+				if (input.type === 'checkbox') {
+					input.checked = value === true
+				} else {
+					input.value = String(value)
+				}
+			})
+			token.value = ''
+			tokenConfigured = config.tokenConfigured === true
+			savedUrl = normalizeUrl(String(config.paperlessUrl || ''))
+			savedSettings = JSON.stringify(settings())
+			updateForm()
+		}
+
+		function isDirty() {
+			return token.value !== '' || JSON.stringify(settings()) !== savedSettings
+		}
 
 		function updateToken() {
-			const configured = root.dataset.tokenConfigured === 'true'
-			const newUrl = configured && normalizeUrl(paperlessUrl.value) !== savedUrl
-			token.required = !configured || newUrl
-			if (!configured) {
+			const newUrl = tokenConfigured && normalizeUrl(paperlessUrl.value) !== savedUrl
+			token.required = !tokenConfigured || newUrl
+			if (!tokenConfigured) {
 				token.placeholder = translate('Required')
 			} else if (newUrl) {
 				token.placeholder = translate('Required again for a new URL')
@@ -161,25 +229,46 @@
 			}
 		}
 
-		function setBusy(busy) {
+		// A dry-run and a run use the saved settings. A dry-run may show what they do before the
+		// changes are saved; "Synchronize now" waits for the save, so that it never applies
+		// settings that the page doesn't show.
+		function updateButtons() {
+			const dirty = isDirty()
+			unsaved.hidden = !dirty
 			buttons.forEach(function(button) {
-				button.disabled = busy
+				button.disabled = busy || (button === run && dirty)
 			})
 		}
 
-		function showMessage(text, isError) {
-			message.textContent = text
-			message.classList.toggle('paperless-sync-message--error', isError)
-			message.classList.toggle('paperless-sync-message--success', !isError && text !== '')
+		function updateForm() {
+			updateToken()
+			updateButtons()
 		}
 
-		// Moves the focus to the setting that the message names, such as "Paperless runs in my local
-		// network", so that it is one key press away; a screen reader reads its hint with it.
-		function focusSetting(error) {
-			const input = error.setting ? root.querySelector('[data-setting="' + window.CSS.escape(error.setting) + '"]') : null
-			if (input) {
-				input.focus()
-			}
+		function setBusy(value) {
+			busy = value
+			updateButtons()
+		}
+
+		// The tone is "progress" while an action runs, "success", or "error", which a screen reader
+		// reads out at once.
+		function showMessage(text, tone) {
+			const error = tone === 'error'
+			message.setAttribute('role', error ? 'alert' : 'status')
+			message.setAttribute('aria-live', error ? 'assertive' : 'polite')
+			message.classList.toggle('paperless-sync-message--error', error)
+			message.classList.toggle('paperless-sync-message--success', tone === 'success')
+			message.textContent = text
+		}
+
+		// Says why an action failed and moves the focus there, or to the setting that the message
+		// names as the way out, such as "Paperless runs in my local network", so that it is one
+		// key press away; a screen reader reads its hint with it.
+		function showError(error, fallback) {
+			showMessage(error.message || fallback, 'error')
+			const setting = error.setting ? root.querySelector('[data-setting="' + window.CSS.escape(error.setting) + '"]') : null
+			const target = setting || message
+			target.focus()
 		}
 
 		function formatTime(timestamp) {
@@ -191,9 +280,9 @@
 
 		// Changes a text only when it differs, so that a screen reader doesn't read it out again
 		// with every refresh.
-		function setText(element, text) {
-			if (element.textContent !== text) {
-				element.textContent = text
+		function setText(target, text) {
+			if (target.textContent !== text) {
+				target.textContent = text
 			}
 		}
 
@@ -324,50 +413,76 @@
 			}
 		}
 
-		async function runSync(isDryRun) {
-			setBusy(true)
-			showState(isDryRun ? 'dry-run-running' : 'running')
-			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), false)
-			try {
-				const result = await request(root.dataset.runUrl, 'POST', { dryRun: isDryRun })
-				showReport(result, true)
-				showMessage(isDryRun ? translate('Dry-run completed. No files were changed.') : translate('Synchronization completed.'), result.errors > 0)
-			} catch (error) {
-				showMessage(error.message || translate('Synchronization failed.'), true)
-				focusSetting(error)
-			} finally {
-				setBusy(false)
-			}
-			try {
-				await refreshStatus()
-			} catch (error) {
-				// The status stays as it was; Refresh asks again.
+		// How a run by hand ended, with the count of the errors that its report lists.
+		function showResult(result, isDryRun) {
+			const failures = Number(result.errors) || 0
+			if (failures === 0) {
+				showMessage(isDryRun ? translate('Dry-run completed. No files were changed.') : translate('Synchronization completed.'), 'success')
+			} else if (isDryRun) {
+				showMessage(translatePlural('Dry-run completed with %n error. No files were changed; see the report.', 'Dry-run completed with %n errors. No files were changed; see the report.', failures), 'error')
+			} else {
+				showMessage(translatePlural('Synchronization completed with %n error. See the report.', 'Synchronization completed with %n errors. See the report.', failures), 'error')
 			}
 		}
 
+		async function runSync(isDryRun) {
+			setBusy(true)
+			showState(isDryRun ? 'dry-run-running' : 'running')
+			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), 'progress')
+			try {
+				const result = await request(root.dataset.runUrl, 'POST', { dryRun: isDryRun })
+				showReport(result, true)
+				showResult(result, isDryRun)
+			} catch (error) {
+				if (error.status === 502 || error.status === 504) {
+					// A proxy or the web server stopped waiting for the answer, while PHP carries on
+					// with the run, which the status then follows.
+					showMessage(translate('The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.'), 'progress')
+				} else {
+					showError(error, translate('Synchronization failed.'))
+				}
+			} finally {
+				setBusy(false)
+			}
+			// The status shows how the run ended, also when it failed, or follows it while it continues.
+			await refreshQuietly()
+		}
+
 		async function refreshStatus() {
-			const status = await request(root.dataset.statusUrl, 'GET')
-			updateStatus(status)
+			updateStatus(await request(root.dataset.statusUrl, 'GET'))
+		}
+
+		// After an action, the status follows it; when that fails, the message of the action stays,
+		// and Refresh asks again.
+		async function refreshQuietly() {
+			try {
+				await refreshStatus()
+			} catch (error) {
+				// The status stays as it was.
+			}
 		}
 
 		form.addEventListener('submit', async function(event) {
 			event.preventDefault()
 			setBusy(true)
-			showMessage(translate('Testing Paperless and Nextcloud access…'), false)
+			// The server tests the connection when the schedule will run or a token was entered,
+			// see SettingsController::save().
+			const testing = schedule.checked || token.value.trim() !== ''
+			showMessage(testing ? translate('Testing Paperless and Nextcloud access…') : translate('Saving the settings…'), 'progress')
+			let saved = false
 			try {
 				const config = await request(root.dataset.saveUrl, 'POST', { settings: settings(), token: token.value })
-				token.value = ''
-				root.dataset.tokenConfigured = config.tokenConfigured ? 'true' : 'false'
-				savedUrl = normalizeUrl(config.paperlessUrl)
-				updateToken()
-				showMessage(translate('Connection successful. Configuration saved.'), false)
-				// The schedule may have changed, and with it the next scheduled run.
-				await refreshStatus()
+				applyConfig(config)
+				showMessage(config.connectionTested ? translate('Connection successful. Configuration saved.') : translate('Saved. Scheduled synchronization is off; the connection was not tested.'), 'success')
+				saved = true
 			} catch (error) {
-				showMessage(error.message || translate('Could not save the configuration.'), true)
-				focusSetting(error)
+				showError(error, translate('Could not save the configuration.'))
 			} finally {
 				setBusy(false)
+			}
+			if (saved) {
+				// The schedule may have changed, and with it the next scheduled run.
+				await refreshQuietly()
 			}
 		})
 
@@ -383,36 +498,59 @@
 			setBusy(true)
 			try {
 				await refreshStatus()
-				showMessage(translate('Status refreshed.'), false)
+				showMessage(translate('Status refreshed.'), 'success')
 			} catch (error) {
-				showMessage(error.message || translate('Could not refresh status.'), true)
+				showError(error, translate('Could not refresh status.'))
 			} finally {
 				setBusy(false)
 			}
 		})
 		reset.addEventListener('click', async function() {
-			if (!window.confirm(translate('Disconnect Paperless and delete the stored API token? Existing synchronized files and state remain untouched.'))) {
+			let question = translate('Disconnect Paperless? This deletes the stored API token and turns off scheduled synchronization and the access to the local network. The other settings, the synchronized files and their state stay as they are.')
+			if (isDirty()) {
+				question += ' ' + translate('Your unsaved changes will be discarded.')
+			}
+			if (!window.confirm(question)) {
 				return
 			}
 			setBusy(true)
+			let disconnected = false
 			try {
-				await request(root.dataset.resetUrl, 'DELETE')
-				token.value = ''
-				root.dataset.tokenConfigured = 'false'
-				savedUrl = ''
-				updateToken()
-				root.querySelector('[data-setting="enabled"]').checked = false
-				showMessage(translate('Paperless disconnected. Existing files were not changed.'), false)
+				applyConfig(await request(root.dataset.resetUrl, 'DELETE'))
+				showMessage(translate('Paperless disconnected: the API token is deleted and scheduled synchronization is off. The other settings and the files are unchanged.'), 'success')
+				disconnected = true
 			} catch (error) {
-				showMessage(error.message || translate('Could not disconnect Paperless.'), true)
+				showError(error, translate('Could not disconnect Paperless.'))
 			} finally {
 				setBusy(false)
 			}
+			if (disconnected) {
+				// Without the schedule, there is no next scheduled run.
+				await refreshQuietly()
+			}
 		})
 
-		paperlessUrl.addEventListener('input', updateToken)
-		updateToken()
-		const status = initialStatus()
+		form.addEventListener('input', updateForm)
+		form.addEventListener('change', updateForm)
+		// Leaving the page with unsaved changes asks first, in a dialog of the browser.
+		window.addEventListener('beforeunload', function(event) {
+			if (isDirty()) {
+				event.preventDefault()
+				event.returnValue = true
+			}
+		})
+
+		const config = initialState('config')
+		if (config !== null) {
+			applyConfig(config)
+		} else {
+			// Without the initial state, the form as the server rendered it is the saved state.
+			tokenConfigured = !token.required
+			savedUrl = normalizeUrl(paperlessUrl.defaultValue)
+			savedSettings = JSON.stringify(settings())
+			updateForm()
+		}
+		const status = initialState('status')
 		if (status !== null) {
 			updateStatus(status)
 		}

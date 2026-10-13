@@ -234,6 +234,52 @@ The setting also helps when the name of Paperless is set only in the hosts file 
 
 If you turned on `allow_local_remote_servers` for this app before, turn on the setting, save, and then turn the switch off again with `occ config:system:delete allow_local_remote_servers`. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#a-paperless-in-the-local-network) explains what the setting allows.
 
+### Saving, pausing and disconnecting
+
+**Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
+
+```mermaid
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What saving the settings tests
+    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
+
+    save(["💾 Test connection<br>and save"])
+    check{"Is every<br>setting valid?"}
+    scheduled{"Schedule on,<br>or a token entered?"}
+    test{"Do Paperless and<br>the base folder work?"}
+    tested["✅ Saved and tested"]
+    untested["✅ Saved without a test<br><i>the schedule pauses</i>"]
+    refused["❌ Not saved:<br>the page says why"]
+
+    save --> check
+    check -- "no" --> refused
+    check -- "yes" --> scheduled
+    scheduled -- "yes" --> test
+    scheduled -- "no" --> untested
+    test -- "yes" --> tested
+    test -- "no" --> refused
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class save,check,scheduled,test nextcloud
+    class tested,untested done
+    class refused refused
+```
+
+To pause synchronization, such as while Paperless is down, its token is revoked or the target user is disabled, uncheck **Enable scheduled synchronization** and save. A save that fails while the schedule is on says so and moves the focus to that switch.
+
+After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so. **Run dry-run** and **Synchronize now** use the saved settings, so **Synchronize now** waits until you save, and the browser asks before you leave the page.
+
+**Disconnect** deletes the stored API token and turns off scheduled synchronization and **Paperless runs in my local network**. The other settings, the synchronized files and their state stay as they are; to connect again, enter the token, turn the local network on again if Paperless runs there, and save.
+
+Results and errors appear in the bar of the buttons, which stays at the bottom of the window. When a proxy or the web server stops waiting for a long run by hand, the page says that the run continues in the background, and the status follows it until it ends.
+
 ### Folder ownership
 
 The configured Nextcloud target user owns the synchronized folders. The app operates through Nextcloud's internal filesystem API and therefore does not need that user's password or an app password.

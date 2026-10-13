@@ -69,9 +69,11 @@ control() {
 }
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
-# network of the Compose project, and settings.mjs then saves the settings as an
-# administrator does, with the confirmation of the password. The files of the checks
-# reach the browser through standard input, so that npm leaves nothing in the checkout.
+# network of the Compose project, and settings.mjs then uses the settings as an
+# administrator does: it saves them with the confirmation of the password, disconnects
+# and connects again with the token, and checks what the page says about unsaved
+# changes, results and errors, also in German. The files of the checks reach the
+# browser through standard input, so that npm leaves nothing in the checkout.
 accessibility() {
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
@@ -83,6 +85,7 @@ accessibility() {
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
 			--env E2E_USER=e2e-admin \
 			--env "E2E_PASSWORD=${PASSWORD}" \
+			--env E2E_TOKEN=e2e-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs'
 }
