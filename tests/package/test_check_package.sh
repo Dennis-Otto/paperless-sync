@@ -8,7 +8,8 @@
 # package they pack as krankerl does, files alone, and as the release workflow packs
 # it again after signing, with its folders. The package of that app passes; a package
 # that lacks a runtime file, or holds a stray one, a changed one, a link, an unsafe
-# entry or the wrong signature, fails and names the difference.
+# entry or the wrong signature, fails and names the difference, and so does a runtime
+# path of the check that HEAD doesn't hold.
 #
 #   bash tests/package/test_check_package.sh
 #
@@ -150,7 +151,7 @@ printf '{"hashes": {}, "signature": "c2lnbmF0dXJl", "certificate": "certificate"
 pack folders signed
 check_parsed "a signed package" signed signed 0 \
 	"Validated signed production package with exactly the 12 runtime files of HEAD and their signature"
-check "a signed package checked as unsigned" signed unsigned 1 "stray:   ${APP_ID}/appinfo/signature.json"
+check "a signed package checked as unsigned" signed unsigned 1 	"Unsigned package already holds a signature: ${APP_ID}/appinfo/signature.json"
 stage
 pack folders unsigned
 check "an unsigned package checked as signed" unsigned signed 1 \
@@ -257,6 +258,12 @@ stage
 cp "${REPO}/js/broken.js" "${STAGE}/${APP_ID}/js/broken.js"
 pack files broken-js
 check_parsed "a package with JavaScript that doesn't parse" broken-js unsigned 1 "A script of the package doesn't parse."
+
+# A runtime path that the app no longer has, which the check names instead of failing
+# in git archive.
+git -C "${REPO}" rm -r --quiet css
+git -C "${REPO}" commit --quiet --message "The app without CSS"
+check "a runtime path that HEAD doesn't hold" krankerl unsigned 1 	"RUNTIME_PATHS of scripts/check-package.sh lists css, which HEAD doesn't hold."
 
 if ((left > 0)); then
 	echo "PHP or Node.js is not installed here; the CI runs the ${left} case(s) that parse the package."

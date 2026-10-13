@@ -46,7 +46,7 @@ A package fails the check, with one line for each difference, when it
 - lacks its signature after signing, or holds one before it;
 - or holds PHP or JavaScript that doesn't parse.
 
-The CI runs the same check on the package of every pull request, so a change that breaks the package fails there and not in a release. A new folder that the app needs at runtime belongs in `RUNTIME_PATHS` of `scripts/check-package.sh`, and `.nextcloudignore` must not list it. `tests/package/test_check_package.sh` tests the check with packages that it must reject.
+The CI runs the same check on the package of every pull request, so a change that breaks the package fails there and not in a release. A new folder that the app needs at runtime belongs in `RUNTIME_PATHS` of `scripts/check-package.sh`, and `.nextcloudignore` must not list it; a path that the app no longer has leaves `RUNTIME_PATHS`, and the check names it until then. `tests/package/test_check_package.sh` tests the check with packages that it must reject.
 
 ## Secrets and recovery
 

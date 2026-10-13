@@ -78,6 +78,10 @@ if [[ "${MODE}" == "signed" ]]; then
 		exit 1
 	fi
 	mv "${APP_ROOT}/${SIGNATURE}" "${WORK}/signature.json"
+elif [[ -e "${APP_ROOT}/${SIGNATURE}" ]]; then
+	echo "Unsigned package already holds a signature: ${APP_ID}/${SIGNATURE}" >&2
+	echo "Sign the package only after this check, or check a signed package as signed." >&2
+	exit 1
 fi
 
 # Each file below $3 of the side $2, expected or package, as "$1 <path>", a folder
@@ -123,6 +127,15 @@ describe() {
 		esac
 	done
 }
+
+# Every runtime path is one of HEAD, or git archive stops without saying which.
+for path in "${RUNTIME_PATHS[@]}"; do
+	if ! git cat-file -e "HEAD:${path}" 2>/dev/null; then
+		echo "RUNTIME_PATHS of scripts/check-package.sh lists ${path}, which HEAD doesn't hold." >&2
+		echo "Remove ${path} there if the app no longer has it, or commit it if the app needs it." >&2
+		exit 1
+	fi
+done
 
 # The runtime files of HEAD, as krankerl would package them, side by side with the
 # package: any file or folder in only one of them, and any file with other content,
