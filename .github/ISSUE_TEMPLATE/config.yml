@@ -3,6 +3,11 @@
 
 blank_issues_enabled: false
 contact_links:
+  # First, so that a question doesn't arrive as a feature request: the Q&A discussions
+  # mark an answer, which the next person finds there.
+  - name: Ask a question
+    url: https://github.com/Dennis-Otto/paperless-sync/discussions/categories/q-a
+    about: How to set up or use the app, or whether it can do something. Search the answers or ask in the Q&A discussions.
   - name: Report a security vulnerability
     url: https://github.com/Dennis-Otto/paperless-sync/security/advisories/new
     about: Report vulnerabilities privately, never in a public issue.
