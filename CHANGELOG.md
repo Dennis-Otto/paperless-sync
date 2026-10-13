@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Security
+
+- A run that can't reach Paperless, because Paperless is down or its name or certificate fails, no longer writes the Paperless API token into the Nextcloud log. Before, the log received the token in plain text with the trace of the error, with every failed run by hand or by the schedule, and so did everyone who reads the log or receives a copy of it. **Every earlier version is affected: create a new API token in Paperless, enter it in the settings, and delete the old Nextcloud logs and their copies, such as in backups or log collectors.**
+- Saving the settings with another Paperless URL needs the API token again. Before, saving without a token sent the stored token to the new URL to test the connection, so whoever could save the settings, with the session of an administrator for example, could receive it at a server of their own. The settings page asks for the token as soon as the URL changes.
+- Saving the settings and disconnecting Paperless ask for the password of the administrator, as Nextcloud does for its own sensitive settings, unless it was confirmed in the last 30 minutes.
+
 ### Bug fixes
 
 - A run no longer counts a document as missing when Paperless answered a page of its list incompletely, such as an empty page from a proxy, or when documents were added or deleted while the run read the pages. The report says `SCAN INCOMPLETE`, the Nextcloud log has a warning, and the next complete scan carries on. Before, a document that still existed in Paperless could move to the deleted folder, or be deleted when direct deletion is on.

@@ -68,13 +68,25 @@ final class ConfigService {
 		return is_string($token) ? $token : '';
 	}
 
-	public function resolveToken(string $candidate): string {
-		$token = trim($candidate);
-		if ($token === '') {
-			$token = $this->getToken();
+	/**
+	 * The token for a connection to $url: the one that was entered, or else the stored one, but
+	 * only for the URL that it was stored with. Otherwise, whoever may change the settings, with
+	 * the session of an administrator for example, could point the URL at a server of their own and
+	 * receive the stored token with the test of the connection, without ever knowing it.
+	 */
+	public function resolveToken(#[\SensitiveParameter] string $tokenCandidate, string $url): string {
+		$token = trim($tokenCandidate);
+		if ($token !== '') {
+			return $token;
 		}
+		$token = $this->getToken();
 		if ($token === '') {
 			throw new InvalidArgumentException('A Paperless API token is required.');
+		}
+		// The whole URL, not only its host: one host may serve several apps behind a proxy.
+		$storedUrl = rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '')), '/');
+		if ($storedUrl === '' || rtrim(trim($url), '/') !== $storedUrl) {
+			throw new InvalidArgumentException('Enter the API token again to connect to another Paperless URL.');
 		}
 
 		return $token;
@@ -85,7 +97,7 @@ final class ConfigService {
 	 *
 	 * @param array<string, mixed> $settings
 	 */
-	public function validate(array $settings, string $tokenCandidate = ''): SyncConfig {
+	public function validate(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$values = $this->readValues();
 		foreach (array_keys(self::DEFAULTS) as $key) {
 			if (array_key_exists($key, $settings)) {
@@ -93,17 +105,17 @@ final class ConfigService {
 				$values[$key] = $settings[$key];
 			}
 		}
-		$token = $this->resolveToken($tokenCandidate);
 		/** @var array<string, mixed> $normalized */
 		$normalized = $this->normalize($values);
+		$token = $this->resolveToken($tokenCandidate, (string)$normalized['paperless_url']);
 
 		return $this->fromValues($normalized, $token !== '');
 	}
 
 	/** @param array<string, mixed> $settings */
-	public function save(array $settings, string $tokenCandidate = ''): SyncConfig {
+	public function save(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$config = $this->validate($settings, $tokenCandidate);
-		$token = $this->resolveToken($tokenCandidate);
+		$token = $this->resolveToken($tokenCandidate, $config->paperlessUrl);
 		$values = $config->jsonSerialize();
 
 		$mapping = [

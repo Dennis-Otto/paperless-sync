@@ -12,7 +12,8 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\Model\PaperlessScan;
 
 interface PaperlessClientInterface {
-	public function testConnection(string $url, string $token): void;
+	/** A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its failure. */
+	public function testConnection(string $url, #[\SensitiveParameter] string $token): void;
 
 	/** The active documents, and whether the run received all of them. */
 	public function documents(): PaperlessScan;

@@ -48,13 +48,12 @@ final class SyncServiceTest extends TestCase {
 	private SyncService $service;
 
 	protected function setUp(): void {
-		$this->token = 'test-token';
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$this->state = new TestStateRepository();
 		$paths = new PathTemplateService();
 		$this->configService = $this->configService($paths);
-		$this->configService->save(self::validSettings());
+		$this->configService->save(self::validSettings(), 'test-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->service = new SyncService(

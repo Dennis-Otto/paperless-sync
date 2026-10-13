@@ -10,7 +10,26 @@
 		return window.t ? window.t('paperless_sync', text) : text
 	}
 
-	async function request(url, method, body) {
+	// The answer of Nextcloud to a request to a route with #[PasswordConfirmationRequired] while the
+	// password of the administrator wasn't confirmed in the last 30 minutes.
+	const PASSWORD_CONFIRMATION_REQUIRED = 'Password confirmation is required'
+
+	// Nextcloud's own dialog asks for the password and confirms it with the server.
+	function confirmPassword() {
+		return new Promise(function(resolve, reject) {
+			const confirmation = window.OC.PasswordConfirmation
+			const notConfirmed = function() {
+				reject(new Error(translate('Your password was not confirmed, so nothing was changed.')))
+			}
+			if (!confirmation) {
+				notConfirmed()
+				return
+			}
+			confirmation.requirePasswordConfirmation(resolve, {}, notConfirmed)
+		})
+	}
+
+	async function request(url, method, body, confirmed = false) {
 		const response = await window.fetch(url, {
 			method,
 			credentials: 'same-origin',
@@ -29,6 +48,10 @@
 				payload = { message: text }
 			}
 		}
+		if (response.status === 403 && payload.message === PASSWORD_CONFIRMATION_REQUIRED && !confirmed) {
+			await confirmPassword()
+			return request(url, method, body, true)
+		}
 		if (!response.ok) {
 			throw new Error(payload.message || translate('The request failed.'))
 		}
@@ -41,6 +64,7 @@
 			return
 		}
 		const form = document.getElementById('paperless-sync-form')
+		const paperlessUrl = document.getElementById('paperless-sync-paperless-url')
 		const token = document.getElementById('paperless-sync-token')
 		const save = document.getElementById('paperless-sync-save')
 		const dryRun = document.getElementById('paperless-sync-dry-run')
@@ -67,6 +91,28 @@
 				}
 			})
 			return values
+		}
+
+		// The URL as the server compares it with the stored one.
+		function normalizeUrl(url) {
+			return url.trim().replace(/\/+$/, '')
+		}
+
+		// The URL that the stored token belongs to. The server sends the stored token only there, so
+		// another URL needs the token again.
+		let savedUrl = normalizeUrl(paperlessUrl.defaultValue)
+
+		function updateToken() {
+			const configured = root.dataset.tokenConfigured === 'true'
+			const newUrl = configured && normalizeUrl(paperlessUrl.value) !== savedUrl
+			token.required = !configured || newUrl
+			if (!configured) {
+				token.placeholder = translate('Required')
+			} else if (newUrl) {
+				token.placeholder = translate('Required again for a new URL')
+			} else {
+				token.placeholder = translate('Configured — leave blank to keep it')
+			}
 		}
 
 		function setBusy(busy) {
@@ -159,8 +205,9 @@
 			try {
 				const config = await request(root.dataset.saveUrl, 'POST', { settings: settings(), token: token.value })
 				token.value = ''
-				token.placeholder = translate('Configured — leave blank to keep it')
 				root.dataset.tokenConfigured = config.tokenConfigured ? 'true' : 'false'
+				savedUrl = normalizeUrl(config.paperlessUrl)
+				updateToken()
 				showMessage(translate('Connection successful. Configuration saved.'), false)
 			} catch (error) {
 				showMessage(error.message || translate('Could not save the configuration.'), true)
@@ -196,8 +243,9 @@
 			try {
 				await request(root.dataset.resetUrl, 'DELETE')
 				token.value = ''
-				token.placeholder = translate('Required')
 				root.dataset.tokenConfigured = 'false'
+				savedUrl = ''
+				updateToken()
 				root.querySelector('[data-setting="enabled"]').checked = false
 				showMessage(translate('Paperless disconnected. Existing files were not changed.'), false)
 			} catch (error) {
@@ -207,6 +255,8 @@
 			}
 		})
 
+		paperlessUrl.addEventListener('input', updateToken)
+		updateToken()
 		lastCompleted.textContent = formatTime(Number.parseInt(lastCompleted.dataset.timestamp, 10))
 	})
 })()

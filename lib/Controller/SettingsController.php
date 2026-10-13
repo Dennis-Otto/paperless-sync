@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
@@ -31,12 +32,19 @@ final class SettingsController extends Controller {
 		parent::__construct($appName, $request);
 	}
 
-	/** @param array<string, mixed> $settings */
+	/**
+	 * Saving decides where the token goes, so Nextcloud asks for the password of the administrator
+	 * first, unless it was confirmed in the last 30 minutes; a session that someone else took over
+	 * is not enough. The stored token is tested only with the URL that it was stored with.
+	 *
+	 * @param array<string, mixed> $settings
+	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings')]
-	public function save(array $settings = [], string $token = ''): JSONResponse {
+	#[PasswordConfirmationRequired]
+	public function save(array $settings = [], #[\SensitiveParameter] string $token = ''): JSONResponse {
 		try {
 			$config = $this->configService->validate($settings, $token);
-			$effectiveToken = $this->configService->resolveToken($token);
+			$effectiveToken = $this->configService->resolveToken($token, $config->paperlessUrl);
 			$this->paperless->testConnection($config->paperlessUrl, $effectiveToken);
 			$this->storage->test($config->targetUser, $config->basePath);
 
@@ -51,7 +59,9 @@ final class SettingsController extends Controller {
 		}
 	}
 
+	/** Disconnecting deletes the token, also only with the password confirmed. */
 	#[FrontpageRoute(verb: 'DELETE', url: '/settings')]
+	#[PasswordConfirmationRequired]
 	public function reset(): JSONResponse {
 		return new JSONResponse($this->configService->reset());
 	}

@@ -46,7 +46,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
-	public function testConnection(string $url, string $token): void {
+	public function testConnection(string $url, #[\SensitiveParameter] string $token): void {
 	}
 
 	public function documents(): PaperlessScan {

@@ -190,7 +190,7 @@ Stable markers such as `[P123]` are compatible with the independent [Paperless U
 
 Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used. Trash synchronization requires visibility of the corresponding trashed documents.
 
-The API token is stored in Nextcloud's credentials manager and never returned to the browser.
+The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. Saving the settings and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
 
 ### Folder ownership
 

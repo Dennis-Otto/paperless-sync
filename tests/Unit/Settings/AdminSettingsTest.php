@@ -33,8 +33,7 @@ final class AdminSettingsTest extends TestCase {
 	}
 
 	public function testFormShowsTheConfigurationTheStatusAndTheActions(): void {
-		$this->token = 'secret-token';
-		$this->configService()->save(self::validSettings());
+		$this->configService()->save(self::validSettings(), 'secret-token');
 		$this->settings['status_last_state'] = 'completed';
 		$settings = new AdminSettings($this->configService(), new StatusService($this->appConfig()), $this->urlGenerator);
 

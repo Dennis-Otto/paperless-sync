@@ -16,9 +16,12 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\IRequest;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use RuntimeException;
 
 final class SettingsControllerTest extends TestCase {
@@ -67,6 +70,45 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame([], $this->settings);
 	}
 
+	public function testSavingTheSameUrlWithoutATokenTestsTheStoredOne(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test', 'secret-token');
+
+		$response = $this->controller->save(self::validSettings() + ['batch_size' => 30]);
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(30, $this->settings['batch_size']);
+		self::assertSame('secret-token', $this->token);
+	}
+
+	/**
+	 * Whoever can change the settings, with the session of an administrator for example, must not
+	 * receive the stored token by pointing the URL at a server of their own.
+	 */
+	public function testStoredTokenNeverGoesToANewUrl(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$stored = $this->settings;
+		$this->paperless->expects(self::never())->method('testConnection');
+		$this->storage->expects(self::never())->method('test');
+
+		$response = $this->controller->save(['paperless_url' => 'https://attacker.example.test'] + self::validSettings());
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Enter the API token again to connect to another Paperless URL.'], $response->getData());
+		self::assertSame($stored, $this->settings);
+		self::assertSame('secret-token', $this->token);
+	}
+
+	public function testANewUrlWorksWithTheTokenEnteredAgain(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test/paperless', 'secret-token');
+
+		$response = $this->controller->save(['paperless_url' => 'https://paperless.example.test/paperless/'] + self::validSettings(), 'secret-token');
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame('https://paperless.example.test/paperless', $this->settings['paperless_url']);
+	}
+
 	public function testSettingsThatPaperlessRejectsAreNotSaved(): void {
 		$this->paperless->method('testConnection')->willThrowException(new RuntimeException('Paperless could not query /api/documents/: HTTP 401.'));
 
@@ -79,6 +121,24 @@ final class SettingsControllerTest extends TestCase {
 		);
 		self::assertSame([], $this->settings);
 		self::assertSame('', $this->token);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function changesOfTheConnection(): array {
+		return [
+			'save' => ['save'],
+			'disconnect' => ['reset'],
+		];
+	}
+
+	/**
+	 * Saving decides where the token goes, and disconnecting removes it, so Nextcloud asks for the
+	 * password of the administrator first, unless it was confirmed in the last 30 minutes. A
+	 * session that someone else took over is not enough.
+	 */
+	#[DataProvider('changesOfTheConnection')]
+	public function testChangesOfTheConnectionNeedThePassword(string $method): void {
+		self::assertCount(1, (new ReflectionMethod(SettingsController::class, $method))->getAttributes(PasswordConfirmationRequired::class));
 	}
 
 	public function testResetReturnsTheDefaults(): void {

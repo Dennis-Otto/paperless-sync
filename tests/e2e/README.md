@@ -10,11 +10,11 @@ config:
 ---
 flowchart TB
     accTitle: What the end-to-end tests run
-    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs and screenshots.mjs against Nextcloud.
+    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs and screenshots.mjs against Nextcloud.
 
     run["run.sh"]
     subgraph compose ["Docker Compose project"]
-        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>screenshots.mjs"]
+        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>settings.mjs,<br>screenshots.mjs"]
         nextcloud["Nextcloud<br>this checkout<br>as a custom app"]
         mock["Paperless mock<br>mock_server.py"]
     end
@@ -44,7 +44,7 @@ Both run in Git Bash on Windows too, with Docker Desktop.
 
 The scenario verifies:
 
-- administrator configuration and server-side token handling
+- administrator configuration and server-side token handling, in the browser too: saving after Nextcloud asks for the password, and a new Paperless URL, which needs the token again, see [Accessibility](#accessibility)
 - dry-run behavior without filesystem mutations
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again
@@ -54,6 +54,7 @@ The scenario verifies:
 - successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs
+- a run that can't reach Paperless, at the very end, whose error the log of Nextcloud holds without the token
 - accessibility of the administration settings and the run report, see [Accessibility](#accessibility)
 
 Optional environment variables:
@@ -126,6 +127,8 @@ Every push to `main`, a run by hand and every night run all versions in any case
 ## Accessibility
 
 At the end of the scenario, `accessibility.mjs` checks the pages of the app in Chromium with [axe-core](https://github.com/dequelabs/axe-core) against WCAG 2.1 at levels A and AA, in the light and the dark theme of Nextcloud: the administration settings with every section open, and the report of a dry-run over a larger archive of the mock, whose list of changes scrolls. It signs in through the login form and looks only into `#paperless-sync-settings`, the element that holds the markup of `templates/`, `js/` and `css/`, so that what Nextcloud draws around it doesn't count. A serious or critical violation fails the suite; the others are listed in the log.
+
+Then `settings.mjs` uses the settings as an administrator does. Another Paperless URL must ask for the token again, and the saved one must not. Right after the login, Nextcloud counts the password as confirmed, so the check answers the first save as Nextcloud does after 30 minutes: the page must show Nextcloud's dialog for the password, confirm it, and save the same settings again.
 
 The browser runs in the image of Playwright that `run.sh` names, inside the network of the Compose project, and reaches Nextcloud as `http://nextcloud`; the suite turns off the first-run wizard of Nextcloud, which would cover the pages. `package.json` and `package-lock.json` pin axe-core and playwright-core. Keep playwright-core at the version of the image: Renovate updates both together (`.github/renovate.json5`), and `scripts/check-project.sh` compares them.
 
