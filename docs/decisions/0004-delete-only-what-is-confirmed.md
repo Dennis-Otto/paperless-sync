@@ -2,10 +2,11 @@
 
 - Status: accepted
 - Date: 2026-10-08
+- Updated: 2026-10-13, with what makes a scan complete and what takes a place in the batch
 
 ## Context
 
-A sync that mirrors deletions can destroy an archive when the source answers wrongly once: a failing request, an empty page, a wrong token.
+A sync that mirrors deletions can destroy an archive when the source answers wrongly once: a failing request, an empty page, a wrong token. Paperless lists its documents page by page, so a page that comes back short or empty, or a document added or deleted while the run reads the pages, leaves documents out of a scan without any error. And a run that cannot write, because the quota is full or the storage read-only, would download every pending document again in every run.
 
 ## Options
 
@@ -14,8 +15,12 @@ A sync that mirrors deletions can destroy an archive when the source answers wro
 
 ## Decision
 
-Option 2. A document in the trash of Paperless moves its copy to the `_Gelöscht` folder, or keeps it in place, as configured. A document that is gone without the trash waits for the configured number of complete scans. Permanent deletion is off by default. Only a copy that is still there is moved or deleted, and every move and deletion counts against the batch size; an error concerns only its own document.
+Option 2. A document in the trash of Paperless moves its copy to the `_Gelöscht` folder, or keeps it in place, as configured. A document that is gone without the trash waits for the configured number of complete scans in a row. Permanent deletion is off by default. Only a copy that is still there is moved or deleted, and every move and deletion counts against the batch size; an error concerns only its own document.
+
+A scan is complete only when every page carries the same count of Paperless, every page but the last is full, and the run received as many documents with different IDs as Paperless listed. The run reads the documents in the order of their IDs, so that a new document joins the last page instead of shifting the others. When the scan of the documents or of the trash is incomplete, the run counts no document as missing: no missing scan, no move, no deletion. Its report says `SCAN INCOMPLETE`, and the Nextcloud log has a warning. A document that a scan lists again starts its count of missing scans anew.
+
+Every export or move of a document that a run tries takes its place in the batch, also one that fails, so that a run that cannot write downloads no more documents than the batch size allows. A document whose last change failed waits behind the others, the one that failed longest ago first, so that documents that keep failing cannot hold up the rest. When conflicts are skipped, a file in the way is reported before the download. A full quota, a read-only or an unavailable storage ends the exports of the run at its first failure.
 
 ## Consequences
 
-A wrong answer of Paperless can't empty the archive in one run, and a deleted document can be restored from the deleted folder. Mirroring a large deletion takes several runs.
+A wrong answer of Paperless can't empty the archive in one run, and a deleted document can be restored from the deleted folder. Mirroring a large deletion takes several runs, and only runs whose scans are complete count towards it. One document deleted and another added while the same scan reads the pages keep the count of Paperless, so that scan may still miss a document; more than one complete scan in a row, three by default, covers this rare case.

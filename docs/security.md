@@ -10,7 +10,7 @@ What Paperless Sync protects, what it trusts and which risks remain. [SECURITY.m
 - The Paperless API token is stored in Nextcloud's credentials manager and never leaves the server: no response, page or message of the app contains it.
 - Synchronization stays off until an administrator has saved a configuration that works with Paperless and Nextcloud. A dry run changes nothing.
 - The app writes only below the configured base folder of the target user, through Nextcloud's file API. Every path is built from cleaned metadata and can't leave that folder.
-- Nothing is deleted for good unless an administrator turns permanent deletion on; even then, only after the document was missing from Paperless and its trash for the configured number of complete runs.
+- Nothing is deleted for good unless an administrator turns permanent deletion on; even then, only after the document was missing from Paperless and its trash for the configured number of complete runs in a row. A run whose list of Paperless came back incomplete counts no document as missing.
 - Requests to Paperless go through Nextcloud's HTTP client, which checks TLS certificates.
 
 ## What is protected
@@ -51,9 +51,10 @@ Each numbered arrow crosses one of the boundaries below; the app checks whatever
 | Metadata of Paperless or a setting leads a path out of the base folder | The path template accepts only known variables; every part is cleaned and `.`, `..` and empty parts are rejected | `testRejectsTraversalAndUnknownVariables`, `testCleansComponents` and `testRelativePathMustNotContainEmptyComponents` in `tests/Unit/Service/PathTemplateServiceTest.php` |
 | A malformed or hostile answer of Paperless | JSON is checked for its shape and types; a document without a numeric ID fails the run instead of writing a file | `testInvalidMetadataIsRejected` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `testDocumentWithoutAValidIdFailsTheRun` in `tests/Unit/Service/SyncServiceTest.php` |
 | Files are deleted by mistake | Permanent deletion is off by default; a missing document waits for the configured number of complete runs; a dry run never counts | `testMissingDocumentWaitsForTheConfiguredRuns` and `testDryRunDoesNotCountMissingRuns` in `tests/Unit/Service/SyncServiceTest.php` |
+| A short or empty page of Paperless, or a list that changes during a scan, makes existing documents look deleted | The documents are read in the order of their IDs; a scan counts only when every page came back full with the same count and every listed document arrived; after an incomplete scan, no document counts as missing | `testScanThatMayHaveMissedDocumentsIsIncomplete` in `tests/Unit/Service/PaperlessApiServiceTest.php`, `testIncompleteScanCountsNoDocumentAsMissing` in `tests/Unit/Service/SyncServiceTest.php`, the step `scan-incomplete` of `tests/e2e/run.sh` |
 | Text from Paperless runs as script on the settings page | The template escapes every value, and the script of the page writes text only as text | `templates/settings.php`, `js/settings.js` |
 | Two runs at once break the state | A lock lets only one run at a time, and the background job never runs in parallel | `testRunWhileAnotherRunIsActiveIsAConflict`, `testCronChecksEveryFiveMinutesAndNeverRunsTwice` |
-| A slow or huge Paperless blocks Nextcloud | Timeouts for every request and the batch size for the changes of one run | `testBatchSizeLimitsTheChangesOfOneRun` in `tests/Unit/Service/SyncServiceTest.php` |
+| A slow or huge Paperless, or a storage that can't be written, ties up Nextcloud | Timeouts for every request; the batch size for the changes of one run, failed ones included; the first write that a full, read-only or unavailable storage refuses ends the exports of the run | `testBatchSizeLimitsTheChangesOfOneRun`, `testFailedExportsTakeTheirPlaceInTheBatch` and `testStorageThatCannotBeWrittenEndsTheExportsOfTheRun` in `tests/Unit/Service/SyncServiceTest.php` |
 
 The Docker end-to-end tests run the app in real Nextcloud containers of every supported version against a mock of the Paperless API ([tests/e2e/README.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md)).
 

@@ -31,7 +31,7 @@ The scenario verifies:
 - archive export through the Paperless download API
 - metadata-only moves without downloading the PDF again
 - Paperless inbox-tag exclusion and empty-folder pruning
-- Paperless trash mirroring and guarded permanent deletion
+- Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete
 - successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs

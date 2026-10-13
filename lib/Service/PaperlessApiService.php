@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Service;
 
 use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\PaperlessScan;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\ITempManager;
@@ -37,12 +38,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$this->requestPage($url, $token, '/api/documents/', ['page' => 1, 'page_size' => 1]);
 	}
 
-	public function documents(): array {
-		return $this->getAll('/api/documents/');
+	public function documents(): PaperlessScan {
+		// Ordered by their IDs, a document added during the scan joins the last page instead of
+		// shifting the pages that the run has not read yet.
+		return $this->scan('/api/documents/', ['ordering' => 'id']);
 	}
 
-	public function trash(): array {
-		return $this->getAll('/api/trash/');
+	public function trash(): PaperlessScan {
+		// Paperless orders its trash on its own; the check of the scan finds the pages that shifted.
+		return $this->scan('/api/trash/');
 	}
 
 	public function correspondents(): array {
@@ -249,17 +253,45 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	/** @return list<array<string, mixed>> */
 	private function getAll(string $path): array {
+		return $this->scan($path)->documents;
+	}
+
+	/**
+	 * Every page of a list. The scan is complete only when every page carries the same count of
+	 * Paperless, every page before the last is full, and the run received as many documents with
+	 * different IDs as Paperless listed: a page that came back short or empty, or a list that
+	 * changed while the run read it, may have left documents out.
+	 *
+	 * @param array<string, string> $query
+	 */
+	private function scan(string $path, array $query = []): PaperlessScan {
 		$url = $this->configService->get()->paperlessUrl;
 		$token = $this->configService->getToken();
-		$first = $this->requestPage($url, $token, $path, ['page' => 1, 'page_size' => self::PAGE_SIZE]);
-		$results = $first['results'];
-		$pages = max(1, (int)ceil($first['count'] / self::PAGE_SIZE));
-		for ($page = 2; $page <= $pages; ++$page) {
-			$next = $this->requestPage($url, $token, $path, ['page' => $page, 'page_size' => self::PAGE_SIZE]);
-			array_push($results, ...$next['results']);
+		$results = [];
+		$ids = [];
+		$complete = true;
+		$listed = 0;
+		$pages = 1;
+		for ($page = 1; $page <= $pages; ++$page) {
+			$next = $this->requestPage($url, $token, $path, $query + ['page' => $page, 'page_size' => self::PAGE_SIZE]);
+			if ($page === 1) {
+				$pages = max(1, (int)ceil($next['count'] / self::PAGE_SIZE));
+			} elseif ($next['count'] !== $listed) {
+				$complete = false;
+			}
+			$listed = $next['count'];
+			if (!$next['paginated'] || ($page < $pages && count($next['results']) !== self::PAGE_SIZE)) {
+				$complete = false;
+			}
+			foreach ($next['results'] as $result) {
+				$results[] = $result;
+				if (isset($result['id']) && (is_int($result['id']) || is_string($result['id']))) {
+					$ids[(string)$result['id']] = true;
+				}
+			}
 		}
 
-		return $results;
+		return new PaperlessScan($results, $complete && count($ids) === $listed && count($results) === $listed, $listed);
 	}
 
 	/**
@@ -281,8 +313,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
+	 * The page of a list, with the count of Paperless, and whether it was a page of a paginated list
+	 * of Paperless: an object with the count and the results.
+	 *
 	 * @param array<string, int|string> $query
-	 * @return array{count: int, results: list<array<string, mixed>>}
+	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool}
 	 * @psalm-suppress MixedAssignment
 	 */
 	private function requestPage(string $url, string $token, string $path, array $query): array {
@@ -318,9 +353,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 		}
 
+		$counted = isset($data['count']) && is_numeric($data['count']);
+
 		return [
-			'count' => isset($data['count']) && is_numeric($data['count']) ? (int)$data['count'] : count($results),
+			'count' => $counted ? (int)$data['count'] : count($results),
 			'results' => $results,
+			'paginated' => $counted && isset($data['results']) && is_array($data['results']),
 		];
 	}
 

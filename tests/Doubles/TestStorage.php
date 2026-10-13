@@ -20,6 +20,8 @@ use RuntimeException;
 final class TestStorage implements NextcloudStorageInterface {
 	/** @var array<string, string> */
 	public array $files = [];
+	/** The failure of every write of a document, such as of a full quota or a read-only storage. */
+	public ?\Throwable $writeException = null;
 	public ?\Throwable $writeTextException = null;
 	public ?\Throwable $moveException = null;
 	public ?\Throwable $deleteException = null;
@@ -38,6 +40,9 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function writeAtomic(string $userId, string $path, $source, string $conflictMode): void {
+		if ($this->writeException !== null) {
+			throw $this->writeException;
+		}
 		if ($conflictMode === 'skip' && isset($this->files[$path])) {
 			throw new RuntimeException('conflict');
 		}

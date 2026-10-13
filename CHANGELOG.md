@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Bug fixes
+
+- A run no longer counts a document as missing when Paperless answered a page of its list incompletely, such as an empty page from a proxy, or when documents were added or deleted while the run read the pages. The report says `SCAN INCOMPLETE`, the Nextcloud log has a warning, and the next complete scan carries on. Before, a document that still existed in Paperless could move to the deleted folder, or be deleted when direct deletion is on.
+- A document that Paperless lists again starts its count of missing scans anew, also when its export fails or waits for the next run, so that only scans in a row count.
+- Every export that a run tries counts against the batch size, also one that fails, and a document whose export failed waits behind the others. Before, a run that couldn't write, against a full quota or a read-only storage for example, downloaded every pending document again in every run and failed on each one.
+- When the quota of the target user is full, or its storage is read-only or unavailable, a run stops exporting at the first failure and reports `EXPORT STOPPED`; the other documents follow in the next run.
+- With the conflict policy *Skip and report conflict*, a file in the way is reported before the document is downloaded, and a dry-run reports the conflict too. Before, the run downloaded the document in vain.
+
 ## [0.1.10](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.9...v0.1.10) (2026-10-08)
 
 ### Bug fixes

@@ -47,6 +47,15 @@ elif mode == "excluded":
 elif mode == "trash":
     expect("movedToTrash", 1)
     expect("errors", 0)
+elif mode == "scan-incomplete":
+    expect("permanentlyDeleted", 0)
+    expect("movedToTrash", 0)
+    expect("errors", 0)
+    actions = [str(action) for action in payload.get("actions", [])]
+    if not any(action.startswith("SCAN INCOMPLETE:") for action in actions):
+        raise AssertionError(f"The incomplete scan is not reported: {payload!r}")
+    if any(action.startswith(("WAIT ", "MISSING ", "DELETE ")) for action in actions):
+        raise AssertionError(f"An incomplete scan counted a document as missing: {payload!r}")
 elif mode == "missing-wait":
     expect("permanentlyDeleted", 0)
     if not any(str(action).startswith("WAIT P123:") for action in payload.get("actions", [])):

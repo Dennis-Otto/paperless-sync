@@ -20,6 +20,9 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use OCP\Files\NotEnoughSpaceException;
+use OCP\Files\NotPermittedException;
+use OCP\Files\StorageNotAvailableException;
 use OCP\Lock\ILockingProvider;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -214,6 +217,118 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayHasKey(124, $this->state->exports);
 	}
 
+	public function testFailedExportsTakeTheirPlaceInTheBatch(): void {
+		$this->configService->save(['batch_size' => 5]);
+		$this->storage->writeException = new RuntimeException('The file name is not allowed');
+
+		$first = $this->exportDocuments($this->documents(50));
+
+		self::assertSame(5, $this->paperless->downloads, 'A run that cannot write downloads no more documents than the batch size allows.');
+		self::assertSame(5, $first->errors);
+		self::assertSame(45, $first->skipped);
+		self::assertSame('The file name is not allowed', $this->state->exports[5]['last_error']);
+		self::assertArrayNotHasKey(6, $this->state->exports);
+
+		$second = $this->service->run();
+
+		self::assertSame(10, $this->paperless->downloads);
+		self::assertSame(45, $second->skipped);
+		self::assertSame(array_map(static fn (int $id): string => "ERROR: P{$id}: The file name is not allowed", range(6, 10)), $second->actions, 'The documents that failed wait behind the others.');
+	}
+
+	public function testDocumentWhoseExportFailedWaitsBehindTheOthers(): void {
+		$this->storage->writeException = new RuntimeException('The file name is not allowed');
+		$this->exportDocument();
+		$this->storage->writeException = null;
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->documents[] = $this->document(124);
+		$this->paperless->contents[124] = '%PDF-124';
+
+		$first = $this->service->run();
+
+		self::assertSame(['EXPORT P124: ' . $this->archivePath(124)], $first->actions);
+		self::assertSame(1, $first->skipped);
+
+		$second = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $second->actions);
+		self::assertNull($this->state->exports[123]['last_error']);
+	}
+
+	public function testDocumentsThatKeepFailingTakeTurns(): void {
+		$this->configService->save(['batch_size' => 2]);
+		$this->storage->writeException = new RuntimeException('The file name is not allowed');
+		$this->exportDocuments($this->documents(4));
+		$this->service->run();
+		// The first two failed in an earlier run than the other two.
+		foreach ([1 => 100, 2 => 100, 3 => 200, 4 => 200] as $id => $lastSeen) {
+			$this->state->exports[$id]['last_seen'] = $lastSeen;
+		}
+
+		$third = $this->service->run();
+
+		self::assertSame(['ERROR: P1: The file name is not allowed', 'ERROR: P2: The file name is not allowed'], $third->actions);
+
+		$fourth = $this->service->run();
+
+		self::assertSame(['ERROR: P3: The file name is not allowed', 'ERROR: P4: The file name is not allowed'], $fourth->actions);
+	}
+
+	/** @return array<string, array{\Throwable}> */
+	public static function storageFailures(): array {
+		return [
+			'full quota' => [new NotEnoughSpaceException('Not enough free space')],
+			'read-only storage' => [new NotPermittedException('Could not create path')],
+			'unavailable external storage' => [new class('The storage is not available') extends StorageNotAvailableException {
+				// Nextcloud's constructor translates a hint, which needs a running server.
+				public function __construct(string $message) {
+					\Exception::__construct($message);
+				}
+			}],
+		];
+	}
+
+	#[DataProvider('storageFailures')]
+	public function testStorageThatCannotBeWrittenEndsTheExportsOfTheRun(\Throwable $failure): void {
+		$this->storage->writeException = $failure;
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Nextcloud cannot store files in the archive, so this run exports no further documents: {error}',
+			['error' => $failure->getMessage(), 'exception' => $failure],
+		);
+
+		$report = $this->exportDocuments($this->documents(3));
+
+		$error = $failure->getMessage();
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame(1, $report->errors);
+		self::assertSame(2, $report->skipped);
+		self::assertSame([
+			"ERROR: P1: {$error}",
+			'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.',
+		], $report->actions);
+		self::assertSame($error, $this->state->exports[1]['last_error']);
+		self::assertArrayNotHasKey(2, $this->state->exports);
+	}
+
+	public function testStorageThatCannotBeWrittenStillRemovesExcludedCopies(): void {
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->configService->save(['excluded_tags' => 'Privat']);
+		$this->paperless->tagInfo = ['names' => ['9' => 'Privat'], 'inbox' => []];
+		$this->paperless->documents = [$this->document(122), $this->document(123), $this->document(124)];
+		$this->paperless->documents[2]['tags'] = [9];
+		$this->paperless->contents[122] = '%PDF-122';
+		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->storage->writeException = new NotEnoughSpaceException('Not enough free space');
+
+		$report = $this->service->run();
+
+		self::assertSame(3, $this->paperless->downloads, 'Only the first document of this run is downloaded.');
+		self::assertSame(1, $report->removedExcluded, 'Removing a copy frees space, so it goes on.');
+		self::assertArrayNotHasKey($this->archivePath(124), $this->storage->files);
+		self::assertSame(1, $report->errors);
+		self::assertSame(2, $report->skipped, 'The excluded document and the export that waits for the next run.');
+	}
+
 	public function testDocumentWithoutAValidIdFailsTheRun(): void {
 		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
 
@@ -266,7 +381,37 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame(1, $report->errors);
 		self::assertSame('a file of the user', $this->storage->files[self::EXPORTED_PATH]);
-		self::assertSame('conflict', $this->state->exports[123]['last_error']);
+		self::assertSame('Nextcloud file conflict at ' . self::EXPORTED_PATH . '.', $this->state->exports[123]['last_error']);
+		self::assertSame(0, $this->paperless->downloads, 'The file stays, so the download would be in vain.');
+	}
+
+	public function testMoveOntoAnExistingFileIsAConflictWhenConflictsAreSkipped(): void {
+		$this->exportDocument();
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		$this->storage->files[$newPath] = 'a file of the user';
+
+		$report = $this->service->run();
+
+		self::assertSame(["ERROR: P123: Nextcloud file conflict at {$newPath}."], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content', $newPath => 'a file of the user'], $this->storage->files);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+	}
+
+	public function testDryRunReportsAConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->storage->files[self::EXPORTED_PATH] = 'a file of the user';
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $report->actions);
+		self::assertSame(0, $report->exported);
+		self::assertSame([], $this->state->exports);
 	}
 
 	public function testImportsInboxAndDeletesSourceAfterSuccessfulTask(): void {
@@ -937,6 +1082,76 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $this->state->exports[123]['missing_runs']);
 	}
 
+	public function testDocumentThatIsListedAgainStartsItsCountOfMissingScansAnew(): void {
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->service->run();
+		$this->paperless->documents = [$this->document()];
+		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->storage->writeException = new RuntimeException('The file name is not allowed');
+
+		$this->service->run(true);
+		self::assertSame(1, $this->state->exports[123]['missing_runs'], 'A dry run changes no state.');
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->errors);
+		self::assertSame(0, $this->state->exports[123]['missing_runs'], 'Only scans in a row without the document count, also when its export fails.');
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function incompleteScans(): array {
+		return [
+			'documents' => ['documentsListed', "SCAN INCOMPLETE: Paperless's list of documents came back incomplete or changed while the run read it (1 of 2 received); no document counts as missing in this run."],
+			'trash' => ['trashListed', "SCAN INCOMPLETE: Paperless's list of trashed documents came back incomplete or changed while the run read it (0 of 2 received); no document counts as missing in this run."],
+		];
+	}
+
+	#[DataProvider('incompleteScans')]
+	public function testIncompleteScanCountsNoDocumentAsMissing(string $listed, string $action): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$files = $this->storage->files;
+		$this->paperless->documents = [$this->document(124)];
+		$this->paperless->{$listed} = 2;
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless\'s list of {list} came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.',
+			self::callback(static fn (array $context): bool => $context['listed'] === 2),
+		);
+
+		$report = $this->service->run();
+
+		self::assertSame([$action], $report->actions);
+		self::assertSame($files, $this->storage->files);
+		self::assertSame(0, $this->state->exports[123]['missing_runs']);
+		self::assertSame('active', $this->state->exports[123]['state']);
+		self::assertSame(0, $report->permanentlyDeleted);
+	}
+
+	public function testCompleteScanAfterAnIncompleteOneCountsTheMissingDocument(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->paperless->documents = [$this->document(124)];
+		$this->paperless->documentsListed = 2;
+		$this->service->run();
+		$this->paperless->documentsListed = null;
+
+		$report = $this->service->run();
+
+		self::assertSame(['MISSING P123: ' . $this->deletedToday()], $report->actions);
+		self::assertSame('missing', $this->state->exports[123]['state']);
+	}
+
+	public function testDryRunReportsAnIncompleteScan(): void {
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->paperless->documentsListed = 1;
+
+		$report = $this->service->run(true);
+
+		self::assertSame(["SCAN INCOMPLETE: Paperless's list of documents came back incomplete or changed while the run read it (0 of 1 received); no document counts as missing in this run."], $report->actions);
+	}
+
 	public function testMissingDocumentMovesToTheDeletedFolderAfterTheGraceRuns(): void {
 		$this->configService->save(['missing_grace_runs' => 1]);
 		$this->exportDocument();
@@ -1220,6 +1435,16 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documentTypes = ['7' => 'Rechnung'];
 
 		return $this->service->run();
+	}
+
+	/** @return list<array<string, mixed>> the documents with the IDs 1 to $count */
+	private function documents(int $count): array {
+		return array_map(fn (int $id): array => $this->document($id), range(1, $count));
+	}
+
+	/** The path of the copy of a document in the archive. */
+	private function archivePath(int $id): string {
+		return self::ARCHIVE . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
 	/** The path of the copy of a document that a run of today moves to the deleted folder. */

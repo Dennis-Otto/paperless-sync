@@ -296,6 +296,13 @@ assert_json trash "${TMP_DIR}/trash.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
 assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
 
+# A page that comes back empty while its count still lists the document counts nothing as missing,
+# so the document waits for its first missing run in the next step.
+control /control/scenario/incomplete >/dev/null
+sync_run false "${TMP_DIR}/scan-incomplete.json"
+assert_json scan-incomplete "${TMP_DIR}/scan-incomplete.json"
+assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+
 control /control/scenario/empty >/dev/null
 sync_run false "${TMP_DIR}/missing-wait.json"
 assert_json missing-wait "${TMP_DIR}/missing-wait.json"
