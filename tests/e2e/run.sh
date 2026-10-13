@@ -146,6 +146,40 @@ assert_dav_file() {
 	grep --fixed-strings "${needle}" "${output}" >/dev/null
 }
 
+# The ID of a file in Nextcloud, to which its shares, comments, tags, favorites and versions belong.
+file_id() {
+	user="$1"
+	path="$2"
+	curl --fail-with-body --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 0' \
+		--header 'Content-Type: application/xml' \
+		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' \
+		"${DAV_BASE}/${user}/${path}" \
+		| grep -oE '<oc:fileid>[0-9]+</oc:fileid>' | grep -oE '[0-9]+'
+}
+
+# The file of the document keeps the ID of its first export through every change of the document.
+assert_file_id() {
+	path="$1"
+	actual="$(file_id sync-target "${path}")"
+	if [[ "${actual}" != "${FILE_ID}" ]]; then
+		echo "The file has the ID ${actual} instead of ${FILE_ID}, which loses its shares, comments and versions: ${path}" >&2
+		exit 1
+	fi
+}
+
+# The entries of the versions app for the file of the document.
+version_count() {
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		"${BASE_URL}/remote.php/dav/versions/sync-target/versions/${FILE_ID}" \
+		| grep -oE '<d:response>' | wc -l
+}
+
 INITIAL_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20%5BP123%5D.pdf'
 RENAMED_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 TRASH_PATH='Documents/Paperless/Archive/_Deleted/2026-08-27/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
@@ -305,12 +339,14 @@ assert_dav_missing sync-target "${INITIAL_PATH}"
 sync_run false "${TMP_DIR}/export.json"
 assert_json export "${TMP_DIR}/export.json"
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
 
 control /control/scenario/renamed >/dev/null
 sync_run false "${TMP_DIR}/move.json"
 assert_json move "${TMP_DIR}/move.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
 # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0: with either, a change
 # of the metadata alone moves the file, here back and forth, without a download.
 control /control/checksum/md5 >/dev/null
@@ -323,11 +359,52 @@ control /control/scenario/renamed >/dev/null
 sync_run false "${TMP_DIR}/move-md5-back.json"
 assert_json move "${TMP_DIR}/move-md5-back.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
 control /control/checksum/sha256 >/dev/null
 "${COMPOSE[@]}" exec -T paperless-mock python -c \
 	"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())" \
 	> "${TMP_DIR}/mock-after-move.json"
 assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
+
+# A new content of the document updates its file in place, in a run by hand: the file keeps its
+# ID, and a share of it shows the new content.
+curl --fail-with-body --silent --show-error \
+	--user "sync-target:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'path=/Documents/Paperless/Archive/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf' \
+	--data-urlencode 'shareType=0' \
+	--data-urlencode 'shareWith=e2e-other' \
+	--output /dev/null \
+	"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123.'
+control /control/content/revised >/dev/null
+sync_run false "${TMP_DIR}/revised.json"
+assert_json export "${TMP_DIR}/revised.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+assert_file_id "${RENAMED_PATH}"
+assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
+# In the background job, as system cron starts it, the versions app of Nextcloud also keeps the
+# previous content as a version. The job runs when synchronization is enabled and the interval
+# since the last run has passed, here as if that run was an hour ago.
+VERSIONS_BEFORE="$(version_count)"
+control /control/content/original >/dev/null
+HOUR_AGO="$(($(date +%s) - 3600))"
+for key in status_last_started status_last_completed status_last_ended; do
+	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
+done
+occ config:app:set paperless_sync sync_enabled --type=boolean --value=1 >/dev/null
+JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | grep -oE '"id":"?[0-9]+' | grep -oE '[0-9]+')"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+occ config:app:set paperless_sync sync_enabled --type=boolean --value=0 >/dev/null
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${RENAMED_PATH}"
+VERSIONS_AFTER="$(version_count)"
+if ((VERSIONS_AFTER != VERSIONS_BEFORE + 1)); then
+	echo "The versions app has ${VERSIONS_AFTER} entries for the file after the update in the background job instead of $((VERSIONS_BEFORE + 1))." >&2
+	exit 1
+fi
 
 control /control/scenario/excluded >/dev/null
 sync_run false "${TMP_DIR}/excluded.json"
@@ -522,4 +599,4 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
+echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
