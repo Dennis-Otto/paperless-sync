@@ -387,13 +387,15 @@ assert_file_id "${RENAMED_PATH}"
 assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
 # In the background job, as system cron starts it, the versions app of Nextcloud also keeps the
 # previous content as a version. The job runs when synchronization is enabled and the interval
-# since the last run has passed, here as if that run was an hour ago.
+# since the last run has passed, here as if that run was an hour ago. A dry-run changes nothing,
+# so the one right before the job doesn't push the schedule back.
 VERSIONS_BEFORE="$(version_count)"
 control /control/content/original >/dev/null
 HOUR_AGO="$(($(date +%s) - 3600))"
-for key in status_last_started status_last_completed status_last_ended; do
+for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
 	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
 done
+sync_run true "${TMP_DIR}/dry-run-before-job.json"
 occ config:app:set paperless_sync sync_enabled --type=boolean --value=1 >/dev/null
 JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | grep -oE '"id":"?[0-9]+' | grep -oE '[0-9]+')"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null

@@ -1,0 +1,17 @@
+flowchart TB
+    accTitle: When the background job starts a run
+    accDescr: Nextcloud's cron starts the background job of the app every five minutes at most. With scheduled synchronization off, it does nothing. Otherwise it takes the start or the end of the last run that synchronized, a scheduled run or one by hand, whichever is later, and a dry-run only while it is still running. When the interval has passed since then, the job starts a run; otherwise it waits for the next background job.
+
+    cron["Nextcloud's cron starts the job<br>every 5 minutes at most"] --> enabled{"Scheduled<br>synchronization on?"}
+    enabled -->|no| off["Nothing to do"]
+    enabled -->|yes| last["The start or the end of the last run<br>that synchronized, scheduled or by hand,<br>whichever is later"]
+    last --> dryrun["A dry-run counts only<br>while it is still running"]
+    dryrun --> passed{"Has the interval<br>passed since then?"}
+    passed -->|no| wait["Wait for the next<br>background job"]
+    passed -->|yes| run["Start a run"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class cron,enabled,last,dryrun,passed check
+    class off,wait kept
+    class run changed

@@ -27,7 +27,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 ## The settings, section by section
 
-The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps.
+The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps. The *Help* link of each section leads to its part of this guide.
 
 **1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses.
 
@@ -36,7 +36,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Connection and ownership: Paperless URL, Paperless API token, Nextcloud target user ID and base folder" src="images/settings-connection-light.png">
 </picture>
 
-**2 · Schedule and modules:** the scheduled synchronization, the export to Nextcloud and the import from the inbox, each on its own, the interval, and the most changes of one run.
+**2 · Schedule and modules:** the scheduled synchronization, the export to Nextcloud and the import from the inbox, each on its own, the [interval](guide.md#background-jobs), from 5 minutes to a day, and the most changes of one run.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-schedule-dark.png">

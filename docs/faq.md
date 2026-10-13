@@ -79,7 +79,7 @@ About the number of documents divided by the batch size, times the interval: wit
 
 ### How often does it run?
 
-At the interval of the settings, 5 minutes by default, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, so a shorter interval acts as five minutes, and only when its system cron runs. A run that is still busy holds back the next one. *Synchronize now* starts a run at once, and a dry-run shows what a run would change without changing it.
+At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* starts a run at once, and the interval then counts from it. A dry-run shows what a run would change without changing it, and doesn't move the next run.
 
 ### Can I connect several Paperless instances?
 
