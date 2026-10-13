@@ -21,6 +21,10 @@ use PHPUnit\Framework\MockObject\MockObject;
 trait InMemoryConfiguration {
 	/** @var array<string, bool|int|string> */
 	private array $settings = [];
+	/** @var array<string, true> the keys stored as lazy, which Nextcloud reads only when asked for lazy keys */
+	private array $lazyKeys = [];
+	/** @var array<string, true> the keys read as lazy, which makes Nextcloud load every lazy value */
+	private array $lazyReads = [];
 	/** What the credentials store holds, as it gives it back: decoded from JSON. */
 	private mixed $credential = null;
 
@@ -45,11 +49,22 @@ trait InMemoryConfiguration {
 	/** @return IAppConfig&MockObject */
 	private function appConfig(): IAppConfig {
 		$mock = $this->createMock(IAppConfig::class);
-		$mock->method('getValueString')->willReturnCallback(fn (string $app, string $key, string $default = ''): string => (string)($this->settings[$key] ?? $default));
+		$mock->method('getValueString')->willReturnCallback(function (string $app, string $key, string $default = '', bool $lazy = false): string {
+			if ($lazy) {
+				$this->lazyReads[$key] = true;
+			}
+
+			return isset($this->lazyKeys[$key]) && !$lazy ? $default : (string)($this->settings[$key] ?? $default);
+		});
 		$mock->method('getValueBool')->willReturnCallback(fn (string $app, string $key, bool $default = false): bool => (bool)($this->settings[$key] ?? $default));
 		$mock->method('getValueInt')->willReturnCallback(fn (string $app, string $key, int $default = 0): int => (int)($this->settings[$key] ?? $default));
-		$mock->method('setValueString')->willReturnCallback(function (string $app, string $key, string $value): bool {
+		$mock->method('setValueString')->willReturnCallback(function (string $app, string $key, string $value, bool $lazy = false): bool {
 			$this->settings[$key] = $value;
+			if ($lazy) {
+				$this->lazyKeys[$key] = true;
+			} else {
+				unset($this->lazyKeys[$key]);
+			}
 			return true;
 		});
 		$mock->method('setValueBool')->willReturnCallback(function (string $app, string $key, bool $value): bool {

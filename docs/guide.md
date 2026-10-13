@@ -27,7 +27,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 ## The settings, section by section
 
-The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows the state and the end of the last run; below them, the buttons save the settings after a test of the connection, start a dry-run or a run, and disconnect Paperless.
+The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, the buttons save the settings after a test of the connection, start a dry-run or a run, and disconnect Paperless.
 
 **1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, and the base folder in the files of that user.
 
@@ -66,11 +66,22 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 ## The report of a run
 
-A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and for a dry-run a line for every file that a run would write, move or delete. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
+A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">
   <img alt="The report of a dry-run: the counts of exported, moved, trashed and excluded documents and of finished imports, and a list with one line for every file change" src="images/report-light.png">
 </picture>
+
+## Status, report and log
+
+--8<-- "README.md:status"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/status-error-dark.png">
+  <img alt="The status of Paperless Sync after a run with an error: the state Completed with errors in red, the times of the last run, of the last successful run and of the next scheduled run, and below them a box that names the document whose download failed" src="images/status-error-light.png">
+</picture>
+
+--8<-- "README.md:status-report"
 
 --8<-- "README.md:help"

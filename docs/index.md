@@ -62,7 +62,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 
     ---
 
-    A dry run lists what a run would change without changing anything. Status and error summaries show what the last run did.
+    A dry run lists what a run would change without changing anything. The status, the errors and the report of the last run, also of a scheduled one, stay on the settings page.
 
 - :material-key-chain-variant:{ .lg .middle } **No passwords in Nextcloud**
 

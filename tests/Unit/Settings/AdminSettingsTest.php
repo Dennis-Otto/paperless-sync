@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCP\AppFramework\Services\IInitialState;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -25,6 +26,8 @@ final class AdminSettingsTest extends TestCase {
 
 	/** @var IURLGenerator&MockObject */
 	private IURLGenerator $urlGenerator;
+	/** @var array<string, mixed> the initial state of the page, by its key */
+	private array $initialState = [];
 
 	protected function setUp(): void {
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
@@ -34,8 +37,10 @@ final class AdminSettingsTest extends TestCase {
 
 	public function testFormShowsTheConfigurationTheStatusAndTheActions(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$this->settings['status_last_state'] = 'completed';
-		$settings = new AdminSettings($this->configService(), new StatusService($this->appConfig()), $this->urlGenerator);
+		$this->settings['status_last_state'] = 'completed-with-errors';
+		$this->settings['status_last_report'] = '{"errors":1,"errorMessages":["P123: Paperless is unavailable"]}';
+		$this->lazyKeys['status_last_report'] = true;
+		$settings = $this->adminSettings();
 
 		$form = $settings->getForm();
 
@@ -44,7 +49,10 @@ final class AdminSettingsTest extends TestCase {
 		$parameters = $form->getParams();
 		self::assertInstanceOf(SyncConfig::class, $parameters['config']);
 		self::assertSame('https://paperless.example.test', $parameters['config']->paperlessUrl);
-		self::assertSame('completed', $parameters['status']['state']);
+		self::assertSame('completed-with-errors', $parameters['status']['state']);
+		self::assertSame($parameters['status'], $this->initialState['status'], 'The page shows the status and its errors from the start.');
+		self::assertSame(['P123: Paperless is unavailable'], $this->initialState['status']['report']['errorMessages']);
+		self::assertNull($this->initialState['status']['nextRun']);
 		self::assertSame('/route/paperless_sync.settings.save', $parameters['saveUrl']);
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
@@ -52,7 +60,7 @@ final class AdminSettingsTest extends TestCase {
 	}
 
 	public function testFormBelongsToTheSectionOfTheApp(): void {
-		$settings = new AdminSettings($this->configService(), new StatusService($this->appConfig()), $this->urlGenerator);
+		$settings = $this->adminSettings();
 		$l10n = $this->createMock(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static fn (string $text): string => $text === 'Paperless Sync' ? 'Paperless-Synchronisation' : $text);
 		$section = new AdminSection($l10n, $this->urlGenerator);
@@ -63,5 +71,14 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/apps/paperless_sync/img/app.svg', $section->getIcon());
 		self::assertSame(55, $section->getPriority());
 		self::assertSame(55, $settings->getPriority());
+	}
+
+	private function adminSettings(): AdminSettings {
+		$initialState = $this->createMock(IInitialState::class);
+		$initialState->method('provideInitialState')->willReturnCallback(function (string $key, mixed $data): void {
+			$this->initialState[$key] = $data;
+		});
+
+		return new AdminSettings($this->configService(), new StatusService($this->appConfig()), $this->urlGenerator, $initialState);
 	}
 }
