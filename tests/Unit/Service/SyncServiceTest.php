@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use LogicException;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -263,7 +264,117 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(2, $this->paperless->downloads);
 		self::assertSame([self::EXPORTED_PATH, self::ARCHIVE], $this->storage->prunes[0]);
 		self::assertSame(1, $report->foldersPruned);
-		self::assertSame(hash('sha256', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+		self::assertSame(hash('sha256', '%PDF-content-v2') . ' ' . hash('md5', '%PDF-content-v2'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/**
+	 * Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0. Before, a change of the
+	 * title on 2.x downloaded the document again and replaced the file, which lost its shares,
+	 * comments and versions in Nextcloud.
+	 */
+	public function testMetadataChangeOnPaperless2MovesTheFileWithoutADownload(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		$renamedPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(1, $report->moved);
+		self::assertSame(0, $report->exported);
+		self::assertSame([$renamedPath => '%PDF-content'], $this->storage->files);
+		self::assertSame(1, $this->paperless->downloads, 'A change of the metadata alone must not download the document again.');
+		self::assertSame(1, $this->paperless->checksumRequests);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint'], 'A move keeps the checksums of the file.');
+	}
+
+	/** An earlier version stored the SHA-256 alone, which Paperless-ngx 3 still recognizes. */
+	public function testFingerprintOfAnEarlierVersionStillMovesTheFileOnPaperless3(): void {
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->moved);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame(hash('sha256', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+	}
+
+	/**
+	 * On Paperless-ngx 2, the SHA-256 alone of an earlier version can't tell an unchanged document,
+	 * so the next change downloads it once more; the changes after it only move the file.
+	 */
+	public function testFingerprintOfAnEarlierVersionGainsTheMd5AtTheNextDownloadOnPaperless2(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->state->exports[123]['fingerprint'] = hash('sha256', '%PDF-content');
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$downloaded = $this->service->run();
+		$this->paperless->documents[0]['title'] = 'Strom August final';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T12:00:00+02:00';
+		$moved = $this->service->run();
+
+		self::assertSame(1, $downloaded->exported);
+		self::assertSame(hash('sha256', '%PDF-content') . ' ' . hash('md5', '%PDF-content'), $this->state->exports[123]['fingerprint']);
+		self::assertSame(1, $moved->moved);
+		self::assertSame(0, $moved->exported);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August final [P123].pdf' => '%PDF-content'], $this->storage->files);
+	}
+
+	public function testNewRevisionOnPaperless2WithTheSameContentOnlyRecordsTheRevision(): void {
+		$this->paperless->md5Checksums = true;
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * Before, an export read the whole document into a string to compute its checksum, so that a
+	 * document larger than the free memory of PHP ended the run with a fatal error, before it saved
+	 * its state, and every run after it died on the same document.
+	 */
+	public function testExportPassesTheDocumentToNextcloudWithoutHoldingItInMemory(): void {
+		$this->configService->save(['inbox_enabled' => false]);
+		$size = 16 * 1024 * 1024;
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = str_repeat('%PDF-large', intdiv($size, 10));
+		$written = hash_init('sha256');
+		$storage = $this->createMock(NextcloudStorageInterface::class);
+		$storage->expects(self::once())->method('writeAtomic')->willReturnCallback(
+			/** @param resource $source */
+			static function (string $userId, string $path, $source) use ($written): void {
+				hash_update_stream($written, $source);
+			},
+		);
+		$service = new SyncService(
+			$this->configService,
+			$this->paperless,
+			$storage,
+			$this->state,
+			new PathTemplateService(),
+			new StatusService($this->appConfig()),
+			$this->locking,
+			$this->logger,
+		);
+		memory_reset_peak_usage();
+		$before = memory_get_usage();
+
+		$report = $service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(hash('sha256', $this->paperless->contents[123]), hash_final($written), 'Nextcloud receives the whole document.');
+		self::assertLessThan($size / 2, memory_get_peak_usage() - $before, 'The document must reach Nextcloud in chunks.');
 	}
 
 	public function testDocumentsThatShareAFileAreDownloadedAgainInsteadOfMoved(): void {
