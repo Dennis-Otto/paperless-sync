@@ -81,7 +81,7 @@ flowchart TB
     class versions,pgsql,mysql done
 ```
 
-- `E2E_VERSIONS`: the major versions to run instead, such as `"33 35"`
+- `E2E_VERSIONS`: the major versions to run instead, such as `"33 35"`; `none` runs only the variants, on `max-version`
 - `E2E_VARIANTS`: the variants to run besides, on the newest of the versions, by default `"pgsql mysql+s3"`: each a database, `sqlite`, `mysql` or `pgsql`, with `+s3` for an object store; `none` runs none
 - `E2E_VERSION_TIMEOUT`: the time after which a run that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all runs are still printed
 
@@ -91,34 +91,34 @@ Ctrl-C ends every run, each with the cleanup of `run.sh`, and prints the logs so
 
 ## In the CI
 
-The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in one job, `nextcloud`, which is the required check of pull requests.
+The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in two jobs side by side, each on a runner of its own. `nextcloud`, the required check of pull requests, runs every supported version (`E2E_VARIANTS=none`). *nextcloud on PostgreSQL, MariaDB and S3* runs the newest version on [the other databases and S3](#databases-and-object-storage) (`E2E_VERSIONS=none`), and is no required check. In one job, the five installations took more than five minutes on the four cores of a runner; split, the required check stays as fast as with the versions alone ([decision 0007](../../docs/decisions/0007-end-to-end-tests-on-real-databases-and-storage.md)).
 
 ```mermaid
 flowchart TB
     accTitle: When the end-to-end tests run
-    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. It runs PostgreSQL, MariaDB and S3 as well only when the change can behave differently on another database or storage. Every push to main and every night run them all, and every Monday the canary runs them against the coming Nextcloud.
+    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise the required check passes at once. The job of PostgreSQL, MariaDB and S3 runs only when the change can behave differently on another database or storage. Every push to main and every night run both jobs, and every Monday the canary runs the tests against the coming Nextcloud.
     pr["Pull request"] --> affected{"affected.sh:<br>can the change<br>affect the app?"}
-    affected -->|"documentation, other workflows,<br>the version of a release"| skipped["nextcloud passes<br>in seconds"]
-    affected -->|"lib/, appinfo/, templates/,<br>js/, css/, l10n/, img/,<br>tests/e2e/, e2e.yml"| variants{"can it behave<br>differently on another<br>database or storage?"}
-    variants -->|"the rest of the app"| versions["run-all.sh:<br>every supported version<br>on SQLite"]
-    variants -->|"lib/Migration/, the state,<br>the storage, the uploads,<br>appinfo/info.xml, tests/e2e/, e2e.yml"| all["run-all.sh:<br>every supported version,<br>PostgreSQL, MariaDB and S3"]
-    main["Push to main,<br>every night, by hand"] --> all
+    affected -->|"documentation, other workflows,<br>the version of a release"| skipped["both jobs pass<br>in seconds"]
+    affected -->|"lib/, appinfo/, templates/,<br>js/, css/, l10n/, img/,<br>tests/e2e/, e2e.yml"| versions["nextcloud, required:<br>every supported version<br>on SQLite"]
+    affected --> variants{"can it behave<br>differently on another<br>database or storage?"}
+    variants -->|"lib/Migration/, the state,<br>the storage, the uploads,<br>appinfo/info.xml, tests/e2e/, e2e.yml"| databases["nextcloud on PostgreSQL,<br>MariaDB and S3:<br>the newest version"]
+    variants -->|"the rest of the app"| later["after the merge,<br>on main"]
+    main["Push to main,<br>every night, by hand"] --> versions
+    main --> databases
     monday["Every Monday,<br>by hand"] --> canary["canary.sh:<br>the coming Nextcloud"]
-    versions --> result["nextcloud: passed<br>or failed"]
-    all --> result
     classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     class pr person
-    class affected,variants,versions,all,canary bot
-    class skipped,result done
+    class affected,variants,versions,databases,canary bot
+    class skipped,later done
 ```
 
 In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown, or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*.
 
-Of the changes that run the tests, those that can behave differently on another database or storage also run [PostgreSQL, and MariaDB with S3](#databases-and-object-storage): the migrations (`lib/Migration/`), the queries of the state (`lib/Service/SyncStateRepository*`), the files in Nextcloud (`lib/Service/NextcloudStorage*`), the uploads to Paperless (`lib/Service/PaperlessApiService.php`), `appinfo/info.xml` as above, the end-to-end tests and their workflow. Any other change of the app runs every version on SQLite with local storage, and its summary says *E2E on SQLite with local storage only*. `scripts/check-project.sh` tests these rules with sample paths and changes.
+Of the changes that run the tests, those that can behave differently on another database or storage also run [PostgreSQL, and MariaDB with S3](#databases-and-object-storage): the migrations (`lib/Migration/`), the queries of the state (`lib/Service/SyncStateRepository*`), the files in Nextcloud (`lib/Service/NextcloudStorage*`), the uploads to Paperless (`lib/Service/PaperlessApiService.php`), `appinfo/info.xml` as above, the end-to-end tests and their workflow. For any other change of the app, that job passes at once, and its summary says *E2E on SQLite with local storage only*. `scripts/check-project.sh` tests these rules with sample paths and changes.
 
-Every push to `main`, a run by hand and every night run all versions and variants in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
+Every push to `main`, a run by hand and every night run both jobs in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
 ## Databases and object storage
 

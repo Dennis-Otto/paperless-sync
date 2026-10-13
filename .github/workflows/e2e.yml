@@ -5,19 +5,24 @@ name: Docker E2E
 
 # The end-to-end tests in Docker against the current release of every Nextcloud
 # version that appinfo/info.xml supports, from min-version to max-version, so that
-# raising max-version, as the upstream bot does, tests the new version at once. The
-# newest version also runs on PostgreSQL, and on MariaDB with an S3 object store as
-# its primary storage. One job runs them all side by side (tests/e2e/run-all.sh): one
-# wait for a runner instead of one for each, and the downloads of one overlap with
-# the installation of another.
+# raising max-version, as the upstream bot does, tests the new version at once. One
+# job, the required check nextcloud, runs all versions side by side
+# (tests/e2e/run-all.sh): one wait for a runner instead of one for each, and the
+# downloads of one version overlap with the installation of another.
 #
-# In a pull request, they run only when the change can affect the app
-# (tests/e2e/affected.sh), and PostgreSQL, MariaDB and S3 only when it can behave
+# A second job runs the newest version on PostgreSQL, and on MariaDB with an S3 object
+# store as its primary storage, on a runner of its own: the five installations in one
+# job took more than five minutes on the four cores of a runner, the versions alone
+# keep nextcloud as fast as before. It is no required check, as decision 0007 says.
+#
+# In a pull request, the versions run only when the change can affect the app
+# (tests/e2e/affected.sh), and the databases and S3 only when it can behave
 # differently there: a change of the migrations, the state, the files in Nextcloud,
-# the uploads or the tests. A change of the documentation or of other workflows
-# alone, or a release, which only writes its version, passes the required check
-# nextcloud at once. Every push to main runs them all, and so does every night, as
-# the images of the versions move with each point release of Nextcloud.
+# the uploads, appinfo/info.xml or the tests. A change of the documentation or of
+# other workflows alone, or a release, which only writes its version, passes the
+# required check nextcloud at once. Every push to main runs them all, and so does
+# every night, as the images of the versions move with each point release of
+# Nextcloud.
 #
 # Every Monday, and when started by hand, they also run against the coming Nextcloud
 # (tests/e2e/canary.sh): the beta or release candidate of the next major version, or
@@ -72,8 +77,36 @@ jobs:
       - name: Run the Paperless Sync end-to-end tests against every supported Nextcloud version
         if: steps.changes.outputs.affected != 'false'
         env:
-          # Without a pull request, the step changes doesn't run, and so all of them do.
-          E2E_VARIANTS: ${{ steps.changes.outputs.variants == 'false' && 'none' || '' }}
+          # The job variants runs the other databases and S3.
+          E2E_VARIANTS: none
+        run: bash tests/e2e/run-all.sh
+
+  variants:
+    name: nextcloud on PostgreSQL, MariaDB and S3
+    if: github.event.schedule != '17 5 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Record the network traffic of the job
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit of a pull request and its base, which affected.sh compares.
+          fetch-depth: 2
+      - name: Find out whether the change can behave differently on another database or storage
+        id: changes
+        if: github.event_name == 'pull_request'
+        run: bash tests/e2e/affected.sh
+      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, and on MariaDB with S3
+        # Without a pull request, the step changes doesn't run, and so this one does.
+        if: steps.changes.outputs.variants != 'false'
+        env:
+          E2E_VERSIONS: none
         run: bash tests/e2e/run-all.sh
 
   coming:

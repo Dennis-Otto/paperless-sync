@@ -19,8 +19,9 @@
 # object store as primary storage; E2E_VARIANTS=none runs none. They leave out the
 # accessibility check, which every version runs.
 #
-# E2E_VERSIONS="33 35" chooses the versions instead; KEEP_E2E=1 keeps the containers
-# of each, as with run.sh. E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs
+# E2E_VERSIONS="33 35" chooses the versions instead, and E2E_VERSIONS=none runs only
+# the variants, on max-version; the CI runs those in a job of their own, next to the
+# versions. KEEP_E2E=1 keeps the containers of each, as with run.sh. E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs
 # before the job of the CI ends after 20 minutes, so that the logs of all are still
 # printed.
 
@@ -29,21 +30,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
-versions=()
-if [[ -n "${E2E_VERSIONS:-}" ]]; then
-	read -ra versions <<<"${E2E_VERSIONS}"
-else
+# The supported versions, from min-version to max-version of appinfo/info.xml.
+supported() {
+	local nextcloud low high version
 	nextcloud="$(grep -oE '<nextcloud [^>]*>' "${REPOSITORY_ROOT}/appinfo/info.xml" | head -n 1 || true)"
 	low="$(sed -nE 's/.* min-version="([0-9]+)[^"]*".*/\1/p' <<<"${nextcloud}")"
 	high="$(sed -nE 's/.* max-version="([0-9]+)[^"]*".*/\1/p' <<<"${nextcloud}")"
 	if [[ -z "${low}" || -z "${high}" ]]; then
 		echo "appinfo/info.xml names no min-version and max-version of Nextcloud." >&2
-		exit 1
+		return 1
 	fi
 	for ((version = low; version <= high; version++)); do
-		versions+=("${version}")
+		echo "${version}"
 	done
-fi
+}
+
+versions=()
+case "${E2E_VERSIONS:-}" in
+	"")
+		range="$(supported)"
+		read -ra versions <<<"${range//$'\n'/ }"
+		;;
+	none) ;;
+	*) read -ra versions <<<"${E2E_VERSIONS}" ;;
+esac
 newest=0
 for version in "${versions[@]}"; do
 	if [[ ! "${version}" =~ ^[0-9]+$ ]]; then
@@ -54,10 +64,6 @@ for version in "${versions[@]}"; do
 		newest="${version}"
 	fi
 done
-if ((${#versions[@]} == 0)); then
-	echo "No version of Nextcloud to test." >&2
-	exit 1
-fi
 
 variants=()
 case "${E2E_VARIANTS:-}" in
@@ -65,6 +71,15 @@ case "${E2E_VARIANTS:-}" in
 	none) ;;
 	*) read -ra variants <<<"${E2E_VARIANTS}" ;;
 esac
+if ((${#versions[@]} + ${#variants[@]} == 0)); then
+	echo "No version of Nextcloud to test." >&2
+	exit 1
+fi
+# Without versions, the variants run on max-version.
+if ((newest == 0)); then
+	range="$(supported)"
+	newest="${range##*$'\n'}"
+fi
 
 database_name() {
 	case "$1" in
