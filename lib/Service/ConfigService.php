@@ -20,6 +20,7 @@ final class ConfigService {
 
 	private const DEFAULTS = [
 		'paperless_url' => '',
+		'paperless_local_network' => false,
 		'enabled' => false,
 		'target_user' => '',
 		'base_path' => 'Dokumente/Paperless',
@@ -141,7 +142,7 @@ final class ConfigService {
 		$values = $config->jsonSerialize();
 
 		$mapping = [
-			'paperless_url' => 'paperlessUrl', 'enabled' => 'enabled', 'target_user' => 'targetUser',
+			'paperless_url' => 'paperlessUrl', 'paperless_local_network' => 'paperlessLocalNetwork', 'enabled' => 'enabled', 'target_user' => 'targetUser',
 			'base_path' => 'basePath', 'archive_folder' => 'archiveFolder', 'inbox_folder' => 'inboxFolder',
 			'error_folder' => 'errorFolder', 'deleted_folder' => 'deletedFolder', 'path_template' => 'pathTemplate',
 			'export_enabled' => 'exportEnabled', 'inbox_enabled' => 'inboxEnabled', 'prefer_archive' => 'preferArchive',
@@ -241,6 +242,9 @@ final class ConfigService {
 	/** @param array<string, mixed> $values @return array<string, mixed> */
 	private function normalize(array $values): array {
 		$values['paperless_url'] = $this->normalizeUrl((string)$values['paperless_url']);
+		// It lifts a protection of Nextcloud, so only a clear yes turns it on: true, as the settings
+		// page sends it, or 1, "1", "true", "on" or "yes", as a form sends it; "false" too is a no.
+		$values['paperless_local_network'] = filter_var($values['paperless_local_network'], FILTER_VALIDATE_BOOLEAN);
 		$values['target_user'] = trim((string)$values['target_user']);
 		if ($values['target_user'] === '') {
 			throw new InvalidArgumentException('A Nextcloud target user is required.');
@@ -294,7 +298,7 @@ final class ConfigService {
 			(bool)$values['allow_direct_delete'], (int)$values['missing_grace_runs'], (bool)$values['prune_empty_folders'],
 			(bool)$values['delete_inbox_after_success'], (bool)$values['recursive_inbox'], (string)$values['conflict_mode'],
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
-			(string)$values['untitled'],
+			(string)$values['untitled'], (bool)$values['paperless_local_network'],
 		);
 	}
 }

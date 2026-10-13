@@ -214,6 +214,50 @@ final class ConfigServiceTest extends TestCase {
 		self::assertFalse($config->tokenConfigured);
 	}
 
+	/**
+	 * Allowing the local network lifts a protection of Nextcloud for the requests to Paperless, so
+	 * it is off until an administrator turns it on, and off again after disconnecting.
+	 */
+	public function testTheLocalNetworkIsAllowedOnlyAfterItWasTurnedOn(): void {
+		self::assertFalse($this->service->get()->paperlessLocalNetwork);
+
+		$config = $this->service->save(self::validSettings() + ['paperless_local_network' => true], 'secret-token');
+
+		self::assertTrue($config->paperlessLocalNetwork);
+		self::assertTrue($this->settings['paperless_local_network']);
+		self::assertTrue($config->jsonSerialize()['paperlessLocalNetwork'], 'The settings page shows it.');
+		self::assertTrue($this->service->save(self::validSettings())->paperlessLocalNetwork, 'A save that leaves it out keeps it.');
+
+		self::assertFalse($this->service->reset()->paperlessLocalNetwork);
+		self::assertArrayNotHasKey('paperless_local_network', $this->settings);
+	}
+
+	/** @return array<string, array{mixed, bool}> a value of the setting as a request may send it, and whether it allows the local network */
+	public static function valuesOfTheLocalNetwork(): array {
+		return [
+			'true' => [true, true],
+			'false' => [false, false],
+			'1 of a form' => ['1', true],
+			'0 of a form' => ['0', false],
+			'the number 1' => [1, true],
+			'"true"' => ['true', true],
+			'"on"' => ['on', true],
+			'"false"' => ['false', false],
+			'empty' => ['', false],
+			'anything else' => ['maybe', false],
+			'null' => [null, false],
+		];
+	}
+
+	/** Only a clear yes lifts the protection of Nextcloud; "false", which PHP would take for true, is a no. */
+	#[DataProvider('valuesOfTheLocalNetwork')]
+	public function testOnlyAClearYesAllowsTheLocalNetwork(mixed $value, bool $allowed): void {
+		$config = $this->service->save(self::validSettings() + ['paperless_local_network' => $value], 'secret-token');
+
+		self::assertSame($allowed, $config->paperlessLocalNetwork);
+		self::assertSame($allowed, $this->settings['paperless_local_network']);
+	}
+
 	/** @return array<string, array{array<string, mixed>, string}> */
 	public static function invalidSettings(): array {
 		return [

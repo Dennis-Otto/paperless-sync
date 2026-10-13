@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\PaperlessApiService;
+use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
@@ -19,6 +20,7 @@ use OCA\PaperlessSync\Tests\Doubles\UnsizedStream;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
+use OCP\Http\Client\LocalServerException;
 use OCP\ITempManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -74,7 +76,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testConnectionTestRequestsOneDocumentWithTheGivenCredentials(): void {
 		$this->responses[] = [200, ['count' => 0, 'results' => []]];
 
-		$this->service->testConnection('https://other.example.test/', 'other-token');
+		$this->service->testConnection('https://other.example.test/', 'other-token', false);
 
 		self::assertSame('https://other.example.test/api/documents/', $this->requests[0]['url']);
 		self::assertSame(['page' => 1, 'page_size' => 1], $this->requests[0]['options']['query']);
@@ -89,7 +91,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testConnectionTestNeedsAUrlAndAToken(): void {
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage('Paperless is not configured.');
-		$this->service->testConnection(self::URL, '');
+		$this->service->testConnection(self::URL, '', false);
 	}
 
 	public function testDocumentsAreReadFromEveryPageInTheOrderOfTheirIds(): void {
@@ -636,6 +638,111 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
+	/** @return array<string, array{string, bool}> every operation that sends the token, with the setting off and on */
+	public static function requestsInTheLocalNetwork(): array {
+		$cases = [];
+		foreach (self::requestsWithTheToken() as $name => [$operation]) {
+			$cases[$name . ', setting off'] = [$operation, false];
+			$cases[$name . ', setting on'] = [$operation, true];
+		}
+
+		return $cases;
+	}
+
+	/**
+	 * Nextcloud refuses addresses of the local network unless a request allows them. Every request
+	 * of the app to Paperless allows them exactly when the setting "Paperless runs in my local
+	 * network" is on, so that no administrator has to turn off the protection of Nextcloud for
+	 * every app with allow_local_remote_servers.
+	 */
+	#[DataProvider('requestsInTheLocalNetwork')]
+	public function testRequestsAllowTheLocalNetworkOnlyWithTheSetting(string $operation, bool $localNetwork): void {
+		$this->settings['paperless_local_network'] = $localNetwork;
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 7: Failed to connect to paperless.example.test');
+		};
+
+		try {
+			$this->call($operation, $localNetwork);
+		} catch (\Throwable) {
+			// The options of the request are what counts, not its failure.
+		}
+
+		self::assertCount(1, $this->requests);
+		$options = $this->requests[0]['options'];
+		if ($localNetwork) {
+			self::assertSame(['allow_local_address' => true], $options['nextcloud'] ?? null);
+		} else {
+			self::assertArrayNotHasKey('nextcloud', $options, 'Without the setting, Nextcloud decides as for any other app.');
+		}
+	}
+
+	public function testConnectionTestAllowsTheLocalNetworkAsAskedAndNotAsSaved(): void {
+		$this->settings['paperless_local_network'] = true;
+		$this->responses[] = [200, ['count' => 0, 'results' => []]];
+		$this->responses[] = [200, ['count' => 0, 'results' => []]];
+
+		$this->service->testConnection('http://paperless:8000', 'other-token', false);
+		$this->settings['paperless_local_network'] = false;
+		$this->service->testConnection('http://paperless:8000', 'other-token', true);
+
+		self::assertArrayNotHasKey('nextcloud', $this->requests[0]['options']);
+		self::assertSame(['allow_local_address' => true], $this->requests[1]['options']['nextcloud']);
+	}
+
+	/** @return array<string, array{string, string}> the message of Nextcloud's refusal and the host that the advice names */
+	public static function refusedLocalAddresses(): array {
+		return [
+			'a name without a domain' => ['Host "paperless" violates local access rules', 'paperless'],
+			'an address of the network' => ['Host "192.168.1.20" violates local access rules', '192.168.1.20'],
+			'a name that points into the network' => ['Host "192.168.1.20" (paperless.lan:8000) violates local access rules', 'paperless.lan'],
+			'no host in the message' => ['violates local access rules', 'paperless.example.test'],
+		];
+	}
+
+	/**
+	 * Nextcloud refuses an address of the local network with a message that names neither the
+	 * reason nor the way out. The app says both, for the host that the administrator entered.
+	 */
+	#[DataProvider('refusedLocalAddresses')]
+	public function testRefusedLocalAddressSaysHowToAllowIt(string $refusal, string $host): void {
+		$ignoreArgs = ini_set('zend.exception_ignore_args', '0');
+		$this->responses[] = static function () use ($refusal): array {
+			throw new LocalServerException($refusal);
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A refused address must be reported.');
+		} catch (PaperlessLocalNetworkException $exception) {
+			self::assertSame($host, $exception->host);
+			self::assertSame(
+				"Nextcloud blocks connections to local addresses such as {$host}. If Paperless runs in your network, turn on \"Paperless runs in my local network\".",
+				$exception->getMessage(),
+			);
+			self::assertInstanceOf(PaperlessRequestException::class, $exception, 'An upload treats it as any other failed request.');
+			self::assertNull($exception->getPrevious());
+			self::assertStringNotContainsString('secret-token', self::logged($exception));
+		} finally {
+			ini_set('zend.exception_ignore_args', (string)$ignoreArgs);
+		}
+	}
+
+	/** A name without an address is no question of the local network, so the setting would not help. */
+	public function testNameWithoutAnAddressIsNoQuestionOfTheLocalNetwork(): void {
+		$this->responses[] = static function (): array {
+			throw new LocalServerException('No DNS record found for paperless.example.test');
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A name without an address must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertNotInstanceOf(PaperlessLocalNetworkException::class, $exception);
+			self::assertSame('No DNS record found for paperless.example.test', $exception->getMessage());
+		}
+	}
+
 	public function testTaskStatusAndItsMessage(): void {
 		$this->responses[] = [200, ['results' => [['status' => 'failure', 'result' => 'Unsupported mime type', 'status_str' => 'ignored']]]];
 
@@ -703,10 +810,13 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->service->documents();
 	}
 
-	/** Calls an operation of the client that sends the token, with arguments that work. */
-	private function call(string $operation): void {
+	/**
+	 * Calls an operation of the client that sends the token, with arguments that work; the test of
+	 * the connection allows the local network as $localNetwork says, the others as the settings do.
+	 */
+	private function call(string $operation, bool $localNetwork = false): void {
 		match ($operation) {
-			'testConnection' => $this->service->testConnection(self::URL, 'secret-token'),
+			'testConnection' => $this->service->testConnection(self::URL, 'secret-token', $localNetwork),
 			'documents' => $this->service->documents(),
 			'trash' => $this->service->trash(),
 			'tags' => $this->service->tags(),

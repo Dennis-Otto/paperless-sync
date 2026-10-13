@@ -14,6 +14,8 @@ use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
+use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
@@ -25,6 +27,7 @@ use ReflectionMethod;
 use RuntimeException;
 
 final class SettingsControllerTest extends TestCase {
+	use GermanTranslations;
 	use InMemoryConfiguration;
 
 	/** @var PaperlessClientInterface&MockObject */
@@ -42,11 +45,12 @@ final class SettingsControllerTest extends TestCase {
 			$this->configService(),
 			$this->paperless,
 			$this->storage,
+			$this->germanL10n(),
 		);
 	}
 
 	public function testSavesSettingsThatWorkWithPaperlessAndNextcloud(): void {
-		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test', 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test', 'secret-token', false);
 		$this->storage->expects(self::once())->method('test')->with('paperless', 'Dokumente/Paperless');
 
 		$response = $this->controller->save(self::validSettings() + ['batch_size' => 20], 'secret-token');
@@ -72,7 +76,7 @@ final class SettingsControllerTest extends TestCase {
 
 	public function testSavingTheSameUrlWithoutATokenTestsTheStoredOne(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test', 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test', 'secret-token', false);
 
 		$response = $this->controller->save(self::validSettings() + ['batch_size' => 30]);
 
@@ -101,7 +105,7 @@ final class SettingsControllerTest extends TestCase {
 
 	public function testANewUrlWorksWithTheTokenEnteredAgain(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test/paperless', 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('https://paperless.example.test/paperless', 'secret-token', false);
 
 		$response = $this->controller->save(['paperless_url' => 'https://paperless.example.test/paperless/'] + self::validSettings(), 'secret-token');
 
@@ -119,6 +123,37 @@ final class SettingsControllerTest extends TestCase {
 			['message' => 'Could not validate the Paperless and Nextcloud configuration: Paperless could not query /api/documents/: HTTP 401.'],
 			$response->getData(),
 		);
+		self::assertSame([], $this->settings);
+		self::assertNull($this->credential);
+	}
+
+	/** The test of the connection allows the local network as the form asks, before it is saved. */
+	public function testTheConnectionIsTestedWithTheLocalNetworkOfTheForm(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->expects(self::once())->method('testConnection')->with('http://paperless:8000', 'secret-token', true);
+
+		$response = $this->controller->save(['paperless_url' => 'http://paperless:8000', 'paperless_local_network' => true] + self::validSettings(), 'secret-token');
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertTrue($this->settings['paperless_local_network']);
+	}
+
+	/**
+	 * Nextcloud refuses a Paperless in the local network with "Host "paperless" violates local
+	 * access rules". The page says instead what to do, in the language of the administrator, and
+	 * names the setting, so that it can move the focus there.
+	 */
+	public function testARefusedLocalAddressSaysWhatToDo(): void {
+		$this->paperless->method('testConnection')->willThrowException(new PaperlessLocalNetworkException('paperless'));
+		$this->storage->expects(self::never())->method('test');
+
+		$response = $this->controller->save(['paperless_url' => 'http://paperless:8000'] + self::validSettings(), 'secret-token');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame([
+			'message' => 'Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein.',
+			'setting' => 'paperless_local_network',
+		], $response->getData());
 		self::assertSame([], $this->settings);
 		self::assertNull($this->credential);
 	}

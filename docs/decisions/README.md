@@ -12,3 +12,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0004](0004-delete-only-what-is-confirmed.md) | Delete only what Paperless has confirmed gone, and only what fits into a run | accepted |
 | [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted |
 | [0006](0006-every-file-name-keeps-its-marker.md) | Every file name keeps its marker and its extension, within the bytes of Nextcloud | accepted |
+| [0008](0008-local-network-per-request.md) | Reach a Paperless in the local network per request, never for the whole server | accepted |

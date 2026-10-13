@@ -74,7 +74,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
 2. In Paperless-ngx, create a dedicated account with view and download access to the documents to mirror, and an API token for it.
-3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud.
+3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, leave synchronization disabled, and save; saving tests the connection to Paperless and the folder in Nextcloud. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
 
@@ -98,6 +98,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - Conflict policy, batch size, and interval controls
 - Dry-run, manual execution, status, and error summaries
 - Server-side token storage through Nextcloud's credentials manager
+- A Paperless in the local network without turning off Nextcloud's protection against server-side request forgery
 - Automated semantic releases and signed App Store packages
 
 <!-- --8<-- [end:features] -->
@@ -191,6 +192,16 @@ Stable markers such as `[P123]` are compatible with the independent [Paperless U
 Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used. Trash synchronization requires visibility of the corresponding trashed documents.
 
 The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+
+#### Paperless in your local network
+
+Nextcloud refuses connections to addresses of the local network, such as `http://paperless:8000` in Docker, `http://paperless.lan` or `http://192.168.1.20:8000`, to protect against server-side request forgery. When Paperless runs at such an address, turn on **Paperless runs in my local network** and save. Nextcloud then allows a local address for the requests of Paperless Sync to the saved Paperless URL only. Every other app and request stays protected, which the system switch `allow_local_remote_servers` would undo for the whole server.
+
+Without the setting, saving says what to do:
+
+> Nextcloud blocks connections to local addresses such as paperless. If Paperless runs in your network, turn on "Paperless runs in my local network".
+
+If you turned on `allow_local_remote_servers` for this app before, turn on the setting, save, and then turn the switch off again with `occ config:system:delete allow_local_remote_servers`. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#a-paperless-in-the-local-network) explains what the setting allows.
 
 ### Folder ownership
 

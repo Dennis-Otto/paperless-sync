@@ -36,10 +36,12 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $tasks = [];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
-	/** @var list<array{string, string}> the URL and the token of every test of the connection */
+	/** @var list<array{string, string, bool}> the URL, the token and whether a local address was allowed, of every test of the connection */
 	public array $connections = [];
 	/** @var array{names: array<string, string>, inbox: list<string>} */
 	public array $tagInfo = ['names' => [], 'inbox' => []];
+	/** The failure of every test of the connection, such as an address that Nextcloud refuses. */
+	public ?\Throwable $connectionException = null;
 	public ?\Throwable $downloadException = null;
 	public ?\Throwable $uploadException = null;
 	/** @var array<string, \Throwable> the failure of the upload of a file, by its name, ahead of $uploadException */
@@ -48,8 +50,11 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token): void {
-		$this->connections[] = [$url, $token];
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void {
+		$this->connections[] = [$url, $token, $localNetwork];
+		if ($this->connectionException !== null) {
+			throw $this->connectionException;
+		}
 	}
 
 	public function documents(): PaperlessScan {

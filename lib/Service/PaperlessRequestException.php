@@ -15,7 +15,8 @@ use RuntimeException;
  * A request to Paperless failed before it had an answer, because Paperless could not be reached
  * for example. It carries only the message of the failure and none of the exception of the HTTP
  * client, because the trace of that one holds the options of the request with the API token, and
- * Nextcloud's log would write them.
+ * Nextcloud's log would write them. When Nextcloud refused the address of Paperless as one of the
+ * local network, it is a PaperlessLocalNetworkException.
  */
-final class PaperlessRequestException extends RuntimeException {
+class PaperlessRequestException extends RuntimeException {
 }

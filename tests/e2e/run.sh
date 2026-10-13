@@ -155,7 +155,10 @@ fi
 occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
 # The browser of the accessibility check reaches Nextcloud by its name in the network.
 occ config:system:set trusted_domains 2 --value=nextcloud >/dev/null
-occ config:system:set allow_local_remote_servers --type=boolean --value=true >/dev/null
+# Nextcloud refuses addresses of the local network, such as the one of paperless-mock, as
+# on every server where nobody turned allow_local_remote_servers on for every app. The app
+# reaches the mock with its own setting "Paperless runs in my local network" instead.
+occ config:system:delete allow_local_remote_servers >/dev/null
 # The password policy would look up every new password at Have I Been Pwned: a
 # request to the internet that the tests don't need and that can fail.
 occ config:app:set password_policy enforceHaveIBeenPwned --type=boolean --value=false >/dev/null
@@ -192,7 +195,8 @@ for attribute in \
 	'data-save-url="/apps/paperless_sync/settings"' \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
-	'data-status-url="/apps/paperless_sync/sync/status"'; do
+	'data-status-url="/apps/paperless_sync/sync/status"' \
+	'data-setting="paperless_local_network"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
@@ -231,12 +235,32 @@ if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
 	exit 1
 fi
 
+# Without the setting, Nextcloud refuses the address of the mock, and the answer says how to
+# allow it instead of Nextcloud's own "Host "paperless-mock" violates local access rules".
+REFUSED_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+	--data-urlencode 'settings[target_user]=sync-target' \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/local-network-refused.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/settings")"
+if [[ "${REFUSED_STATUS}" != "400" ]]; then
+	echo "Saving a Paperless in the local network without its setting answered HTTP ${REFUSED_STATUS} instead of 400: $(cat "${TMP_DIR}/local-network-refused.json")" >&2
+	exit 1
+fi
+assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
+
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
 	--header 'Accept: application/json' \
 	--header 'OCS-APIRequest: true' \
 	--request POST \
 	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+	--data-urlencode 'settings[paperless_local_network]=1' \
 	--data-urlencode 'settings[target_user]=sync-target' \
 	--data-urlencode 'settings[base_path]=Documents/Paperless' \
 	--data-urlencode 'settings[archive_folder]=Archive' \
@@ -472,4 +496,4 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
+echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'

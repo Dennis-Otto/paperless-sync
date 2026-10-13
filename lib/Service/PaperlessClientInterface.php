@@ -12,8 +12,13 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\Model\PaperlessScan;
 
 interface PaperlessClientInterface {
-	/** A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its failure. */
-	public function testConnection(string $url, #[\SensitiveParameter] string $token): void;
+	/**
+	 * A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its
+	 * failure. $localNetwork allows an address of the local network for it.
+	 *
+	 * @throws PaperlessLocalNetworkException when Nextcloud refuses the address as a local one
+	 */
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void;
 
 	/** The active documents, and whether the run received all of them. */
 	public function documents(): PaperlessScan;
