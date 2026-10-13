@@ -79,7 +79,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 - **Nextcloud <span data-app="nextcloud">33–35</span>**, with the system cron for its background jobs, as Nextcloud recommends: *Administration settings → Basic settings → Background jobs → Cron*. Every run of the app is one of these jobs.
 - **PHP <span data-app="php">8.2+</span>** on the Nextcloud server.
-- **Paperless-ngx 2.10 or newer**, the first version with a trash, which the app mirrors, at an address that the Nextcloud server reaches over HTTP or HTTPS. For a Paperless at an address of the local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, turn on the setting [Paperless runs in my local network](#paperless-in-your-local-network).
+- **Paperless-ngx 2.10 or newer, 3.x included**; 2.10 is the first version with a trash, which the app mirrors. Paperless needs an address that the Nextcloud server reaches over HTTP or HTTPS; for an address of your local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, turn on the setting [Paperless runs in my local network](#paperless-in-your-local-network).
 - **A Paperless account for the app**, with an API token, that isn't a superuser. It needs to view and download the documents to mirror, and the permission `documents.add_document` for the inbox; owning the documents lets it mirror the Paperless trash right away. [Paperless connection](#paperless-connection) has the details.
 - **Room in the files of the target user**, the Nextcloud user who owns the archive: the archive counts against the quota of that user.
 
@@ -211,6 +211,35 @@ flowchart TB
 ```
 
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
+
+When you change the title, the tags, the correspondent or the type of a document in Paperless, its file moves to its new path and keeps its shares, comments and versions in Nextcloud, and the desktop and mobile clients only rename it. Only a change of the content, such as a new archive version after Paperless processed the document again, downloads it again. A run tells the two apart by the checksums of the file: it keeps the SHA-256 and the MD5 of every download and compares them with the checksum that Paperless reports, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0. For a file that an earlier version of the app exported, which has only its SHA-256 saved, the first change on Paperless-ngx 2.x reads the file in Nextcloud once to add its MD5, so that it moves without a download too. A download goes to Nextcloud in chunks, so a document of any size fits into the memory of PHP.
+
+```mermaid
+flowchart TB
+    accTitle: How a run tells new metadata from new content
+    accDescr: A document that was never exported is downloaded. For an exported document, a run compares the revision of Paperless with the one it saved. With a new revision, it asks Paperless for the checksum of the file, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0, and looks for it among the SHA-256 and the MD5 that it saved at the download. When the revision is the same, or the checksum is among them, the content is the same: the file stays where it is, or moves to its new path. When an earlier version of the app saved the SHA-256 alone and Paperless reports an MD5, the run computes both checksums of the mirrored file: when its SHA-256 is the saved one and its MD5 the one of Paperless, the content is the same too. Otherwise the run downloads the document to a temporary file, computes both checksums in one pass over it, writes it to Nextcloud in chunks and saves the checksums. The questions are indigo, the requests to Paperless-ngx green, and the results in Nextcloud blue.
+
+    document["A document that<br>Paperless lists"] --> exported{"Exported<br>before?"}
+    exported -->|no| download["Download to a<br>temporary file, SHA-256<br>and MD5 in one pass"]
+    exported -->|yes| revision{"Same revision<br>as saved?"}
+    revision -->|yes| same["Same content"]
+    revision -->|no| checksum["Checksum from Paperless:<br>MD5 up to 2.x,<br>SHA-256 since 3.0"]
+    checksum --> known{"Among the saved<br>SHA-256 and MD5?"}
+    known -->|yes| same
+    known -->|no| earlier{"Only the SHA-256 of<br>an earlier version? Is it<br>the mirrored file's, and<br>its MD5 Paperless's?"}
+    earlier -->|yes| same
+    earlier -->|no| download
+    same --> path{"Same path?"}
+    path -->|yes| unchanged["UNCHANGED"]
+    path -->|no| move["MOVE: the same file<br>at its new path"]
+    download --> export["EXPORT: written in chunks,<br>both checksums saved"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class exported,revision,known,earlier,path check
+    class checksum,download paperless
+    class unchanged,move,export nextcloud
+```
 
 <!-- --8<-- [end:usage] -->
 <!-- --8<-- [start:configuration] -->

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 
@@ -36,6 +37,8 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $tasks = [];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
+	/** Paperless-ngx up to 2.x, whose checksums are MD5; 3.x reports SHA-256. */
+	public bool $md5Checksums = false;
 	/** @var list<array{string, string, bool}> the URL, the token and whether a local address was allowed, of every test of the connection */
 	public array $connections = [];
 	/** @var array{names: array<string, string>, inbox: list<string>} */
@@ -81,18 +84,34 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		return $this->tagInfo;
 	}
 
-	public function downloadDocument(int $documentId, bool $original, $sink): void {
+	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint {
 		if ($this->downloadException !== null) {
 			throw $this->downloadException;
 		}
 		++$this->downloads;
-		fwrite($sink, $this->contents[$documentId] ?? '');
-		rewind($sink);
+		$content = $this->contents[$documentId] ?? '';
+		// Beyond 2 MB, php://temp keeps its content in a file, as the download of the app does.
+		$download = fopen('php://temp', 'w+b');
+		if (!is_resource($download)) {
+			throw new \RuntimeException('Could not open the test download.');
+		}
+		fwrite($download, $content);
+		rewind($download);
+		try {
+			$consume($download);
+		} finally {
+			/** @psalm-suppress RedundantCondition $consume may close the stream. */
+			if (is_resource($download)) {
+				fclose($download);
+			}
+		}
+
+		return new DocumentFingerprint(hash('sha256', $content), hash('md5', $content));
 	}
 
 	public function documentChecksum(int $documentId, bool $original): string {
 		++$this->checksumRequests;
-		return hash('sha256', $this->contents[$documentId] ?? '');
+		return hash($this->md5Checksums ? 'md5' : 'sha256', $this->contents[$documentId] ?? '');
 	}
 
 	public function uploadDocument($source, string $filename): string {

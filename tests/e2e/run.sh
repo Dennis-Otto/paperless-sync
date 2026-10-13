@@ -306,6 +306,19 @@ sync_run false "${TMP_DIR}/move.json"
 assert_json move "${TMP_DIR}/move.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+# Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0: with either, a change
+# of the metadata alone moves the file, here back and forth, without a download.
+control /control/checksum/md5 >/dev/null
+control /control/scenario/active >/dev/null
+sync_run false "${TMP_DIR}/move-md5.json"
+assert_json move "${TMP_DIR}/move-md5.json"
+assert_dav_missing sync-target "${RENAMED_PATH}"
+assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+control /control/scenario/renamed >/dev/null
+sync_run false "${TMP_DIR}/move-md5-back.json"
+assert_json move "${TMP_DIR}/move-md5-back.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+control /control/checksum/sha256 >/dev/null
 "${COMPOSE[@]}" exec -T paperless-mock python -c \
 	"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())" \
 	> "${TMP_DIR}/mock-after-move.json"
@@ -504,4 +517,4 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
+echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
