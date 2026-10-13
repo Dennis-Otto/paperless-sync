@@ -70,3 +70,5 @@ A dry-run or a run by hand ends with its report: how many documents each kind of
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">
   <img alt="The report of a dry-run: the counts of exported, moved, trashed and excluded documents and of finished imports, and a list with one line for every file change" src="images/report-light.png">
 </picture>
+
+--8<-- "README.md:help"

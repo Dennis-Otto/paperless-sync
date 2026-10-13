@@ -4,8 +4,8 @@
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
-# website, and the JavaScript of the settings and the translations, which have no
-# build step.
+# website, the description of the app, and the JavaScript of the settings and the
+# translations, which have no build step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -129,6 +129,21 @@ if command -v python3 >/dev/null 2>&1; then
 else
   echo "Python 3 is not installed here; the CI tests the hook of the website."
 fi
+
+printf '\n== %s\n' "Description of the app"
+# GitHub, the website and Composer describe the app in the same words, those that people
+# search for: the answer description of .copier-answers.yml, which the blueprint writes
+# into .github/repository.toml for the settings bot. Change it with
+#   copier update --defaults --vcs-ref <_commit of .copier-answers.yml> --data description=...
+# and then in mkdocs.yml and composer.json.
+description="$(sed -n 's/^description = "\(.*\)"$/\1/p' .github/repository.toml)"
+website="$(sed -n 's/^site_description: "\(.*\)"$/\1/p' mkdocs.yml)"
+composer="$(sed -n 's/^[[:space:]]*"description": "\(.*\)",$/\1/p' composer.json)"
+if [[ -z "$description" || "$website" != "$description" || "$composer" != "$description" ]]; then
+  echo "The repository has the description \"${description:-none}\", mkdocs.yml the site_description \"${website:-none}\" and composer.json the description \"${composer:-none}\"; give all three the same."
+  exit 1
+fi
+echo "GitHub, the website and Composer describe the app in the same words."
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then
