@@ -13,9 +13,11 @@ use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCP\Files\File;
+use OCP\Files\FileInfo;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
+use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IUser;
@@ -38,6 +40,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $readOnly = [];
 	/** @var array<string, \Throwable> failures of the node operations newFile, move and delete */
 	private array $failures = [];
+	/** @var array<string, int|float> the free space of a folder, by absolute path; unlimited for the others */
+	private array $freeSpace = [];
 	private bool $filesCannotBeOpened = false;
 	private NextcloudStorageService $service;
 
@@ -201,6 +205,67 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->expectException(NotPermittedException::class);
 		$this->expectExceptionMessage('Quota exceeded');
 		$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed');
+	}
+
+	/**
+	 * Nextcloud applies no quota to the temporary .part file of a write, and a full quota refuses
+	 * new folders with a NotPermittedException, so the write checks the space before either.
+	 */
+	public function testWriteThatExceedsTheFreeSpaceIsRefusedBeforeAnyFolderIsCreated(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->freeSpace[self::HOME . '/Archiv'] = 11;
+
+		try {
+			$this->service->writeAtomic(self::USER, 'Archiv/2026/a.pdf', $this->stream('%PDF-content'), 'replace');
+			self::fail('A file larger than the free space must be refused.');
+		} catch (NotEnoughSpaceException $exception) {
+			self::assertSame('Not enough free space in Nextcloud: the file needs 12 bytes, and 11 are free.', $exception->getMessage());
+		}
+		self::assertSame([self::HOME, self::HOME . '/Archiv'], array_keys($this->nodes));
+	}
+
+	public function testWriteThatFitsIntoTheFreeSpaceIsStored(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->freeSpace[self::HOME . '/Archiv'] = 12.0;
+
+		$this->service->writeAtomic(self::USER, 'Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
+
+		self::assertSame('%PDF-content', $this->nodes[self::HOME . '/Archiv/a.pdf']);
+	}
+
+	public function testTextThatExceedsTheFreeSpaceOfTheUserFolderIsRefused(): void {
+		$this->freeSpace[self::HOME] = 0;
+
+		$this->expectException(NotEnoughSpaceException::class);
+		$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed');
+	}
+
+	public function testUnknownFreeSpaceIsNotChecked(): void {
+		$this->freeSpace[self::HOME] = FileInfo::SPACE_UNKNOWN;
+
+		$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed');
+
+		self::assertSame('Paperless import failed', $this->nodes[self::HOME . '/Fehler/a.pdf.error.txt']);
+	}
+
+	public function testWriteBelowAFileWithTheNameOfAFolderFails(): void {
+		$this->nodes[self::HOME . '/Archiv'] = 'a file';
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Nextcloud path component Archiv is not a folder.');
+		$this->service->writeText(self::USER, 'Archiv/2026/a.pdf.error.txt', 'Paperless import failed');
+	}
+
+	public function testWritableFolderIsAFolderInWhichFilesCanBeCreated(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->nodes[self::HOME . '/Fest'] = null;
+		$this->nodes[self::HOME . '/a.pdf'] = '%PDF';
+		$this->readOnly[self::HOME . '/Fest'] = true;
+
+		self::assertTrue($this->service->isWritableFolder(self::USER, '/Archiv/'));
+		self::assertFalse($this->service->isWritableFolder(self::USER, 'Fest'));
+		self::assertFalse($this->service->isWritableFolder(self::USER, 'a.pdf'));
+		self::assertFalse($this->service->isWritableFolder(self::USER, 'Fehlt'));
 	}
 
 	public function testWriteTextStoresTheText(): void {
@@ -391,6 +456,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$folder->method('get')->willReturnCallback(fn (string $relative): Node => $this->node($this->resolve($path, $relative)));
 		$folder->method('getFullPath')->willReturnCallback(fn (string $relative): string => $this->resolve($path, $relative));
 		$folder->method('isCreatable')->willReturnCallback(fn (): bool => !isset($this->readOnly[$path]));
+		$folder->method('getFreeSpace')->willReturnCallback(fn (): int|float => $this->freeSpace[$path] ?? FileInfo::SPACE_UNLIMITED);
 		$folder->method('getDirectoryListing')->willReturnCallback(fn (): array => array_map(
 			fn (string $child): Node => $this->node($child),
 			array_values(array_filter(array_keys($this->nodes), static fn (string $candidate): bool => dirname($candidate) === $path)),

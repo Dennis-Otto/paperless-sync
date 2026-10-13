@@ -72,7 +72,7 @@ sequenceDiagram
     end
     rect rgba(23, 84, 31, 0.12)
         Note over Sync,State: Export
-        Sync->>Paperless: documents, trash, correspondents, types, storage paths, tags
+        Sync->>Paperless: every page of the documents, the trash, correspondents, types, storage paths and tags, checked for completeness
         Sync->>State: compare with the paths and checksums of the last run
         Sync->>Paperless: download new and changed documents
         Sync->>Files: write, move, move to the deleted folder, delete
@@ -84,8 +84,8 @@ sequenceDiagram
 1. Nextcloud's cron starts the background job every five minutes. It runs only when synchronization is enabled and the configured interval has passed. An administrator can start a run or a dry run on the settings page as well.
 2. The run takes a lock, checks that the app is configured, and tests the connection to Paperless and the base folder in Nextcloud.
 3. **Inbox:** the files of the inbox folder are uploaded to Paperless, at most as many as the batch size allows. Each file goes up from a copy in Nextcloud's temporary folder, so that the request has a `Content-Length` also when the file lies on object storage. Their tasks are followed in the next runs: after success the file is deleted or kept, as configured; after a failure it moves to the error folder, next to a text file with the reason. A file that Paperless refuses at once, with `400`, `413`, `415` or `422`, is remembered with its ETag and skipped until it changes. Any other failure, such as a timeout or a `5xx`, ends the uploads of the run, and the file waits for its next attempt: 15 minutes, doubled after each failure, at most a day.
-4. **Export:** every document gets its path from the path template. A new document is downloaded to a temporary file and then written; a document whose checksum changed is written again; a document whose metadata changed moves to its new path. Documents in the Paperless inbox and documents with an excluded tag are skipped, and their mirrored copies removed.
-5. **Trash and deletion:** a document in the Paperless trash moves to the deleted folder. A document that is missing from both the API and the trash for the configured number of complete runs is deleted, but only when permanent deletion is enabled.
+4. **Export:** every document gets its path from the path template. A new document is downloaded to a temporary file and then written; a document whose checksum changed is written again; a document whose metadata changed moves to its new path. Documents in the Paperless inbox and documents with an excluded tag are skipped, and their mirrored copies removed. Every change takes its place in the batch, also one that fails, and failed exports take their places only among the exports. The most recently added documents come first, documents whose last change failed after the others. Before every write, the app checks the free space, because Nextcloud applies no quota to the temporary file of a write; a full quota, an archive that is no longer writable or an unavailable storage ends the exports and moves of the run at its first failure.
+5. **Trash and deletion:** a document in the Paperless trash moves to the deleted folder. A document that is missing from both the API and the trash for the configured number of complete runs in a row moves to the deleted folder too, and is deleted only when permanent and direct deletion are enabled. A scan is complete when every page came back full, with the same count of Paperless, and the run received every document that Paperless listed, read in the order of their IDs; after an incomplete scan, no document counts as missing.
 6. Empty folders are pruned, the state is saved, and the status records the report. A dry run does all of this without writing anything.
 
 ## Design decisions
@@ -93,5 +93,6 @@ sequenceDiagram
 - **Paperless is the source of truth.** Nextcloud gets a mirror; the app sends no change of the mirrored files back to Paperless.
 - **The marker `[P<ID>]`** in every file name ties a file to its document, so a renamed document is found again, and [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) can open it. The app adds it to a template that leaves it out, and it shortens only the free text of a name that would be too long, never the marker.
 - **No WebDAV and no password of Nextcloud.** The app writes through Nextcloud's file API in the name of the target user.
-- **Bounded and resumable runs.** The batch size limits the changes of one run, and the state lets the next run continue where it stopped.
+- **Bounded and resumable runs.** The batch size limits the changes of one run, failed ones included, and the state lets the next run continue where it stopped.
+- **Only complete scans confirm a deletion.** A page that came back short or empty, or a list that changed while the run read it, makes no document count as missing ([decision 0004](decisions/0004-delete-only-what-is-confirmed.md)).
 - **Safe by default.** Synchronization is off until a configuration works, and permanent deletion is off until an administrator turns it on.

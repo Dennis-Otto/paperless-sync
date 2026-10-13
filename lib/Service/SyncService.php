@@ -10,8 +10,12 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCP\Files\NotEnoughSpaceException;
+use OCP\Files\NotPermittedException;
+use OCP\Files\StorageNotAvailableException;
 use OCP\Lock\ILockingProvider;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
@@ -72,8 +76,12 @@ final class SyncService {
 	}
 
 	private function syncExports(SyncConfig $config, SyncReport $report): void {
-		$documents = $this->paperless->documents();
-		$trash = $this->paperless->trash();
+		$documentScan = $this->paperless->documents();
+		$trashScan = $this->paperless->trash();
+		$documents = $documentScan->documents;
+		$trash = $trashScan->documents;
+		$documentsComplete = $this->checkScan($report, 'documents', $documentScan);
+		$trashComplete = $this->checkScan($report, 'trashed documents', $trashScan);
 		$correspondents = $this->paperless->correspondents();
 		$documentTypes = $this->paperless->documentTypes();
 		$storagePaths = $this->paperless->storagePaths();
@@ -82,16 +90,23 @@ final class SyncService {
 		$report->trashedDocuments = count($trash);
 
 		$seen = [];
+		// The changes of the run: the exports and moves that succeeded, and every removal, move to the
+		// deleted folder and deletion that the run tried, also one that failed.
 		$changes = 0;
+		// The exports and moves of documents that the run tried, also those that failed, so that a run
+		// that can't write downloads no more documents than the batch size allows. A failed export is
+		// no change, so documents whose export keeps failing leave the batch of the trashed and the
+		// missing documents alone.
+		$attempts = 0;
+		// After Nextcloud refused a write for the whole archive, the other exports and moves wait for the next run.
+		$storageFailed = false;
 		$archiveRoot = $this->join($config->basePath, $config->archiveFolder);
 		/** @var list<string> $excludedNames */
 		$excludedNames = array_values(array_map('mb_strtolower', array_filter(array_map('trim', explode(',', $config->excludedTags)))));
 		$sharedPaths = $this->sharedPaths($config);
 
-		foreach ($documents as $document) {
-			$documentId = $this->documentId($document);
+		foreach ($this->exportQueue($config, $documents) as [$document, $documentId, $entry]) {
 			$seen[$documentId] = true;
-			$entry = $this->state->findExport($config->targetUser, $documentId);
 			if ($this->isExcluded($config, $document, $tags, $excludedNames)) {
 				++$report->skipped;
 				if ($entry === null) {
@@ -104,6 +119,8 @@ final class SyncService {
 						continue;
 					}
 					if ($exists) {
+						// A removal takes its place in the batch before it is tried, also one that fails.
+						++$changes;
 						if (!$report->dryRun) {
 							$this->storage->delete($config->targetUser, $excludedPath);
 							if ($config->pruneEmptyFolders) {
@@ -112,7 +129,6 @@ final class SyncService {
 						}
 						$report->action("REMOVE EXCLUDED P{$documentId}: {$excludedPath}");
 						++$report->removedExcluded;
-						++$changes;
 					}
 					if (!$report->dryRun) {
 						$this->state->deleteExport($config->targetUser, $documentId);
@@ -159,9 +175,15 @@ final class SyncService {
 					}
 					continue;
 				}
-				if ($changes >= $config->batchSize) {
+				if ($attempts >= $config->batchSize || $changes >= $config->batchSize || $storageFailed) {
 					++$report->skipped;
 					continue;
+				}
+				++$attempts;
+				// When conflicts are skipped, Nextcloud refuses to write over a file, so the download or
+				// the move would be in vain.
+				if ($config->conflictMode === 'skip' && $this->storage->exists($config->targetUser, $target)) {
+					throw new RuntimeException("Nextcloud file conflict at {$target}.");
 				}
 
 				$canMove = $entry !== null
@@ -206,6 +228,7 @@ final class SyncService {
 					}
 					++$report->exported;
 				}
+				++$changes;
 				$report->action(($canMove ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
 				$this->state->saveExport($config->targetUser, $documentId, [
 					'path' => $target,
@@ -220,12 +243,14 @@ final class SyncService {
 				if ($config->pruneEmptyFolders && $oldPath !== '' && $oldPath !== $target) {
 					$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 				}
-				++$changes;
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
 				$report->error("P{$documentId}: {$error}");
 				if (!$report->dryRun) {
 					$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
+				}
+				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
+					$storageFailed = true;
 				}
 			}
 		}
@@ -252,15 +277,16 @@ final class SyncService {
 				// Only a copy that is still there moves and counts, as for missing documents. The keep
 				// policy and a copy that is gone, or was never exported, only mark the document.
 				if ($config->trashMode === 'move' && $exists) {
-					if ($changes >= $config->batchSize) {
+					if ($changes >= $config->batchSize || $storageFailed) {
 						++$report->skipped;
 						continue;
 					}
+					// A move takes its place in the batch before it is tried, also one that fails.
+					++$changes;
 					$target = $this->deletedPath($config, $oldPath, $archiveRoot, $deletedAt);
 					if ($report->dryRun) {
 						$report->action("TRASH P{$documentId}: {$target}");
 						++$report->movedToTrash;
-						++$changes;
 					} elseif ($this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode)) {
 						$values['path'] = $target;
 						if ($config->pruneEmptyFolders) {
@@ -268,7 +294,6 @@ final class SyncService {
 						}
 						$report->action("TRASH P{$documentId}: {$target}");
 						++$report->movedToTrash;
-						++$changes;
 					}
 				}
 				if (!$report->dryRun) {
@@ -280,12 +305,24 @@ final class SyncService {
 				if (!$report->dryRun) {
 					$this->state->saveExport($config->targetUser, $documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
+				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
+					$storageFailed = true;
+				}
 			}
 		}
 
 		foreach ($this->state->allExports($config->targetUser) as $entry) {
 			$documentId = (int)($entry['document_id'] ?? 0);
-			if ($documentId < 1 || isset($seen[$documentId])) {
+			if (isset($seen[$documentId])) {
+				// Paperless listed the document, so its count of missing scans starts anew, also when
+				// its export failed or waits for the next run.
+				if ((int)($entry['missing_runs'] ?? 0) > 0 && !$report->dryRun) {
+					$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0]);
+				}
+				continue;
+			}
+			// A document that an incomplete scan left out may still exist, so such a run counts none as missing.
+			if ($documentId < 1 || !$documentsComplete || !$trashComplete) {
 				continue;
 			}
 			$missingRuns = (int)($entry['missing_runs'] ?? 0) + 1;
@@ -299,9 +336,10 @@ final class SyncService {
 				continue;
 			}
 
-			// Only a copy that is still there is moved or deleted, and only that counts as a change.
-			// When the batch is full, the copy and its state stay as they are, so the next run moves
-			// or deletes it. An error concerns only this document.
+			// Only a copy that is still there is moved or deleted, and only that counts as a change,
+			// also when it fails. When the batch is full, or Nextcloud cannot store files in the
+			// archive, the copy and its state stay as they are, so the next run moves or deletes it.
+			// An error concerns only this document.
 			try {
 				$canDelete = $config->permanentDelete && ($state === 'trash' || $config->allowDirectDelete);
 				if ($canDelete) {
@@ -311,6 +349,7 @@ final class SyncService {
 						continue;
 					}
 					if ($exists) {
+						++$changes;
 						if (!$report->dryRun) {
 							$this->storage->delete($config->targetUser, $path);
 							if ($config->pruneEmptyFolders) {
@@ -319,7 +358,6 @@ final class SyncService {
 						}
 						$report->action("DELETE P{$documentId}: {$path}");
 						++$report->permanentlyDeleted;
-						++$changes;
 					}
 					if (!$report->dryRun) {
 						$this->state->deleteExport($config->targetUser, $documentId);
@@ -329,15 +367,15 @@ final class SyncService {
 
 				$values = ['state' => 'missing', 'missing_runs' => $missingRuns, 'last_error' => null];
 				if ($state === 'active' && $config->trashMode === 'move' && $this->copyExists($config, $path)) {
-					if ($changes >= $config->batchSize) {
+					if ($changes >= $config->batchSize || $storageFailed) {
 						++$report->skipped;
 						continue;
 					}
+					++$changes;
 					$target = $this->deletedPath($config, $path, $archiveRoot, time());
 					if ($report->dryRun) {
 						$report->action("MISSING P{$documentId}: {$target}");
 						++$report->movedToTrash;
-						++$changes;
 					} elseif ($this->storage->move($config->targetUser, $path, $target, $config->conflictMode)) {
 						$values['path'] = $target;
 						if ($config->pruneEmptyFolders) {
@@ -345,7 +383,6 @@ final class SyncService {
 						}
 						$report->action("MISSING P{$documentId}: {$target}");
 						++$report->movedToTrash;
-						++$changes;
 					}
 				}
 				if (!$report->dryRun) {
@@ -357,7 +394,85 @@ final class SyncService {
 				if (!$report->dryRun) {
 					$this->state->saveExport($config->targetUser, $documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
+				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
+					$storageFailed = true;
+				}
 			}
+		}
+	}
+
+	/**
+	 * The documents in the order of the run, each with its ID and its state: the most recently added
+	 * first, so that a new document does not wait behind a backlog. A document whose last change
+	 * failed follows the others, the one that failed longest ago first, so that documents that keep
+	 * failing take turns and leave the places of the batch to those that would succeed.
+	 *
+	 * @param list<array<string, mixed>> $documents
+	 * @return list<array{array<string, mixed>, int, array<string, int|string|null>|null}>
+	 */
+	private function exportQueue(SyncConfig $config, array $documents): array {
+		$queue = [];
+		$failed = [];
+		foreach ($documents as $document) {
+			$documentId = $this->documentId($document);
+			$entry = $this->state->findExport($config->targetUser, $documentId);
+			if (($entry['last_error'] ?? null) !== null) {
+				$failed[] = [$document, $documentId, $entry];
+			} else {
+				$queue[] = [$document, $documentId, $entry];
+			}
+		}
+		usort($queue, static fn (array $left, array $right): int => $right[1] <=> $left[1]);
+		usort($failed, static fn (array $left, array $right): int => [(int)($left[2]['last_seen'] ?? 0), $right[1]] <=> [(int)($right[2]['last_seen'] ?? 0), $left[1]]);
+
+		return [...$queue, ...$failed];
+	}
+
+	/** Reports and logs a scan that may have left documents out; returns whether the scan was complete. */
+	private function checkScan(SyncReport $report, string $list, PaperlessScan $scan): bool {
+		if ($scan->complete) {
+			return true;
+		}
+		$received = count($scan->documents);
+		$report->notice("SCAN INCOMPLETE: Paperless's list of {$list} came back incomplete or changed while the run read it ({$received} of {$scan->listed} received); no document counts as missing in this run.");
+		$this->logger->warning("Paperless's list of {list} came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.", [
+			'list' => $list,
+			'received' => $received,
+			'listed' => $scan->listed,
+		]);
+
+		return false;
+	}
+
+	/**
+	 * Whether a failure concerns the whole archive, so that the other exports and moves of the run
+	 * would fail as well: a full quota or disk, an unavailable storage, or an archive folder in which
+	 * the target user may no longer create files. A path that Nextcloud refuses on its own, such as a
+	 * forbidden name or a read-only subfolder, concerns only its document. The stop is reported and
+	 * logged.
+	 */
+	private function stopsWrites(SyncConfig $config, SyncReport $report, string $archiveRoot, \Throwable $exception, string $error): bool {
+		$archiveFailed = $exception instanceof NotEnoughSpaceException
+			|| $exception instanceof StorageNotAvailableException
+			|| ($exception instanceof NotPermittedException && !$this->archiveWritable($config, $archiveRoot));
+		if (!$archiveFailed) {
+			return false;
+		}
+		$report->notice('EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.');
+		$this->logger->warning('Nextcloud cannot store files in the archive, so this run exports and moves no further documents: {error}', [
+			'error' => $error,
+			'exception' => $exception,
+		]);
+
+		return true;
+	}
+
+	/** Whether the target user may still create files in the archive; a failure of the check counts as no. */
+	private function archiveWritable(SyncConfig $config, string $archiveRoot): bool {
+		try {
+			return $this->storage->isWritableFolder($config->targetUser, $archiveRoot);
+		} catch (\Throwable) {
+			return false;
 		}
 	}
 

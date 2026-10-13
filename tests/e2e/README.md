@@ -28,11 +28,11 @@ The scenario verifies:
 
 - administrator configuration and server-side token handling
 - dry-run behavior without filesystem mutations
-- archive export through the Paperless download API
+- archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
 - Paperless inbox-tag exclusion and empty-folder pruning
-- Paperless trash mirroring and guarded permanent deletion
+- Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete
 - successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs

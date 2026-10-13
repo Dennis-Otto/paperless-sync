@@ -42,6 +42,14 @@ final class SyncReport implements \JsonSerializable {
 		}
 	}
 
+	/**
+	 * A line that the report keeps past the limit of its actions: a run that stopped its exports or
+	 * counted no document as missing says so, also after a hundred other actions.
+	 */
+	public function notice(string $message): void {
+		$this->actions[] = $message;
+	}
+
 	public function error(string $message): void {
 		++$this->errors;
 		$this->action('ERROR: ' . $message);

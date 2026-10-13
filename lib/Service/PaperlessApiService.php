@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Service;
 
 use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\PaperlessScan;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\ITempManager;
@@ -37,12 +38,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$this->requestPage($url, $token, '/api/documents/', ['page' => 1, 'page_size' => 1]);
 	}
 
-	public function documents(): array {
-		return $this->getAll('/api/documents/');
+	public function documents(): PaperlessScan {
+		// Ordered by their IDs, a document added during the scan joins the last page instead of
+		// shifting the pages that the run has not read yet.
+		return $this->scan('/api/documents/', ['ordering' => 'id']);
 	}
 
-	public function trash(): array {
-		return $this->getAll('/api/trash/');
+	public function trash(): PaperlessScan {
+		// Paperless orders its trash on its own; the check of the scan finds the pages that shifted.
+		return $this->scan('/api/trash/');
 	}
 
 	public function correspondents(): array {
@@ -62,11 +66,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		/** @var array<string, string> $names */
 		$names = [];
 		$inbox = [];
-		foreach ($this->getAll('/api/tags/') as $tag) {
-			if (!isset($tag['id']) || !is_scalar($tag['id'])) {
-				continue;
-			}
-			$id = (string)$tag['id'];
+		foreach ($this->getAll('/api/tags/') as $key => $tag) {
+			$id = (string)$key;
 			$name = $tag['name'] ?? null;
 			$names[$id] = is_string($name) ? $name : $id;
 			if (($tag['is_inbox_tag'] ?? false) === true) {
@@ -247,19 +248,74 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return ['status' => $status, 'message' => $message];
 	}
 
-	/** @return list<array<string, mixed>> */
+	/**
+	 * Every entry of a small list of Paperless, such as its tags, by its ID. Without every tag, a
+	 * document with an excluded tag or in the inbox would be exported, and without every
+	 * correspondent, document type or storage path, documents would move to other paths. So a list
+	 * that came back incomplete fails the run, before it changes anything in the archive.
+	 *
+	 * @return array<array-key, array<string, mixed>>
+	 */
 	private function getAll(string $path): array {
-		$url = $this->configService->get()->paperlessUrl;
-		$token = $this->configService->getToken();
-		$first = $this->requestPage($url, $token, $path, ['page' => 1, 'page_size' => self::PAGE_SIZE]);
-		$results = $first['results'];
-		$pages = max(1, (int)ceil($first['count'] / self::PAGE_SIZE));
-		for ($page = 2; $page <= $pages; ++$page) {
-			$next = $this->requestPage($url, $token, $path, ['page' => $page, 'page_size' => self::PAGE_SIZE]);
-			array_push($results, ...$next['results']);
+		$scan = $this->pages($path);
+		if (!$scan['complete']) {
+			$received = count($scan['results']);
+			throw new UnexpectedValueException("Paperless's list {$path} came back incomplete or changed while the run read it ({$received} of {$scan['listed']} received).");
 		}
 
-		return $results;
+		return $scan['byId'];
+	}
+
+	/** @param array<string, string> $query */
+	private function scan(string $path, array $query = []): PaperlessScan {
+		$scan = $this->pages($path, $query);
+
+		return new PaperlessScan($scan['results'], $scan['complete'], $scan['listed']);
+	}
+
+	/**
+	 * Every page of a list, its entries in the order of Paperless and by their IDs. The scan is
+	 * complete only when every page carries the same count of Paperless, every page before the last
+	 * is full, and the run received as many entries with different IDs as Paperless listed: a page
+	 * that came back short or empty, or a list that changed while the run read it, may have left
+	 * entries out.
+	 *
+	 * @param array<string, string> $query
+	 * @return array{results: list<array<string, mixed>>, byId: array<array-key, array<string, mixed>>, complete: bool, listed: int}
+	 */
+	private function pages(string $path, array $query = []): array {
+		$url = $this->configService->get()->paperlessUrl;
+		$token = $this->configService->getToken();
+		$results = [];
+		$byId = [];
+		$complete = true;
+		$listed = 0;
+		$pages = 1;
+		for ($page = 1; $page <= $pages; ++$page) {
+			$next = $this->requestPage($url, $token, $path, $query + ['page' => $page, 'page_size' => self::PAGE_SIZE]);
+			if ($page === 1) {
+				$pages = max(1, (int)ceil($next['count'] / self::PAGE_SIZE));
+			} elseif ($next['count'] !== $listed) {
+				$complete = false;
+			}
+			$listed = $next['count'];
+			if (!$next['paginated'] || ($page < $pages && count($next['results']) !== self::PAGE_SIZE)) {
+				$complete = false;
+			}
+			foreach ($next['results'] as $result) {
+				$results[] = $result;
+				if (isset($result['id']) && (is_int($result['id']) || is_string($result['id']))) {
+					$byId[(string)$result['id']] = $result;
+				}
+			}
+		}
+
+		return [
+			'results' => $results,
+			'byId' => $byId,
+			'complete' => $complete && count($byId) === $listed && count($results) === $listed,
+			'listed' => $listed,
+		];
 	}
 
 	/**
@@ -269,10 +325,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private function namedMap(string $path): array {
 		/** @var array<string, string> $map */
 		$map = [];
-		foreach ($this->getAll($path) as $item) {
-			$id = $item['id'] ?? null;
+		foreach ($this->getAll($path) as $id => $item) {
 			$name = $item['name'] ?? null;
-			if (is_scalar($id) && is_string($name)) {
+			if (is_string($name)) {
 				$map[(string)$id] = $name;
 			}
 		}
@@ -281,8 +336,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
+	 * The page of a list, with the count of Paperless, and whether it was a page of a paginated list
+	 * of Paperless: an object with the count and the results.
+	 *
 	 * @param array<string, int|string> $query
-	 * @return array{count: int, results: list<array<string, mixed>>}
+	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool}
 	 * @psalm-suppress MixedAssignment
 	 */
 	private function requestPage(string $url, string $token, string $path, array $query): array {
@@ -318,9 +376,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 		}
 
+		$counted = isset($data['count']) && is_numeric($data['count']);
+
 		return [
-			'count' => isset($data['count']) && is_numeric($data['count']) ? (int)$data['count'] : count($results),
+			'count' => $counted ? (int)$data['count'] : count($results),
 			'results' => $results,
+			'paginated' => $counted && isset($data['results']) && is_array($data['results']),
 		];
 	}
 

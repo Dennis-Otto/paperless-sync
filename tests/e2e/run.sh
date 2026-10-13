@@ -285,7 +285,16 @@ if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/Example%20
 	exit 1
 fi
 
+# Nextcloud applies no quota to the temporary file of a write, so the app checks the free space
+# itself: with the quota of the target user used up, the export stops at its first document, and
+# the document follows once there is space again.
 control /control/scenario/renamed >/dev/null
+occ user:setting sync-target files quota '1 B' >/dev/null
+sync_run false "${TMP_DIR}/export-stopped.json"
+occ user:setting --delete sync-target files quota >/dev/null
+assert_json export-stopped "${TMP_DIR}/export-stopped.json"
+assert_dav_missing sync-target "${RENAMED_PATH}"
+
 sync_run false "${TMP_DIR}/re-export.json"
 assert_json export "${TMP_DIR}/re-export.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
@@ -294,6 +303,13 @@ control /control/scenario/trash >/dev/null
 sync_run false "${TMP_DIR}/trash.json"
 assert_json trash "${TMP_DIR}/trash.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
+assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+
+# A page that comes back empty while its count still lists the document counts nothing as missing,
+# so the document waits for its first missing run in the next step.
+control /control/scenario/incomplete >/dev/null
+sync_run false "${TMP_DIR}/scan-incomplete.json"
+assert_json scan-incomplete "${TMP_DIR}/scan-incomplete.json"
 assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
 
 control /control/scenario/empty >/dev/null
