@@ -16,7 +16,8 @@ use RuntimeException;
  * that Paperless reports, so that a change of the metadata alone moves the file instead of
  * downloading it again. Paperless-ngx reports MD5 up to 2.x and SHA-256 since 3.0, so the database
  * keeps both, as "<sha256> <md5>" in the column fingerprint. A file that an earlier version exported
- * has only its SHA-256 there until its next download.
+ * has only its SHA-256 there until a run computes the checksums of the mirrored file or downloads
+ * the document again.
  */
 final class DocumentFingerprint {
 	/** The bytes that one read hashes: the document never is in memory as a whole. */

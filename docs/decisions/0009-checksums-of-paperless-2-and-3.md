@@ -13,11 +13,11 @@ The checksum also came from a string of the whole document, so a document larger
 
 1. Require Paperless-ngx 3. Nothing to build, but most installations still run 2.x, and the app would break for them without a word.
 2. Ask Paperless which version it runs and compute the matching checksum. A request more per run, and a guess about versions that a backport or a fork can make wrong.
-3. Compute both checksums at every download and keep both, as `"<sha256> <md5>"` in the existing column `fingerprint` (97 of its 128 characters). A checksum of Paperless matches when it is one of the two. A SHA-256 that an earlier version saved still matches on Paperless-ngx 3, and on 2 the next change downloads the document once more and saves both.
+3. Compute both checksums at every download and keep both, as `"<sha256> <md5>"` in the existing column `fingerprint` (97 of its 128 characters). A checksum of Paperless matches when it is one of the two. A SHA-256 that an earlier version saved still matches on Paperless-ngx 3. On 2, the next change computes both checksums of the mirrored file once: when its SHA-256 is the saved one, the file still has the content of that download, so its MD5 completes the saved checksums, and the change moves the file without a download.
 
 ## Decision
 
-Option 3. The Paperless client downloads to a temporary file as before, computes both checksums in one pass of 1 MB reads over it, and hands the file itself to the write to Nextcloud instead of a copy, so that no document is in memory as a whole, whatever its size. The column keeps its size, so no migration is needed, and no request asks Paperless for its version.
+Option 3. The Paperless client downloads to a temporary file as before, computes both checksums in one pass of 1 MB reads over it, and hands the file itself to the write to Nextcloud instead of a copy, so that no document is in memory as a whole, whatever its size. A file that an earlier version exported gains its MD5 from a read of the mirrored file, which costs one read of a local file instead of a download, and only when Paperless reports an MD5 for a new revision. The column keeps its size, so no migration is needed, and no request asks Paperless for its version.
 
 ## Consequences
 
