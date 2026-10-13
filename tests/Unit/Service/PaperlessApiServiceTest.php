@@ -22,6 +22,7 @@ use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\Http\Client\LocalServerException;
 use OCP\ITempManager;
+use OCP\Security\IRemoteHostValidator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -62,7 +63,10 @@ final class PaperlessApiServiceTest extends TestCase {
 
 			return $path;
 		});
-		$this->service = new PaperlessApiService($configService, $clientService, $this->tempManager);
+		// Nextcloud's check of an address against the local network, for two of its addresses.
+		$remoteHostValidator = $this->createMock(IRemoteHostValidator::class);
+		$remoteHostValidator->method('isValid')->willReturnCallback(static fn (string $host): bool => !in_array($host, ['paperless', '192.168.1.20'], true));
+		$this->service = new PaperlessApiService($configService, $clientService, $this->tempManager, $remoteHostValidator);
 	}
 
 	protected function tearDown(): void {
@@ -266,8 +270,45 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(self::URL . '/api/documents/123/download/', $request['url']);
 		self::assertSame(['original' => 'true'], $request['options']['query']);
 		self::assertSame(180, $request['options']['timeout']);
-		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $request['options']['allow_redirects']);
+		$redirects = $request['options']['allow_redirects'];
+		self::assertIsArray($redirects);
+		self::assertIsCallable($redirects['on_redirect'], 'Without the setting, every redirect is checked against the local network.');
+		unset($redirects['on_redirect']);
+		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $redirects);
 		self::assertFileDoesNotExist($request['options']['sink']);
+	}
+
+	/**
+	 * The redirects of a download replace the check of Nextcloud's HTTP client against the local
+	 * network, so the app checks every one itself. Without that, Paperless could redirect a download
+	 * into the network of the server whenever an administrator turned off Nextcloud's dns_pinning.
+	 */
+	public function testDownloadRefusesARedirectIntoTheLocalNetwork(): void {
+		$this->responses[] = static function (array $options): array {
+			$redirect = $options['allow_redirects']['on_redirect'];
+			$redirect(null, null, self::uri('https://files.example.test/123.pdf'));
+			$redirect(null, null, self::uri('http://192.168.1.20:8000/123.pdf'));
+			self::fail('A redirect into the local network must be refused.');
+		};
+
+		try {
+			$this->service->downloadDocument(123, true, $this->sink());
+			self::fail('A refused redirect must be reported.');
+		} catch (PaperlessLocalNetworkException $exception) {
+			self::assertSame('192.168.1.20', $exception->host);
+			self::assertFalse($exception->withoutDnsRecord);
+		}
+	}
+
+	/** With the setting, Nextcloud allows the local network for the redirects of a download too. */
+	public function testDownloadInTheLocalNetworkLeavesItsRedirectsToNextcloud(): void {
+		$this->settings['paperless_local_network'] = true;
+		$this->responses[] = [200, null];
+
+		$this->service->downloadDocument(123, true, $this->sink());
+
+		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $this->requests[0]['options']['allow_redirects']);
+		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
 	}
 
 	public function testDownloadOfTheArchiveVersion(): void {
@@ -294,7 +335,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn(false);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager);
+		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Could not create a temporary Paperless download file.');
@@ -431,7 +472,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn(false);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager);
+		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Could not create a temporary Paperless upload file.');
@@ -445,7 +486,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn($directory);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager);
+		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 		$warnings = [];
 		set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
 			$warnings[] = $message;
@@ -717,7 +758,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		} catch (PaperlessLocalNetworkException $exception) {
 			self::assertSame($host, $exception->host);
 			self::assertSame(
-				"Nextcloud blocks connections to local addresses such as {$host}. If Paperless runs in your network, turn on \"Paperless runs in my local network\".",
+				"Nextcloud blocks connections to local addresses such as {$host}. If Paperless runs in your network, turn on \"Paperless runs in my local network\" and save the settings.",
 				$exception->getMessage(),
 			);
 			self::assertInstanceOf(PaperlessRequestException::class, $exception, 'An upload treats it as any other failed request.');
@@ -728,8 +769,44 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
-	/** A name without an address is no question of the local network, so the setting would not help. */
-	public function testNameWithoutAnAddressIsNoQuestionOfTheLocalNetwork(): void {
+	/**
+	 * Nextcloud says "No DNS record found" for a name that it can't look up. Without the setting it
+	 * asks only the DNS, not the hosts file of the server, such as Docker's extra_hosts, so the app
+	 * names the setting as a way out; with the setting on, the name has no address at all.
+	 */
+	public function testNameWithoutADnsRecordNamesTheSettingWhileItIsOff(): void {
+		$this->responses[] = static function (): array {
+			throw new LocalServerException('No DNS record found for paperless.home.arpa');
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A name without an address must be reported.');
+		} catch (PaperlessLocalNetworkException $exception) {
+			self::assertSame('paperless.home.arpa', $exception->host);
+			self::assertTrue($exception->withoutDnsRecord);
+			self::assertSame(
+				'Nextcloud found no DNS record for paperless.home.arpa. If the name is set only in the hosts file of the server, or Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
+				$exception->getMessage(),
+			);
+		}
+	}
+
+	public function testNameWithoutADnsRecordNamesTheHostOfTheUrlWhenNextcloudDoesNot(): void {
+		$this->responses[] = static function (): array {
+			throw new LocalServerException('No DNS record found');
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A name without an address must be reported.');
+		} catch (PaperlessLocalNetworkException $exception) {
+			self::assertSame('paperless.example.test', $exception->host);
+		}
+	}
+
+	public function testNameWithoutAnAddressIsNoQuestionOfTheLocalNetworkWithTheSettingOn(): void {
+		$this->settings['paperless_local_network'] = true;
 		$this->responses[] = static function (): array {
 			throw new LocalServerException('No DNS record found for paperless.example.test');
 		};
@@ -861,6 +938,20 @@ final class PaperlessApiServiceTest extends TestCase {
 		$response->method('getBody')->willReturn($body);
 
 		return $response;
+	}
+
+	/** The target of a redirect, as Guzzle passes it to on_redirect. */
+	private static function uri(string $uri): \Stringable {
+		return new class($uri) implements \Stringable {
+			public function __construct(
+				private string $uri,
+			) {
+			}
+
+			public function __toString(): string {
+				return $this->uri;
+			}
+		};
 	}
 
 	/** @return resource */

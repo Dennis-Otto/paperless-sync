@@ -18,6 +18,7 @@ use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
 use OCP\Http\Client\LocalServerException;
 use OCP\ITempManager;
+use OCP\Security\IRemoteHostValidator;
 use RuntimeException;
 use UnexpectedValueException;
 
@@ -33,6 +34,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		private ConfigService $configService,
 		IClientService $clientService,
 		private ITempManager $tempManager,
+		private IRemoteHostValidator $remoteHostValidator,
 	) {
 		$this->client = $clientService->newClient();
 	}
@@ -417,27 +419,51 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * $localNetwork, the setting "Paperless runs in my local network", this request alone may go
 	 * there: its URL is always the one of Paperless that an administrator entered, and the switch
 	 * allow_local_remote_servers, which would lift the protection for every app, stays off.
+	 * Without it, a request that follows redirects checks every one of them as Nextcloud does.
 	 *
 	 * @param 'GET'|'POST' $method
 	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
 	 */
 	private function send(string $method, string $url, #[\SensitiveParameter] string $token, bool $localNetwork, #[\SensitiveParameter] array $options, bool $acceptJson = true): IResponse {
 		$options['headers'] = $this->headersForToken($token, $acceptJson);
+		$redirects = $options['allow_redirects'] ?? null;
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];
+		} elseif (is_array($redirects)) {
+			$redirects['on_redirect'] = $this->refuseLocalRedirect(...);
+			$options['allow_redirects'] = $redirects;
 		}
 		try {
 			return $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
 		} catch (LocalServerException $exception) {
 			$message = $this->failureMessage($exception->getMessage(), $token);
-			// Nextcloud says with the same exception that a name has no address at all, which the
-			// setting can't help.
-			if (str_starts_with($message, 'No DNS record found')) {
+			if (!str_starts_with($message, 'No DNS record found')) {
+				throw new PaperlessLocalNetworkException(self::refusedHost($message, $url));
+			}
+			// Nextcloud says with the same exception that it found no address for a name. Without
+			// the setting, it looks the name up only in the DNS, so a name of the hosts file of the
+			// server needs the setting; with it, the name has no address at all.
+			if ($localNetwork) {
 				throw new PaperlessRequestException($message);
 			}
-			throw new PaperlessLocalNetworkException(self::refusedHost($message, $url));
+			$host = preg_match('/^No DNS record found for (\S+)/', $message, $match) === 1 ? $match[1] : (string)parse_url($url, PHP_URL_HOST);
+			throw new PaperlessLocalNetworkException($host, true);
 		} catch (\Throwable $exception) {
 			throw new PaperlessRequestException($this->failureMessage($exception->getMessage(), $token));
+		}
+	}
+
+	/**
+	 * Refuses a redirect to an address of the local network, as Nextcloud's HTTP client does with
+	 * an on_redirect of its own, which the allow_redirects of a request replaces. Nextcloud's DNS
+	 * pinning checks every redirect as well, but an administrator can turn it off with dns_pinning.
+	 *
+	 * @psalm-suppress UnusedParam Guzzle passes the request and the response before the target.
+	 */
+	private function refuseLocalRedirect(mixed $request, mixed $response, \Stringable $target): void {
+		$host = (string)parse_url((string)$target, PHP_URL_HOST);
+		if (!$this->remoteHostValidator->isValid($host)) {
+			throw new LocalServerException('Host "' . $host . '" violates local access rules');
 		}
 	}
 

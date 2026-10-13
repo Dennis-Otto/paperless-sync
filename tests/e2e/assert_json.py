@@ -31,7 +31,8 @@ elif mode == "local-network-refused":
     expect(
         "message",
         "Nextcloud blocks connections to local addresses such as paperless-mock. "
-        'If Paperless runs in your network, turn on "Paperless runs in my local network".',
+        'If Paperless runs in your network, turn on "Paperless runs in my local network" '
+        "and save the settings.",
     )
     expect("setting", "paperless_local_network")
 elif mode == "dry-run":

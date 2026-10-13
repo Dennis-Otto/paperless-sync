@@ -151,11 +151,27 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame([
-			'message' => 'Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein.',
+			'message' => 'Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein und speichere die Einstellungen.',
 			'setting' => 'paperless_local_network',
 		], $response->getData());
 		self::assertSame([], $this->settings);
 		self::assertNull($this->credential);
+	}
+
+	/**
+	 * Without the setting, Nextcloud looks the name of Paperless up only in the DNS, so a name of
+	 * the hosts file of the server fails with "No DNS record found". The page names the setting too.
+	 */
+	public function testANameWithoutADnsRecordSaysWhatToDo(): void {
+		$this->paperless->method('testConnection')->willThrowException(new PaperlessLocalNetworkException('paperless.home.arpa', true));
+
+		$response = $this->controller->save(['paperless_url' => 'http://paperless.home.arpa:8000'] + self::validSettings(), 'secret-token');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame([
+			'message' => 'Nextcloud hat keinen DNS-Eintrag für paperless.home.arpa gefunden. Wenn der Name nur in der hosts-Datei des Servers steht oder Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein und speichere die Einstellungen.',
+			'setting' => 'paperless_local_network',
+		], $response->getData());
 	}
 
 	/** @return array<string, array{string}> */

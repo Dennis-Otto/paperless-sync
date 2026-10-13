@@ -183,7 +183,7 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame('failed', $this->settings['status_last_state']);
 		self::assertSame(
-			'Nextcloud blocks connections to local addresses such as paperless. If Paperless runs in your network, turn on "Paperless runs in my local network".',
+			'Nextcloud blocks connections to local addresses such as paperless. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
 			$this->settings['status_last_error'],
 		);
 	}

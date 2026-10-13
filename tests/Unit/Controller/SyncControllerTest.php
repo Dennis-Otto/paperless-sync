@@ -96,7 +96,7 @@ final class SyncControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		self::assertSame([
-			'message' => 'Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein.',
+			'message' => 'Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein und speichere die Einstellungen.',
 			'setting' => 'paperless_local_network',
 		], $response->getData());
 	}

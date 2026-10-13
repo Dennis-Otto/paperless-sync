@@ -88,7 +88,7 @@ try {
 	await page.locator('#paperless-sync-save:enabled').waitFor()
 	const refusal = await page.locator('#paperless-sync-message').textContent()
 	expect(
-		refusal === 'Nextcloud blocks connections to local addresses such as paperless-mock. If Paperless runs in your network, turn on "Paperless runs in my local network".',
+		refusal === 'Nextcloud blocks connections to local addresses such as paperless-mock. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.',
 		`A refused local address must say what to do: ${refusal}`,
 	)
 	expect(await localNetwork.evaluate((input) => input === document.activeElement), 'The focus must move to the setting that the message names.')
