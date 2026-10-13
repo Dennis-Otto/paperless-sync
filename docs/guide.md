@@ -27,7 +27,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-checklist-dark.png">
-  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees only its own documents there, and the tags and the upload from the inbox failed, each with the permission to grant in Paperless" src="images/settings-checklist-light.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags and the upload from the inbox failed, each with the permissions to grant in Paperless" src="images/settings-checklist-light.png">
 </picture>
 
 --8<-- "README.md:configuration-checklist"

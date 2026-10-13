@@ -312,6 +312,7 @@ assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
 checklist() {
 	endpoint="$1"
 	output="$2"
+	token="${3:-e2e-view-only-token}"
 	curl --fail-with-body --silent --show-error \
 		--user "e2e-admin:${PASSWORD}" \
 		--header 'Accept: application/json' \
@@ -323,7 +324,7 @@ checklist() {
 		--data-urlencode 'settings[base_path]=Documents/Paperless' \
 		--data-urlencode 'settings[export_enabled]=1' \
 		--data-urlencode 'settings[inbox_enabled]=1' \
-		--data-urlencode 'token=e2e-view-only-token' \
+		--data-urlencode "token=${token}" \
 		--output "${output}" \
 		"${BASE_URL}/apps/paperless_sync/${endpoint}"
 }
@@ -338,6 +339,10 @@ fi
 # the token with the one of the full account.
 checklist settings "${TMP_DIR}/saved-with-failures.json"
 assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
+# Without the permission View for UI Settings, Paperless doesn't tell the checklist the
+# permissions of the account: the lines of the trash and the inbox name that permission.
+checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
+assert_json checklist-no-ui-settings "${TMP_DIR}/checklist-no-ui-settings.json"
 
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \

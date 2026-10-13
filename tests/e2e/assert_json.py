@@ -11,7 +11,7 @@ mode = sys.argv[1]
 payload = json.load(sys.stdin)
 serialized = json.dumps(payload, sort_keys=True)
 
-if "e2e-only-token" in serialized or "e2e-view-only-token" in serialized:
+if any(token in serialized for token in ("e2e-only-token", "e2e-view-only-token", "e2e-no-ui-settings-token")):
     raise AssertionError("A response exposed a synthetic Paperless token")
 
 
@@ -58,11 +58,18 @@ def expect_view_only_checklist():
     expect_line(
         "upload",
         "failed",
-        "The account may not add documents.",
-        "In Paperless, under Users & Groups, give the account the permission Add for Documents.",
+        "The account may neither add documents nor view the tasks that import them.",
+        "In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.",
     )
-    # It is no superuser, so Paperless shows it only its own documents in the trash.
-    expect_line("trash", "warning", "Visible to the account: 0")
+    # It sees the document of the account of the app, which the trash of Paperless leaves out.
+    expect_line(
+        "trash",
+        "warning",
+        "Visible to the account: 0",
+        "Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees 1 of them. "
+        "When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. "
+        "Make the account of the app their owner.",
+    )
     for line_id in ("correspondents", "document_types", "storage_paths", "folder"):
         expect_line(line_id, "passed")
 
@@ -85,6 +92,27 @@ elif mode == "checklist-view-only":
     if set(payload) != {"checks"}:
         raise AssertionError(f"{mode}: the test answers with more than its checklist: {payload!r}")
     expect_view_only_checklist()
+elif mode == "checklist-no-ui-settings":
+    # Every list passes, but without View for UI Settings, Paperless names neither the
+    # permissions nor the ID of the account.
+    if set(payload) != {"checks"} or list(checks()) != CHECKLIST:
+        raise AssertionError(f"{mode}: the test answers with another checklist: {payload!r}")
+    for line_id in ("paperless", "documents", "correspondents", "document_types", "storage_paths", "tags", "folder"):
+        expect_line(line_id, "passed")
+    expect_line(
+        "trash",
+        "warning",
+        hint="Paperless shows the account in its trash only the documents that it owns and those without an owner. "
+        "Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. "
+        "Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.",
+    )
+    expect_line(
+        "upload",
+        "warning",
+        "Paperless did not say whether the account may add documents and view the tasks that import them.",
+        "In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. "
+        "The inbox needs Add for Documents and View for Paperless Tasks.",
+    )
 elif mode == "saved-with-failures":
     # A permission that one module needs is saved with the settings, and the checklist says what to do.
     expect("tokenConfigured", True)

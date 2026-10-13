@@ -635,6 +635,15 @@
 				const counts = revealChecks(result.checks)
 				if (counts.failed > 0) {
 					showMessage(translatePlural('%n check failed. The connection checklist says what to do.', '%n checks failed. The connection checklist says what to do.', counts.failed), 'error')
+					// A failure that a setting of the form fixes, such as "Paperless runs in my local
+					// network", moves the focus to that setting, as a refused save does.
+					const fixable = result.checks.find(function(line) {
+						return line.status === 'failed' && line.setting
+					})
+					const setting = fixable ? root.querySelector('[data-setting="' + window.CSS.escape(fixable.setting) + '"]') : null
+					if (setting) {
+						setting.focus()
+					}
 				} else if (counts.warning > 0) {
 					showMessage(translate('Every check passed. Read the notes of the connection checklist.'), 'success')
 				} else {

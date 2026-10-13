@@ -51,7 +51,19 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** What to do when Paperless answers with an error of its own. */
 	private const STATUS_HINT = 'Check that Paperless runs, and the log of Paperless or of the proxy in front of it.';
 	/** Why the trash of Paperless may lack the documents of other owners, and what that means for them. */
-	private const TRASH_HINT = 'Paperless shows the account only the trashed documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans, and are deleted only with direct deletion allowed. Make the account their owner, or a superuser.';
+	private const TRASH_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror.';
+	/** The same, when Paperless doesn't tell the checklist the account, which it would check otherwise. */
+	private const TRASH_UNKNOWN_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.';
+	/** The visible documents of other owners, which the trash of Paperless leaves out. */
+	private const FOREIGN_DOCUMENTS_HINT = 'Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees %s of them. When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. Make the account of the app their owner.';
+	/** A superuser sees the trash of every owner, but its token controls all of Paperless. */
+	private const SUPERUSER_HINT = 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.';
+	/** What /api/ui_settings/ needs, which tells the checklist the permissions and the ID of the account. */
+	private const UI_SETTINGS_HINT = 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The inbox needs Add for Documents and View for Paperless Tasks.';
+	/** The account of the token when Paperless refused to name it, without the permission View for UI Settings. */
+	private const ACCOUNT_FORBIDDEN = 'forbidden';
+	/** The account of the token when Paperless didn't name it for another reason. */
+	private const ACCOUNT_UNKNOWN = 'unknown';
 	private IClient $client;
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -101,7 +113,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		$checks = [self::answered($documents['version']), self::visibleDocuments($listed)];
-		$account = $config->exportEnabled || $config->inboxEnabled ? $this->account($config, $token) : null;
+		$account = $config->exportEnabled || $config->inboxEnabled ? $this->account($config, $token) : self::ACCOUNT_UNKNOWN;
 		if ($config->exportEnabled) {
 			foreach (self::EXPORT_LISTS as $id => $path) {
 				$checks[] = $this->listCheck($config, $token, $id, $path, $account);
@@ -528,27 +540,34 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
-	 * What Paperless says of the account of the token, in /api/ui_settings/: whether it is a
-	 * superuser, and its permissions, such as add_document. Null when Paperless doesn't say.
+	 * What Paperless says of the account of the token, in /api/ui_settings/: its ID, whether it
+	 * is a superuser, and its permissions, such as add_document. Paperless answers that page only
+	 * for an account with the permission View for UI Settings, and refuses it otherwise.
 	 *
-	 * @return array{superuser: bool, permissions: list<string>}|null
+	 * @return array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_*
 	 */
-	private function account(SyncConfig $config, #[\SensitiveParameter] string $token): ?array {
+	private function account(SyncConfig $config, #[\SensitiveParameter] string $token): array|string {
 		try {
 			$answer = $this->probe($config, $token, '/api/ui_settings/', []);
 		} catch (PaperlessRequestException) {
-			return null;
+			return self::ACCOUNT_UNKNOWN;
+		}
+		if ($answer['status'] === 403) {
+			return self::ACCOUNT_FORBIDDEN;
 		}
 		$data = $answer['data'] ?? [];
 		/** @psalm-suppress MixedAssignment */
 		$permissions = $data['permissions'] ?? null;
 		if ($answer['status'] !== 200 || !is_array($permissions)) {
-			return null;
+			return self::ACCOUNT_UNKNOWN;
 		}
 		/** @psalm-suppress MixedAssignment */
 		$user = $data['user'] ?? null;
+		/** @psalm-suppress MixedAssignment */
+		$id = is_array($user) ? ($user['id'] ?? null) : null;
 
 		return [
+			'id' => is_int($id) ? $id : null,
 			'superuser' => is_array($user) && ($user['is_superuser'] ?? false) === true,
 			'permissions' => array_values(array_filter($permissions, 'is_string')),
 		];
@@ -556,12 +575,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	/**
 	 * The line of a list that the export reads, with the number of its entries that the account
-	 * sees. Paperless lists in its trash only the documents that the account owns and those
-	 * without an owner, unless the account is a superuser, so the line of the trash notes it.
+	 * sees. The trash gets its line from trashCheck().
 	 *
-	 * @param array{superuser: bool, permissions: list<string>}|null $account
+	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private function listCheck(SyncConfig $config, #[\SensitiveParameter] string $token, string $id, string $path, ?array $account): ConnectionCheck {
+	private function listCheck(SyncConfig $config, #[\SensitiveParameter] string $token, string $id, string $path, array|string $account): ConnectionCheck {
 		try {
 			$answer = $this->probe($config, $token, $path);
 		} catch (PaperlessRequestException $exception) {
@@ -575,11 +593,48 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				default => ConnectionCheck::failed($id, 'Paperless answered without the list (HTTP %s).', [(string)$answer['status']], self::STATUS_HINT),
 			};
 		}
-		if ($id === ConnectionCheck::TRASH && ($account === null || !$account['superuser'])) {
-			return ConnectionCheck::warning($id, 'Visible to the account: %s', [(string)$listed], self::TRASH_HINT);
+		if ($id === ConnectionCheck::TRASH) {
+			return $this->trashCheck($config, $token, $listed, $account);
 		}
 
 		return ConnectionCheck::passed($id, 'Visible to the account: %s', [(string)$listed]);
+	}
+
+	/**
+	 * The line of the trash, whose list the account may view. Paperless lists in its trash only
+	 * the documents that the account owns and those without an owner, unless it is a superuser:
+	 * a document of another owner that goes there looks to a run as if it were deleted without
+	 * the trash. So the line counts the documents that the account sees but another account
+	 * owns, and passes when there are none. A superuser sees every trashed document, but its
+	 * token controls all of Paperless, which the line notes instead.
+	 *
+	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
+	 */
+	private function trashCheck(SyncConfig $config, #[\SensitiveParameter] string $token, int $listed, array|string $account): ConnectionCheck {
+		$visible = [(string)$listed];
+		if (!is_array($account)) {
+			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, $account === self::ACCOUNT_FORBIDDEN ? self::TRASH_UNKNOWN_HINT : self::TRASH_HINT);
+		}
+		if ($account['superuser']) {
+			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, self::SUPERUSER_HINT);
+		}
+		$foreign = null;
+		if ($account['id'] !== null) {
+			try {
+				// The filters of the document list of Paperless: with an owner, and not this account.
+				$foreign = self::listed($this->probe($config, $token, '/api/documents/', ['page' => 1, 'page_size' => 1, 'owner__isnull' => 0, 'owner__id__none' => $account['id']]));
+			} catch (PaperlessRequestException) {
+				$foreign = null;
+			}
+		}
+		if ($foreign === null) {
+			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, self::TRASH_HINT);
+		}
+		if ($foreign > 0) {
+			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, self::FOREIGN_DOCUMENTS_HINT, [(string)$foreign]);
+		}
+
+		return ConnectionCheck::passed(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible);
 	}
 
 	/** The line of Paperless after it answered, with its version when its header names one. */
@@ -620,30 +675,57 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
-	 * The line of the inbox: whether the account may add documents, as its permissions say.
+	 * The line of the inbox, as the permissions of the account say: it uploads every file with
+	 * Add for Documents, and asks for the task of Paperless that imports it with View for
+	 * Paperless Tasks, without which it never learns whether a file arrived.
 	 *
-	 * @param array{superuser: bool, permissions: list<string>}|null $account
+	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private static function upload(?array $account): ConnectionCheck {
-		if ($account === null) {
+	private static function upload(array|string $account): ConnectionCheck {
+		if (!is_array($account)) {
 			return ConnectionCheck::warning(
 				ConnectionCheck::UPLOAD,
-				'Paperless did not say whether the account may add documents.',
+				'Paperless did not say whether the account may add documents and view the tasks that import them.',
 				[],
-				'The first upload from the inbox shows it; the account needs the permission Add for Documents.',
+				$account === self::ACCOUNT_FORBIDDEN
+					? self::UI_SETTINGS_HINT
+					: 'The first upload from the inbox shows it; the account needs the permissions Add for Documents and View for Paperless Tasks.',
 			);
 		}
-		// Paperless names the permissions without their app, as add_document; with it is fine as well.
-		if ($account['superuser'] || array_intersect(['add_document', 'documents.add_document'], $account['permissions']) !== []) {
-			return ConnectionCheck::passed(ConnectionCheck::UPLOAD, 'The account may add documents.');
-		}
+		$add = $account['superuser'] || self::permitted('add_document', $account['permissions']);
+		$tasks = $account['superuser'] || self::permitted('view_paperlesstask', $account['permissions']);
 
-		return ConnectionCheck::failed(
-			ConnectionCheck::UPLOAD,
-			'The account may not add documents.',
-			[],
-			'In Paperless, under Users & Groups, give the account the permission Add for Documents.',
-		);
+		return match (true) {
+			$add && $tasks => ConnectionCheck::passed(ConnectionCheck::UPLOAD, 'The account may add documents and view the tasks that import them.'),
+			$tasks => ConnectionCheck::failed(
+				ConnectionCheck::UPLOAD,
+				'The account may not add documents.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission Add for Documents.',
+			),
+			$add => ConnectionCheck::failed(
+				ConnectionCheck::UPLOAD,
+				'The account may not view the tasks that import its uploads.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission View for Paperless Tasks. Without it, the inbox never learns whether Paperless imported a file, and keeps the file.',
+			),
+			default => ConnectionCheck::failed(
+				ConnectionCheck::UPLOAD,
+				'The account may neither add documents nor view the tasks that import them.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.',
+			),
+		};
+	}
+
+	/**
+	 * Whether $permissions hold $permission of the documents app of Paperless, which names its
+	 * permissions without their app, as add_document; with it is fine as well.
+	 *
+	 * @param list<string> $permissions
+	 */
+	private static function permitted(string $permission, array $permissions): bool {
+		return array_intersect([$permission, 'documents.' . $permission], $permissions) !== [];
 	}
 
 	/**

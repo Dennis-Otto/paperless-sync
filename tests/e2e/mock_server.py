@@ -12,24 +12,61 @@ from urllib.parse import parse_qs, urlparse
 
 import showcase
 
+# The token of the account of the app, as the README sets it up: no superuser, with every
+# permission that the export and the inbox need, and the owner of every document.
 TOKEN = "e2e-only-token"
 # The token of an account that may view the documents, correspondents, document types and
-# storage paths, but neither the tags nor add documents: the connection checklist names
-# both permissions, and notes that it sees only its own documents in the trash.
+# storage paths, but neither the tags nor add documents and view their tasks: the
+# connection checklist names those permissions, and notes that it sees documents of
+# another owner, which the trash of Paperless leaves out.
 VIEW_ONLY_TOKEN = "e2e-view-only-token"
+# The token of an account with every permission of a run but View for UI Settings, so
+# that Paperless doesn't tell the checklist its permissions and its ID.
+NO_UI_SETTINGS_TOKEN = "e2e-no-ui-settings-token"
 FORBIDDEN = {"detail": "You do not have permission to perform this action."}
-# What /api/ui_settings/ says of the account of each token, as Paperless-ngx does.
+# The ID of the account of the app, which owns every document of the mock.
+OWNER_ID = 1
+RUN_PERMISSIONS = [
+    "view_document",
+    "add_document",
+    "change_document",
+    "delete_document",
+    "view_correspondent",
+    "view_documenttype",
+    "view_storagepath",
+    "view_tag",
+    "view_paperlesstask",
+]
+
+
+def account(user_id, username, permissions):
+    """What /api/ui_settings/ says of an account that is no superuser, as Paperless-ngx does."""
+    return {
+        "user": {"id": user_id, "username": username, "is_staff": False, "is_superuser": False, "groups": []},
+        "settings": {},
+        "permissions": permissions,
+    }
+
+
 ACCOUNTS = {
-    TOKEN: {
-        "user": {"id": 1, "username": "nextcloud", "is_staff": True, "is_superuser": True, "groups": []},
-        "settings": {},
-        "permissions": ["add_document", "view_document", "change_document", "delete_document", "view_tag", "view_correspondent"],
-    },
-    VIEW_ONLY_TOKEN: {
-        "user": {"id": 2, "username": "nextcloud-view-only", "is_staff": False, "is_superuser": False, "groups": []},
-        "settings": {},
-        "permissions": ["view_document", "view_correspondent", "view_documenttype", "view_storagepath"],
-    },
+    TOKEN: account(OWNER_ID, "nextcloud", [*RUN_PERMISSIONS, "view_uisettings"]),
+    VIEW_ONLY_TOKEN: account(
+        2,
+        "nextcloud-view-only",
+        ["view_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_uisettings"],
+    ),
+    NO_UI_SETTINGS_TOKEN: account(3, "nextcloud-no-ui-settings", RUN_PERMISSIONS),
+}
+# The permission that Paperless-ngx asks of an account for each endpoint that the app reads.
+VIEW_PERMISSIONS = {
+    "/api/documents/": "view_document",
+    "/api/trash/": "view_document",
+    "/api/correspondents/": "view_correspondent",
+    "/api/document_types/": "view_documenttype",
+    "/api/storage_paths/": "view_storagepath",
+    "/api/tags/": "view_tag",
+    "/api/tasks/": "view_paperlesstask",
+    "/api/ui_settings/": "view_uisettings",
 }
 DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
 # The content of P123 after /control/content/revised, as after a new scan in Paperless.
@@ -158,10 +195,17 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         documents, trash = scenario_documents()
-        if parsed.path == "/api/ui_settings/":
-            self._json(200, ACCOUNTS[token])
-        elif token == VIEW_ONLY_TOKEN and parsed.path == "/api/tags/":
+        query = parse_qs(parsed.query)
+        permission = VIEW_PERMISSIONS.get(parsed.path)
+        if permission is not None and permission not in ACCOUNTS[token]["permissions"]:
             self._json(403, FORBIDDEN)
+        elif parsed.path == "/api/ui_settings/":
+            self._json(200, ACCOUNTS[token])
+        elif parsed.path == "/api/documents/" and "owner__id__none" in query:
+            # The filter of the connection checklist: the documents with an owner other than the
+            # account. The account of the app owns every document of the mock.
+            others = query["owner__id__none"][0] != str(OWNER_ID) and query.get("owner__isnull") == ["0"]
+            self._page(documents if others else [])
         elif parsed.path == "/api/documents/":
             # An incomplete answer, as of a proxy or a permission glitch: an empty page whose count
             # still lists the document.
@@ -180,7 +224,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/tags/":
             self._page(showcase.TAGS if self._showcase() else [{"id": 9, "name": "Inbox", "is_inbox_tag": True}])
         elif parsed.path == "/api/tasks/":
-            task_id = parse_qs(parsed.query).get("task_id", [""])[0]
+            task_id = query.get("task_id", [""])[0]
             with LOCK:
                 task = STATE["tasks"].get(task_id)
             self._page([] if task is None else [{"task_id": task_id, **task}])
@@ -262,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
         token = self._authorized()
         if token is None:
             return
-        if token == VIEW_ONLY_TOKEN:
+        if "add_document" not in ACCOUNTS[token]["permissions"]:
             self._json(403, FORBIDDEN)
             return
 

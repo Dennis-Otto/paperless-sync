@@ -190,6 +190,11 @@ try {
 	// A token that is entered is tested, also with the schedule off.
 	await token.fill(TOKEN)
 	await localNetwork.uncheck()
+	// Test connection leads to the setting that its failed check names, as a refused save does.
+	await test.click()
+	await settle()
+	expect(await lineState('paperless') === 'failed', 'Test connection must report the refused local address.')
+	expect(await focused(localNetwork), 'The focus must move to the setting that the failed check names.')
 	await save.click()
 	await settle()
 	const refusal = await message.textContent()
@@ -228,7 +233,7 @@ try {
 		(await page.locator('[data-check="tags"] .paperless-sync-check-hint').textContent()) === 'In Paperless, under Users & Groups, give the account the permission View for Tags.',
 		'The line of the tags must name the permission to grant.',
 	)
-	expect(await lineState('trash') === 'warning', 'An account that is no superuser sees only its own documents in the trash.')
+	expect(await lineState('trash') === 'warning', 'An account that sees documents of another owner gets a note: the trash leaves them out.')
 	expect((await page.locator('[data-check="tags"] .paperless-sync-check-state').textContent()) === 'Failed', 'The state of a line is a word, not a color alone.')
 	expect(await unsaved.isVisible(), 'The test saves nothing: the token stays an unsaved change.')
 	await token.fill('')

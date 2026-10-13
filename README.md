@@ -91,7 +91,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 <!-- --8<-- [start:quick-start] -->
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
-2. In Paperless-ngx, create a dedicated account for the app under *Users & Groups*, not a superuser, with the permission **View** for Documents, Correspondents, Document Types, Storage Paths, Tags and UI Settings, and, if you use the inbox, **Add** for Documents and **View** for Paperless Tasks. Make it the owner of the documents to mirror, as [Paperless connection](#paperless-connection) shows, and create its API token under *My Profile*.
+2. In Paperless-ngx, create a dedicated account for the app under *Users & Groups*, not a superuser, with the permission **View** for Documents, Correspondents, Document Types, Storage Paths, Tags and UI Settings, and, if you use the inbox, **Add** for Documents and **View** for Paperless Tasks. Make it the owner of the documents to mirror, so that their trash reaches the archive right away, and create its API token under *My Profile*.
 3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, and click **Test connection**: the checklist below it shows every permission that the account lacks, and what to grant. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first. Leave synchronization disabled, and save; saving runs the same checks.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Dokumente/Paperless/Archiv` of that user.
@@ -279,7 +279,7 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 <!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks two permissions. -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-checklist-dark.png">
-  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees only its own documents there, and the tags and the upload from the inbox failed, each with the permission to grant in Paperless" src="docs/images/settings-checklist-light.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags and the upload from the inbox failed, each with the permissions to grant in Paperless" src="docs/images/settings-checklist-light.png">
 </picture>
 
 <!-- --8<-- [start:configuration-checklist] -->
@@ -292,7 +292,7 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 | Upload from the inbox | with the inbox on: the account has the permissions **Add** for Documents and **View** for Paperless Tasks | saved with the failure |
 | Nextcloud folder | the target user may create files in the base folder | not saved |
 
-Each line has its state as a word, *Passed*, *Note* or *Failed*, next to its sign. A failure names the cause, such as a token that Paperless refuses, a certificate that Nextcloud doesn't trust, an address in your network, or a URL without a Paperless API, such as the login page of a proxy, and what to do. A change of the URL, the token, the target user, the base folder, the local network or the modules takes the checklist away, until the next test.
+Without **View** for UI Settings, Paperless doesn't tell the app the permissions of the account and its ID, so the lines of the trash and of the upload get a note that names this permission instead of a result. Each line has its state as a word, *Passed*, *Note* or *Failed*, next to its sign. A failure names the cause, such as a token that Paperless refuses, a certificate that Nextcloud doesn't trust, an address in your network, or a URL without a Paperless API, such as the login page of a proxy, and what to do. A change of the URL, the token, the target user, the base folder, the local network or the modules takes the checklist away, until the next test.
 
 #### Paperless in your local network
 

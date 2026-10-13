@@ -39,7 +39,7 @@ final class ConnectionCheckTest extends TestCase {
 
 	#[DataProvider('labels')]
 	public function testEveryLineHasATranslatedLabel(string $id, string $label): void {
-		self::assertSame($label, ConnectionCheck::passed($id, 'The account may add documents.')->translated($this->germanL10n())['label']);
+		self::assertSame($label, ConnectionCheck::passed($id, 'The account may add documents and view the tasks that import them.')->translated($this->germanL10n())['label']);
 	}
 
 	public function testALineInTheLanguageOfTheAdministrator(): void {

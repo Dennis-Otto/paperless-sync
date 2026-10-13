@@ -26,9 +26,10 @@ interface PaperlessClientInterface {
 	/**
 	 * The checks of Paperless for the connection checklist, with $token to the URL of $config and
 	 * its local network: that Paperless answers there and takes the token, and that its account
-	 * may read every list that the modules of $config need, sees the trash of every owner, and may
-	 * add documents for the inbox. A check that fails is a line of the list, not an exception;
-	 * after a failure of the connection itself, the list ends there.
+	 * may read every list that the modules of $config need, owns the documents that it sees, so
+	 * that the trash shows them, and may add documents and view their tasks for the inbox. A
+	 * check that fails is a line of the list, not an exception; after a failure of the connection
+	 * itself, the list ends there.
 	 *
 	 * @return list<ConnectionCheck>
 	 */

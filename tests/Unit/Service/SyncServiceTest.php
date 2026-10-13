@@ -2015,6 +2015,19 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('active', $this->state->exports[123]['state']);
 	}
 
+	/** Permanent deletion alone deletes only what the trash showed, so the notice of a missing document still says that it moves. */
+	public function testDryRunWithPermanentDeletionAloneSaysThatMissingCopiesMove(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => false]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$report = $this->service->run(true);
+
+		$deletedPath = self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
+		self::assertSame(['MISSING P123: ' . $deletedPath, self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(0, $report->permanentlyDeleted);
+	}
+
 	/**
 	 * Paperless lists in its trash only the documents that the account of the app owns, so a
 	 * document of another owner in the trash looks gone without the trash. A dry-run, which an
@@ -2077,7 +2090,8 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		self::assertSame(['DELETE P123: ' . self::EXPORTED_PATH, self::trashEmpty(1, 1)], $report->actions);
+		// The notice says that the copy is deleted, although the document may be in a trash that the account doesn't see.
+		self::assertSame(['DELETE P123: ' . self::EXPORTED_PATH, self::trashEmpty(1, 1, true)], $report->actions);
 		self::assertSame(1, $report->permanentlyDeleted);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertArrayHasKey(123, $this->state->exports);
@@ -2231,12 +2245,19 @@ final class SyncServiceTest extends TestCase {
 		return self::ARCHIVE . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
-	/** The path of the copy of a document that a run of today moves to the deleted folder. */
-	/** The notice of a dry-run about documents that go missing while the trash of Paperless lists none. */
-	private static function trashEmpty(int $missing, int $scans): string {
-		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, unless it is a superuser. Documents in the trash of other owners count as missing: they move to the deleted folder only after the required missing scans ({$scans} in a row), as documents deleted without the trash do.";
+	/**
+	 * The notice of a dry-run about documents that go missing while the trash of Paperless lists
+	 * none, with $deleted when permanent and direct deletion are both on.
+	 */
+	private static function trashEmpty(int $missing, int $scans, bool $deleted = false): string {
+		$fate = $deleted
+			? "their copies are deleted after the required missing scans ({$scans} in a row), although the documents can still be restored in Paperless"
+			: "their copies move to the deleted folder only after the required missing scans ({$scans} in a row), as those of documents deleted without the trash do";
+
+		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.";
 	}
 
+	/** The path of the copy of a document that a run of today moves to the deleted folder. */
 	private function deletedToday(int $id = 123): string {
 		return self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}

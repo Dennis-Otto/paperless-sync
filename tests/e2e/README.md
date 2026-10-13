@@ -46,7 +46,7 @@ The scenario verifies:
 
 - administrator configuration and server-side token handling, in the browser too: saving after Nextcloud asks for the password, and a new Paperless URL, which needs the token again, see [Accessibility](#accessibility)
 - a Paperless in the local network without `allow_local_remote_servers`: Nextcloud refuses the mock at its address of the network of Compose, the save says how to allow it and the page moves the focus to *Paperless runs in my local network*, and with that setting on, the whole scenario runs
-- the connection checklist: *Test connection* with the token of an account that may view the documents but neither the tags nor add documents names both permissions to grant and the trash that it sees only in part, and saves nothing; a save with that token goes on with the same checklist; and with the token of the full account, every check passes, in the browser too
+- the connection checklist: *Test connection* with the token of an account that may view the documents but neither the tags nor add documents and view their tasks names those permissions to grant and the document of another owner that the trash leaves out, and saves nothing; a save with that token goes on with the same checklist; without **View** for UI Settings, the lines of the trash and the upload name that permission; with the token of the full account, every check passes, in the browser too, and a refused local address moves the focus to its setting after *Test connection* as after a save
 - dry-run behavior without filesystem mutations
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again, with the SHA-256 checksums of Paperless-ngx 3 and, in a mode of the mock, the MD5 checksums of Paperless-ngx 2
@@ -70,7 +70,7 @@ Optional environment variables:
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 
-All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture, a superuser, and `e2e-view-only-token`, an account without the permissions for the tags and for adding documents, and records whether uploads arrived intact. Like Paperless-ngx, it names its version in the header `X-Version` and the permissions of the account in `/api/ui_settings/`. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.`
+All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture, an account that is no superuser, with every permission of a run, and the owner of every document; `e2e-view-only-token`, an account without the permissions for the tags, for adding documents and for their tasks; and `e2e-no-ui-settings-token`, an account without **View** for UI Settings. It records whether uploads arrived intact. Like Paperless-ngx, it answers each endpoint only with its permission, names its version in the header `X-Version` and the ID and the permissions of the account in `/api/ui_settings/`, and filters the documents by their owner. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.`
 
 ## Every supported version at once
 

@@ -80,6 +80,7 @@ final class SensitiveParametersTest extends TestCase {
 			'PaperlessApiService::send($options)',
 			'PaperlessApiService::send($token)',
 			'PaperlessApiService::testConnection($token)',
+			'PaperlessApiService::trashCheck($token)',
 			'PaperlessClientInterface::preflight($token)',
 			'PaperlessClientInterface::testConnection($token)',
 			'SettingsController::checks($token)',

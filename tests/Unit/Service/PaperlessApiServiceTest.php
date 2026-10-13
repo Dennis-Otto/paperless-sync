@@ -37,8 +37,18 @@ final class PaperlessApiServiceTest extends TestCase {
 	use InMemoryConfiguration;
 
 	private const URL = 'https://paperless.example.test';
-	/** What the checklist says of a trash that lists only the documents of the account. */
-	private const TRASH_HINT = 'Paperless shows the account only the trashed documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans, and are deleted only with direct deletion allowed. Make the account their owner, or a superuser.';
+	/** What the checklist says of a trash that lists only the documents of the account, when it can't count those of others. */
+	private const TRASH_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror.';
+	/** The same, when Paperless refuses to name the account without the permission View for UI Settings. */
+	private const TRASH_UNKNOWN_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.';
+	/** What the checklist says of the visible documents of other owners. */
+	private const FOREIGN_DOCUMENTS_HINT = 'Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees %s of them. When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. Make the account of the app their owner.';
+	/** What the checklist says of the token of a superuser. */
+	private const SUPERUSER_HINT = 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.';
+	/** What the inbox needs, when Paperless refuses to name the account without the permission View for UI Settings. */
+	private const UI_SETTINGS_HINT = 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The inbox needs Add for Documents and View for Paperless Tasks.';
+	/** The query of the documents that the account sees and another account owns, for the account of self::account(). */
+	private const FOREIGN_QUERY = ['page' => 1, 'page_size' => 1, 'owner__isnull' => 0, 'owner__id__none' => 3];
 	/** What the checklist says when no Paperless answers at the URL. */
 	private const NO_API_HINT = 'Check the URL: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path, and a proxy in front of Paperless may answer with its login page.';
 	/** What the checklist says when Paperless answers with an error of its own. */
@@ -944,12 +954,13 @@ final class PaperlessApiServiceTest extends TestCase {
 	/**
 	 * The checklist reads one entry of every list that the enabled modules need, as a run reads
 	 * them, and asks Paperless about the account of the token, with the token and its timeouts.
-	 * Each line says how many entries the account sees, and the version of Paperless.
+	 * Each line says how many entries the account sees, and the version of Paperless. The trash
+	 * passes when the account owns every document that it sees, or they have no owner.
 	 */
 	public function testPreflightChecksEveryListThatTheModulesNeed(): void {
 		$this->responses[] = [200, self::page(12), ['X-Version' => '2.20.15']];
-		$this->responses[] = [200, self::account(false, ['view_document', 'add_document'])];
-		foreach ([2, 3, 4, 0, 5] as $count) {
+		$this->responses[] = [200, self::account(false, ['view_document', 'add_document', 'view_paperlesstask'])];
+		foreach ([2, 0, 3, 4, 0, 5] as $count) {
 			$this->responses[] = [200, self::page($count)];
 		}
 
@@ -958,17 +969,18 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertEquals([
 			ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['2.20.15']),
 			ConnectionCheck::passed('documents', 'Visible to the account: %s', ['12']),
-			ConnectionCheck::warning('trash', 'Visible to the account: %s', ['2'], self::TRASH_HINT),
+			ConnectionCheck::passed('trash', 'Visible to the account: %s', ['2']),
 			ConnectionCheck::passed('correspondents', 'Visible to the account: %s', ['3']),
 			ConnectionCheck::passed('document_types', 'Visible to the account: %s', ['4']),
 			ConnectionCheck::passed('storage_paths', 'Visible to the account: %s', ['0']),
 			ConnectionCheck::passed('tags', 'Visible to the account: %s', ['5']),
-			ConnectionCheck::passed('upload', 'The account may add documents.'),
+			ConnectionCheck::passed('upload', 'The account may add documents and view the tasks that import them.'),
 		], $checks);
 		self::assertSame([
 			self::URL . '/api/documents/',
 			self::URL . '/api/ui_settings/',
 			self::URL . '/api/trash/',
+			self::URL . '/api/documents/',
 			self::URL . '/api/correspondents/',
 			self::URL . '/api/document_types/',
 			self::URL . '/api/storage_paths/',
@@ -976,6 +988,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		], array_column($this->requests, 'url'));
 		self::assertSame(['page' => 1, 'page_size' => 1], $this->requests[0]['options']['query']);
 		self::assertSame([], $this->requests[1]['options']['query']);
+		self::assertSame(self::FOREIGN_QUERY, $this->requests[3]['options']['query'], 'The documents with an owner other than the account.');
 		foreach ($this->requests as $request) {
 			self::assertSame('GET', $request['method']);
 			self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
@@ -1019,8 +1032,8 @@ final class PaperlessApiServiceTest extends TestCase {
 	 */
 	public function testATokenWithoutThePermissionForTagsIsReportedWithTheFix(): void {
 		$this->responses[] = [200, self::page(12)];
-		$this->responses[] = [200, self::account(false, ['view_document'])];
-		foreach ([0, 1, 1, 1] as $count) {
+		$this->responses[] = [200, self::account(false, ['view_document', 'view_paperlesstask'])];
+		foreach ([0, 0, 1, 1, 1] as $count) {
 			$this->responses[] = [200, self::page($count)];
 		}
 		$this->responses[] = [403, ['detail' => 'You do not have permission to perform this action.']];
@@ -1107,7 +1120,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertEquals([
 			ConnectionCheck::passed('paperless', 'Paperless-ngx %s answers at this URL.', ['3.3.0']),
 			ConnectionCheck::failed('documents', 'The account may not view them (HTTP 403).', [], 'In Paperless, under Users & Groups, give the account the permission View for Documents.', true),
-			ConnectionCheck::failed('upload', 'The account may not add documents.', [], 'In Paperless, under Users & Groups, give the account the permission Add for Documents.'),
+			ConnectionCheck::failed('upload', 'The account may neither add documents nor view the tasks that import them.', [], 'In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.'),
 		], $checks);
 	}
 
@@ -1218,36 +1231,57 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
 	}
 
-	/** @return array<string, array{array<string, mixed>|null, list<int|string|array<string, mixed>>, ConnectionCheck, ConnectionCheck}> what Paperless says of the account, and the lines of the trash and the inbox */
+	/**
+	 * The answer of /api/ui_settings/, the answer to the count of the documents of other owners
+	 * when the checklist asks for it, and the lines of the trash and the inbox.
+	 *
+	 * @return array<string, array{array{0: int, 1: mixed}, array{0: int, 1: mixed}|null, ConnectionCheck, ConnectionCheck}>
+	 */
 	public static function accounts(): array {
-		$trashOfOwners = ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], self::TRASH_HINT);
-		$trashOfAll = ConnectionCheck::passed('trash', 'Visible to the account: %s', ['1']);
-		$mayAdd = ConnectionCheck::passed('upload', 'The account may add documents.');
-		$unknown = ConnectionCheck::warning(
+		$trash = static fn (string $hint, array $parameters = []): ConnectionCheck => ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], $hint, $parameters);
+		$owner = ConnectionCheck::passed('trash', 'Visible to the account: %s', ['1']);
+		$mayUpload = ConnectionCheck::passed('upload', 'The account may add documents and view the tasks that import them.');
+		$unknown = static fn (string $hint): ConnectionCheck => ConnectionCheck::warning(
 			'upload',
-			'Paperless did not say whether the account may add documents.',
+			'Paperless did not say whether the account may add documents and view the tasks that import them.',
 			[],
-			'The first upload from the inbox shows it; the account needs the permission Add for Documents.',
+			$hint,
 		);
+		$firstUpload = $unknown('The first upload from the inbox shows it; the account needs the permissions Add for Documents and View for Paperless Tasks.');
+		$mayNeither = ConnectionCheck::failed(
+			'upload',
+			'The account may neither add documents nor view the tasks that import them.',
+			[],
+			'In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.',
+		);
+		$inbox = ['documents.add_document', 'documents.view_paperlesstask'];
 
 		return [
-			'a superuser' => [self::account(true, []), [200], $trashOfAll, $mayAdd],
-			'the permission with its app' => [self::account(false, ['documents.add_document']), [200], $trashOfOwners, $mayAdd],
-			'a Paperless without the page' => [null, [404, ['detail' => 'Not found.']], $trashOfOwners, $unknown],
-			'a page without permissions' => [['user' => ['is_superuser' => true]], [200], $trashOfOwners, $unknown],
-			'a page that fails' => [null, [500, '<html>Server Error</html>'], $trashOfOwners, $unknown],
+			'a superuser, whose token controls all of Paperless' => [[200, self::account(true, [])], null, $trash(self::SUPERUSER_HINT), $mayUpload],
+			'the owner of every document it sees' => [[200, self::account(false, $inbox)], [200, self::page(0)], $owner, $mayUpload],
+			'an account that sees documents of others' => [[200, self::account(false, $inbox)], [200, self::page(4)], $trash(self::FOREIGN_DOCUMENTS_HINT, ['4']), $mayUpload],
+			'a count of other owners that fails' => [[200, self::account(false, $inbox)], [400, ['owner__id__none' => ['Unknown filter.']]], $trash(self::TRASH_HINT), $mayUpload],
+			'an account without its ID' => [[200, ['user' => ['is_superuser' => false], 'permissions' => []]], null, $trash(self::TRASH_HINT), $mayNeither],
+			'an account without View for UI Settings' => [[403, ['detail' => 'You do not have permission to perform this action.']], null, $trash(self::TRASH_UNKNOWN_HINT), $unknown(self::UI_SETTINGS_HINT)],
+			'a Paperless without the page' => [[404, ['detail' => 'Not found.']], null, $trash(self::TRASH_HINT), $firstUpload],
+			'a page without permissions' => [[200, ['user' => ['is_superuser' => true]]], null, $trash(self::TRASH_HINT), $firstUpload],
+			'a page that fails' => [[500, '<html>Server Error</html>'], null, $trash(self::TRASH_HINT), $firstUpload],
 		];
 	}
 
 	/**
-	 * @param array<string, mixed>|null $account
-	 * @param list<int|string|array<string, mixed>> $answer
+	 * @param array{0: int, 1: mixed} $account
+	 * @param array{0: int, 1: mixed}|null $foreign
 	 */
 	#[DataProvider('accounts')]
-	public function testTheAccountDecidesTheLinesOfTheTrashAndTheInbox(?array $account, array $answer, ConnectionCheck $trash, ConnectionCheck $upload): void {
+	public function testTheAccountDecidesTheLinesOfTheTrashAndTheInbox(array $account, ?array $foreign, ConnectionCheck $trash, ConnectionCheck $upload): void {
 		$this->responses[] = [200, self::page(1)];
-		$this->responses[] = [$answer[0], $answer[1] ?? $account];
-		for ($list = 0; $list < 5; ++$list) {
+		$this->responses[] = $account;
+		$this->responses[] = [200, self::page(1)];
+		if ($foreign !== null) {
+			$this->responses[] = $foreign;
+		}
+		for ($list = 0; $list < 4; ++$list) {
 			$this->responses[] = [200, self::page(1)];
 		}
 
@@ -1255,6 +1289,25 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		self::assertEquals($trash, $checks[2]);
 		self::assertEquals($upload, $checks[7]);
+		self::assertCount($foreign === null ? 7 : 8, $this->requests);
+	}
+
+	/** A count of the documents of other owners that can't be read leaves the trash with its note. */
+	public function testACountOfOtherOwnersThatCannotBeReadKeepsTheNote(): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(false, [])];
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 28: Operation timed out');
+		};
+		for ($list = 0; $list < 4; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight(['inbox_enabled' => false]);
+
+		self::assertEquals(ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], self::TRASH_HINT), $checks[2]);
+		self::assertSame('passed', $checks[3]->status, 'The other lists are still checked.');
 	}
 
 	public function testAnAccountThatCannotBeAskedForIsUnknown(): void {
@@ -1266,7 +1319,48 @@ final class PaperlessApiServiceTest extends TestCase {
 		$checks = $this->preflight(['export_enabled' => false]);
 
 		self::assertSame(ConnectionCheck::WARNING, $checks[2]->status);
-		self::assertSame('Paperless did not say whether the account may add documents.', $checks[2]->message);
+		self::assertSame('Paperless did not say whether the account may add documents and view the tasks that import them.', $checks[2]->message);
+	}
+
+	/** @return array<string, array{list<string>, ConnectionCheck}> the permissions of the account and the line of the inbox */
+	public static function inboxPermissions(): array {
+		return [
+			'both' => [['add_document', 'view_paperlesstask'], ConnectionCheck::passed('upload', 'The account may add documents and view the tasks that import them.')],
+			'only the tasks' => [['view_paperlesstask'], ConnectionCheck::failed(
+				'upload',
+				'The account may not add documents.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission Add for Documents.',
+			)],
+			'only the upload, which never learns what became of a file' => [['add_document'], ConnectionCheck::failed(
+				'upload',
+				'The account may not view the tasks that import its uploads.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission View for Paperless Tasks. Without it, the inbox never learns whether Paperless imported a file, and keeps the file.',
+			)],
+			'neither' => [['view_document'], ConnectionCheck::failed(
+				'upload',
+				'The account may neither add documents nor view the tasks that import them.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.',
+			)],
+		];
+	}
+
+	/**
+	 * The inbox uploads with Add for Documents and then asks for the task that imports the file,
+	 * which needs View for Paperless Tasks; the line names each permission that is missing.
+	 *
+	 * @param list<string> $permissions
+	 */
+	#[DataProvider('inboxPermissions')]
+	public function testTheInboxNeedsToAddDocumentsAndViewTheirTasks(array $permissions, ConnectionCheck $line): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(false, $permissions)];
+
+		$checks = $this->preflight(['export_enabled' => false]);
+
+		self::assertEquals($line, $checks[2]);
 	}
 
 	/** @return array<string, array{int, mixed, ConnectionCheck}> an answer for the trash that is no page, and its line */

@@ -11,7 +11,7 @@ When something doesn't work, Paperless Sync says why, and this page leads from w
 
 ## The way of a request to Paperless
 
-Saving the settings tests the connection with one request for the first document, and every run starts with the same request. Each step on its way can fail with an error of its own:
+**Test connection** in the settings follows this way, and so does every save that tests the connection: its [connection checklist](guide.md#connection-checklist) names the step that failed and what to do. Every run starts with the same request for the first document. Each step on its way can fail with an error of its own:
 
 ```mermaid
 ---
@@ -21,7 +21,7 @@ config:
 ---
 flowchart TB
     accTitle: The way of a request from Nextcloud to Paperless, and the error of each step
-    accDescr: A request of Paperless Sync passes six steps before Paperless answers with the documents. An address of the local network needs the setting Paperless runs in my local network, or Nextcloud blocks it. The name must resolve and Paperless must answer at its port, or the message has cURL error 6 or 7. A certificate of HTTPS must be one that Nextcloud trusts, or the message has cURL error 60. The URL must lead to the API of Paperless, or the answer is 404 Not Found, or a page of a login that is no JSON. The token must be valid, or the answer is 401 Unauthorized. Finally, in a run, the account must see every list that the run reads, or the answer is 403 Forbidden.
+    accDescr: A request of Paperless Sync passes six steps before Paperless answers with the documents. An address of the local network needs the setting Paperless runs in my local network, or Nextcloud blocks it. The name must resolve and Paperless must answer at its port, or the message has cURL error 6 or 7. A certificate of HTTPS must be one that Nextcloud trusts, or the message has cURL error 60. The URL must lead to the API of Paperless, or the answer is 404 Not Found, or a page of a login that is no JSON. The token must be valid, or the answer is 401 Unauthorized. Finally, the account must see every list that a run reads, or the answer is 403 Forbidden: Test connection marks that list as failed, with the permission to grant.
 
     request(["Paperless Sync<br>asks Paperless"])
     local["<b>Address allowed?</b><br><i>else: Nextcloud blocks<br>local addresses</i>"]
@@ -29,7 +29,7 @@ flowchart TB
     tls["<b>Certificate trusted?</b><br><i>else: cURL error 60</i>"]
     api["<b>URL leads to the API?</b><br><i>else: 404 Not Found,<br>or invalid JSON</i>"]
     token["<b>Token valid?</b><br><i>else: 401 Unauthorized</i>"]
-    lists["<b>Account sees<br>every list?</b><br><i>else, in a run:<br>403 Forbidden</i>"]
+    lists["<b>Account sees<br>every list?</b><br><i>else: 403 Forbidden,<br>a failed line<br>of the checklist</i>"]
     done(["Paperless answers"])
 
     request --> local --> reach --> tls --> api --> token --> lists --> done
@@ -53,7 +53,7 @@ flowchart TB
 | `404 Not Found` | The URL lacks the sub-path under which Paperless runs, such as `/paperless`. **Fix:** Enter the URL as you open Paperless in the browser, sub-path included; [details](#behind-a-reverse-proxy). |
 | `Paperless returned invalid JSON.` | The URL leads to a web page instead of the API, such as the login of a proxy in front of Paperless. **Fix:** Let the proxy pass the requests to `/api/` with their token; [details](#behind-a-reverse-proxy). |
 | `401 Unauthorized` | The token is wrong, was deleted in Paperless, or its account is inactive. **Fix:** Create a token in Paperless and enter it again. |
-| `403 Forbidden` for `/api/tags/`, `/api/correspondents/`, `/api/document_types/` or `/api/storage_paths/` | The account may see the documents, but not that list, which every run reads. Saving tests only the documents, so it succeeds. **Fix:** Give the account the permission to view that list in Paperless. |
+| `403 Forbidden` for `/api/tags/`, `/api/correspondents/`, `/api/document_types/` or `/api/storage_paths/` | The account may see the documents, but not that list, which every run reads. **Test connection**, and every save that tests the connection, marks that list as failed in the connection checklist, with the permission to grant; the save keeps the settings. **Fix:** Give the account the permission to view that list in Paperless. |
 | `Nextcloud user … does not exist.` | The target user is no Nextcloud user. **Fix:** Enter the account name, as *Accounts* in the administration lists it, not the display name. |
 | `The configured Nextcloud base folder is not a writable folder.` | The base folder is a file, or a share that the target user may only read. **Fix:** Choose a folder that the target user owns. |
 | `Enter the API token again to connect to another Paperless URL.` | The URL changed, and the token goes only to the URL that it was saved with. **Fix:** Enter the token with the new URL. |
@@ -61,7 +61,8 @@ flowchart TB
 | `Nextcloud file conflict at …` | Conflicts are skipped, and a file is in the way of the document. **Fix:** Move or delete that file, or choose **Replace synchronized file**; see the [conflict policy](guide.md#conflict-policy). |
 | `EXPORT STOPPED` and `Not enough free space in Nextcloud` | The quota of the target user is full, or the archive is read-only or its storage unavailable. **Fix:** Raise the quota or free space; the next run carries on. |
 | `SCAN INCOMPLETE` | A page of Paperless came back short, or documents were added or deleted while the run read them. The run counted no document as missing. **Fix:** Nothing, if the next run is complete. If it stays, look for a proxy that cuts long answers, or permissions that change. |
-| `Paperless answered the upload with HTTP 403` | The account may not add documents, which the inbox needs. The upload waits and tries again later. **Fix:** Give the account the permission `documents.add_document` in Paperless. |
+| `Paperless answered the upload with HTTP 403` | The account may not add documents, which the inbox needs. The upload waits and tries again later. **Fix:** Give the account the permission `documents.add_document` in Paperless, **Add** for Documents. |
+| `Import task …` with `HTTP 403` | The account may add documents, but not view the tasks of Paperless that import them, so the inbox never learns whether a file arrived, and keeps it. **Fix:** Give the account the permission **View** for Paperless Tasks, `documents.view_paperlesstask`; the line *Upload from the inbox* of the connection checklist names it. |
 | `IMPORT REJECTED` with `HTTP 413` | A proxy in front of Paperless refuses large files, such as the 100 MB of the free plan of Cloudflare. **Fix:** Raise the limit of the proxy, then save the file anew to submit it again. |
 | `IMPORT REJECTED` with another reason | Paperless refused the file, such as one of a type that it doesn't take. **Fix:** Convert the file, or remove it from the inbox. |
 | The status says *Failed* or *Completed with errors* | The run, or single documents, failed. **Fix:** Read the box of errors below the status, then the [log](#read-the-log). |
