@@ -57,7 +57,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame(20, $config->batchSize);
 		self::assertTrue($config->tokenConfigured);
 		self::assertSame(20, $this->settings['batch_size']);
-		self::assertSame('secret-token', $this->token);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
 	}
 
 	public function testInvalidSettingsAreRejectedBeforeAnyConnection(): void {
@@ -78,7 +78,7 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		self::assertSame(30, $this->settings['batch_size']);
-		self::assertSame('secret-token', $this->token);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
 	}
 
 	/**
@@ -96,7 +96,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame(['message' => 'Enter the API token again to connect to another Paperless URL.'], $response->getData());
 		self::assertSame($stored, $this->settings);
-		self::assertSame('secret-token', $this->token);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
 	}
 
 	public function testANewUrlWorksWithTheTokenEnteredAgain(): void {
@@ -120,7 +120,7 @@ final class SettingsControllerTest extends TestCase {
 			$response->getData(),
 		);
 		self::assertSame([], $this->settings);
-		self::assertSame('', $this->token);
+		self::assertNull($this->credential);
 	}
 
 	/** @return array<string, array{string}> */

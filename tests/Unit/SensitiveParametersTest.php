@@ -68,6 +68,7 @@ final class SensitiveParametersTest extends TestCase {
 		self::assertSame([
 			'ConfigService::resolveToken($tokenCandidate)',
 			'ConfigService::save($tokenCandidate)',
+			'ConfigService::storeToken($token)',
 			'ConfigService::validate($tokenCandidate)',
 			'PaperlessApiService::failureMessage($token)',
 			'PaperlessApiService::headersForToken($token)',

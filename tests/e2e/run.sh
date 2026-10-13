@@ -428,10 +428,48 @@ if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
 	echo 'The log of Nextcloud holds no failed run, so the check of the token below would prove nothing.' >&2
 	exit 1
 fi
+# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter].
+# Without one in the log, PHP left out the arguments of every frame
+# (zend.exception_ignore_args=On, as in php.ini-production), and the count of the token below
+# would pass without the fix.
+if [[ "$(log_count SensitiveParameterValue)" == "0" ]]; then
+	echo 'The log of Nextcloud holds no argument replaced by PHP, so the check of the token below would prove nothing.' >&2
+	exit 1
+fi
 TOKEN_IN_LOG="$(log_count e2e-only-token)"
 if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" >/dev/null; then
 	echo "A run without Paperless put the token into its answer or into ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
 	exit 1
 fi
 
-echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, and a run without Paperless that keeps the token out of the log.'
+# The provisioning API of Nextcloud may change any value of the app, the URL too, without the
+# settings page, which asks for the token again. The next run must not send the stored token to
+# the new URL; the URL that the token was saved with gets it again.
+set_paperless_url() {
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode "value=$1" \
+		--output /dev/null \
+		"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/paperless_url"
+}
+set_paperless_url 'http://paperless-mock:8080/elsewhere'
+REPOINTED_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=true' \
+	--output "${TMP_DIR}/repointed.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+if [[ "${REPOINTED_STATUS}" != "500" ]] || ! grep --fixed-strings 'not completely configured' "${TMP_DIR}/repointed.json" >/dev/null; then
+	echo "A run after the URL was changed through the provisioning API used the stored token: HTTP ${REPOINTED_STATUS}, $(cat "${TMP_DIR}/repointed.json")" >&2
+	exit 1
+fi
+set_paperless_url 'http://paperless-mock:8080'
+sync_run true "${TMP_DIR}/back.json"
+
+echo 'Docker E2E passed: dry-run, export, metadata move, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'

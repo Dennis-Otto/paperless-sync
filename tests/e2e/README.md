@@ -54,7 +54,8 @@ The scenario verifies:
 - successful and failed Nextcloud inbox imports, and a file that Paperless refuses, which waits in the inbox until it changes
 - target-user ownership and access isolation
 - background-job registration, status reporting, and clean application logs
-- a run that can't reach Paperless, at the very end, whose error the log of Nextcloud holds without the token
+- a run that can't reach Paperless, near the end, whose error the log of Nextcloud holds without the token, with the arguments of the frames of its trace that PHP replaced
+- a Paperless URL changed through Nextcloud's provisioning API, at the very end, which doesn't get the token until the URL that the token was saved with is back
 - accessibility of the administration settings and the run report, see [Accessibility](#accessibility)
 
 Optional environment variables:

@@ -139,6 +139,26 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('Paperless Sync is not completely configured.', $this->settings['status_last_error']);
 	}
 
+	/**
+	 * The provisioning API of Nextcloud may change the URL in the app configuration without the
+	 * settings page, which asks for the token again. The next run must not send the token there.
+	 */
+	public function testAUrlChangedElsewhereNeverGetsTheToken(): void {
+		$this->exportDocument();
+		self::assertSame([['https://paperless.example.test', 'test-token']], $this->paperless->connections);
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		try {
+			$this->service->run();
+			self::fail('A URL that the token was not saved with must not get it.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
+		}
+
+		self::assertCount(1, $this->paperless->connections);
+		self::assertSame(1, $this->paperless->downloads);
+	}
+
 	public function testCompletedRunIsLoggedAndRecordedInTheStatus(): void {
 		$this->exportDocument();
 		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization completed', self::callback(

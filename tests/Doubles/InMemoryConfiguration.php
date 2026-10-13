@@ -21,7 +21,8 @@ use PHPUnit\Framework\MockObject\MockObject;
 trait InMemoryConfiguration {
 	/** @var array<string, bool|int|string> */
 	private array $settings = [];
-	private string $token = '';
+	/** What the credentials store holds, as it gives it back: decoded from JSON. */
+	private mixed $credential = null;
 
 	private function configService(?PathTemplateService $paths = null): ConfigService {
 		return new ConfigService($this->appConfig(), $this->credentialsManager(), $paths ?? new PathTemplateService());
@@ -69,12 +70,13 @@ trait InMemoryConfiguration {
 	/** @return ICredentialsManager&MockObject */
 	private function credentialsManager(): ICredentialsManager {
 		$credentials = $this->createMock(ICredentialsManager::class);
-		$credentials->method('retrieve')->willReturnCallback(fn (): ?string => $this->token !== '' ? $this->token : null);
+		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
 		$credentials->method('store')->willReturnCallback(function (string $userId, string $identifier, mixed $value): void {
-			$this->token = is_string($value) ? $value : '';
+			/** @psalm-suppress MixedAssignment */
+			$this->credential = json_decode(json_encode($value, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
 		});
 		$credentials->method('delete')->willReturnCallback(function (): int {
-			$this->token = '';
+			$this->credential = null;
 			return 1;
 		});
 
