@@ -76,20 +76,22 @@ Each numbered arrow crosses one of the boundaries below; the app checks whatever
 
 ### Which token a save tests
 
-Saving tests the connection to Paperless first, with the token that goes with the URL:
+With scheduled synchronization on, or a token entered, saving tests the connection to Paperless first, with the token that goes with the URL. With the schedule off and no token entered, a save only checks that the URL is the one that the stored token was saved with, and no request leaves the server:
 
 ```mermaid
 flowchart TB
     accTitle: Which token a save of the settings tests
-    accDescr: Nextcloud first asks for the password of the administrator, unless it was confirmed in the last 30 minutes. A token that was entered is tested with the URL of the form. Without one, the stored token is tested only when the URL is the one that it was saved with; for another URL, the save is refused with the message to enter the token again, and no request leaves the server.
+    accDescr: Nextcloud first asks for the password of the administrator, unless it was confirmed in the last 30 minutes. A token that was entered is tested with the URL of the form. Without one, the stored token goes only to the URL that it was saved with: for that URL, the save tests it when scheduled synchronization is on, and otherwise stores the settings without a request to Paperless; for another URL, the save is refused with the message to enter the token again, and no request leaves the server.
 
     save(["Save the settings"])
     password{"Password confirmed<br>in the last<br>30 minutes?"}
     confirm["Nextcloud asks<br>for the password"]
     entered{"Token<br>entered?"}
     same{"Same URL as the<br>stored token's?"}
+    schedule{"Scheduled<br>synchronization on?"}
     typed["Test the entered<br>token with the URL"]
     stored["Test the stored<br>token with the URL"]
+    untested["Saved without a<br>request to Paperless"]
     refuse["Refused: enter the<br>API token again"]
 
     save --> password
@@ -97,12 +99,14 @@ flowchart TB
     password -- "yes" --> entered
     entered -- "yes" --> typed
     entered -- "no" --> same
-    same -- "yes" --> stored
+    same -- "yes" --> schedule
+    schedule -- "yes" --> stored
+    schedule -- "no" --> untested
     same -- "no" --> refuse
 
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class typed,stored done
+    class typed,stored,untested done
     class refuse refused
 ```
 

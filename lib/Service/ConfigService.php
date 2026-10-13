@@ -171,11 +171,18 @@ final class ConfigService {
 		return $this->get();
 	}
 
+	/**
+	 * Disconnect Paperless: delete the token and turn off what reaches Paperless without an
+	 * administrator watching, the scheduled synchronization, and the access to the local network,
+	 * which lifts a protection of Nextcloud. The other settings stay, the deletion policy too: to
+	 * connect again, an administrator enters the token, and allows the local network again when
+	 * Paperless runs there.
+	 */
 	public function reset(): SyncConfig {
-		foreach (array_keys(self::DEFAULTS) as $key) {
-			$this->appConfig->deleteKey(AppConstants::APP_ID, $this->storageKey($key));
-		}
 		$this->credentialsManager->delete('', self::TOKEN_IDENTIFIER);
+		foreach (['enabled', 'paperless_local_network'] as $key) {
+			$this->appConfig->setValueBool(AppConstants::APP_ID, $this->storageKey($key), false);
+		}
 
 		return $this->get();
 	}
