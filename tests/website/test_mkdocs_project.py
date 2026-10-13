@@ -141,11 +141,11 @@ def test_the_build_reads_the_info_of_this_app() -> None:
 
 def test_a_page_gets_the_versions_in_its_fields() -> None:
     known(nextcloud=f"33{EN_DASH}36", php="8.2+")
-    markdown = (
+    html = (
         f'<li>Nextcloud <span data-app="nextcloud">33{EN_DASH}35</span></li>\n'
         '<li>PHP <span data-app="php"></span></li>\n'
     )
-    assert hook.on_page_markdown(markdown, page=page()) == (
+    assert hook.on_page_content(html, page=page()) == (
         f'<li>Nextcloud <span data-app="nextcloud">33{EN_DASH}36</span></li>\n'
         '<li>PHP <span data-app="php">8.2+</span></li>\n'
     )
@@ -153,34 +153,57 @@ def test_a_page_gets_the_versions_in_its_fields() -> None:
 
 def test_a_page_without_fields_stays_as_it_is() -> None:
     known(nextcloud="33+", php="8.2+")
-    markdown = "Every file name ends in [P{{ id }}], such as `{{ app.php }}`.\n"
-    assert hook.on_page_markdown(markdown, page=page()) == markdown
+    html = "<p>A name ends in [P{{ id }}], such as <code>{{ app.php }}</code>.</p>\n"
+    assert hook.on_page_content(html, page=page()) == html
+
+
+def test_a_field_shown_as_code_stays_as_it_is() -> None:
+    known(nextcloud="33+", php="8.3+")
+    html = (
+        "<p>The fields, such as <code>&lt;span "
+        'data-app="php"&gt;8.2+&lt;/span&gt;</code>, of a page.</p>\n'
+    )
+    assert hook.on_page_content(html, page=page("development.md")) == html
 
 
 def test_an_unknown_field_fails() -> None:
     known(nextcloud="33+", php="8.2+")
     with fails('guide.md has the unknown field data-app="mysql".'):
-        hook.on_page_markdown('<span data-app="mysql">8</span>', page=page("guide.md"))
+        hook.on_page_content('<span data-app="mysql">8</span>', page=page("guide.md"))
 
 
 def test_a_field_that_the_hook_cant_read_fails() -> None:
     known(nextcloud="33+", php="8.2+")
-    for markdown in (
+    for html in (
         "<span data-app='php'>8.2+</span>",
         '<span class="version" data-app="php">8.2+</span>',
         '<span data-app="php"><b>8.2+</b></span>',
         '<span data-app="php">8.2+</span> and <abbr data-app="php">PHP</abbr>',
     ):
         with fails("index.md has a field that isn't"):
-            hook.on_page_markdown(markdown, page=page())
+            hook.on_page_content(html, page=page())
 
 
 def test_the_home_page_has_both_fields() -> None:
     known(nextcloud="NEXTCLOUD", php="PHP")
     markdown = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
-    filled = hook.on_page_markdown(markdown, page=page())
+    filled = hook.on_page_content(markdown, page=page())
     assert '<li>Nextcloud <span data-app="nextcloud">NEXTCLOUD</span></li>' in filled
     assert '<li>PHP <span data-app="php">PHP</span></li>' in filled
+
+
+def test_the_requirements_of_the_readme_get_both_fields() -> None:
+    # The guide takes the requirements from the README by a snippet, which MkDocs
+    # writes into its HTML before the hook fills the fields.
+    guide = (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
+    assert '--8<-- "README.md:requirements"' in guide
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    start = readme.index("<!-- --8<-- [start:requirements] -->")
+    end = readme.index("<!-- --8<-- [end:requirements] -->")
+    known(nextcloud="NEXTCLOUD", php="PHP")
+    filled = hook.on_page_content(readme[start:end], page=page("guide.md"))
+    assert '**Nextcloud <span data-app="nextcloud">NEXTCLOUD</span>**' in filled
+    assert '**PHP <span data-app="php">PHP</span>**' in filled
 
 
 def main() -> int:

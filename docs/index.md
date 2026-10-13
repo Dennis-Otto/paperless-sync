@@ -19,12 +19,13 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 <ul class="ps-requirements" aria-label="Requirements">
   <li>Nextcloud <span data-app="nextcloud">33–35</span></li>
   <li>PHP <span data-app="php">8.2+</span></li>
-  <li>Paperless-ngx with an API token</li>
+  <li>Paperless-ngx 2.10+ with an API token</li>
   <li>Nextcloud's system cron</li>
 </ul>
 
 [Get it from the App Store](https://apps.nextcloud.com/apps/paperless_sync){ .md-button .md-button--primary }
 [Quick start](#quick-start){ .md-button }
+[Requirements](guide.md#requirements){ .md-button }
 { .ps-hero-actions }
 
 ![The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud](images/archive.gif)
@@ -125,13 +126,13 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
 
     [:octicons-arrow-right-24: Decisions](decisions/README.md)
 
-- :material-history:{ .lg .middle } **Releases and changelog**
+- :material-hammer-wrench:{ .lg .middle } **Development and releases**
 
     ---
 
-    How a release is made, signed and published in the Nextcloud App Store, and the changes of each version.
+    How to build and test the app, how a release is made, signed and published in the Nextcloud App Store, and the changes of each version.
 
-    [:octicons-arrow-right-24: Releases](releases.md) · [Changelog](changelog.md)
+    [:octicons-arrow-right-24: Development](development.md) · [Releases](releases.md) · [Changelog](changelog.md)
 
 </div>
 
