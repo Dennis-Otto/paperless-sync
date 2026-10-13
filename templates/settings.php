@@ -133,8 +133,9 @@ $stateLabels = [
 				</label>
 				<label class="paperless-sync-field paperless-sync-field--wide">
 					<span><?php p($l->t('Archive path template')); ?></span>
-					<input data-setting="path_template" type="text" value="<?php p($config->pathTemplate); ?>" required>
+					<input data-setting="path_template" type="text" value="<?php p($config->pathTemplate); ?>" aria-describedby="paperless-sync-path-template-hint" required>
 				</label>
+				<p id="paperless-sync-path-template-hint" class="settings-hint paperless-sync-field--wide"><?php p($l->t('Write variables as {{ name }}; {{ id }} is required. The variables are id, title, correspondent, document_type, storage_path, created, created_year, created_month, added, added_year, original_filename and extension.')); ?> <?php p($l->t('Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.')); ?></p>
 			</div>
 			<div class="paperless-sync-switches paperless-sync-switches--inline">
 				<label><input data-setting="prefer_archive" type="checkbox" <?php if ($config->preferArchive) {
@@ -148,7 +149,7 @@ $stateLabels = [
 				<span><?php p($l->t('Additional excluded Paperless tags')); ?></span>
 				<input data-setting="excluded_tags" type="text" value="<?php p($config->excludedTags); ?>" placeholder="Draft, Private">
 			</label>
-			<p class="settings-hint"><?php p($l->t('Separate tag names with commas. Template variables include id, title, correspondent, document_type, storage_path, created, created_year, created_month, added, added_year, original_filename, and extension.')); ?></p>
+			<p class="settings-hint"><?php p($l->t('Separate tag names with commas.')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">

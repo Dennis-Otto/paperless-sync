@@ -15,10 +15,22 @@ use OCA\PaperlessSync\Model\SyncConfig;
 final class PathTemplateService {
 	public const DEFAULT_TEMPLATE = '{{ correspondent }}/{{ document_type }}/{{ created_year }}/{{ created }} - {{ title }} [P{{ id }}]{{ extension }}';
 
+	/** The longest folder name in bytes; Nextcloud accepts 250. */
+	private const MAX_FOLDER_BYTES = 200;
+
+	/**
+	 * The longest file name in bytes: Nextcloud accepts 250, and the temporary name of a
+	 * write, ".{name}.paperless-{16 hex digits}.part" in NextcloudStorageService, is 33 longer.
+	 */
+	private const MAX_FILENAME_BYTES = 217;
+
+	private const PLACEHOLDER = '/{{\s*([a-z_]+)\s*}}/';
+
+	/** The names of devices, which Windows doesn't allow as the name of a file or folder, with any extension. */
 	private const WINDOWS_RESERVED = [
-		'CON', 'PRN', 'AUX', 'NUL',
-		'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-		'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+		'CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$',
+		'COM0', 'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9', 'COM¹', 'COM²', 'COM³',
+		'LPT0', 'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9', 'LPT¹', 'LPT²', 'LPT³',
 	];
 
 	private const VARIABLES = [
@@ -27,26 +39,30 @@ final class PathTemplateService {
 		'original_filename', 'extension',
 	];
 
+	/** The values that are shortened when a name would be too long; the dates, the ID and the extension stay whole. */
+	private const FREE_TEXT = ['title', 'correspondent', 'document_type', 'storage_path', 'original_filename'];
+
 	public function validateTemplate(string $template): string {
 		$normalized = trim(str_replace('\\', '/', $template), " /\t\n\r\0\x0B");
 		if ($normalized === '') {
 			throw new InvalidArgumentException('The archive path template must not be empty.');
 		}
-		if (!str_contains($normalized, '{{ id }}')) {
+		if (preg_match('/{{\s*id\s*}}/', $normalized) !== 1) {
 			throw new InvalidArgumentException('The archive path template must contain {{ id }}.');
 		}
 
-		preg_match_all('/{{\s*([a-z_]+)\s*}}/', $normalized, $matches);
+		preg_match_all(self::PLACEHOLDER, $normalized, $matches);
 		foreach ($matches[1] as $variable) {
 			if (!in_array($variable, self::VARIABLES, true)) {
-				throw new InvalidArgumentException("Unknown archive path variable: {{$variable}}.");
+				throw new InvalidArgumentException('Unknown archive path variable: {{ ' . $variable . ' }}.');
 			}
 		}
-		if (preg_match('/{{|}}/', preg_replace('/{{\s*[a-z_]+\s*}}/', '', $normalized) ?? '') === 1) {
+		if (preg_match('/{{|}}/', preg_replace(self::PLACEHOLDER, '', $normalized) ?? '') === 1) {
 			throw new InvalidArgumentException('The archive path template contains an invalid placeholder.');
 		}
 
-		return $normalized;
+		// One spelling of every placeholder, such as {{ id }} for {{id}}.
+		return preg_replace(self::PLACEHOLDER, '{{ $1 }}', $normalized) ?? $normalized;
 	}
 
 	public function normalizeRelativePath(string $path, bool $allowEmpty = false): string {
@@ -121,43 +137,116 @@ final class PathTemplateService {
 			'extension' => $extension,
 		];
 
-		$rendered = $config->pathTemplate;
-		foreach ($values as $name => $value) {
-			$rendered = preg_replace('/{{\s*' . preg_quote($name, '/') . '\s*}}/', $value, $rendered) ?? $rendered;
-		}
-
-		$renderedComponents = explode('/', $rendered);
-		$lastIndex = array_key_last($renderedComponents);
+		// Each part of the template becomes one name of the path, so a value can't add a folder.
+		$templates = explode('/', $config->pathTemplate);
+		$fileTemplate = array_pop($templates);
 		$components = [];
-		foreach ($renderedComponents as $index => $component) {
-			$isFilename = $index === $lastIndex;
-			$components[] = $this->cleanComponent($component, $isFilename ? 'Document' : 'Folder', $isFilename ? 220 : 120);
+		foreach ($templates as $template) {
+			$components[] = $this->fit($template, $values, 'Folder', self::MAX_FOLDER_BYTES, '');
 		}
+		// The file name ends with the extension and keeps the marker [P123], which ties the file to its
+		// document and which Paperless Unified Search reads; a template without them gets them added.
+		$stem = preg_replace('/{{\s*extension\s*}}\z/', '', $fileTemplate) ?? $fileTemplate;
+		if (preg_match('/\[P{{\s*id\s*}}\]/', $stem) !== 1) {
+			$stem .= ' [P{{ id }}]';
+		}
+		$components[] = $this->fit($stem, $values, 'Document', self::MAX_FILENAME_BYTES - strlen($extension), "[P{$id}]") . $extension;
 
 		return implode('/', $components);
 	}
 
-	public function cleanComponent(string $value, string $fallback, int $maxLength = 120): string {
+	public function cleanComponent(string $value, string $fallback, int $maxBytes = self::MAX_FOLDER_BYTES): string {
+		$text = mb_scrub($value, 'UTF-8');
+		// Normalizer comes with the extension intl, so there is nothing to autoload.
 		/**
 		 * @psalm-suppress InternalMethod
 		 * @psalm-suppress MixedAssignment
 		 */
-		$normalized = class_exists(\Normalizer::class) ? \Normalizer::normalize($value, \Normalizer::FORM_C) : $value;
-		$text = is_string($normalized) ? $normalized : $value;
-		$text = preg_replace('/[\x00-\x1f\x7f<>:"\/\\\\|?*]/u', '_', $text) ?? $text;
+		$normalized = class_exists(\Normalizer::class, false) ? \Normalizer::normalize($text, \Normalizer::FORM_C) : $text;
+		$text = is_string($normalized) ? $normalized : $text;
+		// Control characters, and the characters that Windows, macOS or Nextcloud don't allow in a name.
+		$text = preg_replace('/[\p{Cc}<>:"\/\\\\|?*]/u', '_', $text) ?? $text;
 		$text = preg_replace('/\s+/u', ' ', $text) ?? $text;
-		$text = trim($text, " .\t\n\r\0\x0B");
-		if ($text === '' || $text === '.' || $text === '..') {
+		// Without dots at the ends, . and .. become empty and take the fallback.
+		$text = trim($text, ' .');
+		if ($text === '') {
 			$text = $fallback;
 		}
-		$stem = strtoupper(explode('.', $text, 2)[0]);
+		$stem = strtoupper(rtrim(explode('.', $text, 2)[0], ' '));
 		if (in_array($stem, self::WINDOWS_RESERVED, true)) {
 			$text = '_' . $text;
 		}
-		$text = mb_substr($text, 0, $maxLength);
-		$text = rtrim($text, ' .');
+		$text = rtrim(mb_strcut($text, 0, $maxBytes, 'UTF-8'), ' .');
 
 		return $text !== '' ? $text : $fallback;
+	}
+
+	/**
+	 * Renders one name of the path in at most $maxBytes bytes. It shortens only the free-text
+	 * values, the longest first, so that the text of the template, the dates, the ID and the
+	 * marker stay whole. Only when they alone are too long does it cut the name itself, and a
+	 * file name then keeps its marker at its end.
+	 *
+	 * @param array<string, string> $values
+	 */
+	private function fit(string $template, array $values, string $fallback, int $maxBytes, string $marker): string {
+		preg_match_all(self::PLACEHOLDER, $template, $matches);
+		$lengths = [];
+		foreach ($matches[1] as $name) {
+			if (in_array($name, self::FREE_TEXT, true)) {
+				$lengths[] = strlen($values[$name]);
+			}
+		}
+		$budget = $maxBytes - strlen($this->substitute($template, array_fill_keys(self::FREE_TEXT, '') + $values));
+		do {
+			$share = $this->fairShare($lengths, $budget);
+			$shortened = $values;
+			foreach (self::FREE_TEXT as $name) {
+				$shortened[$name] = mb_strcut($values[$name], 0, $share, 'UTF-8');
+			}
+			$component = $this->cleanComponent($this->substitute($template, $shortened), $fallback, PHP_INT_MAX);
+			// Cleaning can make the name a little longer, such as "_" before a name of Windows.
+			$excess = strlen($component) - $maxBytes;
+			$budget -= $excess;
+		} while ($excess > 0 && $share > 0);
+
+		// A name that fits stays as it is; one whose template text alone is too long is cut.
+		$component = $this->cleanComponent($component, $fallback, $maxBytes);
+		if ($marker !== '' && !str_contains($component, $marker)) {
+			$component = $this->cleanComponent($component, $fallback, $maxBytes - strlen($marker) - 1) . ' ' . $marker;
+		}
+
+		return $component;
+	}
+
+	/**
+	 * The bytes that each value may keep so that all of them fit into $budget bytes together:
+	 * the values shorter than their share stay whole, and the longer ones share the rest equally.
+	 *
+	 * @param list<int> $lengths
+	 */
+	private function fairShare(array $lengths, int $budget): int {
+		sort($lengths);
+		$remaining = count($lengths);
+		foreach ($lengths as $length) {
+			if ($length * $remaining > $budget) {
+				return intdiv(max(0, $budget), $remaining);
+			}
+			$budget -= $length;
+			--$remaining;
+		}
+
+		return max([0, ...$lengths]);
+	}
+
+	/**
+	 * Puts the values into the template in one pass and as plain text, so that "$1" or
+	 * "{{ title }}" in a title stays as it is.
+	 *
+	 * @param array<string, string> $values
+	 */
+	private function substitute(string $template, array $values): string {
+		return preg_replace_callback(self::PLACEHOLDER, static fn (array $match): string => $values[$match[1]] ?? $match[0], $template) ?? $template;
 	}
 
 	/** @param mixed $value */
