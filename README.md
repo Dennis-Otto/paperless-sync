@@ -276,7 +276,7 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 
 <!-- --8<-- [end:configuration] -->
 
-<!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks two permissions. -->
+<!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks three permissions. -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-checklist-dark.png">
   <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags and the upload from the inbox failed, each with the permissions to grant in Paperless" src="docs/images/settings-checklist-light.png">

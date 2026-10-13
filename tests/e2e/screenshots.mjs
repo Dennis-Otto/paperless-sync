@@ -324,7 +324,7 @@ try {
 		for (const [index, card] of CARDS.entries()) {
 			save(`docs/images/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
-		// The connection checklist of an account that lacks two permissions, below the
+		// The connection checklist of an account that lacks three permissions, below the
 		// connection settings: lines that passed, failed and have a note.
 		// It is taller than the window of the other pictures, so the window grows for it.
 		await page.setViewportSize(TALL_VIEWPORT)
