@@ -4,9 +4,13 @@ mkdocs.yml names this file under hooks. A page shows a version that appinfo/info
 asks for in a field, such as <span data-app="php">8.2+</span>, named nextcloud or php.
 The hook writes the versions of info.xml into every field, so that the website follows
 a change of the app, such as the pull request of the upstream bot that raises
-max-version, without an edit of its own. The text in the Markdown is what github.com
-shows, and it may lag behind the website until the next edit of the page. A field that
-this hook doesn't know or can't read fails the build.
+max-version, without an edit of its own. It fills the fields in the HTML of a page, so
+that it reaches the fields that a page takes from the README by a snippet as well, such
+as those of the requirements in the guide; a field shown as code is text there and
+stays as it is. The text in the Markdown is what github.com shows, and it may lag
+behind the website until the next edit of the page; scripts/check-project.sh makes
+sure that it never claims more than info.xml. A field that this hook doesn't know or
+can't read fails the build.
 tests/website/test_mkdocs_project.py tests the hook.
 """
 
@@ -21,6 +25,9 @@ from mkdocs.exceptions import PluginError
 
 # A field of this hook: its name and the text that the hook replaces.
 FIELD = re.compile(r'<span data-app="([^"]*)">[^<]*</span>')
+# An element of the HTML with a data-app attribute, which must be a field. In code,
+# the HTML has &lt; for <, so that a field shown as code is no element.
+ELEMENT = re.compile(r"<[a-zA-Z][^<>]*\sdata-app=")
 # The versions for the fields, by name, read at the start of the last build.
 VALUES: dict[str, str] = {}
 
@@ -50,8 +57,8 @@ def on_config(config: Any) -> None:
     VALUES["php"] = versions(dependencies.find("php"), "PHP")
 
 
-def on_page_markdown(markdown: str, *, page: Any, **_: Any) -> str:
-    """Write the versions into the fields of a page."""
+def on_page_content(html: str, *, page: Any, **_: Any) -> str:
+    """Write the versions into the fields of a page, those of its snippets included."""
     source = page.file.src_uri
 
     def fill(field: re.Match[str]) -> str:
@@ -60,9 +67,9 @@ def on_page_markdown(markdown: str, *, page: Any, **_: Any) -> str:
             raise PluginError(f'{source} has the unknown field data-app="{name}".')
         return f'<span data-app="{name}">{VALUES[name]}</span>'
 
-    markdown, filled = FIELD.subn(fill, markdown)
-    if markdown.count("data-app") != filled:
+    html, filled = FIELD.subn(fill, html)
+    if len(ELEMENT.findall(html)) != filled:
         raise PluginError(
             f'{source} has a field that isn\'t <span data-app="name">text</span>.'
         )
-    return markdown
+    return html
