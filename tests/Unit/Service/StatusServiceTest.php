@@ -79,7 +79,7 @@ final class StatusServiceTest extends TestCase {
 		$this->service->completed(new SyncReport(true, 1000, 1060));
 
 		self::assertArrayHasKey('status_last_report', $this->lazyKeys, 'Nextcloud loads the report only when it is asked for.');
-		self::assertArrayNotHasKey('status_last_state', $this->lazyKeys, 'The background job reads the rest of the status in every check.');
+		self::assertArrayNotHasKey('status_last_state', $this->lazyKeys, 'Only the report is lazy.');
 		self::assertTrue($this->service->get()['report']['dryRun']);
 	}
 
@@ -192,6 +192,17 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame(10_500 + 15 * 60, $this->service->nextRun($config), 'A run that is still active counts from its start.');
 
 		self::assertNull($this->service->nextRun($this->config(false)), 'Without scheduled runs there is no next one.');
+	}
+
+	public function testNextScheduledRunLeavesTheLazyReportUnloaded(): void {
+		$report = new SyncReport(false, 10_000, 10_060);
+		$report->action('EXPORT P1: Archiv/P1.pdf');
+		$this->service->completed($report);
+		$config = $this->config(true);
+		$this->lazyReads = [];
+
+		self::assertSame(10_060 + 15 * 60, $this->service->nextRun($config));
+		self::assertSame([], $this->lazyReads, 'The background job asks for the next run in every check.');
 	}
 
 	public function testOverviewHasTheStatusAndTheNextScheduledRun(): void {

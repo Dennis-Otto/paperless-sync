@@ -532,9 +532,9 @@ final class SyncServiceTest extends TestCase {
 
 		$message = 'Paperless Sync could not synchronize the document P{documentId}: {error}';
 		self::assertSame([
-			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless is unavailable', 'exception' => $unavailable]],
-			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless timed out', 'exception' => $timedOut]],
-		], $warnings, 'The second run fails as the first did, so only the first and the third are logged.');
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless is unavailable']],
+			[$message, ['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => 'Paperless timed out']],
+		], $warnings, 'The second run fails as the first did, so only the first and the third are logged, without the exception, whose trace can hold the token.');
 	}
 
 	public function testDryRunLogsTheErrorOfADocumentThatNoRunRecorded(): void {
@@ -686,7 +686,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->taskException = $timedOut;
 		$this->logger->expects(self::once())->method('warning')->with(
 			'Paperless Sync could not check the import of the inbox file {path}: {error}',
-			['path' => $path, 'error' => 'Paperless timed out', 'exception' => $timedOut],
+			['path' => $path, 'error' => 'Paperless timed out'],
 		);
 
 		$report = $this->service->run();
@@ -1652,18 +1652,15 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayNotHasKey('enabled', $this->settings);
 	}
 
-	/** @param array<string, mixed>|null $document */
 	/** Expects the warning about the error of the document P123, once in every run that follows. */
 	private function expectDocumentWarning(string $path, string $error): void {
 		$this->logger->expects(self::once())->method('warning')->with(
 			'Paperless Sync could not synchronize the document P{documentId}: {error}',
-			self::callback(static fn (array $context): bool => $context['documentId'] === 123
-				&& $context['path'] === $path
-				&& $context['error'] === $error
-				&& $context['exception'] instanceof RuntimeException),
+			['documentId' => 123, 'path' => $path, 'error' => $error],
 		);
 	}
 
+	/** @param array<string, mixed>|null $document */
 	private function exportDocument(?array $document = null): SyncReport {
 		return $this->exportDocuments([$document ?? $this->document()]);
 	}

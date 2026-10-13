@@ -100,7 +100,7 @@ final class StatusService {
 	 */
 	public function overview(SyncConfig $config): array {
 		$status = $this->get();
-		$status['nextRun'] = $this->nextRun($config, $status);
+		$status['nextRun'] = $this->nextRun($config);
 
 		return $status;
 	}
@@ -110,14 +110,18 @@ final class StatusService {
 	 * the start or the end of the last run, whichever is later. A time that has passed, or 0 before
 	 * the first run, means the next background job. Null when scheduled runs are off.
 	 *
-	 * @param Status|null $status the status, when it is already at hand
+	 * It reads only the times of the last run, because the background job asks for it in every
+	 * check, and the lazy report stays unloaded then.
 	 */
-	public function nextRun(SyncConfig $config, ?array $status = null): ?int {
+	public function nextRun(SyncConfig $config): ?int {
 		if (!$config->enabled) {
 			return null;
 		}
-		$status ??= $this->get();
-		$last = max($status['lastStarted'], $status['lastCompleted'], $status['lastEnded']);
+		$last = max(
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, 0),
+		);
 
 		return $last > 0 ? $last + $config->syncIntervalMinutes * 60 : 0;
 	}

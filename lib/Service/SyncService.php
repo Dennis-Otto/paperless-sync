@@ -136,7 +136,7 @@ final class SyncService {
 				} catch (\Throwable $exception) {
 					$error = $this->exceptionMessage($exception);
 					$report->error("Excluded P{$documentId}: {$error}");
-					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry, $exception);
+					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry);
 					if (!$report->dryRun) {
 						$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
 					}
@@ -255,7 +255,7 @@ final class SyncService {
 				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
 				} else {
-					$this->logDocumentError($documentId, $target !== '' ? $target : (string)($entry['path'] ?? ''), $error, $entry, $exception);
+					$this->logDocumentError($documentId, $target !== '' ? $target : (string)($entry['path'] ?? ''), $error, $entry);
 				}
 			}
 		}
@@ -313,7 +313,7 @@ final class SyncService {
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
 				} else {
-					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry, $exception);
+					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry);
 				}
 			}
 		}
@@ -404,7 +404,7 @@ final class SyncService {
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
 				} else {
-					$this->logDocumentError($documentId, $path, $error, $entry, $exception);
+					$this->logDocumentError($documentId, $path, $error, $entry);
 				}
 			}
 		}
@@ -575,10 +575,10 @@ final class SyncService {
 				$report->error("Import task {$path}: {$error}");
 				// The task stays pending, with its error, so that a lasting failure is logged once.
 				if ($this->changedError($pending, $error)) {
+					// Without the exception, as for the error of a document.
 					$this->logger->warning('Paperless Sync could not check the import of the inbox file {path}: {error}', [
 						'path' => $path,
 						'error' => $error,
-						'exception' => $exception,
 					]);
 				}
 				if (!$report->dryRun) {
@@ -715,9 +715,13 @@ final class SyncService {
 	 * Logs the error of a document as a warning, unless its state keeps the same error from an
 	 * earlier run: an error that recurs in every run is logged once, when it first occurs or changes.
 	 *
+	 * The warning carries the message of the error but not the exception: Nextcloud would log its
+	 * trace, and the trace of a failed request to Paperless can hold the arguments of the request,
+	 * the API token among them.
+	 *
 	 * @param array<string, int|string|null>|null $entry the state of the document
 	 */
-	private function logDocumentError(int $documentId, string $path, string $error, ?array $entry, \Throwable $exception): void {
+	private function logDocumentError(int $documentId, string $path, string $error, ?array $entry): void {
 		if (!$this->changedError($entry, $error)) {
 			return;
 		}
@@ -725,7 +729,6 @@ final class SyncService {
 			'documentId' => $documentId,
 			'path' => $path,
 			'error' => $error,
-			'exception' => $exception,
 		]);
 	}
 
