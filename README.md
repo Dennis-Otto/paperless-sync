@@ -80,7 +80,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - **Nextcloud <span data-app="nextcloud">33–35</span>**, with the system cron for its background jobs, as Nextcloud recommends: *Administration settings → Basic settings → Background jobs → Cron*. Every run of the app is one of these jobs.
 - **PHP <span data-app="php">8.2+</span>** on the Nextcloud server.
 - **Paperless-ngx 2.10 or newer**, the first version with a trash, which the app mirrors, at an address that the Nextcloud server reaches over HTTP or HTTPS. For a Paperless at an address of the local network, such as `http://paperless:8000` in Docker or `http://192.168.1.20:8000`, turn on the setting [Paperless runs in my local network](#paperless-in-your-local-network).
-- **A Paperless account for the app**, with an API token. It needs to view and download the documents to mirror, to own them so that it sees them in the Paperless trash, and the permission `documents.add_document` for the inbox; [Paperless connection](#paperless-connection) has the details.
+- **A Paperless account for the app**, with an API token, that isn't a superuser. It needs to view and download the documents to mirror, and the permission `documents.add_document` for the inbox; owning the documents lets it mirror the Paperless trash right away. [Paperless connection](#paperless-connection) has the details.
 - **Room in the files of the target user**, the Nextcloud user who owns the archive: the archive counts against the quota of that user.
 
 <!-- --8<-- [end:requirements] -->
@@ -221,7 +221,14 @@ Stable markers such as `[P123]` are compatible with the independent [Paperless U
 
 Use a dedicated Paperless service account. It needs view and download access to every document that should be exported. Enable `documents.add_document` only when Nextcloud inbox import is used.
 
-The Paperless trash shows an account only the documents that it owns and those without an owner, unless the account is a superuser: a permission granted on a document of someone else doesn't count there. So make the account the owner of the documents, or a superuser, for the trash to reach the deleted folder right away. A document in the trash that the account can't see counts as missing instead: its copy moves to the deleted folder only after the configured number of complete scans, and with permanent and direct deletion both on, it is deleted then, although the document can still be restored in Paperless.
+The Paperless trash shows an account only the documents that it owns and those without an owner: a permission granted on a document of someone else doesn't count there. A superuser sees the whole trash, but its token controls all of Paperless, every document and every user, so don't use one for this app. Make the account of the app the owner of the documents instead, and keep the access of the people who own them now:
+
+- **New documents:** add a workflow in Paperless with the trigger *Document Added* and an action *Assignment* that assigns the account of the app as the owner and gives view and edit permissions to the users or groups who own the documents now.
+- **Existing documents:** select them in the document list, choose *Permissions*, set the account of the app as the owner, and give view and edit permissions to the same users or groups. Leave *Merge with existing permissions* off: with it on, Paperless keeps the current owner and sets one only for documents without an owner. Off, the dialog replaces the permissions of the selected documents, so list everyone who should keep access.
+
+Only the owner of a document or a superuser can change its owner. The Paperless trash then lists these documents for the account of the app and for superusers, not for the people who owned them before.
+
+Without ownership, the trash still reaches the archive, only later: a document in the trash that the account can't see counts as missing, and its copy moves to the deleted folder after the configured number of complete scans. Keep *Also allow deletion when the app never observed the Paperless trash state* off in that case: with it and permanent deletion both on, such a copy is deleted then, although the document can still be restored in Paperless.
 
 The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
 

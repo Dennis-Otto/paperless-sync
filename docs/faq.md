@@ -16,7 +16,7 @@ No. Paperless is the source of the archive, and the app sends nothing back from 
 
 ### What does the Paperless account of the app need?
 
-A dedicated account with an API token, which can view and download the documents to mirror, and which owns them, or is a superuser, so that their trash reaches the deleted folder right away. The inbox needs the permission `documents.add_document` as well. The [guide](guide.md#paperless-connection) has the details, and the [security design](security.md) explains why a dedicated account.
+A dedicated account with an API token, which can view and download the documents to mirror; when it owns them as well, their trash reaches the deleted folder right away. The inbox needs the permission `documents.add_document` as well. Don't use a superuser: it would see the whole trash, but its token controls all of Paperless. The [guide](guide.md#paperless-connection) shows how to make the account the owner without taking away the access of the people who own them now, and the [security design](security.md) explains why a dedicated account.
 
 ## The archive in Nextcloud
 
@@ -73,11 +73,11 @@ Only the target user sees that trash bin, under *Deleted files* in *Files*. Next
 
 ### Can I change the path template later?
 
-Yes. The next runs move every file to the path of the new template, within the batch size, without downloading it again, so a large archive shows the old and the new layout side by side for a while: 5,000 documents take 50 runs with a batch of 100. Start a dry-run first, which lists a move for every file. The app removes the folders that the moves leave empty when *Remove empty folders after moves and deletions* is on. A new archive or base folder moves the files of the archive as well, but not the copies in the deleted folder, and the old folders stay behind; remove them once the moves are done. Share the base folder or the archive folder, which the template doesn't change, rather than the folders that it builds: a folder that a move empties disappears with its shares.
+Yes. The next runs move every file to the path of the new template, within the batch size, without downloading it again, so a large archive shows the old and the new layout side by side for a while: 5,000 documents take 50 runs with a batch of 100. Start a dry-run first, which lists a move for every file. The app removes the folders that the moves leave empty when *Remove empty folders after moves and deletions* is on. A new archive or base folder moves the files of the archive as well, but not the copies in the deleted folder, and the old folders stay behind; remove them once the moves are done. Share the archive folder, which the template doesn't change, rather than the folders that it builds: a folder that a move empties disappears with its shares. A share of the base folder would include the inbox and error folders as well.
 
 ### Can several users see the archive?
 
-Yes, through Nextcloud: the target user shares the folder of the archive with them, or with a group of them, as [decision 0002](decisions/0002-the-filesystem-api-of-nextcloud.md) intends. Share it read-only, since the next run undoes changes anyway, and share the inbox folder only with those who may send documents to Paperless. An archive of its own for every user, with the documents that each one may see in Paperless, is the feature request [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84); add your 👍 or your use there.
+Yes, through Nextcloud: the target user shares the folder of the archive with them, or with a group of them, as [decision 0002](decisions/0002-the-filesystem-api-of-nextcloud.md) intends. Share it read-only, since nothing there goes back to Paperless, and a run may replace an edited copy or write a deleted one anew; share the inbox folder only with those who may send documents to Paperless. An archive of its own for every user, with the documents that each one may see in Paperless, is the feature request [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84); add your 👍 or your use there.
 
 ### Can I change the target user?
 
@@ -124,4 +124,4 @@ Yes, with the setting **Paperless runs in my local network**, which allows the a
 1. Choose **Disconnect** in its settings, which deletes the settings and the API token.
 2. Remove the app under *Apps*, or with `occ app:remove paperless_sync`.
 
-Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. Without that plan, an administrator of the database may drop them.
+Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. To remove them for good, an administrator of the database drops both tables and also deletes the records of the app, which tell Nextcloud that the tables exist: `DELETE FROM oc_migrations WHERE app = 'paperless_sync'` and `DELETE FROM oc_appconfig WHERE appid = 'paperless_sync'`, with your prefix. Dropping only the tables breaks a later installation, which then skips creating them.

@@ -123,13 +123,15 @@ Nextcloud logs warnings and errors by default. To see that a run completed, with
 
 ### Documents of the trash come late
 
-The Paperless trash shows an account only the documents that it owns and those without an owner, unless the account is a superuser. A document of someone else that goes to the trash disappears for the app from both lists, so it counts as missing: its copy moves to the deleted folder only after the configured number of complete scans, below the date of that run instead of the date of the trash. With permanent and direct deletion both on, the copy is even deleted then, although the document can still be restored in Paperless. Make the account the owner of the documents, or a superuser, so that their trash is mirrored right away.
+The Paperless trash shows an account only the documents that it owns and those without an owner. A document of someone else that goes to the trash disappears for the app from both lists, so it counts as missing: its copy moves to the deleted folder only after the configured number of complete scans, below the date of that run instead of the date of the trash. With permanent deletion and *Also allow deletion when the app never observed the Paperless trash state* both on, the copy is even deleted then, although the document can still be restored in Paperless.
+
+**Fix:** Make the account of the app the owner of the documents, with a workflow for new ones and the bulk edit of permissions for the others, as the [guide](guide.md#paperless-connection) shows; both keep the access of the people who own them now. Don't make the account a superuser: it would see the whole trash, but its token controls all of Paperless.
 
 ## Files
 
 ### Other users don't see the archive
 
-The archive is in the files of the target user alone; the app gives nobody else access. Share its folder, such as `Dokumente/Paperless/Archiv`, from *Files*, with users or with a group, and preferably read-only, since the next run undoes their changes anyway. Share the inbox folder only with those who may send documents to Paperless: whatever reaches it goes to Paperless under the account of the app.
+The archive is in the files of the target user alone; the app gives nobody else access. Share its folder, such as `Dokumente/Paperless/Archiv`, from *Files*, with users or with a group, and preferably read-only, since nothing there goes back to Paperless, and a run may replace an edited copy or write a deleted one anew. Share the inbox folder only with those who may send documents to Paperless: whatever reaches it goes to Paperless under the account of the app.
 
 ### Deleted copies are not in the trash bin
 
