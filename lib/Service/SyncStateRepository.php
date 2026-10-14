@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IDBConnection;
 
 final class SyncStateRepository implements SyncStateRepositoryInterface {
@@ -18,6 +19,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IDBConnection $connection,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
@@ -41,7 +43,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 
 	public function saveExport(string $ownerUid, int $documentId, array $values): void {
 		$existing = $this->findExport($ownerUid, $documentId);
-		$now = time();
+		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
 			'path', 'fingerprint', 'source_revision', 'state', 'missing_runs', 'last_seen', 'trash_date', 'last_error',
 		]));
@@ -99,7 +101,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 
 	public function saveImport(string $ownerUid, string $path, array $values): void {
 		$existing = $this->findImport($ownerUid, $path);
-		$now = time();
+		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
 			'etag', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
 		]));

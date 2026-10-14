@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
@@ -46,13 +47,14 @@ final class SyncService {
 		private StatusService $status,
 		private ILockingProvider $lockingProvider,
 		private LoggerInterface $logger,
+		private ITimeFactory $timeFactory,
 		private ActivityPublisher $activity,
 	) {
 	}
 
 	public function run(bool $dryRun = false): SyncReport {
 		$this->lockingProvider->acquireLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
-		$report = new SyncReport($dryRun, time());
+		$report = new SyncReport($dryRun, $this->now());
 		$this->status->started($dryRun);
 		$config = null;
 		try {
@@ -71,7 +73,7 @@ final class SyncService {
 			if ($config->exportEnabled) {
 				$this->syncExports($config, $report);
 			}
-			$report->completedAt = time();
+			$report->completedAt = $this->now();
 			$this->status->completed($report);
 			$this->logger->info('Paperless synchronization completed', $report->summary());
 
@@ -153,7 +155,7 @@ final class SyncService {
 					$report->error("Excluded P{$documentId}: {$error}");
 					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry);
 					if (!$report->dryRun) {
-						$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
+						$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 					}
 				}
 				continue;
@@ -201,7 +203,7 @@ final class SyncService {
 							'source_revision' => $sourceRevision,
 							'state' => 'active',
 							'missing_runs' => 0,
-							'last_seen' => time(),
+							'last_seen' => $this->now(),
 							'trash_date' => null,
 							'last_error' => null,
 						]);
@@ -291,7 +293,7 @@ final class SyncService {
 					'source_revision' => $sourceRevision,
 					'state' => 'active',
 					'missing_runs' => 0,
-					'last_seen' => time(),
+					'last_seen' => $this->now(),
 					'trash_date' => null,
 					'last_error' => null,
 				]);
@@ -302,7 +304,7 @@ final class SyncService {
 				$error = $this->exceptionMessage($exception);
 				$report->error("P{$documentId}: {$error}");
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => time(), 'last_error' => mb_substr($error, 0, 4000)]);
+					$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 				}
 				// The warning about the archive names the error that stops the writes.
 				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
@@ -326,12 +328,12 @@ final class SyncService {
 				if (($entry['state'] ?? '') === 'trash' && $exists) {
 					++$report->unchanged;
 					if (!$report->dryRun) {
-						$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0, 'last_seen' => time(), 'last_error' => null]);
+						$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0, 'last_seen' => $this->now(), 'last_error' => null]);
 					}
 					continue;
 				}
 				$deletedAt = $this->timestamp($document['deleted_at'] ?? null);
-				$values = ['state' => 'trash', 'missing_runs' => 0, 'last_seen' => time(), 'trash_date' => $deletedAt, 'last_error' => null];
+				$values = ['state' => 'trash', 'missing_runs' => 0, 'last_seen' => $this->now(), 'trash_date' => $deletedAt, 'last_error' => null];
 				// Only a copy that is still there moves and counts, as for missing documents. The keep
 				// policy and a copy that is gone, or was never exported, only mark the document.
 				if ($config->trashMode === 'move' && $exists) {
@@ -438,7 +440,7 @@ final class SyncService {
 						continue;
 					}
 					++$changes;
-					$target = $this->deletedPath($config, $path, $archiveRoot, time());
+					$target = $this->deletedPath($config, $path, $archiveRoot, $this->now());
 					if ($report->dryRun) {
 						$report->action("MISSING P{$documentId}: {$target}");
 						++$report->movedToTrash;
@@ -629,7 +631,7 @@ final class SyncService {
 		}
 		/** @var array<string, int> $attempts the failed uploads of each file whose next attempt is due */
 		$attempts = [];
-		$now = time();
+		$now = $this->now();
 
 		foreach ($this->state->allImports($config->targetUser) as $pending) {
 			$path = (string)($pending['path'] ?? '');
@@ -717,7 +719,7 @@ final class SyncService {
 					'etag' => $file['etag'],
 					'task_id' => $taskId,
 					'status' => 'pending',
-					'submitted_at' => time(),
+					'submitted_at' => $this->now(),
 					'attempts' => 0,
 					'retry_at' => 0,
 					'last_error' => null,
@@ -751,7 +753,7 @@ final class SyncService {
 			'etag' => $etag,
 			'task_id' => '',
 			'status' => 'rejected',
-			'submitted_at' => time(),
+			'submitted_at' => $this->now(),
 			'attempts' => 0,
 			'retry_at' => 0,
 			'last_error' => mb_substr($reason, 0, 4000),
@@ -917,7 +919,7 @@ final class SyncService {
 	private function retryLater(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, string $error): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
-		$now = time();
+		$now = $this->now();
 		$this->state->saveImport($config->targetUser, $path, [
 			'etag' => $etag,
 			'task_id' => '',
@@ -1025,13 +1027,18 @@ final class SyncService {
 		return (int)$document['id'];
 	}
 
+	/** The current time, from the clock of Nextcloud, which the tests set. */
+	private function now(): int {
+		return $this->timeFactory->getTime();
+	}
+
 	private function scalarString(mixed $value): string {
 		return is_scalar($value) ? (string)$value : '';
 	}
 
 	private function deletedPath(SyncConfig $config, string $oldPath, string $archiveRoot, int $timestamp): string {
 		$relative = $this->relativeTo($oldPath, $archiveRoot);
-		return $this->join($archiveRoot, $config->deletedFolder, gmdate('Y-m-d', $timestamp > 0 ? $timestamp : time()), $relative);
+		return $this->join($archiveRoot, $config->deletedFolder, gmdate('Y-m-d', $timestamp > 0 ? $timestamp : $this->now()), $relative);
 	}
 
 	private function relativeTo(string $path, string $root): string {
@@ -1042,11 +1049,11 @@ final class SyncService {
 	/** @param mixed $value */
 	private function timestamp(mixed $value): int {
 		if (!is_string($value) || $value === '') {
-			return time();
+			return $this->now();
 		}
 		$timestamp = strtotime($value);
 
-		return $timestamp !== false ? $timestamp : time();
+		return $timestamp !== false ? $timestamp : $this->now();
 	}
 
 	private function join(string ...$parts): string {

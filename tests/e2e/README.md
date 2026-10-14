@@ -29,7 +29,7 @@ The scenario verifies:
 - a mirrored file that keeps its file ID through every move and every new content, a share of it that shows the new content, and the version of the previous content that the background job leaves, which a dry-run right before it doesn't hold back
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
 - Paperless inbox-tag exclusion and empty-folder pruning
-- Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete
+- Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete, and no deletion of a document purged from the trash while permanent deletion is off
 - successful and failed Nextcloud inbox imports, with the ID of the new document and with the reason of Paperless in the `.error.txt`, a duplicate and a task that Paperless revoked, in the task shapes of Paperless-ngx 3.x and 2.20, and a file that Paperless refuses, which waits in the inbox until it changes
 - the Activity stream of the target user, through the API of the Activity app: no entry for a dry-run, one entry for a run with the link of the file that it wrote, also for the background job without a user session, and one entry for each import that Paperless finished, with the link of the new document, failed, with its reason, or refused
 - target-user ownership and access isolation
