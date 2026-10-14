@@ -79,6 +79,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 				<strong id="paperless-sync-next-run">—</strong>
 			</div>
 			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
+			<p id="paperless-sync-paperless-version" class="paperless-sync-status-paperless" hidden></p>
 		</div>
 		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
 			<h3 id="paperless-sync-errors-title"></h3>

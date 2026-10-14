@@ -28,6 +28,12 @@ final class SyncService {
 	private const RETRY_DELAY = 900;
 	/** The longest wait between two uploads of a file that keep failing, in seconds. */
 	private const MAX_RETRY_DELAY = 86400;
+	/** The statuses of a task of Paperless that imported its file. */
+	private const TASK_SUCCEEDED = ['SUCCESS', 'SUCCEEDED'];
+	/** The statuses of a task that ended without a document; Paperless-ngx 3.x revokes a task that it cancels. */
+	private const TASK_FAILED = ['FAILURE', 'FAILED', 'ERROR', 'REVOKED'];
+	/** How long after its upload a task that Paperless has not finished, or doesn't list, may take, in seconds. */
+	private const TASK_TIMEOUT = 86400;
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -51,7 +57,7 @@ final class SyncService {
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
 				throw new RuntimeException('Paperless Sync is not completely configured.');
 			}
-			$this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork);
+			$this->status->connected($this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork));
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {
 				$this->storage->prepare($config);
@@ -626,38 +632,14 @@ final class SyncService {
 			unset($byPath[$path]);
 
 			try {
-				$task = $this->paperless->taskStatus((string)($pending['task_id'] ?? ''));
-				if (in_array($task['status'], ['SUCCESS', 'SUCCEEDED'], true)) {
-					if (($pending['etag'] ?? '') === $file['etag']) {
-						if (!$report->dryRun && $config->deleteInboxAfterSuccess) {
-							$this->storage->delete($config->targetUser, $path);
-							$this->state->deleteImport($config->targetUser, $path);
-							if ($config->pruneEmptyFolders) {
-								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
-							}
-						} elseif (!$report->dryRun) {
-							$this->state->saveImport($config->targetUser, $path, ['status' => 'success', 'last_error' => null]);
-						}
-						$report->action("IMPORT SUCCESS: {$path}");
-					} elseif (!$report->dryRun) {
-						$this->state->deleteImport($config->targetUser, $path);
-					}
-					++$report->importsSucceeded;
-					unset($byPath[$path]);
-				} elseif (in_array($task['status'], ['FAILURE', 'FAILED', 'ERROR'], true)) {
-					$relative = $this->relativeTo($path, $inboxRoot);
-					$destination = $this->join($errorRoot, $relative);
-					if (!$report->dryRun) {
-						$this->storage->move($config->targetUser, $path, $destination, $config->conflictMode);
-						$this->storage->writeText($config->targetUser, $destination . '.error.txt', "Paperless import failed\n\n" . $task['message'] . "\n");
-						$this->state->deleteImport($config->targetUser, $path);
-						if ($config->pruneEmptyFolders) {
-							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
-						}
-					}
-					$report->action("IMPORT ERROR: {$path} -> {$destination}");
-					++$report->importsFailed;
-					unset($byPath[$path]);
+				$taskId = (string)($pending['task_id'] ?? '');
+				$task = $this->paperless->taskStatus($taskId);
+				if (in_array($task['status'], self::TASK_SUCCEEDED, true)) {
+					$this->importSucceeded($config, $report, $path, $file['etag'], $unchangedFile, $task['documentId'], $inboxRoot);
+				} elseif (in_array($task['status'], self::TASK_FAILED, true)) {
+					$this->importFailed($config, $report, $path, $this->importDiagnostic($taskId, $task), $inboxRoot, $errorRoot);
+				} elseif ($now - (int)($pending['submitted_at'] ?? 0) >= self::TASK_TIMEOUT) {
+					$this->endUnfinishedImport($config, $report, $path, $file['etag'], $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task, $inboxRoot, $errorRoot);
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
@@ -747,9 +729,144 @@ final class SyncService {
 		]);
 	}
 
+	/**
+	 * The text of the .error.txt next to a file whose import failed: what Paperless said about its
+	 * task, and the ID of the task, by which the task list of Paperless shows more.
+	 *
+	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
+	 */
+	private function importDiagnostic(string $taskId, array $task): string {
+		if ($task['status'] === 'REVOKED') {
+			$reason = 'Paperless cancelled the task before it finished (REVOKED), so it created no document' . ($task['message'] !== '' ? ': ' . $task['message'] : '.');
+		} else {
+			$reason = $task['message'] !== '' ? $task['message'] : 'Paperless gave no reason; its log may have one.';
+		}
+
+		return "Paperless import failed\n\n{$reason}\n\nPaperless task: {$taskId}\n";
+	}
+
+	/**
+	 * Paperless has the content of a file of the inbox. A file that changed since its upload, whose
+	 * new content Paperless doesn't have, goes up again in the next run.
+	 */
+	private function importSucceeded(SyncConfig $config, SyncReport $report, string $path, string $etag, bool $sameContent, ?int $documentId, string $inboxRoot): void {
+		if ($sameContent) {
+			if (!$report->dryRun && $config->deleteInboxAfterSuccess) {
+				$this->storage->delete($config->targetUser, $path);
+				$this->state->deleteImport($config->targetUser, $path);
+				if ($config->pruneEmptyFolders) {
+					$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
+				}
+			} elseif (!$report->dryRun) {
+				$this->state->saveImport($config->targetUser, $path, ['etag' => $etag, 'status' => 'success', 'last_error' => null]);
+			}
+			$report->action("IMPORT SUCCESS: {$path}" . ($documentId !== null ? " -> P{$documentId}" : ''));
+		} elseif (!$report->dryRun) {
+			$this->state->deleteImport($config->targetUser, $path);
+		}
+		++$report->importsSucceeded;
+	}
+
+	/** The import of a file of the inbox created no document, so it moves to the error folder, next to a text that says why. */
+	private function importFailed(SyncConfig $config, SyncReport $report, string $path, string $diagnostic, string $inboxRoot, string $errorRoot): void {
+		$destination = $this->join($errorRoot, $this->relativeTo($path, $inboxRoot));
+		if (!$report->dryRun) {
+			$this->storage->move($config->targetUser, $path, $destination, $config->conflictMode);
+			$this->storage->writeText($config->targetUser, $destination . '.error.txt', $diagnostic);
+			$this->state->deleteImport($config->targetUser, $path);
+			if ($config->pruneEmptyFolders) {
+				$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
+			}
+		}
+		$report->action("IMPORT ERROR: {$path} -> {$destination}");
+		++$report->importsFailed;
+	}
+
+	/**
+	 * Paperless has not finished the task of an upload a day after it. Without an end of the task,
+	 * the file would wait in the inbox for good, so the run ends it:
+	 *
+	 * - Paperless has a document with the content of the file, as when the task was removed after
+	 *   it finished: the import succeeded.
+	 * - Paperless still lists the task, as pending or started: its worker may be down, or the task
+	 *   may wait in a long queue. Paperless-ngx 3.x imports a duplicate as a second document unless
+	 *   PAPERLESS_CONSUMER_DELETE_DUPLICATES is on, so a new upload could create the document
+	 *   twice. The file moves to the error folder instead, with a note that the document may still
+	 *   appear in Paperless.
+	 * - Paperless doesn't list the task at all, so its queue lost it, as after a restart of Redis,
+	 *   or the file changed since its upload, so Paperless doesn't have its content: the file is
+	 *   uploaded again after the wait of a failed upload.
+	 *
+	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
+	 */
+	private function endUnfinishedImport(SyncConfig $config, SyncReport $report, string $path, string $etag, bool $unchangedFile, int $attempts, string $taskId, array $task, string $inboxRoot, string $errorRoot): void {
+		$content = $this->mirroredFingerprint($config, $path);
+		$documentId = $content !== null ? $this->paperless->findDocument($content) : null;
+		if ($documentId !== null) {
+			$this->importSucceeded($config, $report, $path, $etag, true, $documentId, $inboxRoot);
+			return;
+		}
+		$state = $task['status'] . ($task['message'] !== '' ? ": {$task['message']}" : '');
+		$error = "Paperless has not finished the import task {$taskId} a day after the upload ({$state})";
+		if (!$task['listed'] || !$unchangedFile) {
+			$this->retryUnfinishedImport($config, $report, $path, $etag, $attempts, $taskId, $error);
+			return;
+		}
+		$this->importFailed($config, $report, $path, $this->unfinishedDiagnostic($taskId, $state), $inboxRoot, $errorRoot);
+		if (!$report->dryRun) {
+			$this->logger->warning('Paperless has not finished the import of the inbox file {path} a day after its upload; it moves to the error folder, as Paperless may still import it: {error}', [
+				'path' => $path,
+				'error' => $error,
+				'task' => $taskId,
+			]);
+		}
+	}
+
+	/** The text of the .error.txt next to a file whose task Paperless still lists, unfinished, a day after the upload. */
+	private function unfinishedDiagnostic(string $taskId, string $state): string {
+		return "Paperless import not finished\n\n"
+			. "Paperless has not finished the import task a day after the upload ({$state}). Its worker may be down, or the task may still wait in its queue, so Paperless may still create the document. The file was not uploaded again, because Paperless-ngx 3.x imports a duplicate as a second document.\n\n"
+			. "Should the document not appear in Paperless, check that the worker of Paperless runs, then move the file back into the inbox.\n\n"
+			. "Paperless task: {$taskId}\n";
+	}
+
+	/**
+	 * Paperless doesn't list the task of an upload a day after it and has no document with the
+	 * content of the file, so its queue lost the task, as after a restart of Redis; or the file
+	 * changed since its upload. The file is uploaded again after the wait of a failed upload.
+	 */
+	private function retryUnfinishedImport(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, string $taskId, string $error): void {
+		if ($report->dryRun) {
+			$report->error("Import {$path}: {$error}; a run uploads it again");
+			return;
+		}
+		$minutes = $this->retryLater($config, $report, $path, $etag, $attempts, $error);
+		$this->logger->warning('Paperless has not finished the import of the inbox file {path} a day after its upload; it is uploaded again in {minutes} minutes: {error}', [
+			'path' => $path,
+			'error' => $error,
+			'task' => $taskId,
+			'minutes' => $minutes,
+		]);
+	}
+
 	/** The upload failed for a reason that may pass, so the file waits longer after each failure. */
 	private function retryImportLater(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, \Throwable $exception): void {
 		$error = $this->exceptionMessage($exception);
+		$minutes = $this->retryLater($config, $report, $path, $etag, $attempts, $error);
+		// The first failure of a file is a warning, the ones after it only information.
+		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
+			'path' => $path,
+			'error' => $error,
+			'attempts' => $attempts,
+			'minutes' => $minutes,
+		]);
+	}
+
+	/**
+	 * Saves that a file of the inbox waits for its next upload, twice as long after each failure up
+	 * to a day, and reports why. The answer is the wait in minutes.
+	 */
+	private function retryLater(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, string $error): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
 		$now = time();
@@ -763,13 +880,8 @@ final class SyncService {
 			'last_error' => mb_substr($error, 0, 4000),
 		]);
 		$report->error("Import {$path}: {$error} (attempt {$attempts}, the next in {$minutes} minutes)");
-		// The first failure of a file is a warning, the ones after it only information.
-		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
-			'path' => $path,
-			'error' => $error,
-			'attempts' => $attempts,
-			'minutes' => $minutes,
-		]);
+
+		return $minutes;
 	}
 
 	/**
