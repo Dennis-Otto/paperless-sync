@@ -51,7 +51,7 @@ final class Version000130Date20261014120000 extends SimpleMigrationStep {
 	}
 
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		if ($this->configService->get()->targetUser === '' && !$this->hasRun()) {
+		if ($this->configService->targetUser() === '' && !$this->hasRun()) {
 			return;
 		}
 		$kept = $this->configService->keepNames(self::GERMAN_NAMES);

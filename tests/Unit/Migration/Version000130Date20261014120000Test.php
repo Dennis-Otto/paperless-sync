@@ -46,6 +46,7 @@ final class Version000130Date20261014120000Test extends TestCase {
 
 		$this->migrate('Kept 9 German names of folders of Paperless Sync, which earlier versions proposed in every language.');
 
+		self::assertSame(0, $this->credentialReads, 'A token that no longer decrypts must not stop the update of Nextcloud.');
 		self::assertSame(self::GERMAN, $this->names(), 'An English instance keeps the archive where it is.');
 		foreach (array_keys(self::GERMAN) as $key) {
 			self::assertArrayHasKey($key, $this->lazyKeys, 'Nextcloud loads the names only when the app asks for them.');

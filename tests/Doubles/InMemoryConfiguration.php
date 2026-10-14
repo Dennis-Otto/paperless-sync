@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
@@ -33,9 +34,11 @@ trait InMemoryConfiguration {
 	private int $credentialReads = 0;
 	/** The default language of Nextcloud, which the names of the folders of a new installation follow. */
 	private string $defaultLanguage = 'en';
+	/** The forced language of Nextcloud, false when none is set, as config.php holds it. */
+	private bool|string $forcedLanguage = false;
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
-		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory());
+		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig());
 	}
 
 	/**
@@ -117,7 +120,9 @@ trait InMemoryConfiguration {
 		/** @var array<string, string> $german */
 		$german = $catalog['translations'];
 		$factory = $this->createMock(IFactory::class);
-		$factory->method('findGenericLanguage')->willReturnCallback(fn (): string => $this->defaultLanguage);
+		// Like Nextcloud, findGenericLanguage() of the app gives English for a language without a
+		// catalog of the app, even when its generic language has one, which the app must not rely on.
+		$factory->method('findGenericLanguage')->willReturnCallback(fn (?string $app = null): string => $app === null || in_array($this->defaultLanguage, ['en', 'de'], true) ? $this->defaultLanguage : 'en');
 		$factory->method('languageExists')->willReturnCallback(static fn (?string $app, string $language): bool => in_array($language, ['en', 'de'], true));
 		$factory->method('get')->willReturnCallback(function (string $app, ?string $language = null) use ($german): IL10N {
 			// Nextcloud would take the language of whoever reads instead of one without a catalog.
@@ -136,6 +141,24 @@ trait InMemoryConfiguration {
 		});
 
 		return $factory;
+	}
+
+	/**
+	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language and
+	 * $defaultLanguage as default_language, which is missing when empty.
+	 *
+	 * @return IConfig&MockObject
+	 */
+	private function systemConfig(): IConfig {
+		$config = $this->createMock(IConfig::class);
+		// Nextcloud casts the value to a string, so true reads as '1' and false as ''.
+		$config->method('getSystemValueString')->willReturnCallback(fn (string $key, string $default = ''): string => match ($key) {
+			'force_language' => (string)$this->forcedLanguage,
+			'default_language' => $this->defaultLanguage === '' ? $default : $this->defaultLanguage,
+			default => $default,
+		});
+
+		return $config;
 	}
 
 	/** @return ICredentialsManager&MockObject */

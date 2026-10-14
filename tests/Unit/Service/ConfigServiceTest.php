@@ -76,6 +76,32 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame($names[1], $this->service->validate(self::validSettings(), 'secret-token')->archiveFolder, 'A dry-run and a save take the same names.');
 	}
 
+	/** @return array<string, array{bool|string, string, string}> force_language, default_language and the proposed archive folder */
+	public static function systemLanguages(): array {
+		return [
+			'a forced language before the default one' => ['de_DE', 'en', 'Archiv'],
+			'force_language true, which names no language' => [true, 'de', 'Archiv'],
+			'no default language' => [false, '', 'Archive'],
+		];
+	}
+
+	/** The names follow force_language before default_language, as Nextcloud does, and English without either. */
+	#[DataProvider('systemLanguages')]
+	public function testNamesFollowTheForcedLanguageOfNextcloud(bool|string $forced, string $default, string $archive): void {
+		[$this->forcedLanguage, $this->defaultLanguage] = [$forced, $default];
+
+		self::assertSame($archive, $this->service->get()->archiveFolder);
+	}
+
+	/** The settings that only tell whether the app is set up don't read the token. */
+	public function testReadsTheTargetUserWithoutTheToken(): void {
+		self::assertSame('', $this->service->targetUser());
+		$this->settings['target_user'] = ' paperless ';
+
+		self::assertSame('paperless', $this->service->targetUser());
+		self::assertSame(0, $this->credentialReads);
+	}
+
 	/** A saved name stays when the default language of Nextcloud changes. */
 	public function testASavedNameKeepsItsLanguage(): void {
 		$this->defaultLanguage = 'de';

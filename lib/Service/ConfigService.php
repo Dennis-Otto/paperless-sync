@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
+use OCP\IConfig;
 use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
 
@@ -78,6 +79,7 @@ final class ConfigService {
 		private ICredentialsManager $credentialsManager,
 		private PathTemplateService $pathTemplate,
 		private IFactory $l10nFactory,
+		private IConfig $config,
 	) {
 	}
 
@@ -318,6 +320,14 @@ final class ConfigService {
 		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '', lazy: true)), '/');
 	}
 
+	/**
+	 * The configured target user alone. Unlike get(), it doesn't read the token, whose decryption
+	 * fails after a restore with another secret, which a check whether the app is set up must survive.
+	 */
+	public function targetUser(): string {
+		return trim($this->appConfig->getValueString(AppConstants::APP_ID, 'target_user', '', lazy: true));
+	}
+
 	/** @return array<string, mixed> */
 	private function readValues(): array {
 		$values = [];
@@ -360,13 +370,20 @@ final class ConfigService {
 	}
 
 	/**
-	 * The default language of Nextcloud, or else its generic language, such as de for de_DE, when
-	 * the app has no catalog for the regional one, or else English. Nextcloud would fall back to
-	 * the language of the user who reads, which differs between administrators and is missing in
-	 * a scheduled run.
+	 * The default language of Nextcloud, force_language before default_language as Nextcloud reads
+	 * them, or else its generic language, such as de for de_DE, when the app has no catalog for the
+	 * regional one, or else English. It reads the system configuration itself: IFactory's
+	 * findGenericLanguage() gives English for a language that the app has no catalog for, before
+	 * trying the generic one, and follows the forceLanguage parameter of a request. Nextcloud would
+	 * fall back to the language of the user who reads, which differs between administrators and is
+	 * missing in a scheduled run.
 	 */
 	private function defaultLanguage(): string {
-		$language = $this->l10nFactory->findGenericLanguage(AppConstants::APP_ID);
+		$language = $this->config->getSystemValueString('force_language', '');
+		// force_language true, read as '1', only keeps users from choosing a language.
+		if (in_array($language, ['', '1'], true)) {
+			$language = $this->config->getSystemValueString('default_language', 'en');
+		}
 		foreach ([$language, explode('_', $language)[0]] as $candidate) {
 			if ($this->l10nFactory->languageExists(AppConstants::APP_ID, $candidate)) {
 				return $candidate;
