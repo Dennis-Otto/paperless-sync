@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, resetUrl: string, runUrl: string, statusUrl: string} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -44,6 +44,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 	id="paperless-sync-settings"
 	class="section paperless-sync-settings"
 	data-save-url="<?php p($_['saveUrl']); ?>"
+	data-test-url="<?php p($_['testUrl']); ?>"
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
 	data-status-url="<?php p($_['statusUrl']); ?>">
@@ -111,13 +112,21 @@ $help = static function (string $anchor, string $section) use ($l): void {
 					<input data-setting="base_path" type="text" value="<?php p($config->basePath); ?>" required>
 				</label>
 			</div>
-			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving or disconnecting may ask for your password.')); ?></p>
+			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving, testing or disconnecting may ask for your password.')); ?></p>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Paperless runs in my local network')); ?></span></label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-local-network-hint"><?php p($l->t('Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.')); ?></p>
+			<div class="paperless-sync-test">
+				<button id="paperless-sync-test" type="button" aria-describedby="paperless-sync-test-hint"><?php p($l->t('Test connection')); ?></button>
+				<p class="settings-hint" id="paperless-sync-test-hint"><?php p($l->t('Checks every Paperless permission that the enabled modules need, and the base folder, without saving.')); ?></p>
+			</div>
+			<div id="paperless-sync-checks" class="paperless-sync-checks" hidden>
+				<h4 id="paperless-sync-checks-title"><?php p($l->t('Connection checklist')); ?></h4>
+				<ul id="paperless-sync-checks-list" aria-labelledby="paperless-sync-checks-title"></ul>
+			</div>
 		</section>
 
 		<section class="paperless-sync-card">
