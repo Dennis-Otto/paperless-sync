@@ -15,6 +15,8 @@ import { chromium } from 'playwright-core'
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const USER = process.env.E2E_USER ?? 'e2e-admin'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
+// The synthetic token of an account of the mock that may neither view the tags nor add documents.
+const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
 const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
 const FAILING = new Set(['serious', 'critical'])
@@ -72,6 +74,19 @@ const PAGES = [
 			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: FAILED_STATUS }))
 			await page.locator('#paperless-sync-refresh-status').click()
 			await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		},
+	},
+	{
+		// The connection checklist with lines that passed, failed and have a note: Test
+		// connection with the token of an account with too few permissions.
+		name: 'connection checklist',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.locator('#paperless-sync-token').fill(VIEW_ONLY_TOKEN)
+			await page.locator('#paperless-sync-test').click()
+			await page.locator('.paperless-sync-check--failed').first().waitFor()
+			await page.locator('#paperless-sync-test:enabled').waitFor()
 		},
 	},
 	{

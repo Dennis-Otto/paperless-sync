@@ -59,12 +59,14 @@
 		})
 	}
 
-	// An error with the text for the page, the HTTP status of the answer, 0 without one, and the
-	// setting that the text names as the way out, if any.
-	function requestError(text, status, setting) {
+	// An error with the text for the page, the HTTP status of the answer, 0 without one, the
+	// setting that the text names as the way out, if any, and the lines of the connection
+	// checklist that the answer had, if any.
+	function requestError(text, status, setting, checks) {
 		const error = new Error(text)
 		error.status = status
 		error.setting = setting
+		error.checks = checks
 		return error
 	}
 
@@ -113,7 +115,7 @@
 			throw requestError(translate('Your session has expired. Reload the page and try again.'), response.status)
 		}
 		if (data !== null && typeof data.message === 'string' && data.message !== '') {
-			throw requestError(data.message, response.status, data.setting)
+			throw requestError(data.message, response.status, data.setting, data.checks)
 		}
 		throw requestError(translate('The server answered with status {status}.', { status: response.status }), response.status)
 	}
@@ -132,6 +134,9 @@
 		const token = element('token')
 		const schedule = root.querySelector('[data-setting="enabled"]')
 		const save = element('save')
+		const test = element('test')
+		const checks = element('checks')
+		const checksList = element('checks-list')
 		const dryRun = element('dry-run')
 		const run = element('run')
 		const reset = element('reset')
@@ -152,7 +157,9 @@
 		const errors = element('errors')
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
-		const buttons = [save, dryRun, run, reset, refresh]
+		const buttons = [save, test, dryRun, run, reset, refresh]
+		// The settings that the connection checklist depends on: a change of one outdates its lines.
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled']
 		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
 		const pollInterval = 5000
 		const pollLimit = 60
@@ -307,10 +314,88 @@
 				message.focus()
 				return
 			}
-			// The bar of the buttons sticks to the bottom of the window and may cover the setting,
-			// where focus() would leave it: it scrolls only to an element outside the window.
+			focusSetting(setting)
+		}
+
+		// Moves the focus to a setting, in view. The bar of the buttons sticks to the bottom of the
+		// window and may cover the setting, where focus() would leave it: it scrolls only to an
+		// element outside the window.
+		function focusSetting(setting) {
 			setting.scrollIntoView({ block: 'center' })
 			setting.focus({ preventScroll: true })
+		}
+
+		// The sign of a line of the connection checklist, which a screen reader skips, and the word
+		// for its state, which everyone reads.
+		const checkStates = {
+			passed: { sign: '✓', label: translate('Passed') },
+			warning: { sign: '!', label: translate('Note') },
+			failed: { sign: '✗', label: translate('Failed') },
+		}
+
+		function paragraph(className, text) {
+			const item = document.createElement('p')
+			item.className = className
+			item.textContent = text
+			return item
+		}
+
+		// Shows the lines of the connection checklist in the connection settings: what each check
+		// found and, when it failed or has a note, what to do. Answers how many failed and how
+		// many have a note.
+		function showChecks(lines) {
+			const counts = { passed: 0, warning: 0, failed: 0 }
+			if (!Array.isArray(lines) || lines.length === 0) {
+				return counts
+			}
+			checksList.replaceChildren(...lines.map(function(line) {
+				const status = line.status in checkStates ? line.status : 'failed'
+				counts[status]++
+				const item = document.createElement('li')
+				item.className = 'paperless-sync-check paperless-sync-check--' + status
+				item.dataset.check = line.id
+				const sign = document.createElement('span')
+				sign.className = 'paperless-sync-check-sign'
+				sign.setAttribute('aria-hidden', 'true')
+				sign.textContent = checkStates[status].sign
+				// The label, the state and what the check found, on one line.
+				const title = paragraph('paperless-sync-check-title', '')
+				const label = document.createElement('strong')
+				label.textContent = line.label
+				const state = document.createElement('span')
+				state.className = 'paperless-sync-check-state'
+				state.textContent = checkStates[status].label
+				const found = document.createElement('span')
+				found.className = 'paperless-sync-check-message'
+				found.textContent = line.message
+				title.append(label, ' ', state, ' ', found)
+				const body = document.createElement('div')
+				body.append(title)
+				if (line.hint) {
+					body.append(paragraph('paperless-sync-check-hint', line.hint))
+				}
+				item.append(sign, body)
+				return item
+			}))
+			checks.hidden = false
+			return counts
+		}
+
+		// Shows the checklist of a test or a save, and scrolls to it when a check failed, as the
+		// message next to the buttons says.
+		function revealChecks(lines) {
+			const counts = showChecks(lines)
+			if (counts.failed > 0) {
+				checks.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+			}
+			return counts
+		}
+
+		// After a change of a setting that the checklist depends on, its lines no longer apply.
+		function outdateChecks(event) {
+			if (event.target === token || checkedSettings.includes(event.target.dataset.setting)) {
+				checks.hidden = true
+			}
 		}
 
 		function formatTime(timestamp) {
@@ -559,9 +644,21 @@
 			try {
 				const config = await request(root.dataset.saveUrl, 'POST', sent)
 				applyConfig(config, sent)
-				showMessage(config.connectionTested ? translate('Connection successful. Configuration saved.') : translate('Saved. Scheduled synchronization is off; the connection was not tested.'), 'success')
+				const counts = revealChecks(config.checks)
+				if (!config.connectionTested) {
+					showMessage(translate('Saved. Scheduled synchronization is off; the connection was not tested.'), 'success')
+				} else if (counts.failed > 0) {
+					// A check of one module failed, such as a missing permission for the tags: the
+					// settings are saved, and the runs fail until it passes.
+					showMessage(translatePlural('Configuration saved, but %n check failed, and runs fail until it passes. The connection checklist says what to do.', 'Configuration saved, but %n checks failed, and runs fail until they pass. The connection checklist says what to do.', counts.failed), 'error')
+				} else if (counts.warning > 0) {
+					showMessage(translate('Connection successful. Configuration saved. Read the notes of the connection checklist.'), 'success')
+				} else {
+					showMessage(translate('Connection successful. Configuration saved.'), 'success')
+				}
 				saved = true
 			} catch (error) {
+				revealChecks(error.checks)
 				showError(error, translate('Could not save the configuration.'))
 			} finally {
 				setBusy(false)
@@ -569,6 +666,36 @@
 			if (saved) {
 				// The schedule may have changed, and with it the next scheduled run.
 				await refreshQuietly()
+			}
+		})
+
+		// The checklist of the settings in the form, without saving them.
+		test.addEventListener('click', async function() {
+			setBusy(true)
+			showMessage(translate('Testing Paperless and Nextcloud access…'), 'progress')
+			try {
+				const result = await request(root.dataset.testUrl, 'POST', snapshot())
+				const counts = revealChecks(result.checks)
+				if (counts.failed > 0) {
+					showMessage(translatePlural('%n check failed. The connection checklist says what to do.', '%n checks failed. The connection checklist says what to do.', counts.failed), 'error')
+					// A failure that a setting of the form fixes, such as "Paperless runs in my local
+					// network", moves the focus to that setting, as a refused save does.
+					const fixable = result.checks.find(function(line) {
+						return line.status === 'failed' && line.setting
+					})
+					const setting = fixable ? root.querySelector('[data-setting="' + window.CSS.escape(fixable.setting) + '"]') : null
+					if (setting) {
+						focusSetting(setting)
+					}
+				} else if (counts.warning > 0) {
+					showMessage(translate('Every check passed. Read the notes of the connection checklist.'), 'success')
+				} else {
+					showMessage(translate('Every check passed.'), 'success')
+				}
+			} catch (error) {
+				showError(error, translate('Could not test the connection.'))
+			} finally {
+				setBusy(false)
 			}
 		})
 
@@ -619,6 +746,8 @@
 
 		form.addEventListener('input', updateForm)
 		form.addEventListener('change', updateForm)
+		form.addEventListener('input', outdateChecks)
+		form.addEventListener('change', outdateChecks)
 		// Leaving the page with unsaved changes asks first, in a dialog of the browser.
 		window.addEventListener('beforeunload', function(event) {
 			if (isDirty()) {

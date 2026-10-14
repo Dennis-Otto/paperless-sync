@@ -26,9 +26,13 @@ const MOCK_URL = process.env.E2E_MOCK_URL ?? 'http://paperless-mock:8080'
 const ADMIN = process.env.E2E_USER ?? 'e2e-admin'
 const OWNER = process.env.E2E_TARGET_USER ?? 'paperless'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
+// The token of an account of the mock that may neither view the tags nor add documents, for
+// a connection checklist that shows what it finds.
+const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
 const OUTPUT = fileURLToPath(new URL('pictures', import.meta.url))
 const THEMES = ['light', 'dark']
 const VIEWPORT = { width: 1280, height: 800 }
+const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = '/Dokumente/Paperless/Archiv'
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion']
@@ -121,6 +125,25 @@ async function expandFolderTree(page, folders) {
 }
 
 // A picture of a part of the page, with a margin of what is around it.
+// A picture of the part of the page from the top of one element to the bottom of another
+// below it, such as a button and the result that it shows, with a margin around them.
+async function shotFromTo(page, first, last, margin = 16) {
+	await first.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+	const viewport = page.viewportSize()
+	const top = await first.boundingBox()
+	const bottom = await last.boundingBox()
+	const x = Math.max(0, Math.min(top.x, bottom.x) - margin)
+	const y = Math.max(0, top.y - margin)
+	return page.screenshot({
+		clip: {
+			x,
+			y,
+			width: Math.min(viewport.width - x, Math.max(top.x + top.width, bottom.x + bottom.width) - x + margin),
+			height: Math.min(viewport.height - y, bottom.y + bottom.height + margin - y),
+		},
+	})
+}
+
 async function shot(page, locator, margin = 16) {
 	await locator.evaluate((element) => element.scrollIntoView({ block: 'center' }))
 	const box = await locator.boundingBox()
@@ -301,6 +324,15 @@ try {
 		for (const [index, card] of CARDS.entries()) {
 			save(`docs/images/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
+		// The connection checklist of an account that lacks three permissions, below the
+		// connection settings: lines that passed, failed and have a note.
+		// It is taller than the window of the other pictures, so the window grows for it.
+		await page.setViewportSize(TALL_VIEWPORT)
+		await page.locator('#paperless-sync-token').fill(VIEW_ONLY_TOKEN)
+		await page.locator('#paperless-sync-test').click()
+		await page.locator('.paperless-sync-check--failed').first().waitFor()
+		await page.locator('#paperless-sync-test:enabled').waitFor()
+		save(`docs/images/settings-checklist-${theme}.png`, await shotFromTo(page, page.locator('.paperless-sync-test'), page.locator('#paperless-sync-checks')))
 		await context.close()
 	}
 
