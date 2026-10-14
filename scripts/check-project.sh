@@ -10,16 +10,21 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-# Python 3.11 or newer, for the checks that need it: python3, or python on Windows,
-# where Python installs no python3.
-python=""
-for candidate in python3 python; do
-  if command -v "$candidate" >/dev/null 2>&1 &&
-    "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
-    python="$candidate"
-    break
-  fi
-done
+# A Python 3 at least as new as the arguments: python3, or python on Windows, where
+# Python installs no python3. The hook of the website runs on any Python 3; the check
+# of the area labels needs 3.11 for tomllib.
+find_python() {
+  local candidate
+  for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 &&
+      "$candidate" -c 'import sys; sys.exit(sys.version_info < tuple(map(int, sys.argv[1:])))' "$@" >/dev/null 2>&1; then
+      echo "$candidate"
+      return
+    fi
+  done
+}
+python_any="$(find_python 3)"
+python="$(find_python 3 11)"
 
 printf '\n== %s\n' "Browser of the end-to-end tests"
 # A version of playwright-core drives the browsers in the image of the same version.
@@ -161,10 +166,10 @@ echo "The website shows the icon of the app, img/app.svg."
 printf '\n== %s\n' "Hook of the website"
 # The hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the
 # pages of the website. Its tests need Python alone, no MkDocs.
-if [[ -n "$python" ]]; then
-  "$python" -B tests/website/test_mkdocs_project.py
+if [[ -n "$python_any" ]]; then
+  "$python_any" -B tests/website/test_mkdocs_project.py
 else
-  echo "Python 3.11 or newer is not installed here; the CI tests the hook of the website."
+  echo "Python 3 is not installed here; the CI tests the hook of the website."
 fi
 
 printf '\n== %s\n' "Versions in the README"
@@ -283,6 +288,8 @@ problems = []
 def regex(glob):
     if re.search(r"[][{}()!+@]", glob):
         problems.append(f"{name}: the glob {glob} uses more than *, ** and ?, which this check reads.")
+    if re.search(r"[^/]\*\*|\*\*[^/]", glob):
+        problems.append(f"{name}: the glob {glob} has ** inside a name, where the labeler reads it as *; write * there, or ** alone as a whole folder.")
     parts = {"**/": "(?:.*/)?", "/**": "/.*", "**": ".*", "*": "[^/]*", "?": "[^/]"}
     tokens = re.findall(r"\*\*/|/\*\*$|\*\*|\*|\?|[^*?/]+|/", glob)
     return re.compile("".join(parts.get(token, re.escape(token)) for token in tokens))
@@ -320,8 +327,8 @@ sys.exit(1 if problems else 0)
 '
 if [[ -n "$python" ]]; then
   "$python" -B -c "$area_labels" .github/labeler.yml
-  # And the check finds a file without an area, a glob without a file and an area
-  # without a rule, in copies of the rules with one of them broken.
+  # And the check finds a file without an area, a glob without a file, a ** inside a
+  # name and an area without a rule, in copies of the rules with one of them broken.
   broken() {
     local expected="$1" output
     if output="$("$python" -B -c "$area_labels" - 2>&1)" ||
@@ -334,9 +341,11 @@ if [[ -n "$python" ]]; then
     broken 'templates/settings.php belongs to no area'
   { cat .github/labeler.yml && echo '          - lib/Service/Missing*.php'; } |
     broken 'the glob lib/Service/Missing*.php matches no file'
+  { cat .github/labeler.yml && echo '          - lib/Service/Paperless**.php'; } |
+    broken 'the glob lib/Service/Paperless**.php has ** inside a name'
   sed 's/^"area: inbox":/"area: other":/' .github/labeler.yml |
     broken 'The area "area: inbox" of .github/labels.toml has no rule'
-  echo "The check of the area labels reports a file without an area, a glob without a file and an area without a rule."
+  echo "The check of the area labels reports a file without an area, a glob without a file, a ** inside a name and an area without a rule."
 else
   echo "Python 3.11 or newer is not installed here; the CI checks the area labels of pull requests."
 fi

@@ -47,6 +47,7 @@
           - lib/Service/PaperlessApiService.php
           - lib/Service/PaperlessClientInterface.php
           - lib/Service/PaperlessRequestException.php
+          - lib/Service/PaperlessVersionException.php
           - lib/Service/StatusService.php
           - lib/Service/SyncStateRepository*.php
           - lib/Model/PaperlessScan.php
