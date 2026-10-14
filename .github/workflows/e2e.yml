@@ -37,8 +37,8 @@ name: Docker E2E
 # and the current one of 3.x, side by side. They check every answer that the app reads
 # and then run the app against it, and they compare the shapes of the answers with the
 # fixtures of the unit tests (tests/fixtures/). They are no required check either; a
-# failure on Monday opens the issue "Paperless-ngx answers differently than the app
-# expects", or adds the run to it, and closes it once they pass again.
+# failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
+# or adds the run to it, and closes it once they pass again.
 
 on:
   push:
@@ -275,7 +275,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TITLE: Paperless-ngx answers differently than the app expects
+          TITLE: The contract tests against Paperless-ngx fail
           RESULT: ${{ needs.paperless.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -296,7 +296,7 @@ jobs:
           {
             printf 'The weekly contract tests against a real Paperless-ngx fail: %s\n\n' "$RUN_URL"
             cat <<'TEXT'
-          The job `paperless` of `.github/workflows/e2e.yml` runs `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and the current release of 3.x, whose images Renovate keeps current. It checks every answer of Paperless that the app reads, runs the app against it, and compares the shapes of the answers with the fixtures of the unit tests in `tests/fixtures/`. A failure means that a release of Paperless-ngx answers differently than the app expects, or that a field the unit tests read is gone.
+          The job `paperless` of `.github/workflows/e2e.yml` runs `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and the current release of 3.x, whose images Renovate keeps current. It checks every answer of Paperless that the app reads, runs the app against it, and compares the shapes of the answers with the fixtures of the unit tests in `tests/fixtures/`. A failure means that a release of Paperless-ngx answers differently than the app expects, that a field the unit tests read is gone, or that a change of the app (its paths, reports, settings or status) no longer matches what `tests/e2e/contract.py` expects: the log of the run says which.
 
           The log of the failed job names the answer and the field; its artifact holds the answers of Paperless. `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app reads them.
 

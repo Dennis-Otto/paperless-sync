@@ -122,7 +122,8 @@ def ended(task):
     Paperless-ngx 2.x marks a failed task in two steps: its handler of task_failure writes
     FAILURE with the traceback object as the result, "<traceback object at 0x…>", and its
     handler of task_postrun the reason a moment later. A poll between the two reads the
-    placeholder, so a failure ends only with its reason.
+    placeholder, so a failure ends only with its reason. The app reads it too soon as well:
+    https://github.com/Dennis-Otto/paperless-sync/issues/161
     """
     status = str(task.get("status", "")).upper()
     if status == "FAILURE":

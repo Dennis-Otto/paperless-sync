@@ -1,4 +1,4 @@
-# Check the mock and the answers of the unit tests against a real Paperless-ngx every week
+# Check the app and the answers of its unit tests against a real Paperless-ngx every week
 
 - Status: accepted
 - Date: 2026-10-14
@@ -21,7 +21,8 @@ Option 3. `tests/e2e/run-contract.sh` starts Paperless-ngx 2.20 or the current 3
 
 ## Consequences
 
-- A release of Paperless-ngx that answers differently opens an issue within a week, and the update of its image by Renovate shows it in the pull request before it merges.
+- A release of Paperless-ngx that answers differently opens an issue within a week, and the update of its image by Renovate shows it in the pull request, which Renovate merges only once the contract tests pass too.
 - The unit tests read answers that Paperless sent, so a difference between the mock and Paperless shows in the unit tests too, once the fixtures are recorded anew.
+- The contract tests do not compare the mock itself with Paperless; the unit tests read the recorded answers, and the end-to-end tests keep the mock.
 - The fixtures change with each recording, in their IDs and times; only a change of their shape fails the contract tests. `CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2` and `3` record them.
 - The README names the versions of Paperless-ngx that the app is tested with.
