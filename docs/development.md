@@ -17,7 +17,7 @@ bash scripts/check.sh
 bash tests/e2e/run.sh
 ```
 
-`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds, which `scripts/check-package.sh` compares file by file with the runtime files of the commit ([what the package holds](releases.md#what-the-package-holds)), and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, the tests of its hook, the versions in the README, the same description of the app on GitHub, on the website and in `composer.json`, the tests of `scripts/check-package.sh`, and the JavaScript and the translations.
+`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds, which `scripts/check-package.sh` compares file by file with the runtime files of the commit ([what the package holds](releases.md#what-the-package-holds)), and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, the tests of its hook, the versions in the README, the same description of the app on GitHub, on the website and in `composer.json`, an [area label](automation.md#a-pull-request) for every file of the app and of its unit tests, the tests of `scripts/check-package.sh`, and the JavaScript and the translations.
 
 ## Tests
 
