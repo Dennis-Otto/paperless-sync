@@ -5,13 +5,15 @@ config:
 ---
 flowchart TB
     accTitle: What saving the settings tests
-    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving tests the connection to Paperless and the base folder in Nextcloud and stores the settings only when both work; otherwise the page says why and, when only the schedule asked for the test, that turning it off saves the settings. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
+    accDescr: Saving first checks every setting; an invalid one is not saved. When scheduled synchronization is on or a token was entered, saving runs the connection checklist. When Paperless can't be reached, refuses the token or doesn't let the account view documents, or the target user can't create files in the base folder, the settings are not saved; the page says why and, when only the schedule asked for the test, that turning it off saves the settings. When only a permission of one module is missing, such as the one for the tags, the settings are saved, and the checklist names the permission to grant. With the schedule off and no new token, the settings are stored without a test, so that an administrator can pause a synchronization that fails.
 
     save(["💾 Test connection<br>and save"])
     check{"Is every<br>setting valid?"}
     scheduled{"Schedule on,<br>or a token entered?"}
-    test{"Do Paperless and<br>the base folder work?"}
+    test{"Paperless, its documents<br>and the base folder work?"}
+    modules{"Every permission<br>of the modules?"}
     tested["✅ Saved and tested"]
+    partly["⚠️ Saved; the checklist<br>names what to grant"]
     untested["`✅ Saved without a test<br>*the schedule pauses*`"]
     refused["❌ Not saved:<br>the page says why"]
 
@@ -20,12 +22,16 @@ flowchart TB
     check -- "yes" --> scheduled
     scheduled -- "yes" --> test
     scheduled -- "no" --> untested
-    test -- "yes" --> tested
+    test -- "yes" --> modules
     test -- "no" --> refused
+    modules -- "yes" --> tested
+    modules -- "no" --> partly
 
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef note fill:#d977062e,stroke:#d97706,stroke-width:2px
     classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class save,check,scheduled,test nextcloud
+    class save,check,scheduled,test,modules nextcloud
     class tested,untested done
+    class partly note
     class refused refused

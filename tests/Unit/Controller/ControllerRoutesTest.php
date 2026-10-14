@@ -29,6 +29,7 @@ final class ControllerRoutesTest extends TestCase {
 		return [
 			'settings save' => [SettingsController::class, 'save', 'POST', '/settings'],
 			'settings reset' => [SettingsController::class, 'reset', 'DELETE', '/settings'],
+			'settings test' => [SettingsController::class, 'test', 'POST', '/settings/test'],
 			'settings preview' => [SettingsController::class, 'preview', 'POST', '/settings/preview'],
 			'sync run' => [SyncController::class, 'run', 'POST', '/sync/run'],
 			'sync status' => [SyncController::class, 'status', 'GET', '/sync/status'],

@@ -330,6 +330,96 @@
 	margin-bottom: 18px;
 }
 
+/* Test connection, at the end of the connection settings, with its checklist below it. */
+.paperless-sync-test {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	align-items: center;
+	margin-top: 18px;
+}
+
+.paperless-sync-test .settings-hint {
+	flex: 1 1 260px;
+	margin: 0;
+}
+
+.paperless-sync-checks {
+	margin-top: 16px;
+	padding: 14px 18px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+}
+
+.paperless-sync-checks h4 {
+	margin: 0 0 8px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.paperless-sync-checks ul {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+/* A line: its sign in a circle, then the check, its state and what it found, and below them
+   what to do. */
+.paperless-sync-check {
+	display: flex;
+	gap: 12px;
+	align-items: flex-start;
+	overflow-wrap: anywhere;
+}
+
+.paperless-sync-check p {
+	margin: 0;
+	padding: 0;
+	line-height: 1.5;
+}
+
+.paperless-sync-check-sign {
+	display: inline-flex;
+	flex: 0 0 24px;
+	width: 24px;
+	height: 24px;
+	align-items: center;
+	justify-content: center;
+	border: 2px solid currentcolor;
+	border-radius: 50%;
+	font-weight: 700;
+	line-height: 1;
+}
+
+/* The state is a word as well as a color, so that the line doesn't depend on the color alone. */
+.paperless-sync-check-state {
+	margin: 0 6px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.paperless-sync-check-hint {
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-check--passed .paperless-sync-check-sign,
+.paperless-sync-check--passed .paperless-sync-check-state {
+	color: var(--color-success-text);
+}
+
+.paperless-sync-check--warning .paperless-sync-check-sign,
+.paperless-sync-check--warning .paperless-sync-check-state {
+	color: var(--color-warning-text, var(--color-main-text));
+}
+
+.paperless-sync-check--failed .paperless-sync-check-sign,
+.paperless-sync-check--failed .paperless-sync-check-state {
+	color: var(--color-error-text);
+}
+
 .paperless-sync-actions {
 	display: flex;
 	flex-wrap: wrap;

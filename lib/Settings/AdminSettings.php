@@ -40,6 +40,7 @@ final class AdminSettings implements ISettings {
 			'config' => $config,
 			'status' => $status,
 			'saveUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.save'),
+			'testUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.test'),
 			'resetUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.reset'),
 			'runUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.run'),
 			'statusUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.status'),

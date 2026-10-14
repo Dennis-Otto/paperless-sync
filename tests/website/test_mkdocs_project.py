@@ -274,14 +274,18 @@ def test_an_alert_with_a_quote_inside_fails() -> None:
 
 
 def test_the_warning_about_edits_reaches_the_guide_as_an_alert() -> None:
-    # The guide takes the configuration from the README by a snippet, with the warning
-    # that the files of the archive are a mirror of Paperless.
+    # The guide takes the configuration from the README by snippets, around the picture of
+    # the connection checklist; one of them has the warning that the files of the archive
+    # are a mirror of Paperless.
     guide = (ROOT / "docs" / "guide.md").read_text(encoding="utf-8")
-    assert '--8<-- "README.md:configuration"' in guide
+    included = re.findall(r'--8<-- "README\.md:([\w-]+)"', guide)
+    assert "configuration" in included
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    start = readme.index("<!-- --8<-- [start:configuration] -->")
-    end = readme.index("<!-- --8<-- [end:configuration] -->")
-    assert "> [!WARNING]\n> The files of the archive are a mirror" in readme[start:end]
+    sections = [
+        readme[readme.index(f"<!-- --8<-- [start:{name}] -->") : readme.index(f"<!-- --8<-- [end:{name}] -->")]
+        for name in included
+    ]
+    assert any("> [!WARNING]\n> The files of the archive are a mirror" in section for section in sections)
 
 
 def main() -> int:
