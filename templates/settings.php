@@ -254,7 +254,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 		</details>
 
 		<div class="paperless-sync-actions">
-			<button id="paperless-sync-save" type="submit" class="primary"><?php p($l->t('Test connection and save')); ?></button>
+			<button id="paperless-sync-save" type="submit" class="primary"><?php p($config->enabled ? $l->t('Test connection and save') : $l->t('Save')); ?></button>
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
 			<button id="paperless-sync-reset" type="button"><?php p($l->t('Disconnect')); ?></button>

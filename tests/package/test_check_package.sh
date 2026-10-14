@@ -29,7 +29,10 @@ failures=0
 left=0
 
 # Git of these tests alone, without the configuration of the machine, such as signed
-# commits or hooks.
+# commits or hooks, and without the repository that runs them: GIT_DIR or GIT_WORK_TREE,
+# such as for a worktree in a container, would point every command of the tests there,
+# so that git init rewrote its configuration and its branch got the commits of the tests.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=test@example.com
 export GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=test@example.com

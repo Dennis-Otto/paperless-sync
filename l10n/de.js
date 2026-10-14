@@ -44,6 +44,7 @@ OC.L10N.register(
 		"Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.": "Schalte das ein, wenn Nextcloud Paperless unter einer Adresse deines Netzwerks erreicht, etwa http://paperless:8000 oder http://192.168.1.20:8000, die Nextcloud zum Schutz vor Server-Side Request Forgery sperrt. Es erlaubt eine solche Adresse nur für die Anfragen dieser App an die Paperless-URL oben, nicht für andere Apps. Paperless kann diese Anfragen dann auch an andere Geräte deines Netzwerks umleiten, schalte es also nur für ein Paperless ein, dem du vertraust.",
 		"Nextcloud blocks connections to local addresses such as %s. If Paperless runs in your network, turn on \"Paperless runs in my local network\" and save the settings.": "Nextcloud sperrt Verbindungen zu lokalen Adressen wie %s. Wenn Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein und speichere die Einstellungen.",
 		"Nextcloud found no DNS record for %s. If the name is set only in the hosts file of the server, or Paperless runs in your network, turn on \"Paperless runs in my local network\" and save the settings.": "Nextcloud hat keinen DNS-Eintrag für %s gefunden. Wenn der Name nur in der hosts-Datei des Servers steht oder Paperless in deinem Netzwerk läuft, schalte „Paperless läuft in meinem lokalen Netzwerk“ ein und speichere die Einstellungen.",
+		"To save the settings without the test, turn off scheduled synchronization.": "Um die Einstellungen ohne den Test zu speichern, schalte die geplante Synchronisation aus.",
 		"Schedule and modules": "Zeitplan und Module",
 		"Keep synchronization disabled until a dry-run has been reviewed.": "Lasse die Synchronisation deaktiviert, bis ein Testlauf geprüft wurde.",
 		"Enable scheduled synchronization": "Geplante Synchronisation aktivieren",
@@ -87,6 +88,7 @@ OC.L10N.register(
 		"Missing date": "Fehlendes Datum",
 		"Missing title": "Fehlender Titel",
 		"Test connection and save": "Verbindung testen und speichern",
+		"Save": "Speichern",
 		"Run dry-run": "Testlauf starten",
 		"Synchronize now": "Jetzt synchronisieren",
 		"Disconnect": "Trennen",
@@ -127,6 +129,7 @@ OC.L10N.register(
 			"Synchronisation mit %n Fehlern abgeschlossen. Siehe den Bericht."
 		],
 		"The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.": "Der Lauf dauert länger, als der Webserver auf eine Antwort wartet. Er läuft im Hintergrund weiter, und der Status oben zeigt, wann er endet.",
+		"The web server answered with status {status}, and the state of the run could not be read. Choose \"Refresh\" to see how the run ended.": "Der Webserver hat mit dem Status {status} geantwortet, und der Zustand des Laufs konnte nicht abgefragt werden. Wähle „Aktualisieren“, um zu sehen, wie der Lauf endete.",
 		"Synchronization failed.": "Die Synchronisation ist fehlgeschlagen.",
 		"Testing Paperless and Nextcloud access…": "Paperless- und Nextcloud-Zugriff werden geprüft …",
 		"Saving the settings…": "Einstellungen werden gespeichert …",
