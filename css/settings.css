@@ -53,6 +53,14 @@
 	color: var(--color-text-maxcontrast);
 }
 
+/* The Paperless that the last run reached, in a line of its own below the times. */
+.paperless-sync-status-paperless {
+	flex-basis: 100%;
+	margin: 0;
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+}
+
 .paperless-sync-status-value {
 	display: flex;
 	gap: 8px;

@@ -79,6 +79,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 				<strong id="paperless-sync-next-run">—</strong>
 			</div>
 			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
+			<p id="paperless-sync-paperless-version" class="paperless-sync-status-paperless" hidden></p>
 		</div>
 		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
 			<h3 id="paperless-sync-errors-title"></h3>
@@ -253,7 +254,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 		</details>
 
 		<div class="paperless-sync-actions">
-			<button id="paperless-sync-save" type="submit" class="primary"><?php p($l->t('Test connection and save')); ?></button>
+			<button id="paperless-sync-save" type="submit" class="primary"><?php p($config->enabled ? $l->t('Test connection and save') : $l->t('Save')); ?></button>
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
 			<button id="paperless-sync-reset" type="button"><?php p($l->t('Disconnect')); ?></button>

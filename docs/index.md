@@ -19,7 +19,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 <ul class="ps-requirements" aria-label="Requirements">
   <li>Nextcloud <span data-app="nextcloud">33–35</span></li>
   <li>PHP <span data-app="php">8.2+</span></li>
-  <li>Paperless-ngx 2.10+ with an API token</li>
+  <li>Paperless-ngx 2.16+ with an API token</li>
   <li>Nextcloud's system cron</li>
 </ul>
 

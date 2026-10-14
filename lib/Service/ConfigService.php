@@ -233,7 +233,11 @@ final class ConfigService {
 		return ['url' => $url, 'token' => $token];
 	}
 
-	private function configuredUrl(): string {
+	/**
+	 * The configured Paperless URL alone, without a trailing slash. Unlike get(), it doesn't read the
+	 * token, which a link to Paperless, such as in the activity stream, doesn't need.
+	 */
+	public function configuredUrl(): string {
 		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '')), '/');
 	}
 

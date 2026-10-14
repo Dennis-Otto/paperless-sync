@@ -63,8 +63,8 @@ final class Provider implements IProvider {
 	}
 
 	/**
-	 * "Paperless Sync added or updated 3 documents and moved 1 document to _Deleted: a.pdf, b.pdf,
-	 * c.pdf and 1 more", each file with its link.
+	 * "Paperless Sync added or updated 6 documents and moved 1 document to _Deleted: a.pdf, b.pdf,
+	 * c.pdf, d.pdf, e.pdf and 2 more", each file with its link.
 	 *
 	 * @param array<array-key, mixed> $parameters
 	 * @return array{string, array<string, array<string, string>>, string}
@@ -147,7 +147,7 @@ final class Provider implements IProvider {
 			return [$l->t('{file} was imported into Paperless'), $objects, $link];
 		}
 		$objects['document'] = ['type' => 'highlight', 'id' => (string)$document, 'name' => 'P' . $document];
-		$paperlessUrl = rtrim($this->configService->get()->paperlessUrl, '/');
+		$paperlessUrl = $this->configService->configuredUrl();
 		if ($paperlessUrl !== '') {
 			$link = "{$paperlessUrl}/documents/{$document}/details";
 			$objects['document']['link'] = $link;

@@ -14,6 +14,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCP\AppFramework\Http;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -24,6 +25,18 @@ use RuntimeException;
 use UnexpectedValueException;
 
 final class PaperlessApiService implements PaperlessClientInterface {
+	/**
+	 * The version of the API of Paperless that every request asks for, so that the answers keep
+	 * their shape whatever version a Paperless serves by default: 9 on Paperless-ngx 2.16 to 2.20,
+	 * 10 since 3.0, which serves 9 as well, for at least a year after 10 came (decision 0012).
+	 */
+	public const API_VERSION = '9';
+	/** The first version of Paperless-ngx that serves version 9 of its API. */
+	public const MINIMUM_VERSION = '2.16';
+	/** The longest version of Paperless-ngx that the status keeps, such as 3.3.0 or 3.4.0-beta.1. */
+	private const VERSION_LENGTH = 32;
+	/** The longest message of a task that the app keeps, such as the reason of a failed import. */
+	private const TASK_MESSAGE_LENGTH = 4000;
 	private const PAGE_SIZE = 1000;
 	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
 	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
@@ -40,8 +53,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$this->client = $clientService->newClient();
 	}
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void {
-		$this->requestPage($url, $token, $localNetwork, '/api/documents/', ['page' => 1, 'page_size' => 1]);
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
+		$page = $this->requestPage($url, $token, $localNetwork, '/api/documents/', ['page' => 1, 'page_size' => 1]);
+
+		return ['version' => $page['version'], 'apiVersion' => self::API_VERSION];
 	}
 
 	public function documents(): PaperlessScan {
@@ -213,8 +228,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 					// An error comes back as a response, so that the reason in its body can be read.
 					'http_errors' => false,
 				],
-				false,
 			);
+		} catch (PaperlessVersionException $exception) {
+			// Every other file would fail the same way, so the file waits as for an unreachable Paperless.
+			throw new PaperlessUploadException($exception->getMessage(), false, Http::STATUS_NOT_ACCEPTABLE);
 		} catch (PaperlessRequestException $exception) {
 			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false);
 		}
@@ -242,6 +259,16 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		throw new UnexpectedValueException('Paperless returned an invalid upload task response.');
 	}
 
+	/**
+	 * The task of an upload, in either shape of Paperless. Version 9 of its API, which the app asks
+	 * for, lists tasks without pages, with the status in upper case, the result as a text, such as
+	 * "Success. New document id 456 created" or the reason of a failure, and related_document,
+	 * which on Paperless-ngx 2.x is also the original of a duplicate. Version 10 of Paperless-ngx
+	 * 3.x lists them in pages, with the status in lower case and the result in result_data, as
+	 * document_id, reason, duplicate_of or error_message.
+	 *
+	 * @psalm-suppress MixedAssignment
+	 */
 	public function taskStatus(string $taskId): array {
 		$config = $this->configService->get();
 		$page = $this->requestPage(
@@ -252,40 +279,85 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			['task_id' => $taskId, 'page_size' => 10],
 		);
 		$task = $page['results'][0] ?? null;
-		if (!is_array($task)) {
-			return ['status' => 'PENDING', 'message' => 'Task is not visible yet.'];
+		if ($task === null) {
+			return ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false];
 		}
-		$status = strtoupper((string)($task['status'] ?? $task['state'] ?? 'PENDING'));
-		$message = '';
-		foreach (['error', 'message', 'result', 'status_str'] as $key) {
-			if (isset($task[$key]) && is_scalar($task[$key]) && (string)$task[$key] !== '') {
-				$message = (string)$task[$key];
-				break;
-			}
+		$status = strtoupper(self::text($task['status'] ?? null));
+		$result = $task['result_data'] ?? null;
+		$data = is_array($result) ? $result : [];
+		$message = self::text($task['result'] ?? null);
+		if ($message === '') {
+			$message = self::resultMessage($data);
 		}
-		$result = ['status' => $status, 'message' => $message];
-		$document = self::createdDocument($task['related_document'] ?? null, $message);
-		if ($document !== null) {
-			$result['document'] = $document;
+		$ids = $task['related_document_ids'] ?? null;
+		$documentId = null;
+		if ($status === 'SUCCESS') {
+			$documentId = self::documentId($data['document_id'] ?? null)
+				?? self::documentId($task['related_document'] ?? null)
+				?? self::documentId(is_array($ids) ? ($ids[0] ?? null) : null)
+				?? (preg_match('/New document id (\d+) created/', $message, $match) === 1 ? self::documentId($match[1]) : null);
 		}
 
-		return $result;
+		return [
+			'status' => $status !== '' ? $status : 'PENDING',
+			'message' => mb_substr($message, 0, self::TASK_MESSAGE_LENGTH),
+			'documentId' => $documentId,
+			'listed' => true,
+		];
 	}
 
-	/**
-	 * The ID of the document that a finished task created: Paperless names it in related_document,
-	 * as a number or a string of one, and in the result of the task, "Success. New document id 123
-	 * created".
-	 */
-	private static function createdDocument(mixed $related, string $message): ?int {
-		if ((is_int($related) || is_string($related)) && preg_match('/^[1-9]\d*$/', (string)$related) === 1) {
-			return (int)$related;
-		}
-		if (preg_match('/\bdocument id (\d+)/i', $message, $match) === 1 && (int)$match[1] > 0) {
-			return (int)$match[1];
+	public function findDocument(DocumentFingerprint $content): ?int {
+		$config = $this->configService->get();
+		foreach ([$content->sha256, $content->md5] as $checksum) {
+			$page = $this->requestPage(
+				$config->paperlessUrl,
+				$this->configService->getToken(),
+				$config->paperlessLocalNetwork,
+				'/api/documents/',
+				['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1],
+			);
+			$documentId = self::documentId($page['results'][0]['id'] ?? null);
+			if ($documentId !== null) {
+				return $documentId;
+			}
 		}
 
 		return null;
+	}
+
+	/**
+	 * What result_data of version 10 says about the end of a task, in the words that version 9
+	 * uses for it; its traceback stays out.
+	 *
+	 * @param array<array-key, mixed> $data
+	 */
+	private static function resultMessage(array $data): string {
+		foreach (['error_message', 'reason'] as $key) {
+			$text = self::text($data[$key] ?? null);
+			if ($text !== '') {
+				return $text;
+			}
+		}
+		$duplicate = self::documentId($data['duplicate_of'] ?? null);
+		if ($duplicate !== null) {
+			return "Not consuming: It is a duplicate of document #{$duplicate}" . (($data['duplicate_in_trash'] ?? false) === true ? ', which is in the trash of Paperless' : '');
+		}
+
+		return self::text($data['error_type'] ?? null);
+	}
+
+	/** A text of an answer of Paperless, or '' for anything else, such as null or a list. */
+	private static function text(mixed $value): string {
+		return is_string($value) || is_int($value) || is_float($value) ? trim((string)$value) : '';
+	}
+
+	/** The ID of a document, as a number or as the text of one, or null for anything else. */
+	private static function documentId(mixed $value): ?int {
+		if (is_string($value) && preg_match('/^\d+$/', $value) === 1) {
+			$value = (int)$value;
+		}
+
+		return is_int($value) && $value > 0 ? $value : null;
 	}
 
 	/**
@@ -380,7 +452,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * of Paperless: an object with the count and the results.
 	 *
 	 * @param array<string, int|string> $query
-	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool}
+	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool, version: string}
 	 * @psalm-suppress MixedAssignment
 	 */
 	private function requestPage(string $url, #[\SensitiveParameter] string $token, bool $localNetwork, string $path, array $query): array {
@@ -424,7 +496,19 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			'count' => $counted ? (int)$data['count'] : count($results),
 			'results' => $results,
 			'paginated' => $counted && isset($data['results']) && is_array($data['results']),
+			'version' => self::serverVersion($response),
 		];
+	}
+
+	/**
+	 * The version of Paperless-ngx that its header X-Version names, such as 3.3.0, or '' without
+	 * one: a proxy may leave the header out, and its text comes from the server, so anything that
+	 * doesn't look like a version is left out too.
+	 */
+	private static function serverVersion(IResponse $response): string {
+		$version = ltrim(trim($response->getHeader('X-Version')), 'vV');
+
+		return strlen($version) <= self::VERSION_LENGTH && preg_match('/^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?$/', $version) === 1 ? $version : '';
 	}
 
 	private function url(SyncConfig $config, string $path): string {
@@ -432,11 +516,14 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
-	 * Every request to Paperless, with the token in its header Authorization. When the HTTP client
-	 * fails before Paperless answers, as when Paperless can't be reached, only the message of its
-	 * exception goes on, in a PaperlessRequestException: the trace of the exception of the client
-	 * holds the options of the request with the token, which Nextcloud's log would write, and no
-	 * attribute can leave them out of it.
+	 * Every request to Paperless, with the token in its header Authorization, and in its header
+	 * Accept the version of the API that the app reads, so that a new default of Paperless doesn't
+	 * change the shape of its answers. When the HTTP client fails before Paperless answers, as when
+	 * Paperless can't be reached, only the message of its exception goes on, in a
+	 * PaperlessRequestException: the trace of the exception of the client holds the options of the
+	 * request with the token, which Nextcloud's log would write, and no attribute can leave them
+	 * out of it. A Paperless that doesn't serve the version answers 406 Not Acceptable, which is a
+	 * PaperlessVersionException, also when the request takes errors as answers.
 	 *
 	 * Nextcloud refuses addresses of the local network, against server-side request forgery. With
 	 * $localNetwork, the setting "Paperless runs in my local network", this request alone may go
@@ -447,15 +534,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @param 'GET'|'POST' $method
 	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
 	 */
-	private function send(string $method, string $url, #[\SensitiveParameter] string $token, bool $localNetwork, #[\SensitiveParameter] array $options, bool $acceptJson = true): IResponse {
-		$options['headers'] = $this->headersForToken($token, $acceptJson);
+	private function send(string $method, string $url, #[\SensitiveParameter] string $token, bool $localNetwork, #[\SensitiveParameter] array $options): IResponse {
+		$options['headers'] = $this->headersForToken($token);
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];
 		} elseif (isset($options['allow_redirects']) && is_array($options['allow_redirects'])) {
 			$options['allow_redirects'] = ['on_redirect' => $this->refuseLocalRedirect(...)] + $options['allow_redirects'];
 		}
 		try {
-			return $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
+			$response = $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
 		} catch (LocalServerException $exception) {
 			$message = $this->failureMessage($exception->getMessage(), $token);
 			if (!str_starts_with($message, 'No DNS record found')) {
@@ -470,8 +557,17 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			$host = preg_match('/^No DNS record found for (\S+)/', $message, $match) === 1 ? $match[1] : (string)parse_url($url, PHP_URL_HOST);
 			throw new PaperlessLocalNetworkException($host, true);
 		} catch (\Throwable $exception) {
+			// Nextcloud's HTTP client throws an answer with an error, with its status as the code.
+			if ($exception->getCode() === Http::STATUS_NOT_ACCEPTABLE) {
+				throw new PaperlessVersionException();
+			}
 			throw new PaperlessRequestException($this->failureMessage($exception->getMessage(), $token));
 		}
+		if ($response->getStatusCode() === Http::STATUS_NOT_ACCEPTABLE) {
+			throw new PaperlessVersionException();
+		}
+
+		return $response;
 	}
 
 	/**
@@ -513,16 +609,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/** @return array<string, string> */
-	private function headersForToken(#[\SensitiveParameter] string $token, bool $acceptJson = true): array {
-		$headers = [
+	private function headersForToken(#[\SensitiveParameter] string $token): array {
+		return [
 			'Authorization' => 'Token ' . $token,
 			'User-Agent' => AppConstants::USER_AGENT,
+			'Accept' => 'application/json; version=' . self::API_VERSION,
 		];
-		if ($acceptJson) {
-			$headers['Accept'] = 'application/json';
-		}
-
-		return $headers;
 	}
 
 	/** @param resource|string|null $body @return array<array-key, mixed>|string */

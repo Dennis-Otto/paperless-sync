@@ -4,8 +4,9 @@
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
-# website, the versions in the README, the description of the app, and the JavaScript
-# of the settings and the translations, which have no build step.
+# website, the versions in the README, the description of the app, the check of its
+# package, and the JavaScript of the settings and the translations, which have no build
+# step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -47,7 +48,8 @@ for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e
   mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
   .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
-  composer.lock screenshots/01-admin-settings.png; do
+  composer.lock screenshots/01-admin-settings.png scripts/check-package.sh \
+  tests/package/test_check_package.sh; do
   expect skip "$path"
 done
 
@@ -248,6 +250,13 @@ if [[ -z "$description" || "$website" != "$description" || "$composer" != "$desc
   exit 1
 fi
 echo "GitHub, the website and Composer describe the app in the same words."
+
+printf '\n== %s\n' "Check of the package"
+# scripts/check-package.sh, which scripts/check.sh runs on the package of krankerl and
+# the release workflow on the package of every release, with the packages it must
+# reject: one that lacks a runtime file, or holds a stray, changed or linked one, or the
+# wrong signature. In a throwaway repository, without krankerl.
+bash tests/package/test_check_package.sh
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then

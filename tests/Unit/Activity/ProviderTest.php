@@ -183,6 +183,15 @@ final class ProviderTest extends TestCase {
 		self::assertSame('', $event->getLink());
 	}
 
+	public function testDocumentLinkReadsNoToken(): void {
+		$this->credentialReads = 0;
+
+		$event = $this->parse('en', ActivityPublisher::SUBJECT_IMPORTED, ['file' => ['id' => 31, 'path' => 'Eingang/scan.pdf'], 'document' => 123]);
+
+		self::assertSame('https://paperless.example.test/documents/123/details', $event->getLink());
+		self::assertSame(0, $this->credentialReads, 'Every reader of the stream renders the entry, so it needs the URL of Paperless alone, never its token.');
+	}
+
 	public function testDocumentLinksToPaperlessOnlyWhileItsAddressIsKnown(): void {
 		$this->settings['paperless_url'] = '';
 

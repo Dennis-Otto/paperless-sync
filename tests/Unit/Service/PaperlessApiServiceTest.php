@@ -11,10 +11,12 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
+use OCA\PaperlessSync\Service\PaperlessVersionException;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\UnsizedStream;
 use OCP\Http\Client\IClient;
@@ -36,10 +38,11 @@ final class PaperlessApiServiceTest extends TestCase {
 	use InMemoryConfiguration;
 
 	private const URL = 'https://paperless.example.test';
+	private const VERSION_REQUIRED = 'Paperless does not serve version 9 of its API, which Paperless Sync uses (HTTP 406 Not Acceptable). Paperless Sync needs Paperless-ngx 2.16 or newer; with a newer Paperless-ngx, update Paperless Sync.';
 
 	/** @var list<array{method: string, url: string, options: array<string, mixed>}> */
 	private array $requests = [];
-	/** @var list<array{int, mixed}|Closure> the status and body of each response, or a closure that returns them */
+	/** @var list<array{int, mixed}|array{int, mixed, array<string, string>}|Closure> the status, the body and the headers of each response, or a closure that returns them */
 	private array $responses = [];
 	/** @var ITempManager&MockObject */
 	private ITempManager $tempManager;
@@ -78,18 +81,40 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testConnectionTestRequestsOneDocumentWithTheGivenCredentials(): void {
-		$this->responses[] = [200, ['count' => 0, 'results' => []]];
+		$this->responses[] = [200, ['count' => 0, 'results' => []], ['X-Version' => '3.3.0', 'X-Api-Version' => '10']];
 
-		$this->service->testConnection('https://other.example.test/', 'other-token', false);
+		$server = $this->service->testConnection('https://other.example.test/', 'other-token', false);
 
 		self::assertSame('https://other.example.test/api/documents/', $this->requests[0]['url']);
 		self::assertSame(['page' => 1, 'page_size' => 1], $this->requests[0]['options']['query']);
 		self::assertSame([
 			'Authorization' => 'Token other-token',
 			'User-Agent' => AppConstants::USER_AGENT,
-			'Accept' => 'application/json',
+			'Accept' => 'application/json; version=9',
 		], $this->requests[0]['options']['headers']);
 		self::assertSame(60, $this->requests[0]['options']['timeout']);
+		self::assertSame(['version' => '3.3.0', 'apiVersion' => '9'], $server, 'The app speaks API version 9, also with a Paperless that offers 10.');
+	}
+
+	/** @return array<string, array{string, string}> the header X-Version of Paperless, and the version that the app keeps of it */
+	public static function versionHeaders(): array {
+		return [
+			'Paperless-ngx 2.20' => ['2.20.15', '2.20.15'],
+			'a prerelease' => ['3.4.0-beta.1', '3.4.0-beta.1'],
+			'with a v and spaces' => [' v3.3.1 ', '3.3.1'],
+			'none, as behind a proxy that drops it' => ['', ''],
+			'no version' => ['latest', ''],
+			'markup' => ['<b>3.3.0</b>', ''],
+			'too long' => ['3.' . str_repeat('1', 40), ''],
+		];
+	}
+
+	/** Paperless names its version in the header X-Version of every answer to a request with a token. */
+	#[DataProvider('versionHeaders')]
+	public function testConnectionTestNamesTheVersionOfPaperless(string $header, string $version): void {
+		$this->responses[] = [200, ['count' => 0, 'results' => []], ['X-Version' => $header]];
+
+		self::assertSame(['version' => $version, 'apiVersion' => '9'], $this->service->testConnection(self::URL, 'secret-token', false));
 	}
 
 	public function testConnectionTestNeedsAUrlAndAToken(): void {
@@ -479,7 +504,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('POST', $request['method']);
 		self::assertSame(self::URL . '/api/documents/post_document/', $request['url']);
 		self::assertSame(['name' => 'document', 'filename' => 'police.pdf', 'content' => '%PDF-inbox', 'size' => 10], $sent);
-		self::assertArrayNotHasKey('Accept', $request['options']['headers']);
+		self::assertSame('application/json; version=9', $request['options']['headers']['Accept']);
 		self::assertSame(180, $request['options']['timeout']);
 		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
 		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'), 'The copy of the file must be removed.');
@@ -658,6 +683,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'tags' => ['tags'],
 			'download' => ['downloadDocument'],
 			'checksum' => ['documentChecksum'],
+			'document by its checksums' => ['findDocument'],
 			'upload' => ['uploadDocument'],
 			'task' => ['taskStatus'],
 		];
@@ -763,6 +789,82 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Paperless answers in the shape of the API version that a request asks for, and in that of
+	 * its default without one, which changed from 9 to 10 with Paperless-ngx 3.0. Every request asks
+	 * for 9, which Paperless-ngx 2.16 to 2.20 and 3.x all serve, so that one shape holds for all.
+	 */
+	#[DataProvider('requestsWithTheToken')]
+	public function testEveryRequestAsksForApiVersion9(string $operation): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 7: Failed to connect to paperless.example.test');
+		};
+
+		try {
+			$this->call($operation);
+		} catch (\Throwable) {
+			// The headers of the request are what counts, not its failure.
+		}
+
+		self::assertCount(1, $this->requests);
+		self::assertSame('application/json; version=9', $this->requests[0]['options']['headers']['Accept']);
+	}
+
+	/**
+	 * Paperless refuses an API version that it doesn't serve with 406 Not Acceptable, which
+	 * Nextcloud's HTTP client throws with the status as its code: Paperless-ngx before 2.16, or a
+	 * Paperless of the future that no longer serves version 9.
+	 */
+	#[DataProvider('requestsWithTheToken')]
+	public function testPaperlessWithoutApiVersion9IsNamed(string $operation): void {
+		$ignoreArgs = ini_set('zend.exception_ignore_args', '0');
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('Client error: `GET https://paperless.example.test/api/documents/?page=1` resulted in a `406 Not Acceptable` response: {"detail":"Invalid version in \\"Accept\\" header."}', 406);
+		};
+
+		try {
+			$this->call($operation);
+			self::fail('A Paperless without API version 9 must be reported.');
+		} catch (\Throwable $exception) {
+			self::assertSame(self::VERSION_REQUIRED, $exception->getMessage());
+			self::assertNull($exception->getPrevious());
+			self::assertStringNotContainsString('secret-token', self::logged($exception));
+		} finally {
+			ini_set('zend.exception_ignore_args', (string)$ignoreArgs);
+		}
+	}
+
+	public function testRefusedApiVersionIsAFailureOfTheRequest(): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('Client error: `GET https://paperless.example.test/api/documents/` resulted in a `406 Not Acceptable` response', 406);
+		};
+
+		$this->expectException(PaperlessVersionException::class);
+		$this->service->documents();
+	}
+
+	/** An error that comes back as an answer, as to an upload, whose body has the reason. */
+	public function testUploadToAPaperlessWithoutApiVersion9WaitsLikeAnUnreachableOne(): void {
+		$this->responses[] = [406, ['detail' => 'Invalid version in "Accept" header.']];
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('A Paperless without API version 9 must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame(self::VERSION_REQUIRED, $exception->getMessage());
+			self::assertFalse($exception->permanent, 'Another file would fail the same way: the file is not to blame.');
+			self::assertSame(406, $exception->statusCode);
+		}
+	}
+
+	public function testAnswer406OfAListIsNamedToo(): void {
+		$this->responses[] = [406, ['detail' => 'Invalid version in "Accept" header.']];
+
+		$this->expectException(PaperlessVersionException::class);
+		$this->expectExceptionMessage(self::VERSION_REQUIRED);
+		$this->service->documents();
+	}
+
 	public function testConnectionTestAllowsTheLocalNetworkAsAskedAndNotAsSaved(): void {
 		$this->settings['paperless_local_network'] = true;
 		$this->responses[] = [200, ['count' => 0, 'results' => []]];
@@ -865,71 +967,172 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
-	public function testTaskStatusAndItsMessage(): void {
-		$this->responses[] = [200, ['results' => [['status' => 'failure', 'result' => 'Unsupported mime type', 'status_str' => 'ignored']]]];
+	public function testTaskIsAskedForByItsId(): void {
+		$this->responses[] = [200, []];
 
-		self::assertSame(['status' => 'FAILURE', 'message' => 'Unsupported mime type'], $this->service->taskStatus('task-1'));
-		self::assertSame(['task_id' => 'task-1', 'page_size' => 10], $this->requests[0]['options']['query']);
+		$this->service->taskStatus('task-1');
+
 		self::assertSame(self::URL . '/api/tasks/', $this->requests[0]['url']);
-	}
-
-	public function testTaskStateWithoutAMessage(): void {
-		$this->responses[] = [200, [['state' => 'started', 'error' => '', 'message' => ['not text']]]];
-
-		self::assertSame(['status' => 'STARTED', 'message' => ''], $this->service->taskStatus('task-1'));
-	}
-
-	public function testTaskWithoutAStatusIsPending(): void {
-		$this->responses[] = [200, [['task_id' => 'task-1']]];
-
-		self::assertSame(['status' => 'PENDING', 'message' => ''], $this->service->taskStatus('task-1'));
-	}
-
-	public function testTaskThatIsNotVisibleYetIsPending(): void {
-		$this->responses[] = [200, ['count' => 0, 'results' => []]];
-
-		self::assertSame(['status' => 'PENDING', 'message' => 'Task is not visible yet.'], $this->service->taskStatus('task-1'));
+		self::assertSame(['task_id' => 'task-1', 'page_size' => 10], $this->requests[0]['options']['query']);
 	}
 
 	/**
-	 * Paperless-ngx names the new document of a finished task in related_document, as a string or a
-	 * number, and in the text of the result.
+	 * Import tasks as Paperless lists them, for an upload of the app: API version 9 as
+	 * Paperless-ngx 2.20 serves it (TasksViewSerializer) and as 3.x serves it (TaskSerializerV9,
+	 * which derives its result from result_data), in a list; version 10 of 3.x
+	 * (TaskSerializerV10), in pages, with a status in lower case and the result in result_data.
 	 *
-	 * @return array<string, array{array<string, mixed>, int}>
+	 * @return array<string, array{mixed, array{status: string, message: string, documentId: int|null, listed: bool}}>
 	 */
-	public static function finishedTasks(): array {
+	public static function tasks(): array {
+		$v9 = static fn (array $task): array => [[
+			'id' => 41,
+			'task_id' => 'task-1',
+			'task_name' => 'consume_file',
+			'task_file_name' => 'police.pdf',
+			'date_created' => '2026-10-13T10:00:00+02:00',
+			'date_done' => '2026-10-13T10:00:30+02:00',
+			'type' => 'manual_task',
+			'acknowledged' => false,
+			'owner' => 3,
+			...$task,
+		]];
+		$v10 = static fn (array $task): array => ['count' => 1, 'next' => null, 'previous' => null, 'results' => [[
+			'id' => 41,
+			'task_id' => 'task-1',
+			'task_type' => 'consume_file',
+			'task_type_display' => 'Consume File',
+			'trigger_source' => 'api_upload',
+			'trigger_source_display' => 'API Upload',
+			'date_created' => '2026-10-13T10:00:00+02:00',
+			'date_started' => '2026-10-13T10:00:01+02:00',
+			'date_done' => '2026-10-13T10:00:30+02:00',
+			'duration_seconds' => 29.0,
+			'wait_time_seconds' => 1.0,
+			'input_data' => ['filename' => 'police.pdf'],
+			'acknowledged' => false,
+			'owner' => 3,
+			...$task,
+		]]];
+
 		return [
-			'related document as text' => [['status' => 'SUCCESS', 'result' => 'Success. New document id 123 created', 'related_document' => '123'], 123],
-			'related document as a number' => [['status' => 'SUCCESS', 'related_document' => 77], 77],
-			'only the result' => [['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => null], 456],
+			'2.20, pending' => [$v9(['status' => 'PENDING', 'result' => null, 'related_document' => null]), ['status' => 'PENDING', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'2.20, success' => [
+				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => '456']),
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456, 'listed' => true],
+			],
+			'2.20, success without related_document' => [
+				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 457 created']),
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 457 created', 'documentId' => 457, 'listed' => true],
+			],
+			'2.20, failure' => [
+				$v9(['status' => 'FAILURE', 'result' => 'police.pdf: Unsupported mime type application/octet-stream', 'related_document' => null]),
+				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null, 'listed' => true],
+			],
+			'2.20, duplicate, whose related_document is the original' => [
+				$v9(['status' => 'FAILURE', 'result' => 'Not consuming police.pdf: It is a duplicate of Police (#123).', 'related_document' => '123']),
+				['status' => 'FAILURE', 'message' => 'Not consuming police.pdf: It is a duplicate of Police (#123).', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 9, success' => [
+				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => 456, 'duplicate_documents' => []]),
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456, 'listed' => true],
+			],
+			'3.x in version 9, duplicate' => [
+				$v9(['status' => 'FAILURE', 'result' => 'Not consuming: It is a duplicate of document #123', 'related_document' => 123, 'duplicate_documents' => [['id' => 123, 'title' => 'Police', 'deleted_at' => null]]]),
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 9, revoked' => [
+				$v9(['status' => 'REVOKED', 'result' => null, 'related_document' => null, 'duplicate_documents' => []]),
+				['status' => 'REVOKED', 'message' => '', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, started' => [$v10(['status' => 'started', 'status_display' => 'Started', 'result_data' => null, 'related_document_ids' => []]), ['status' => 'STARTED', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'3.x in version 10, success' => [
+				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => ['document_id' => 456], 'related_document_ids' => [456]]),
+				['status' => 'SUCCESS', 'message' => '', 'documentId' => 456, 'listed' => true],
+			],
+			'3.x in version 10, success with the ID only in related_document_ids' => [
+				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => [], 'related_document_ids' => [458]]),
+				['status' => 'SUCCESS', 'message' => '', 'documentId' => 458, 'listed' => true],
+			],
+			'3.x in version 10, stopped, such as after a split at a barcode' => [
+				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => ['reason' => 'Barcode splitting complete!'], 'related_document_ids' => []]),
+				['status' => 'SUCCESS', 'message' => 'Barcode splitting complete!', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, failure' => [
+				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => [
+					'error_type' => 'ConsumerError',
+					'error_message' => 'police.pdf: Unsupported mime type application/octet-stream',
+					'traceback' => "Traceback (most recent call last):\n  File \"consumer.py\"",
+				], 'related_document_ids' => []]),
+				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, failure with its type alone' => [
+				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['error_type' => 'WorkerLostError', 'error_message' => ''], 'related_document_ids' => []]),
+				['status' => 'FAILURE', 'message' => 'WorkerLostError', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, duplicate' => [
+				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['duplicate_of' => 123, 'duplicate_in_trash' => false], 'related_document_ids' => [123]]),
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, duplicate of a document in the trash' => [
+				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['duplicate_of' => 123, 'duplicate_in_trash' => true], 'related_document_ids' => [123]]),
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123, which is in the trash of Paperless', 'documentId' => null, 'listed' => true],
+			],
+			'3.x in version 10, revoked' => [
+				$v10(['status' => 'revoked', 'status_display' => 'Revoked', 'result_data' => null, 'related_document_ids' => []]),
+				['status' => 'REVOKED', 'message' => '', 'documentId' => null, 'listed' => true],
+			],
+			'a status of the future' => [$v9(['status' => 'Retrying', 'result' => ['not text'], 'related_document' => 'none']), ['status' => 'RETRYING', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'no status' => [[['task_id' => 'task-1']], ['status' => 'PENDING', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'not listed yet, in version 9' => [[], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false]],
+			'not listed yet, in version 10' => [['count' => 0, 'results' => []], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false]],
 		];
 	}
 
-	/** @param array<string, mixed> $task */
-	#[DataProvider('finishedTasks')]
-	public function testFinishedTaskNamesItsNewDocument(array $task, int $document): void {
-		$this->responses[] = [200, ['results' => [$task]]];
+	/** @param array{status: string, message: string, documentId: int|null, listed: bool} $expected */
+	#[DataProvider('tasks')]
+	public function testTaskStatusInEveryShapeOfPaperless(mixed $body, array $expected): void {
+		$this->responses[] = [200, $body];
 
-		self::assertSame($document, $this->service->taskStatus('task-1')['document'] ?? null);
+		self::assertSame($expected, $this->service->taskStatus('task-1'));
 	}
 
-	/** @return array<string, array{array<string, mixed>}> */
-	public static function tasksWithoutADocument(): array {
+	/**
+	 * A file of the inbox whose task Paperless has not finished a day after the upload may be in
+	 * Paperless already. Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5 before,
+	 * so the SHA-256 is asked for first, then the MD5.
+	 *
+	 * @return array<string, array{list<mixed>, int|null, int}>
+	 */
+	public static function documentsByChecksum(): array {
+		$none = ['count' => 0, 'next' => null, 'previous' => null, 'results' => []];
+		$found = static fn (mixed $id): array => ['count' => 1, 'next' => null, 'previous' => null, 'results' => [['id' => $id]]];
+
 		return [
-			'pending' => [['status' => 'PENDING', 'related_document' => null]],
-			'no number' => [['status' => 'SUCCESS', 'related_document' => 'P12', 'result' => 'Success.']],
-			'zero' => [['status' => 'SUCCESS', 'related_document' => '0', 'result' => 'New document id 0 created']],
-			'not a scalar' => [['status' => 'SUCCESS', 'related_document' => ['id' => 5]]],
-			'failure' => [['status' => 'FAILURE', 'result' => 'File type application/octet-stream not supported']],
+			'3.x, by its SHA-256' => [[$found(456)], 456, 1],
+			'2.x, by its MD5' => [[$none, $found(457)], 457, 2],
+			'an ID as a text' => [[$found('458')], 458, 1],
+			'not in Paperless' => [[$none, $none], null, 2],
+			'an answer without an ID' => [[$found(null), $found('none')], null, 2],
 		];
 	}
 
-	/** @param array<string, mixed> $task */
-	#[DataProvider('tasksWithoutADocument')]
-	public function testTaskWithoutADocumentNamesNone(array $task): void {
-		$this->responses[] = [200, ['results' => [$task]]];
+	/** @param list<mixed> $bodies */
+	#[DataProvider('documentsByChecksum')]
+	public function testDocumentIsFoundByTheChecksumsOfItsOriginal(array $bodies, ?int $expected, int $requests): void {
+		foreach ($bodies as $body) {
+			$this->responses[] = [200, $body];
+		}
+		$content = new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'));
 
-		self::assertArrayNotHasKey('document', $this->service->taskStatus('task-1'));
+		self::assertSame($expected, $this->service->findDocument($content));
+
+		self::assertCount($requests, $this->requests);
+		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
+		self::assertSame(['checksum__iexact' => $content->sha256, 'fields' => 'id', 'page_size' => 1], $this->requests[0]['options']['query']);
+		if ($requests === 2) {
+			self::assertSame(['checksum__iexact' => $content->md5, 'fields' => 'id', 'page_size' => 1], $this->requests[1]['options']['query']);
+		}
 	}
 
 	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> */
@@ -985,6 +1188,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'tags' => $this->service->tags(),
 			'downloadDocument' => $this->service->downloadDocument(123, true, self::discard()),
 			'documentChecksum' => $this->service->documentChecksum(123, true),
+			'findDocument' => $this->service->findDocument(new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'))),
 			'uploadDocument' => $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'),
 			'taskStatus' => $this->service->taskStatus('task-1'),
 		};
@@ -1015,13 +1219,17 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->requests[] = ['method' => $method, 'url' => $url, 'options' => $options];
 		$next = array_shift($this->responses);
 		self::assertNotNull($next, "Unexpected request {$method} {$url}");
-		[$status, $body] = $next instanceof Closure ? $next($options) : $next;
+		$answer = $next instanceof Closure ? $next($options) : $next;
+		[$status, $body] = $answer;
+		// The names of headers are case-insensitive, as in Guzzle.
+		$headers = array_change_key_case($answer[2] ?? [], CASE_LOWER);
 		if (is_array($body)) {
 			$body = json_encode($body, JSON_THROW_ON_ERROR);
 		}
 		$response = $this->createMock(IResponse::class);
 		$response->method('getStatusCode')->willReturn($status);
 		$response->method('getBody')->willReturn($body);
+		$response->method('getHeader')->willReturnCallback(static fn (string $name): string => $headers[strtolower($name)] ?? '');
 
 		return $response;
 	}

@@ -172,10 +172,28 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame([
-			'message' => 'Could not validate the Paperless and Nextcloud configuration: Unavailable. To save the settings without the test, turn off scheduled synchronization.',
+			'message' => 'Could not validate the Paperless and Nextcloud configuration: Unavailable. Um die Einstellungen ohne den Test zu speichern, schalte die geplante Synchronisation aus.',
 			'setting' => 'enabled',
 		], $response->getData());
 		self::assertSame($stored, $this->settings);
+	}
+
+	/**
+	 * The hint starts a sentence of its own, also after a message without a full stop at its end,
+	 * such as one of Guzzle while Paperless is down, which ends with the URL.
+	 */
+	public function testTheHintOfTheScheduleIsASentenceOfItsOwn(): void {
+		$this->configService()->save(self::validSettings() + ['enabled' => true], 'secret-token');
+		$this->paperless->method('testConnection')->willThrowException(new RuntimeException(
+			'cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/ ',
+		));
+
+		$response = $this->controller->save(self::validSettings() + ['enabled' => true]);
+
+		self::assertSame(
+			'Could not validate the Paperless and Nextcloud configuration: cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/. Um die Einstellungen ohne den Test zu speichern, schalte die geplante Synchronisation aus.',
+			$response->getData()['message'],
+		);
 	}
 
 	/**
