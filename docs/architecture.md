@@ -67,11 +67,14 @@ Three kinds of tests check the app: unit tests, which `scripts/check.sh` runs be
 | 2026-10-14, before [#114](https://github.com/Dennis-Otto/paperless-sync/issues/114) | 2,287 | 2,005 | 282 | 87.7 % |
 | 2026-10-14, after [#114](https://github.com/Dennis-Otto/paperless-sync/issues/114) | 2,295 | 2,205 | 90 | 96.1 % |
 
-No mutant of the deletion guards of [decision 0004](decisions/0004-delete-only-what-is-confirmed.md) survives. Most of the others change nothing that the app does: a `break` in place of the `continue` at the end of a loop, a cast of a value that is a string already, the default of a key that every row has, or a limit of the wait between uploads that the wait of a day caps anyway. The same run on your computer, with the version of Infection that the workflow uses and PHP 8.3:
+No mutant of the deletion guards of [decision 0004](decisions/0004-delete-only-what-is-confirmed.md) survives. Most of the others change nothing that the app does: a `break` in place of the `continue` at the end of a loop, a cast of a value that is a string already, the default of a key that every row has, or a limit of the wait between uploads that the wait of a day caps anyway. The same run on your computer, with PHP 8.3 and the version and checksum of Infection from `.github/workflows/mutation.yml`. Everything stays in the ignored folder `build/`, because the workflow uses a committed `infection.json5` in place of its own:
 
 ```sh
-echo '{"bootstrap": "tests/bootstrap.php", "source": {"directories": ["lib"]}, "timeout": 30}' > infection.json5
-php infection.phar --threads=max --min-msi=0 --no-progress
+mkdir -p build
+curl -fsSL -o build/infection.phar https://github.com/infection/infection/releases/download/0.35.6/infection.phar
+echo "3fd4216875260b8e47c48ec1a92473f500d88bd36d8ffec21cc0d24e18d7f0ea  build/infection.phar" | sha256sum --check --strict
+echo '{"bootstrap": "../tests/bootstrap.php", "source": {"directories": ["../lib"]}, "timeout": 30, "logs": {"text": "infection.log"}}' > build/infection.json5
+php build/infection.phar --configuration=build/infection.json5 --threads=max --with-uncovered --min-msi=0 --min-covered-msi=0 --no-progress
 ```
 
 ## Design decisions
