@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Nextcloud on PostgreSQL instead of SQLite: run.sh adds this file to compose.yaml
+# with E2E_DATABASE=pgsql and installs Nextcloud with it.
+
+services:
+  postgres:
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: e2e-only-password
+    # The database lives as long as its container; in memory, it doesn't wait for the disk.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=nextcloud", "--dbname=nextcloud"]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+
+  nextcloud:
+    depends_on:
+      postgres:
+        condition: service_healthy

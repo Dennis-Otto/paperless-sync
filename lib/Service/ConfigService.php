@@ -16,6 +16,14 @@ use OCP\IAppConfig;
 use OCP\Security\ICredentialsManager;
 
 final class ConfigService {
+	/**
+	 * The shortest interval of the scheduled synchronization: Nextcloud starts the background job
+	 * that runs it every five minutes at most.
+	 */
+	public const MINIMUM_INTERVAL_MINUTES = 5;
+	/** The longest interval of the scheduled synchronization, a day. */
+	public const MAXIMUM_INTERVAL_MINUTES = 1440;
+
 	private const TOKEN_IDENTIFIER = AppConstants::APP_ID . '.api-token';
 
 	private const DEFAULTS = [
@@ -242,6 +250,8 @@ final class ConfigService {
 				$values[$key] = $this->appConfig->getValueString(AppConstants::APP_ID, $storageKey, $default);
 			}
 		}
+		// A shorter interval, which an earlier version or occ stored, always acted as the shortest.
+		$values['sync_interval_minutes'] = max(self::MINIMUM_INTERVAL_MINUTES, (int)$values['sync_interval_minutes']);
 
 		return $values;
 	}
@@ -265,7 +275,7 @@ final class ConfigService {
 		}
 		$values['path_template'] = $this->pathTemplate->validateTemplate((string)$values['path_template']);
 		$values['excluded_tags'] = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\r\n]+/', (string)$values['excluded_tags']) ?: [])))));
-		$values['sync_interval_minutes'] = $this->range((int)$values['sync_interval_minutes'], 1, 1440, 'Synchronization interval');
+		$values['sync_interval_minutes'] = $this->range((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES, 'Synchronization interval');
 		$values['batch_size'] = $this->range((int)$values['batch_size'], 1, 1000, 'Batch size');
 		$values['missing_grace_runs'] = $this->range((int)$values['missing_grace_runs'], 1, 30, 'Missing-document confirmation runs');
 		if (!in_array($values['trash_mode'], ['keep', 'move'], true)) {

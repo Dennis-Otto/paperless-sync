@@ -35,8 +35,15 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $contents = [];
 	/** @var array<string, string> */
 	public array $uploads = [];
-	/** @var array<string, array{status: string, message: string}> */
+	/** @var array<string, array{status: string, message: string, documentId?: int|null, listed?: bool}> the tasks that Paperless lists, by default pending */
 	public array $tasks = [];
+	/** @var array<string, int> the ID of a document by a checksum of its original, SHA-256 or MD5 */
+	public array $originals = [];
+	/** @var list<string> the SHA-256 of every content that a run looked for */
+	public array $searches = [];
+	public ?\Throwable $findException = null;
+	/** @var array{version: string, apiVersion: string} the Paperless that every test of the connection reaches */
+	public array $server = ['version' => '2.20.15', 'apiVersion' => '9'];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
 	/** Paperless-ngx up to 2.x, whose checksums are MD5; 3.x reports SHA-256. */
@@ -55,11 +62,13 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void {
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
 		$this->connections[] = [$url, $token, $localNetwork];
 		if ($this->connectionException !== null) {
 			throw $this->connectionException;
 		}
+
+		return $this->server;
 	}
 
 	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array {
@@ -120,6 +129,14 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		return hash($this->md5Checksums ? 'md5' : 'sha256', $this->contents[$documentId] ?? '');
 	}
 
+	public function findDocument(DocumentFingerprint $content): ?int {
+		$this->searches[] = $content->sha256;
+		if ($this->findException !== null) {
+			throw $this->findException;
+		}
+		return $this->originals[$content->sha256] ?? $this->originals[$content->md5] ?? null;
+	}
+
 	public function uploadDocument($source, string $filename): string {
 		$this->uploadAttempts[] = $filename;
 		$failure = $this->uploadFailures[$filename] ?? $this->uploadException;
@@ -135,7 +152,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		if ($this->taskException !== null) {
 			throw $this->taskException;
 		}
-		return $this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => ''];
+		return ($this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => '']) + ['documentId' => null, 'listed' => true];
 	}
 
 	/** @param list<array<string, mixed>> $documents */

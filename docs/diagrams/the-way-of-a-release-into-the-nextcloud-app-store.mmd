@@ -1,0 +1,27 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a release into the Nextcloud App Store
+    accDescr: A change reaches main. The release bot keeps the pull request of the next release, with the version from the titles of the merged pull requests and the notes from Unreleased. When it is merged, an isolated build makes the package, signed with the certificate of the app, its SBOMs, its VEX and its signed provenance. The release is published on GitHub and announced in the discussions, the issue lifecycle closes the issues that it fixes, and the package goes to the Nextcloud App Store. The release verification then checks the release as users can, and does so again every week. Main is orange, the bots blue, and the App Store green.
+
+    main(["A change<br>in main"])
+    pull["Release bot:<br>the pull request<br>of the next version,<br>with its notes"]
+    build["Isolated build:<br>the signed package,<br>SBOMs, VEX, signed<br>provenance"]
+    publish["The release<br>on GitHub, announced<br>in the discussions"]
+    close["Issue lifecycle:<br>closes the issues<br>it fixes"]
+    store(["The Nextcloud<br>App Store"])
+    verify["Release verification:<br>checks it as users<br>can, every week too"]
+
+    main --> pull -- "merged" --> build --> publish
+    publish --> close & store
+    store --> verify
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class main yours
+    class pull,build,publish,close,verify bots
+    class store result

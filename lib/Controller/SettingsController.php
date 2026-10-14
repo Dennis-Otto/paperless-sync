@@ -95,10 +95,9 @@ final class SettingsController extends Controller {
 
 			// The way to pause a synchronization that fails, such as while Paperless is down, and the
 			// setting that does it, which the page moves the focus to.
-			return new JSONResponse(
-				['message' => $message . ' ' . $this->l10n->t('To save the settings without the test, turn off scheduled synchronization.'), 'setting' => 'enabled'],
-				Http::STATUS_BAD_REQUEST,
-			);
+			$hint = $this->l10n->t('To save the settings without the test, turn off scheduled synchronization.');
+
+			return new JSONResponse(['message' => self::sentence($message) . ' ' . $hint, 'setting' => 'enabled'], Http::STATUS_BAD_REQUEST);
 		}
 	}
 
@@ -122,6 +121,17 @@ final class SettingsController extends Controller {
 		}
 
 		return new JSONResponse(['checks' => $this->translated($checks)]);
+	}
+
+	/**
+	 * The text with a full stop at its end, unless it ends a sentence already, so that a hint
+	 * after it starts a sentence of its own: the message of a failed request of Guzzle ends with
+	 * the URL, for example.
+	 */
+	private static function sentence(string $text): string {
+		$text = rtrim($text);
+
+		return preg_match('/[.!?]$/', $text) === 1 ? $text : $text . '.';
 	}
 
 	/**

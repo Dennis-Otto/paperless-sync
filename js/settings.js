@@ -153,6 +153,7 @@
 		const lastEnded = element('last-ended')
 		const lastSuccess = element('last-success')
 		const nextRun = element('next-run')
+		const paperlessVersion = element('paperless-version')
 		const errors = element('errors')
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
@@ -172,6 +173,10 @@
 		// stored token only there, so another URL needs the token again.
 		let tokenConfigured = false
 		let savedUrl = ''
+		// The state of the last run as the server last sent it. A run shows that it is running
+		// before the server answers; when the status can't be refreshed after it, the status
+		// shows this state again, not a run that never ends.
+		let serverState = lastState.dataset.state || 'never-run'
 
 		// The settings that the form shows, or a copy of it, as the page sends them.
 		function settings(scope = root) {
@@ -271,9 +276,16 @@
 			})
 		}
 
+		// Saving tests the connection when the schedule will run or a token was entered, as
+		// SettingsController::save() decides, and its button says whether it will.
+		function willTest() {
+			return schedule.checked || token.value.trim() !== ''
+		}
+
 		function updateForm() {
 			updateToken()
 			updateButtons()
+			setText(save, willTest() ? translate('Test connection and save') : translate('Save'))
 		}
 
 		function setBusy(value) {
@@ -298,8 +310,19 @@
 		function showError(error, fallback) {
 			showMessage(error.message || fallback, 'error')
 			const setting = error.setting ? root.querySelector('[data-setting="' + window.CSS.escape(error.setting) + '"]') : null
-			const target = setting || message
-			target.focus()
+			if (setting === null) {
+				message.focus()
+				return
+			}
+			focusSetting(setting)
+		}
+
+		// Moves the focus to a setting, in view. The bar of the buttons sticks to the bottom of the
+		// window and may cover the setting, where focus() would leave it: it scrolls only to an
+		// element outside the window.
+		function focusSetting(setting) {
+			setting.scrollIntoView({ block: 'center' })
+			setting.focus({ preventScroll: true })
 		}
 
 		// The sign of a line of the connection checklist, which a screen reader skips, and the word
@@ -401,6 +424,18 @@
 			return translate('≈ {time}', { time: formatTime(timestamp) })
 		}
 
+		// The Paperless that the last run reached: its version, as it names itself, and the version
+		// of its API that the app uses; a line below the times, hidden before the first run.
+		function showPaperless(status) {
+			paperlessVersion.hidden = !status.paperlessApiVersion
+			if (paperlessVersion.hidden) {
+				return
+			}
+			setText(paperlessVersion, status.paperlessVersion
+				? translate('The last run reached Paperless-ngx {version} through version {api} of its API.', { version: status.paperlessVersion, api: status.paperlessApiVersion })
+				: translate('The last run reached Paperless-ngx, which named no version, through version {api} of its API.', { api: status.paperlessApiVersion }))
+		}
+
 		// The state of the last run as StatusService stores it, and its label; templates/settings.php has the same.
 		const stateLabels = {
 			'never-run': translate('Never run'),
@@ -452,10 +487,12 @@
 		function updateStatus(status) {
 			const state = status.state || 'never-run'
 			const lastReport = status.report && typeof status.report === 'object' ? status.report : {}
+			serverState = state
 			showState(state)
 			setText(lastEnded, formatTime(status.lastEnded))
 			setText(lastSuccess, formatTime(status.lastSuccess))
 			setText(nextRun, formatNextRun(status.nextRun))
+			showPaperless(status)
 			showErrors(status, lastReport)
 			if (Object.keys(lastReport).length > 0) {
 				showReport(lastReport, false)
@@ -551,8 +588,11 @@
 				await explainGateway(gateway)
 				return
 			}
-			// The status shows how the run ended, also when it failed, or follows it while it continues.
-			await refreshQuietly()
+			// The status shows how the run ended, also when it failed, or follows it while it
+			// continues. Without an answer, it shows the last state that the server sent.
+			if (!(await refreshQuietly())) {
+				showState(serverState)
+			}
 		}
 
 		// A proxy or the web server answered for the app: it stopped waiting for a long run, while
@@ -563,7 +603,11 @@
 			try {
 				state = await refreshStatus()
 			} catch (error) {
-				// The status stays as it was, and the message says what is known.
+				// Neither the run nor the status answered, so how the run ended is unknown: the
+				// status shows the last state that the server sent, and Refresh asks again.
+				showState(serverState)
+				showError(requestError(translate('The web server answered with status {status}, and the state of the run could not be read. Choose "Refresh" to see how the run ended.', { status }), status), '')
+				return
 			}
 			if (state.endsWith('running')) {
 				showMessage(translate('The run takes longer than the web server waits for an answer. It continues in the background, and the status above shows when it ends.'), 'progress')
@@ -580,21 +624,20 @@
 		}
 
 		// After an action, the status follows it; when that fails, the message of the action stays,
-		// and Refresh asks again.
+		// and Refresh asks again. Answers whether the status was refreshed.
 		async function refreshQuietly() {
 			try {
 				await refreshStatus()
+				return true
 			} catch (error) {
-				// The status stays as it was.
+				return false
 			}
 		}
 
 		form.addEventListener('submit', async function(event) {
 			event.preventDefault()
 			setBusy(true)
-			// The server tests the connection when the schedule will run or a token was entered,
-			// see SettingsController::save().
-			const testing = schedule.checked || token.value.trim() !== ''
+			const testing = willTest()
 			showMessage(testing ? translate('Testing Paperless and Nextcloud access…') : translate('Saving the settings…'), 'progress')
 			let saved = false
 			const sent = snapshot()
@@ -642,7 +685,7 @@
 					})
 					const setting = fixable ? root.querySelector('[data-setting="' + window.CSS.escape(fixable.setting) + '"]') : null
 					if (setting) {
-						setting.focus()
+						focusSetting(setting)
 					}
 				} else if (counts.warning > 0) {
 					showMessage(translate('Every check passed. Read the notes of the connection checklist.'), 'success')

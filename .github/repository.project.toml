@@ -3,9 +3,10 @@
 # lists gain their new items, and values replace those of repository.toml.
 # https://github.com/Dennis-Otto/repo-blueprint#settings-as-code
 
-# The end-to-end tests against every supported Nextcloud version (e2e.yml).
+# The end-to-end tests against every supported Nextcloud version, and against the
+# newest one on PostgreSQL, and on MariaDB with S3 (e2e.yml, decision 0007).
 [branch]
-required_checks = ["nextcloud"]
+required_checks = ["nextcloud", "nextcloud on PostgreSQL, MariaDB and S3"]
 
 # An environment of this project and the secrets it needs:
 # [environments.deploy]

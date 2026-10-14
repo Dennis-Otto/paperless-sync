@@ -19,9 +19,14 @@ interface PaperlessClientInterface {
 	 * A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its
 	 * failure. $localNetwork allows an address of the local network for it.
 	 *
+	 * The answer names the version of Paperless-ngx as Paperless names itself, '' when it doesn't,
+	 * and the version of its API that the app uses.
+	 *
+	 * @return array{version: string, apiVersion: string}
 	 * @throws PaperlessLocalNetworkException when Nextcloud refuses the address as a local one
+	 * @throws PaperlessVersionException when Paperless doesn't serve the version of its API that the app uses
 	 */
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): void;
+	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array;
 
 	/**
 	 * The checks of Paperless for the connection checklist, with $token to the URL of $config and
@@ -66,11 +71,25 @@ interface PaperlessClientInterface {
 	public function documentChecksum(int $documentId, bool $original): string;
 
 	/**
+	 * The ID of a document whose original has the content of these checksums, or null when
+	 * Paperless has none: Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5
+	 * before, so both are asked for.
+	 */
+	public function findDocument(DocumentFingerprint $content): ?int;
+
+	/**
 	 * @param resource $source
 	 * @throws PaperlessUploadException when Paperless doesn't take the file, or can't be reached
 	 */
 	public function uploadDocument($source, string $filename): string;
 
-	/** @return array{status: string, message: string} */
+	/**
+	 * The state of the task of an upload: its status in upper case, as Paperless names it, such as
+	 * PENDING, STARTED, SUCCESS, FAILURE or REVOKED, PENDING also while Paperless doesn't list the
+	 * task; what Paperless says about its result, such as the reason of a failure; the ID of the
+	 * document that it created, if it names one; and whether Paperless lists the task at all.
+	 *
+	 * @return array{status: string, message: string, documentId: int|null, listed: bool}
+	 */
 	public function taskStatus(string $taskId): array;
 }

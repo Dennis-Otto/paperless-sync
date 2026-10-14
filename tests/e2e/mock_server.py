@@ -68,11 +68,24 @@ VIEW_PERMISSIONS = {
     "/api/tasks/": "view_paperlesstask",
     "/api/ui_settings/": "view_uisettings",
 }
-DOCUMENT_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123.\n%%EOF\n"
 # The content of P123 after /control/content/revised, as after a new scan in Paperless.
 REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised.\n%%EOF\n"
 LOCK = threading.Lock()
 STATE = {}
+SCENARIOS = {
+    "active", "renamed", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
+}
+# The versions of Paperless-ngx that the mock plays, with the versions of the API that each serves
+# and its default (src/paperless/settings.py, REST_FRAMEWORK): 2.15 is the last before version 9,
+# and 3.0 made 10 the default.
+PAPERLESS = {
+    "2.15.3": {"allowed": range(1, 9), "default": 8},
+    "2.20.15": {"allowed": range(1, 10), "default": 9},
+    "3.3.0": {"allowed": (9, 10), "default": 10},
+}
+# The ends of an import task that /control/tasks/... sets, as Paperless-ngx 3.x keeps them in
+# PaperlessTask: its status and its result_data (src/documents/signals/handlers.py).
+TASK_ENDS = {"pending", "started", "success", "failure", "duplicate", "revoked"}
 
 
 def reset_state():
@@ -90,8 +103,110 @@ def reset_state():
                 "uploads": [],
                 "refusedUploads": [],
                 "tasks": {},
+                "paperless": "3.3.0",
+                # The API version that each request asked for, "none" without one.
+                "apiVersions": {},
             }
         )
+
+
+def task_end(task, end, number):
+    """Sets the status and result_data of a task as Paperless-ngx 3.x stores them."""
+    task["status"] = "failure" if end == "duplicate" else end
+    task["result_data"] = {
+        "success": {"document_id": 500 + number},
+        "failure": {
+            "error_type": "ConsumerError",
+            "error_message": f"{task['filename']}: Synthetic unsupported mime type",
+            "traceback": "Traceback (most recent call last): synthetic",
+        },
+        "duplicate": {"duplicate_of": 123, "duplicate_in_trash": False},
+    }.get(end)
+
+
+def task_v9_paperless_2(task_id, task):
+    """A task as Paperless-ngx 2.20 lists it (TasksViewSerializer): a Celery state and a text."""
+    data = task["result_data"] or {}
+    result, related = None, None
+    if "document_id" in data:
+        result, related = f"Success. New document id {data['document_id']} created", str(data["document_id"])
+    elif "duplicate_of" in data:
+        result = f"Not consuming {task['filename']}: It is a duplicate of Monthly invoice (#{data['duplicate_of']})."
+        related = str(data["duplicate_of"])
+    elif "error_message" in data:
+        result = data["error_message"]
+    return {
+        "id": task["id"],
+        "task_id": task_id,
+        "task_name": "consume_file",
+        "task_file_name": task["filename"],
+        "date_created": "2026-10-13T10:00:00+02:00",
+        "date_done": None if task["status"] in ("pending", "started") else "2026-10-13T10:00:30+02:00",
+        "type": "auto_task",
+        "status": task["status"].upper(),
+        "result": result,
+        "acknowledged": False,
+        "related_document": related,
+        "owner": 3,
+    }
+
+
+def task_v9_paperless_3(task_id, task):
+    """A task as Paperless-ngx 3.x lists it in version 9 (TaskSerializerV9), derived from result_data."""
+    data = task["result_data"] or {}
+    result = None
+    if "document_id" in data:
+        result = f"Success. New document id {data['document_id']} created"
+    elif "reason" in data:
+        result = data["reason"]
+    elif "duplicate_of" in data:
+        result = f"Not consuming: It is a duplicate of document #{data['duplicate_of']}"
+    elif "error_message" in data:
+        result = data["error_message"]
+    related = data.get("document_id") or data.get("duplicate_of")
+    return {
+        "id": task["id"],
+        "task_id": task_id,
+        "task_name": "consume_file",
+        "task_file_name": task["filename"],
+        "type": "manual_task",
+        "status": task["status"].upper(),
+        "date_created": "2026-10-13T10:00:00+02:00",
+        "date_done": None if task["status"] in ("pending", "started") else "2026-10-13T10:00:30+02:00",
+        "result": result,
+        "acknowledged": False,
+        "related_document": related,
+        "duplicate_documents": (
+            [{"id": data["duplicate_of"], "title": "Monthly invoice", "deleted_at": None}] if "duplicate_of" in data else []
+        ),
+        "owner": 3,
+    }
+
+
+def task_v10(task_id, task):
+    """A task as Paperless-ngx 3.x lists it in version 10 (TaskSerializerV10)."""
+    data = task["result_data"]
+    related = [] if not data else [data[key] for key in ("document_id", "duplicate_of") if key in data][:1]
+    return {
+        "id": task["id"],
+        "task_id": task_id,
+        "task_type": "consume_file",
+        "task_type_display": "Consume File",
+        "trigger_source": "api_upload",
+        "trigger_source_display": "API Upload",
+        "status": task["status"],
+        "status_display": task["status"].capitalize(),
+        "date_created": "2026-10-13T10:00:00+02:00",
+        "date_started": None if task["status"] == "pending" else "2026-10-13T10:00:01+02:00",
+        "date_done": None if task["status"] in ("pending", "started") else "2026-10-13T10:00:30+02:00",
+        "duration_seconds": None,
+        "wait_time_seconds": None,
+        "input_data": {"filename": task["filename"]},
+        "result_data": data,
+        "related_document_ids": related,
+        "acknowledged": False,
+        "owner": 3,
+    }
 
 
 def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags=None):
@@ -111,11 +226,16 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
     }
 
 
-def document_content():
-    """The content of P123, the revised one after /control/content/revised."""
+def original_content(document_id):
+    """The content of a document as the mock first serves it."""
+    return f"%PDF-1.4\nSynthetic Paperless archive document P{document_id}.\n%%EOF\n".encode("utf-8")
+
+
+def document_content(document_id):
+    """The content of a document, that of P123 the revised one after /control/content/revised."""
     with LOCK:
         revised = STATE["content"] == "revised"
-    return REVISED_CONTENT if revised else DOCUMENT_CONTENT
+    return REVISED_CONTENT if document_id == 123 and revised else original_content(document_id)
 
 
 def paperless_checksum(data):
@@ -123,6 +243,19 @@ def paperless_checksum(data):
     with LOCK:
         algorithm = STATE["checksum"]
     return hashlib.new(algorithm, data).hexdigest()
+
+
+def restored():
+    # Paperless writes the time of the restore into the document, so the app compares
+    # its checksum before it moves the copy back.
+    return document("Monthly invoice corrected", "2026-08-28T09:00:00+02:00")
+
+
+def statement():
+    # A second document, for the conflicts and the document that vanishes.
+    letter = document("Annual statement")
+    letter["id"] = 124
+    return letter
 
 
 def archived_letter(number):
@@ -167,6 +300,14 @@ def scenario_documents():
         trashed = document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")
         trashed["deleted_at"] = "2026-08-27T08:00:00+02:00"
         return [], [trashed]
+    if scenario == "restored":
+        return [restored()], []
+    if scenario == "conflict":
+        # A second document, at whose path in Nextcloud a file of the user waits.
+        return [restored(), statement()], []
+    if scenario == "vanished":
+        # The first document is gone from Paperless without passing through its trash.
+        return [statement()], []
     if scenario in ("empty", "incomplete"):
         return [], []
     if scenario == "archive":
@@ -179,6 +320,7 @@ def scenario_documents():
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        self.api_headers = {}
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self._json(200, {"status": "ok"})
@@ -191,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"detail": "Not found"})
             return
         token = self._authorized()
-        if token is None:
+        if token is None or not self._versioned():
             return
 
         documents, trash = scenario_documents()
@@ -227,7 +369,13 @@ class Handler(BaseHTTPRequestHandler):
             task_id = query.get("task_id", [""])[0]
             with LOCK:
                 task = STATE["tasks"].get(task_id)
-            self._page([] if task is None else [{"task_id": task_id, **task}])
+                paperless = STATE["paperless"]
+            if self.api_version >= 10:
+                self._page([] if task is None else [task_v10(task_id, task)])
+            else:
+                # Version 9 lists the tasks without pages.
+                render = task_v9_paperless_2 if paperless.startswith("2.") else task_v9_paperless_3
+                self._json(200, [] if task is None else [render(task_id, task)])
         elif self._showcase() and re.fullmatch(r"/api/documents/\d+/(download|metadata)/", parsed.path):
             document_id = int(parsed.path.split("/")[3])
             data = showcase.content(document_id)
@@ -239,28 +387,33 @@ class Handler(BaseHTTPRequestHandler):
                 checksum = showcase.checksum(document_id)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         elif self._scenario() == "names" and re.fullmatch(r"/api/documents/20[1-4]/(download|metadata)/", parsed.path):
+            # The documents with long or unusual names carry the first content of P123.
+            data = original_content(123)
             if parsed.path.endswith("/download/"):
-                self._bytes(200, DOCUMENT_CONTENT, "application/pdf")
+                self._bytes(200, data, "application/pdf")
             else:
-                checksum = paperless_checksum(DOCUMENT_CONTENT)
+                checksum = paperless_checksum(data)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
-        elif parsed.path == "/api/documents/123/download/":
-            with LOCK:
-                STATE["downloads"] += 1
-            self._bytes(200, document_content(), "application/pdf")
-        elif parsed.path == "/api/documents/123/metadata/":
-            checksum = paperless_checksum(document_content())
-            with LOCK:
-                STATE["metadataRequests"] += 1
-            self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
+        elif match := re.fullmatch(r"/api/documents/(123|124)/(download|metadata)/", parsed.path):
+            data = document_content(int(match.group(1)))
+            if match.group(2) == "download":
+                with LOCK:
+                    STATE["downloads"] += 1
+                self._bytes(200, data, "application/pdf")
+            else:
+                checksum = paperless_checksum(data)
+                with LOCK:
+                    STATE["metadataRequests"] += 1
+                self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
         else:
             self._json(404, {"detail": "Not found"})
 
     def do_POST(self):
+        self.api_headers = {}
         parsed = urlparse(self.path)
         if parsed.path.startswith("/control/scenario/"):
             scenario = parsed.path.rsplit("/", 1)[-1]
-            if scenario not in {"active", "renamed", "excluded", "trash", "incomplete", "empty", "archive", "names"} | showcase.SCENARIOS:
+            if scenario not in SCENARIOS | showcase.SCENARIOS:
                 self._json(400, {"detail": "Unknown scenario"})
                 return
             with LOCK:
@@ -285,16 +438,38 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["checksum"] = algorithm
             self._json(200, {"checksum": algorithm})
             return
+        if parsed.path.startswith("/control/paperless/"):
+            version = parsed.path.rsplit("/", 1)[-1]
+            if version not in PAPERLESS:
+                self._json(400, {"detail": "Unknown Paperless version"})
+                return
+            with LOCK:
+                STATE["paperless"] = version
+            self._json(200, {"paperless": version})
+            return
         if parsed.path.startswith("/control/tasks/"):
-            status = parsed.path.rsplit("/", 1)[-1].upper()
-            if status not in {"PENDING", "SUCCESS", "FAILURE"}:
-                self._json(400, {"detail": "Unknown task status"})
+            # The end of every task: /control/tasks/<end>.
+            end = parsed.path.rsplit("/", 1)[-1]
+            if end not in TASK_ENDS:
+                self._json(400, {"detail": "Unknown task end"})
                 return
             with LOCK:
                 for task in STATE["tasks"].values():
-                    task["status"] = status
-                    task["message"] = "Synthetic unsupported mime type" if status == "FAILURE" else ""
-            self._json(200, {"status": status})
+                    task_end(task, end, task["id"])
+            self._json(200, {"end": end})
+            return
+        if match := re.fullmatch(r"/control/task-of/([^/]+)/([a-z]+)", parsed.path):
+            # The end of the task of the last upload of a file: /control/task-of/<name>/<end>.
+            filename, end = match.groups()
+            with LOCK:
+                task_ids = [upload["taskId"] for upload in STATE["uploads"] if upload["filename"] == filename]
+                if end in TASK_ENDS and task_ids:
+                    task = STATE["tasks"][task_ids[-1]]
+                    task_end(task, end, task["id"])
+            if end not in TASK_ENDS or not task_ids:
+                self._json(400, {"detail": "Unknown task end or file"})
+                return
+            self._json(200, {"end": end})
             return
         if parsed.path == "/control/reset":
             reset_state()
@@ -304,7 +479,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"detail": "Not found"})
             return
         token = self._authorized()
-        if token is None:
+        if token is None or not self._versioned():
             return
         if "add_document" not in ACCOUNTS[token]["permissions"]:
             self._json(403, FORBIDDEN)
@@ -327,7 +502,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"document": [refusal]})
             return
         with LOCK:
-            task_id = f"task-{len(STATE['uploads']) + 1}"
+            number = len(STATE["uploads"]) + 1
+            task_id = f"task-{number}"
             STATE["uploads"].append(
                 {
                     "taskId": task_id,
@@ -335,7 +511,7 @@ class Handler(BaseHTTPRequestHandler):
                     "containsFixture": b"Synthetic inbox PDF" in body,
                 }
             )
-            STATE["tasks"][task_id] = {"status": "PENDING", "message": ""}
+            STATE["tasks"][task_id] = {"id": number, "filename": filename, "status": "pending", "result_data": None}
         self._json(200, task_id)
 
     def _showcase(self):
@@ -359,11 +535,31 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["invalidAuth"] += 1
             self._json(401, {"detail": "Invalid synthetic credentials"})
             return None
-        # Paperless-ngx names its version in every answer to an authenticated request: 2.x with
-        # the MD5 checksums of the test, 3.x with SHA-256.
-        with LOCK:
-            self.paperless_version = "2.20.15" if STATE["checksum"] == "md5" else "3.3.0"
         return token
+
+    def _versioned(self):
+        """
+        Serves the version of the API that the header Accept asks for, or the default of the
+        Paperless that the mock plays, as Django REST framework's AcceptHeaderVersioning does, and
+        refuses one that it doesn't serve with 406. An answer to a request with a token names the
+        newest version and the version of Paperless in X-Api-Version and X-Version.
+        """
+        match = re.search(r"version=([^;,\s]+)", self.headers.get("Accept", ""))
+        with LOCK:
+            paperless = STATE["paperless"]
+            versions = STATE["apiVersions"]
+            requested = match.group(1) if match else "none"
+            versions[requested] = versions.get(requested, 0) + 1
+        allowed = PAPERLESS[paperless]["allowed"]
+        if match is None:
+            self.api_version = PAPERLESS[paperless]["default"]
+        elif match.group(1).isdigit() and int(match.group(1)) in allowed:
+            self.api_version = int(match.group(1))
+        else:
+            self._json(406, {"detail": 'Invalid version in "Accept" header.'})
+            return False
+        self.api_headers = {"X-Api-Version": str(max(allowed)), "X-Version": paperless}
+        return True
 
     def _page(self, results, count=None):
         self._json(200, {"count": len(results) if count is None else count, "next": None, "previous": None, "results": results})
@@ -374,10 +570,9 @@ class Handler(BaseHTTPRequestHandler):
     def _bytes(self, status, body, content_type):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        version = getattr(self, "paperless_version", None)
-        if version is not None:
-            self.send_header("X-Version", version)
         self.send_header("Content-Length", str(len(body)))
+        for name, value in getattr(self, "api_headers", {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
 

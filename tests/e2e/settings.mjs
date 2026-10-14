@@ -14,7 +14,8 @@
 // the checklist goes when a setting that it checked changes. The form always shows what
 // the server stored, says when it holds unsaved
 // changes, and shows every result and error next to the buttons, translated, also when
-// a proxy answers with a page of its own. run.sh starts it in the image of Playwright,
+// a proxy answers with a page of its own. The CSS of Nextcloud, which styles every button
+// and input, leaves Disconnect at the end of the bar and every checkbox next to its label. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
 // Paperless and the saved configuration of run.sh are there, and it leaves that
 // configuration as it found it.
@@ -87,6 +88,8 @@ try {
 	const refresh = page.locator('#paperless-sync-refresh-status')
 	const unsaved = page.locator('#paperless-sync-unsaved')
 	const message = page.locator('#paperless-sync-message')
+	const state = page.locator('#paperless-sync-last-state')
+	const spinner = page.locator('#paperless-sync-running')
 	const required = () => token.evaluate((input) => input.required)
 	const focused = (locator) => locator.evaluate((element) => element === document.activeElement)
 	// The buttons are busy until an action has its answer; the save button stays enabled
@@ -108,6 +111,33 @@ try {
 		return event.defaultPrevented
 	})
 
+	// The CSS of Nextcloud gives every button a margin and every input the height of a
+	// button. Disconnect, which can't be undone, must still keep its distance at the end of
+	// the bar, and a checkbox must sit on the first line of its label, not below it.
+	const bar = await page.locator('.paperless-sync-actions').boundingBox()
+	const disconnect = await reset.boundingBox()
+	expect(
+		bar !== null && disconnect !== null && bar.x + bar.width - (disconnect.x + disconnect.width) <= 20 && disconnect.x - bar.x > bar.width / 2,
+		`Disconnect must sit at the right end of the bar: ${JSON.stringify({ bar, disconnect })}`,
+	)
+	const misaligned = await page.locator('.paperless-sync-switches label').evaluateAll((labels) => labels.flatMap((label) => {
+		const box = label.querySelector('input').getBoundingClientRect()
+		const text = document.createRange()
+		text.selectNodeContents(label.querySelector('span'))
+		const line = text.getClientRects()[0]
+		const offset = (box.top + box.height / 2) - (line.top + line.height / 2)
+		return Math.abs(offset) < 4 && box.height <= 24 ? [] : [`${label.textContent.trim()}: ${box.height} px high, ${offset.toFixed(1)} px off the middle of its first line`]
+	}))
+	expect(misaligned.length === 0, `Checkboxes must align with the first line of their labels: ${misaligned.join('; ')}`)
+	const interval = page.locator('[data-setting="sync_interval_minutes"]')
+	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
+	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
+	expect(
+		helpLinks.length === 5 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Every section must link to its part of the guide: ${JSON.stringify(helpLinks)}`,
+	)
+	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
+
 	const savedUrl = await url.inputValue()
 	expect(!(await required()), 'With the saved URL, the stored token must be enough.')
 	await url.fill(`${savedUrl}/other-app`)
@@ -116,6 +146,18 @@ try {
 	await url.fill(`${savedUrl}/`)
 	expect(!(await required()), 'The saved URL with a slash at its end is the same URL.')
 	console.log('Settings: another URL asks for the token again, the saved one does not.')
+
+	// The save button says whether saving tests the connection, as the server decides it:
+	// when the schedule will run or a token was entered.
+	expect((await save.textContent()) === 'Save', `With the schedule off, saving tests nothing: ${await save.textContent()}`)
+	await schedule.check()
+	expect((await save.textContent()) === 'Test connection and save', 'With the schedule on, saving tests the connection.')
+	await schedule.uncheck()
+	await token.fill(TOKEN)
+	expect((await save.textContent()) === 'Test connection and save', 'A token that was entered is tested.')
+	await token.fill('')
+	expect((await save.textContent()) === 'Save', 'Without the token, saving tests nothing again.')
+	console.log('Settings: the save button says whether saving tests the connection.')
 
 	const saves = []
 	await page.route(`**${SETTINGS}`, async (route) => {
@@ -187,7 +229,9 @@ try {
 	expect(await unsaved.isHidden(), 'The saved settings are the ones that the save sent.')
 	console.log('Settings: a change made while the server answers a save stays, as an unsaved change.')
 
-	// A token that is entered is tested, also with the schedule off.
+	// A token that is entered is tested, also with the schedule off. The setting that the
+	// message names lies under the bar of the buttons, which sticks to the bottom of the
+	// window, and the focus must bring it into view.
 	await token.fill(TOKEN)
 	await localNetwork.uncheck()
 	// Test connection leads to the setting that its failed check names, as a refused save does.
@@ -195,6 +239,7 @@ try {
 	await settle()
 	expect(await lineState('paperless') === 'failed', 'Test connection must report the refused local address.')
 	expect(await focused(localNetwork), 'The focus must move to the setting that the failed check names.')
+	await localNetwork.evaluate((input) => input.scrollIntoView({ block: 'end' }))
 	await save.click()
 	await settle()
 	const refusal = await message.textContent()
@@ -203,6 +248,13 @@ try {
 		`A refused local address must say what to do: ${refusal}`,
 	)
 	expect(await focused(localNetwork), 'The focus must move to the setting that the message names.')
+	const inView = () => {
+		const input = document.querySelector('[data-setting="paperless_local_network"]').getBoundingClientRect()
+		const bar = document.querySelector('.paperless-sync-actions').getBoundingClientRect()
+		return input.top >= 0 && input.bottom <= bar.top
+	}
+	const covered = await page.waitForFunction(inView, null, { timeout: 5000 }).then(() => false, () => true)
+	expect(!covered, `The setting with the focus must be in view, above the bar of the buttons: ${JSON.stringify(await localNetwork.boundingBox())}`)
 	await localNetwork.check()
 	await save.click()
 	await settle()
@@ -285,6 +337,26 @@ try {
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: a gateway timeout of a run says that it continues while the status shows it running, without the page of the proxy.')
 
+	// Neither the run nor the status answers: how the run ended is unknown, and the status
+	// shows the last state that the server sent, not a dry-run that never ends.
+	const stateBefore = await state.textContent()
+	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 504, contentType: 'text/html', body: GATEWAY_TIMEOUT }))
+	await page.route(`**${STATUS}`, (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<html><body>Service Unavailable</body></html>' }))
+	await dryRun.click()
+	const unknown = await messageAfter('Calculating synchronization changes…')
+	await settle()
+	expect(
+		unknown === 'The web server answered with status 504, and the state of the run could not be read. Choose "Refresh" to see how the run ended.',
+		`Without the status, the page must not point to it: ${unknown}`,
+	)
+	expect(
+		(await state.textContent()) === stateBefore && await spinner.isHidden(),
+		`The status must show the last state that the server sent, ${stateBefore}, not ${await state.textContent()}.`,
+	)
+	await page.unroute(`**${STATUS}`)
+	await page.unroute(`**${RUN}`)
+	console.log('Settings: when neither the run nor the status answers, the status keeps the last state that the server sent.')
+
 	// A run with errors says how many, and a refresh of the status that fails afterwards
 	// leaves that message alone.
 	await page.route(`**${RUN}`, (route) => route.fulfill({
@@ -309,6 +381,7 @@ try {
 	const withErrors = await message.textContent()
 	expect(withErrors === 'Synchronization completed with 2 errors. See the report.', `A run with errors must count them: ${withErrors}`)
 	expect(await page.locator('#paperless-sync-report').isVisible(), 'The report of the run must be shown.')
+	expect((await state.textContent()) !== 'Running' && await spinner.isHidden(), 'Without the status, the run must not look as if it were still running.')
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: a run with errors counts them, and a failed refresh of the status keeps that message.')
 
@@ -375,6 +448,7 @@ try {
 		})
 		await reset.click()
 		expect(german.startsWith('Paperless trennen? Das gespeicherte API-Token wird gelöscht'), `The question must be German: ${german}`)
+		expect((await save.textContent()) === 'Speichern', `The save button must be German: ${await save.textContent()}`)
 		expect(!(await required()), 'Dismissing the question keeps the token.')
 		console.log('Settings: the questions of the page are in the language of the administrator.')
 	} finally {

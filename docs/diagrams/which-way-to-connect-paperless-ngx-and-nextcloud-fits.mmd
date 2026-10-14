@@ -1,0 +1,28 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Which way to connect Paperless-ngx and Nextcloud fits
+    accDescr: When only files should go into Paperless, Nextcloud's Paperless integration sends single files by hand, the inbox of Paperless Sync takes every file put into a folder of Nextcloud, with the export turned off if you like, and Paperless's own consume folder, mail fetcher and apps take scans from a phone, a mail or a scanner. When the documents of Paperless should appear in Nextcloud Files, the question is whether you can install apps in your Nextcloud. If not, such as with a hosted Nextcloud, the WebDAV container or an rclone script copy them over WebDAV. If you can, and a read-only view of Paperless's own files is enough, an external-storage mount fits, of a local folder or over SMB or SFTP; for a tidy archive by correspondent, type and year, an inbox to Paperless and deletions only after confirmation, Paperless Sync. The questions are orange, the options green.
+
+    need{{"Paperless documents<br>in Nextcloud Files?"}}
+    into(["Paperless integration,<br>the inbox of<br>Paperless Sync, or<br>Paperless's consume<br>folder, mail, apps"])
+    install{{"Can you install<br>apps in Nextcloud?"}}
+    webdav(["WebDAV<br>container or<br>rclone script"])
+    view{{"A read-only view<br>of Paperless's own<br>files enough?"}}
+    mount(["External-<br>storage mount"])
+    sync(["Paperless Sync"])
+
+    need -- "no, only into<br>Paperless" --> into
+    need -- "yes" --> install
+    install -- "no, such as<br>a hosted<br>Nextcloud" --> webdav
+    install -- "yes" --> view
+    view -- "yes" --> mount
+    view -- "no: a tidy<br>archive, an inbox,<br>safe deletions" --> sync
+
+    classDef question fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef option fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class need,install,view question
+    class into,webdav,mount,sync option

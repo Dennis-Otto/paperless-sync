@@ -24,8 +24,8 @@ A dedicated account with an API token, which can view and download the documents
 
 The files of the archive are a mirror of Paperless, and they are read-only by intent. An edit stays while its document stays the same in Paperless. When the document changes there, a run may write the file anew from Paperless, depending on the change, and the [conflict policy](guide.md#conflict-policy) decides about your edit:
 
-- **Replace synchronized file**, the default: the file of Paperless takes the place of your edit. A scheduled run puts your edited file, with its versions, into the trash bin of the target user; a run started with *Synchronize now* deletes it for good ([#119](https://github.com/Dennis-Otto/paperless-sync/issues/119)).
-- **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated.
+- **Replace synchronized file**, the default: the run writes the content of Paperless into the same file, so its shares and versions stay. Your edit remains as an earlier version, under *Versions* in the details of the file: in a scheduled run, and in a run started with *Synchronize now* only when the administrator who starts it is the target user; otherwise it is lost.
+- **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated. A copy that nobody edited is no conflict, and the run updates it.
 
 A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless.
 
@@ -44,30 +44,10 @@ It depends on what deletes them:
 
 Every copy that the app deletes in Nextcloud, and every folder that it empties, takes this way:
 
-```mermaid
-flowchart TB
-    accTitle: Where a copy goes that Paperless Sync deletes
-    accDescr: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, a scheduled run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends. A run started with Synchronize now deletes it for good, which issue 119 tracks.
-
-    deleted(["The app deletes<br>a copy"])
-    trashbin{"Deleted files<br>of Nextcloud on?"}
-    who{"Who started<br>the run?"}
-    kept["🗑️ Trash bin of the<br>target user, to restore<br>until its retention ends"]
-    gone["Gone for good"]
-
-    deleted --> trashbin
-    trashbin -- "no" --> gone
-    trashbin -- "yes" --> who
-    who -- "the schedule" --> kept
-    who -- "Synchronize now,<br>#119" --> gone
-
-    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
-    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
-    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
-    class trashbin,who check
-    class kept kept
-    class gone refused
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.dark.svg">
+  <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.svg" alt="Where a copy goes that Paperless Sync deletes: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, a scheduled run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends. A run started with Synchronize now deletes it for good, which issue 119 tracks.">
+</picture>
 
 Only the target user sees that trash bin, under *Deleted files* in *Files*. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
 
@@ -89,7 +69,7 @@ Yes, the files belong to the target user, so the quota of that user applies. Whe
 
 ### Does it work with object storage such as S3?
 
-Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) adds S3 to the end-to-end tests.
+Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) tracks adding S3 to the end-to-end tests.
 
 ## Setup and operation
 
@@ -99,7 +79,7 @@ About the number of documents divided by the batch size, times the interval: wit
 
 ### How often does it run?
 
-At the interval of the settings, 5 minutes by default, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, so a shorter interval acts as five minutes, and only when its system cron runs. A run that is still busy holds back the next one. *Synchronize now* starts a run at once, and a dry-run shows what a run would change without changing it.
+At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* starts a run at once, and the interval then counts from it. A dry-run shows what a run would change without changing it, and doesn't move the next run.
 
 ### Can I connect several Paperless instances?
 
@@ -121,7 +101,7 @@ Yes, with the setting **Paperless runs in my local network**, which allows the a
 
 ### How do I uninstall Paperless Sync?
 
-1. Choose **Disconnect** in its settings, which deletes the settings and the API token.
+1. Choose **Disconnect** in its settings, which deletes the API token and turns off the schedule and **Paperless runs in my local network**. The other settings stay, for a later connection, until you delete the records of the app below.
 2. Remove the app under *Apps*, or with `occ app:remove paperless_sync`.
 
-Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. To remove them for good, an administrator of the database drops both tables and also deletes the records of the app, which tell Nextcloud that the tables exist: `DELETE FROM oc_migrations WHERE app = 'paperless_sync'` and `DELETE FROM oc_appconfig WHERE appid = 'paperless_sync'`, with your prefix. Dropping only the tables breaks a later installation, which then skips creating them.
+Paperless stays as it is, and the archive stays in the files of the target user as ordinary files, which you can keep, move or delete. Nextcloud leaves the two tables of the app in its database, `paperless_sync_export` and `paperless_sync_import`, with the prefix of your installation, such as `oc_`: a later installation goes on from them. To remove them for good, an administrator of the database drops both tables and also deletes the records of the app, which tell Nextcloud that the tables exist and hold its settings: `DELETE FROM oc_migrations WHERE app = 'paperless_sync'` and `DELETE FROM oc_appconfig WHERE appid = 'paperless_sync'`, with your prefix. Dropping only the tables breaks a later installation, which then skips creating them.

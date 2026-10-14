@@ -26,12 +26,14 @@ final class SyncJob extends TimedJob {
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
-		$this->setInterval(300);
+		// Every five minutes, the shortest interval that the settings accept.
+		$this->setInterval(ConfigService::MINIMUM_INTERVAL_MINUTES * 60);
 		$this->setAllowParallelRuns(false);
 	}
 
 	protected function run(mixed $argument): void {
-		// The settings page shows the same time as the next scheduled run.
+		// The settings page shows the same time as the next scheduled run. It counts from the last
+		// real run, so that a dry-run doesn't push the schedule back.
 		$nextRun = $this->statusService->nextRun($this->configService->get());
 		if ($nextRun === null || $this->time->getTime() < $nextRun) {
 			return;

@@ -59,6 +59,22 @@ final class ConnectionCheckTest extends TestCase {
 		);
 	}
 
+	/** A message that ends with a URL, as one of Guzzle does, gets a full stop before the hint. */
+	public function testTheHintOfALineIsASentenceOfItsOwn(): void {
+		$line = ConnectionCheck::failed(
+			ConnectionCheck::PAPERLESS,
+			'Paperless could not be reached: %s',
+			['cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/ '],
+			'Check the Paperless URL, and that the Nextcloud server reaches it through its network, firewall and proxy.',
+			true,
+		);
+
+		self::assertSame(
+			'Paperless war nicht erreichbar: cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/. Prüfe die Paperless-Adresse und ob der Nextcloud-Server sie über sein Netzwerk, seine Firewall und seinen Proxy erreicht.',
+			$line->translatedText($this->germanL10n()),
+		);
+	}
+
 	public function testALineWithoutAHintIsItsMessage(): void {
 		$line = ConnectionCheck::passed(ConnectionCheck::DOCUMENTS, 'Visible to the account: %s', ['12']);
 

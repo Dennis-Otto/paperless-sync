@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of an issue
+    accDescr: You open an issue. The issue assistant labels it from its form and gives a first analysis, written by an AI that only reads. When it needs more information, the issue lifecycle reminds you after 15 days and closes the issue after 30 days without an answer, and your answer goes back to the assistant; a possible duplicate closes after 3 days unless someone objects. Otherwise a pull request fixes the issue; when it merges, the issue gets the label fixed-in-next-release, and the release that ships the fix closes it with a link to the release, in the milestone of the release. You are orange, the bots blue, and the closed issue green.
+
+    issue(["You open<br>an issue"])
+    assistant["Issue assistant:<br>labels and a first<br>analysis by an AI<br>that only reads"]
+    lifecycle["Issue lifecycle:<br>asks for more, reminds<br>after 15 days, closes<br>after 30; a possible<br>duplicate after 3"]
+    fix["A pull request<br>with Fixes #123<br>merges: label<br>fixed-in-next-<br>release"]
+    release(["The release<br>closes the issue<br>with a link, in<br>its milestone"])
+
+    issue --> assistant
+    assistant --> lifecycle & fix
+    lifecycle -- "you<br>answer" --> assistant
+    fix --> release
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class issue yours
+    class assistant,lifecycle,fix bots
+    class release result

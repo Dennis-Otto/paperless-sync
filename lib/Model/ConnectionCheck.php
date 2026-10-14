@@ -99,11 +99,19 @@ final class ConnectionCheck {
 		];
 	}
 
-	/** The message and the hint in the language of the administrator, as one text. */
+	/**
+	 * The message and the hint in the language of the administrator, as one text. The hint starts
+	 * a sentence of its own, also after a message without a full stop at its end, such as one of
+	 * Guzzle while Paperless is down, which ends with the URL.
+	 */
 	public function translatedText(IL10N $l10n): string {
 		$line = $this->translated($l10n);
+		if ($line['hint'] === '') {
+			return $line['message'];
+		}
+		$message = rtrim($line['message']);
 
-		return $line['hint'] === '' ? $line['message'] : $line['message'] . ' ' . $line['hint'];
+		return (preg_match('/[.!?]$/', $message) === 1 ? $message : $message . '.') . ' ' . $line['hint'];
 	}
 
 	private function label(IL10N $l10n): string {

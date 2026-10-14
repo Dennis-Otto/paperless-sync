@@ -17,8 +17,40 @@ PROJECT_NAME="${E2E_PROJECT_NAME:-paperless_sync_e2e}"
 PASSWORD="e2e-only-password"
 BASE_URL="http://127.0.0.1:${E2E_PORT}"
 DAV_BASE="${BASE_URL}/remote.php/dav/files"
-TMP_DIR="$(mktemp -d)"
 COMPOSE=("${DOCKER_BIN}" compose --project-name "${PROJECT_NAME}" --file "${SCRIPT_DIR}/compose.yaml")
+# The database of Nextcloud: SQLite in its own files, or MariaDB (mysql) or PostgreSQL
+# (pgsql) in a container of compose.<database>.yaml. Its primary storage: its disk
+# (local), or an object store with the API of S3 in a container of compose.s3.yaml.
+E2E_DATABASE="${E2E_DATABASE:-sqlite}"
+E2E_OBJECTSTORE="${E2E_OBJECTSTORE:-local}"
+case "${E2E_DATABASE}" in
+	sqlite) DATABASE_NAME=SQLite DATABASE_TYPE=sqlite3 ;;
+	mysql) DATABASE_NAME=MariaDB DATABASE_TYPE=mysql ;;
+	pgsql) DATABASE_NAME=PostgreSQL DATABASE_TYPE=pgsql ;;
+	*)
+		echo "E2E_DATABASE=${E2E_DATABASE} is none of sqlite, mysql and pgsql." >&2
+		exit 1
+		;;
+esac
+if [[ "${E2E_DATABASE}" != sqlite ]]; then
+	COMPOSE+=(--file "${SCRIPT_DIR}/compose.${E2E_DATABASE}.yaml")
+fi
+case "${E2E_OBJECTSTORE}" in
+	local) STORAGE_NAME="local storage" ;;
+	s3)
+		STORAGE_NAME="S3 object storage"
+		COMPOSE+=(--file "${SCRIPT_DIR}/compose.s3.yaml")
+		;;
+	*)
+		echo "E2E_OBJECTSTORE=${E2E_OBJECTSTORE} is neither local nor s3." >&2
+		exit 1
+		;;
+esac
+# E2E_ACCESSIBILITY=0 leaves out the checks in the browser at the end, accessibility.mjs and
+# settings.mjs, which don't depend on the database or the storage; run-all.sh runs them once
+# for every version.
+E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
+TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
 # playwright-core in package.json; Renovate updates both together, and
 # scripts/check-project.sh compares them.
@@ -56,16 +88,34 @@ occ() {
 	"${COMPOSE[@]}" exec -T --user www-data nextcloud php occ "$@"
 }
 
+# Checks a JSON file in one of the modes of assert_json.py, some with a value to
+# compare, such as the time of an earlier run.
 assert_json() {
 	mode="$1"
 	file="$2"
-	"${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_json.py "${mode}" < "${file}"
+	"${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_json.py "${mode}" "${@:3}" < "${file}"
+}
+
+# A value of the JSON on standard input, by its keys and indexes: json_value 0 id.
+json_value() {
+	"${COMPOSE[@]}" exec -T paperless-mock python -c '
+import json, sys
+value = json.load(sys.stdin)
+for key in sys.argv[1:]:
+    value = value[int(key)] if isinstance(value, list) else value[key]
+print(value)' "$@"
 }
 
 control() {
 	path="$1"
 	"${COMPOSE[@]}" exec -T paperless-mock python -c \
 		"import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8080${path}', method='POST')).read()"
+}
+
+# What the Paperless mock has seen: downloads, uploads and refused requests.
+mock_state() {
+	"${COMPOSE[@]}" exec -T paperless-mock python -c \
+		"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())"
 }
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
@@ -90,6 +140,49 @@ accessibility() {
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs'
+}
+
+# Saves settings as the administration settings do, such as conflict_mode=skip; the
+# others keep their values, and so does the token.
+save_settings() {
+	output="$1"
+	shift
+	settings=()
+	for setting in "$@"; do
+		settings+=(--data-urlencode "settings[${setting%%=*}]=${setting#*=}")
+	done
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		"${settings[@]}" \
+		--output "${output}" \
+		"${BASE_URL}/apps/paperless_sync/settings"
+}
+
+# The times when the last run started, completed and ended, from which the background job
+# computes its next run, as it reads them from the database.
+last_run() {
+	for key in status_last_started status_last_completed status_last_ended; do
+		printf '%s ' "$(occ config:app:get paperless_sync "${key}")"
+	done
+}
+
+# Checks the status of a run in another process, such as the background job, as the
+# web server shows it: it keeps the config of the apps for up to 3 seconds
+# (AppConfig::LOCAL_CACHE_TTL), so it may show the run a little later.
+assert_status_soon() {
+	mode="$1"
+	output="$2"
+	for _ in $(seq 1 20); do
+		sync_status "${output}"
+		if assert_json "${mode}" "${output}" "${@:3}" 2>/dev/null; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	assert_json "${mode}" "${output}" "${@:3}"
 }
 
 sync_run() {
@@ -134,6 +227,17 @@ assert_dav_missing() {
 		echo "Expected missing or inaccessible WebDAV path, got HTTP ${status}: ${path}" >&2
 		exit 1
 	fi
+}
+
+dav_upload() {
+	user="$1"
+	path="$2"
+	content="$3"
+	printf '%s\n' "${content}" \
+		| curl --fail-with-body --silent --show-error \
+			--user "${user}:${PASSWORD}" \
+			--upload-file - \
+			"${DAV_BASE}/${user}/${path}" >/dev/null
 }
 
 assert_dav_file() {
@@ -186,20 +290,44 @@ INITIAL_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26
 RENAMED_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 TRASH_PATH='Documents/Paperless/Archive/_Deleted/2026-08-27/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 ERROR_PATH='Documents/Paperless/Errors/broken.pdf'
+STATEMENT_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Annual%20statement%20%5BP124%5D.pdf'
 
 cd "${REPOSITORY_ROOT}"
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
-if ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+# The seconds since the start at the end of each phase show where a slow run spends them.
+echo "The containers run after ${SECONDS} s."
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!
 fi
 
+install_options=(--database="${E2E_DATABASE}")
+case "${E2E_DATABASE}" in
+	mysql) install_options+=(--database-host=mariadb) ;;
+	pgsql) install_options+=(--database-host=postgres) ;;
+esac
+if [[ "${E2E_DATABASE}" != sqlite ]]; then
+	install_options+=(--database-name=nextcloud --database-user=nextcloud --database-pass="${PASSWORD}")
+fi
 if ! occ status --output=json 2>/dev/null | grep --fixed-strings '"installed":true' >/dev/null; then
 	occ maintenance:install \
-		--database=sqlite \
+		"${install_options[@]}" \
 		--admin-user=e2e-admin \
 		--admin-pass="${PASSWORD}" >/dev/null
+fi
+# Nextcloud runs on the database and the storage asked for, so that a variant can't
+# pass on SQLite and the disk by mistake.
+INSTALLED_TYPE="$(occ config:system:get dbtype)"
+OBJECTSTORE_CLASS="$(occ config:system:get objectstore class 2>/dev/null || true)"
+if [[ "${INSTALLED_TYPE}" != "${DATABASE_TYPE}" ]]; then
+	echo "Nextcloud runs on the database ${INSTALLED_TYPE}, not on ${DATABASE_TYPE}." >&2
+	exit 1
+fi
+if [[ "${E2E_OBJECTSTORE}" == s3 && "${OBJECTSTORE_CLASS}" != *'\ObjectStore\S3' ]] ||
+	[[ "${E2E_OBJECTSTORE}" == local && -n "${OBJECTSTORE_CLASS}" ]]; then
+	echo "Nextcloud keeps its files in ${OBJECTSTORE_CLASS:-local storage}, not in ${STORAGE_NAME}." >&2
+	exit 1
 fi
 occ config:system:set trusted_domains 1 --value=127.0.0.1 >/dev/null
 # The browser of the accessibility check reaches Nextcloud by its name in the network.
@@ -212,7 +340,7 @@ occ config:system:delete allow_local_remote_servers >/dev/null
 # request to the internet that the tests don't need and that can fail.
 occ config:app:set password_policy enforceHaveIBeenPwned --type=boolean --value=false >/dev/null
 NEXTCLOUD_VERSION="$(occ status --output=json | grep -oE '"versionstring":"[^"]+"' | cut -d '"' -f 4 || true)"
-echo "The tests run against Nextcloud ${NEXTCLOUD_VERSION:-?}."
+echo "The tests run against Nextcloud ${NEXTCLOUD_VERSION:-?} on ${DATABASE_NAME}, with ${STORAGE_NAME}."
 
 for user in sync-target e2e-other; do
 	"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \
@@ -230,10 +358,14 @@ occ router:list \
 	| grep --fixed-strings 'paperless_sync.settings.save' \
 	| grep --fixed-strings '/apps/paperless_sync/settings' >/dev/null
 occ background-job:list | grep --fixed-strings 'OCA\PaperlessSync\Cron\SyncJob' >/dev/null
+# Background jobs run only when the tests start them, as system cron would: a page
+# that the accessibility check opens doesn't start them as well.
+occ background:cron >/dev/null
 # The first-run wizard would cover the pages that the accessibility check opens.
 occ app:disable firstrunwizard >/dev/null 2>&1 || true
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
+echo "Nextcloud and the app are set up after ${SECONDS} s."
 
 # The administration settings render the form with all of its routes.
 curl --fail-with-body --silent --show-error \
@@ -402,9 +534,7 @@ assert_json move "${TMP_DIR}/move-md5-back.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
 assert_file_id "${RENAMED_PATH}"
 control /control/checksum/sha256 >/dev/null
-"${COMPOSE[@]}" exec -T paperless-mock python -c \
-	"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())" \
-	> "${TMP_DIR}/mock-after-move.json"
+mock_state > "${TMP_DIR}/mock-after-move.json"
 assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
 
 # A new content of the document updates its file in place, in a run by hand: the file keeps its
@@ -426,19 +556,39 @@ assert_json export "${TMP_DIR}/revised.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
 assert_file_id "${RENAMED_PATH}"
 assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
-# In the background job, as system cron starts it, the versions app of Nextcloud also keeps the
-# previous content as a version. The job runs when synchronization is enabled and the interval
-# since the last run has passed, here as if that run was an hour ago.
+# The background job, as system cron starts it. Until synchronization is enabled, it does
+# nothing. Then it runs when the interval since the last run has passed, here as if that run was
+# an hour ago, also right after a dry-run: a dry-run changes nothing, so it doesn't push the
+# schedule back. Started again at once, the job waits for the interval. In the job, the versions
+# app of Nextcloud also keeps the previous content as a version.
 VERSIONS_BEFORE="$(version_count)"
 control /control/content/original >/dev/null
 HOUR_AGO="$(($(date +%s) - 3600))"
-for key in status_last_started status_last_completed status_last_ended; do
+for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
 	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
 done
-occ config:app:set paperless_sync sync_enabled --type=boolean --value=1 >/dev/null
-JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | grep -oE '"id":"?[0-9]+' | grep -oE '[0-9]+')"
+JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-occ config:app:set paperless_sync sync_enabled --type=boolean --value=0 >/dev/null
+if [[ "$(last_run)" != "${HOUR_AGO} ${HOUR_AGO} ${HOUR_AGO} " ]]; then
+	echo 'The background job synchronized while synchronization was disabled.' >&2
+	exit 1
+fi
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+# With the schedule on, saving tests the connection first.
+save_settings "${TMP_DIR}/enabled.json" enabled=1
+assert_json enabled "${TMP_DIR}/enabled.json"
+sync_run true "${TMP_DIR}/dry-run-before-job.json"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
+LAST_RUN="$(last_run)"
+occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
+	echo 'The background job ran again before its interval had passed.' >&2
+	exit 1
+fi
+# The schedule goes off again, as the steps after this one and settings.mjs expect it.
+save_settings "${TMP_DIR}/disabled.json" enabled=0
+assert_json disabled "${TMP_DIR}/disabled.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
 assert_file_id "${RENAMED_PATH}"
 VERSIONS_AFTER="$(version_count)"
@@ -499,11 +649,7 @@ if [[ "${MKCOL_STATUS}" != "201" && "${MKCOL_STATUS}" != "405" ]]; then
 	echo "Unexpected WebDAV MKCOL status: ${MKCOL_STATUS}" >&2
 	exit 1
 fi
-printf '%s\n' '%PDF-1.4 Synthetic inbox PDF policy.' \
-	| curl --fail-with-body --silent --show-error \
-		--user "sync-target:${PASSWORD}" \
-		--upload-file - \
-		"${DAV_BASE}/sync-target/Documents/Paperless/Inbox/Insurance/policy.pdf" >/dev/null
+dav_upload sync-target 'Documents/Paperless/Inbox/Insurance/policy.pdf' '%PDF-1.4 Synthetic inbox PDF policy.'
 sync_run false "${TMP_DIR}/import-submitted.json"
 assert_json import-submitted "${TMP_DIR}/import-submitted.json"
 control /control/tasks/success >/dev/null
@@ -511,11 +657,7 @@ sync_run false "${TMP_DIR}/import-success.json"
 assert_json import-success "${TMP_DIR}/import-success.json"
 assert_dav_missing sync-target 'Documents/Paperless/Inbox/Insurance/policy.pdf'
 
-printf '%s\n' '%PDF-1.4 Synthetic inbox PDF broken.' \
-	| curl --fail-with-body --silent --show-error \
-		--user "sync-target:${PASSWORD}" \
-		--upload-file - \
-		"${DAV_BASE}/sync-target/Documents/Paperless/Inbox/broken.pdf" >/dev/null
+dav_upload sync-target 'Documents/Paperless/Inbox/broken.pdf' '%PDF-1.4 Synthetic inbox PDF broken.'
 sync_run false "${TMP_DIR}/failed-submitted.json"
 assert_json import-submitted "${TMP_DIR}/failed-submitted.json"
 control /control/tasks/failure >/dev/null
@@ -523,16 +665,29 @@ sync_run false "${TMP_DIR}/import-failed.json"
 assert_json import-failed "${TMP_DIR}/import-failed.json"
 assert_dav_missing sync-target 'Documents/Paperless/Inbox/broken.pdf'
 assert_dav_file sync-target "${ERROR_PATH}" 'Synthetic inbox PDF broken.'
-assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'Synthetic unsupported mime type'
+assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'broken.pdf: Synthetic unsupported mime type'
 assert_dav_missing e2e-other "${ERROR_PATH}"
+
+# A duplicate and a task that Paperless revoked end their imports too, with what Paperless
+# said, here in the shapes of Paperless-ngx 2.20, whose status then names its version.
+dav_upload sync-target 'Documents/Paperless/Inbox/copy.pdf' '%PDF-1.4 Synthetic inbox PDF copy.'
+dav_upload sync-target 'Documents/Paperless/Inbox/cancelled.pdf' '%PDF-1.4 Synthetic inbox PDF cancelled.'
+sync_run false "${TMP_DIR}/ended-submitted.json"
+assert_json import-submitted "${TMP_DIR}/ended-submitted.json" 2
+control /control/task-of/copy.pdf/duplicate >/dev/null
+control /control/task-of/cancelled.pdf/revoked >/dev/null
+control /control/paperless/2.20.15 >/dev/null
+sync_run false "${TMP_DIR}/import-ended.json"
+assert_json import-failed "${TMP_DIR}/import-ended.json" 2
+assert_dav_file sync-target 'Documents/Paperless/Errors/copy.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
+assert_dav_file sync-target 'Documents/Paperless/Errors/cancelled.pdf.error.txt' 'Paperless cancelled the task before it finished (REVOKED)'
+sync_status "${TMP_DIR}/status-paperless-2.json"
+assert_json paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
+control /control/paperless/3.3.0 >/dev/null
 
 # Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
 # the runs after it don't upload it again until it changes.
-printf '%s\n' 'Synthetic unsupported file.' \
-	| curl --fail-with-body --silent --show-error \
-		--user "sync-target:${PASSWORD}" \
-		--upload-file - \
-		"${DAV_BASE}/sync-target/Documents/Paperless/Inbox/notes.bin" >/dev/null
+dav_upload sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
 sync_run false "${TMP_DIR}/import-rejected.json"
 assert_json import-rejected "${TMP_DIR}/import-rejected.json"
 sync_run false "${TMP_DIR}/import-waiting.json"
@@ -542,10 +697,75 @@ assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic uns
 sync_status "${TMP_DIR}/status.json"
 assert_json status "${TMP_DIR}/status.json"
 
-"${COMPOSE[@]}" exec -T paperless-mock python -c \
-	"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())" \
-	> "${TMP_DIR}/mock-final.json"
+mock_state > "${TMP_DIR}/mock-final.json"
 assert_json mock-final "${TMP_DIR}/mock-final.json"
+
+# The deleted document is back in Paperless, and the next run exports it again.
+control /control/scenario/renamed >/dev/null
+sync_run false "${TMP_DIR}/export-again.json"
+assert_json export "${TMP_DIR}/export-again.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+
+# Restored from the trash of Paperless, a document gets its copy back from the deleted
+# folder, without a download, and the deleted folder goes when it is empty.
+control /control/scenario/trash >/dev/null
+sync_run false "${TMP_DIR}/trash-again.json"
+assert_json trash "${TMP_DIR}/trash-again.json"
+assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+DOWNLOADS="$(mock_state | json_value downloads)"
+control /control/scenario/restored >/dev/null
+sync_run false "${TMP_DIR}/restored.json"
+assert_json restored "${TMP_DIR}/restored.json"
+assert_dav_missing sync-target "${TRASH_PATH}"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/_Deleted')" != "404" ]]; then
+	echo 'The empty deleted folder was not pruned after the restore.' >&2
+	exit 1
+fi
+mock_state > "${TMP_DIR}/mock-restored.json"
+assert_json mock-no-download "${TMP_DIR}/mock-restored.json" "${DOWNLOADS}"
+
+# With conflict_mode=skip, a file of the user at the path of a new document stays as
+# it is, and the run reports the conflict without downloading the document in vain;
+# with replace, the document takes its place.
+dav_upload sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
+save_settings "${TMP_DIR}/conflict-skip.json" conflict_mode=skip
+assert_json conflict-skip "${TMP_DIR}/conflict-skip.json"
+control /control/scenario/conflict >/dev/null
+DOWNLOADS="$(mock_state | json_value downloads)"
+sync_run false "${TMP_DIR}/conflict.json"
+assert_json conflict "${TMP_DIR}/conflict.json"
+assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
+mock_state > "${TMP_DIR}/mock-conflict.json"
+assert_json mock-no-download "${TMP_DIR}/mock-conflict.json" "${DOWNLOADS}"
+save_settings "${TMP_DIR}/conflict-replace.json" conflict_mode=replace
+assert_json conflict-replace "${TMP_DIR}/conflict-replace.json"
+sync_run false "${TMP_DIR}/conflict-replaced.json"
+assert_json conflict-replaced "${TMP_DIR}/conflict-replaced.json"
+assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic Paperless archive document P124.'
+
+# A document that vanishes from Paperless without passing through its trash keeps its
+# copy for the grace runs, then the copy moves to the deleted folder of that day. As
+# direct deletion is not allowed, the runs after it leave the copy there.
+control /control/scenario/vanished >/dev/null
+sync_run false "${TMP_DIR}/vanished-wait.json"
+assert_json vanished-wait "${TMP_DIR}/vanished-wait.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+DAY_BEFORE="$(date -u +%F)"
+sync_run false "${TMP_DIR}/vanished.json"
+DAY_AFTER="$(date -u +%F)"
+assert_json vanished "${TMP_DIR}/vanished.json"
+assert_dav_missing sync-target "${RENAMED_PATH}"
+for day in "${DAY_BEFORE}" "${DAY_AFTER}"; do
+	VANISHED_PATH="Documents/Paperless/Archive/_Deleted/${day}/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf"
+	if [[ "$(dav_status sync-target GET "${VANISHED_PATH}")" == "200" ]]; then
+		break
+	fi
+done
+assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
+sync_run false "${TMP_DIR}/vanished-kept.json"
+assert_json vanished-kept "${TMP_DIR}/vanished-kept.json"
+assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
 
 # Titles and names that the path template must take as they are: "$1" and "{{ … }}"
 # stay text, and names in Chinese, emoji and Cyrillic shrink to the bytes that Nextcloud
@@ -561,13 +781,36 @@ for path in "${NAMED_PATHS[@]}"; do
 	assert_dav_file sync-target "${path}" 'Synthetic Paperless archive document P123.'
 done
 
+echo "The scenarios pass after ${SECONDS} s."
+
 # The administration settings and the report of a dry-run over a larger archive meet
 # WCAG 2.1 AA.
-control /control/scenario/archive >/dev/null
-accessibility
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
+	control /control/scenario/archive >/dev/null
+	accessibility
+	echo "The accessibility check passes after ${SECONDS} s."
+fi
 
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
+
+# A Paperless-ngx before 2.16 doesn't serve version 9 of its API, which every request of the app
+# asks for, so a run says which Paperless it needs instead of reading answers of another shape.
+control /control/paperless/2.15.3 >/dev/null
+OLD_PAPERLESS_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=true' \
+	--output "${TMP_DIR}/old-paperless.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+control /control/paperless/3.3.0 >/dev/null
+if [[ "${OLD_PAPERLESS_STATUS}" != "500" ]] || ! grep --fixed-strings 'Paperless Sync needs Paperless-ngx 2.16 or newer' "${TMP_DIR}/old-paperless.json" >/dev/null; then
+	echo "A run against Paperless-ngx 2.15 did not name the Paperless it needs: HTTP ${OLD_PAPERLESS_STATUS}, $(cat "${TMP_DIR}/old-paperless.json")" >&2
+	exit 1
+fi
 
 # A run that can't reach Paperless, the most common failure, logs its error without the token,
 # although Nextcloud writes the arguments of every frame of the trace of an exception. It comes
@@ -640,4 +883,8 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-echo 'Docker E2E passed: a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, long and unusual names, access isolation, accessibility, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token.'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
+	checks="${checks}, accessibility, the settings in the browser"
+fi
+echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token."

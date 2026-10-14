@@ -4,8 +4,9 @@
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
-# website, the versions in the README, the description of the app, and the JavaScript
-# of the settings and the translations, which have no build step.
+# website, the versions in the README, the description of the app, the check of its
+# package, and the JavaScript of the settings and the translations, which have no build
+# step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -47,8 +48,33 @@ for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e
   mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
   .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
-  composer.lock screenshots/01-admin-settings.png; do
+  composer.lock screenshots/01-admin-settings.png scripts/check-package.sh \
+  tests/package/test_check_package.sh; do
   expect skip "$path"
+done
+
+# Of those, a change that can behave differently on another database or storage runs
+# PostgreSQL, MariaDB and the object store as well.
+expect_variants() {
+  local expected="$1" path="$2" actual=skip
+  if path_affects_variants "$path"; then
+    actual=run
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    echo "A change of $path should $expected the other databases and the object store, but tests/e2e/affected.sh says $actual."
+    problems=$((problems + 1))
+  fi
+}
+for path in lib/Migration/Version000110Date20261008000000.php lib/Service/SyncStateRepository.php \
+  lib/Service/SyncStateRepositoryInterface.php lib/Service/NextcloudStorageService.php \
+  lib/Service/NextcloudStorageInterface.php lib/Service/PaperlessApiService.php \
+  tests/e2e/compose.s3.yaml tests/e2e/run-all.sh .github/workflows/e2e.yml; do
+  expect_variants run "$path"
+done
+for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
+  lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
+  tests/e2e/README.md README.md; do
+  expect_variants skip "$path"
 done
 
 # A change of appinfo/info.xml, as git diff --unified=0 shows it. A release writes
@@ -99,18 +125,18 @@ decision() {
   rm -f "$output"
   echo "$result"
 }
-if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != affected=true ]]; then
+if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true\nvariants=true' ]]; then
   echo "tests/e2e/affected.sh should run the end-to-end tests when it can't compare the commits."
   problems=$((problems + 1))
 fi
-if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != affected=false ]]; then
+if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false\nvariants=false' ]]; then
   echo "tests/e2e/affected.sh HEAD HEAD should find nothing that runs the end-to-end tests."
   problems=$((problems + 1))
 fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest."
+echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads."
 
 printf '\n== %s\n' "Icon of the website"
 # The website shows the icon of the app as its logo, its favicon and on its preview
@@ -224,6 +250,13 @@ if [[ -z "$description" || "$website" != "$description" || "$composer" != "$desc
   exit 1
 fi
 echo "GitHub, the website and Composer describe the app in the same words."
+
+printf '\n== %s\n' "Check of the package"
+# scripts/check-package.sh, which scripts/check.sh runs on the package of krankerl and
+# the release workflow on the package of every release, with the packages it must
+# reject: one that lacks a runtime file, or holds a stray, changed or linked one, or the
+# wrong signature. In a throwaway repository, without krankerl.
+bash tests/package/test_check_package.sh
 
 printf '\n== %s\n' "JavaScript and translations"
 if ! command -v node >/dev/null 2>&1; then

@@ -235,6 +235,24 @@ final class SettingsControllerTest extends TestCase {
 	}
 
 	/**
+	 * The hint starts a sentence of its own, also after a message without a full stop at its end,
+	 * such as one of Guzzle while Paperless is down, which ends with the URL.
+	 */
+	public function testTheHintOfTheScheduleIsASentenceOfItsOwn(): void {
+		$this->configService()->save(self::validSettings() + ['enabled' => true], 'secret-token');
+		$this->preflightFailure = new RuntimeException(
+			'cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/ ',
+		);
+
+		$response = $this->controller->save(self::validSettings() + ['enabled' => true]);
+
+		self::assertSame(
+			'Could not validate the Paperless and Nextcloud configuration: cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/. ' . self::TURN_OFF_THE_SCHEDULE,
+			$response->getData()['message'],
+		);
+	}
+
+	/**
 	 * A save that fails after the checks passed, such as in the credentials store, is no failure
 	 * of the schedule: the answer names no setting, so the page doesn't send the administrator to
 	 * the schedule, whose test passed.

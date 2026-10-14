@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The way of a request from Nextcloud to Paperless, and the error of each step
+    accDescr: A request of Paperless Sync passes seven steps before Paperless answers with the documents. An address of the local network needs the setting Paperless runs in my local network, or Nextcloud blocks it. The name must resolve and Paperless must answer at its port, or the message has cURL error 6 or 7. A certificate of HTTPS must be one that Nextcloud trusts, or the message has cURL error 60. The URL must lead to the API of Paperless, or the answer is 404 Not Found, or a page of a login that is no JSON. Paperless must serve version 9 of its API, as Paperless-ngx 2.16 and newer do, or the answer is 406 Not Acceptable. The token must be valid, or the answer is 401 Unauthorized. Finally, the account must see every list that a run reads, or the answer is 403 Forbidden: Test connection marks that list as failed, with the permission to grant.
+
+    request(["Paperless Sync<br>asks Paperless"])
+    local["`**Address allowed?**<br>*else: Nextcloud blocks<br>local addresses*`"]
+    reach["`**Name resolves,<br>port answers?**<br>*else: cURL error 6 or 7*`"]
+    tls["`**Certificate trusted?**<br>*else: cURL error 60*`"]
+    api["`**URL leads to the API?**<br>*else: 404 Not Found,<br>or invalid JSON*`"]
+    version["`**API version 9<br>served?**<br>*else: 406 Not Acceptable,<br>before Paperless-ngx 2.16*`"]
+    token["`**Token valid?**<br>*else: 401 Unauthorized*`"]
+    lists["`**Account sees<br>every list?**<br>*else: 403 Forbidden,<br>a failed line<br>of the checklist*`"]
+    done(["Paperless answers"])
+
+    request --> local --> reach --> tls --> api --> version --> token --> lists --> done
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class local,reach,tls,api,version,token,lists check
+    class done done

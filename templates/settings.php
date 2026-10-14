@@ -9,6 +9,10 @@ declare(strict_types=1);
  * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string} $_
  */
 
+use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Service\ConfigService;
+use OCP\Util;
+
 script('paperless_sync', 'settings');
 style('paperless_sync', 'settings');
 
@@ -25,6 +29,15 @@ $stateLabels = [
 	'completed-with-errors' => $l->t('Completed with errors'),
 	'failed' => $l->t('Failed'),
 ];
+// A link from a section to its part of the guide, which names the section for screen readers.
+$help = static function (string $anchor, string $section) use ($l): void {
+	print_unescaped(sprintf(
+		'<a class="paperless-sync-help" href="%s" target="_blank" rel="noreferrer noopener" aria-label="%s">%s</a>',
+		Util::sanitizeHTML(AppConstants::GUIDE_URL . '#' . $anchor),
+		Util::sanitizeHTML($l->t('Help on %s', [$section])),
+		Util::sanitizeHTML($l->t('Help')),
+	));
+};
 ?>
 
 <div
@@ -67,6 +80,7 @@ $stateLabels = [
 				<strong id="paperless-sync-next-run">—</strong>
 			</div>
 			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
+			<p id="paperless-sync-paperless-version" class="paperless-sync-status-paperless" hidden></p>
 		</div>
 		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
 			<h3 id="paperless-sync-errors-title"></h3>
@@ -78,7 +92,7 @@ $stateLabels = [
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">1</span><h3><?php p($l->t('Connection and ownership')); ?></h3></div>
-				<p><?php p($l->t('The target user owns all synchronized files. No Nextcloud password is required.')); ?></p>
+				<p><?php p($l->t('The target user owns all synchronized files. No Nextcloud password is required.')); ?> <?php $help('paperless-connection', $l->t('Connection and ownership')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field paperless-sync-field--wide">
@@ -118,7 +132,7 @@ $stateLabels = [
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">2</span><h3><?php p($l->t('Schedule and modules')); ?></h3></div>
-				<p><?php p($l->t('Keep synchronization disabled until a dry-run has been reviewed.')); ?></p>
+				<p><?php p($l->t('Keep synchronization disabled until a dry-run has been reviewed.')); ?> <?php $help('background-jobs', $l->t('Schedule and modules')); ?></p>
 			</div>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="enabled" type="checkbox" <?php if ($config->enabled) {
@@ -134,19 +148,20 @@ $stateLabels = [
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Interval in minutes')); ?></span>
-					<input data-setting="sync_interval_minutes" type="number" min="1" max="1440" value="<?php p((string)$config->syncIntervalMinutes); ?>">
+					<input data-setting="sync_interval_minutes" type="number" min="<?php p((string)ConfigService::MINIMUM_INTERVAL_MINUTES); ?>" max="<?php p((string)ConfigService::MAXIMUM_INTERVAL_MINUTES); ?>" value="<?php p((string)$config->syncIntervalMinutes); ?>" aria-describedby="paperless-sync-interval-hint">
 				</label>
 				<label class="paperless-sync-field">
 					<span><?php p($l->t('Maximum changes per module and run')); ?></span>
 					<input data-setting="batch_size" type="number" min="1" max="1000" value="<?php p((string)$config->batchSize); ?>">
 				</label>
+				<p id="paperless-sync-interval-hint" class="settings-hint paperless-sync-field--wide"><?php p($l->t('From 5 minutes to a day: Nextcloud starts background jobs every 5 minutes at most, and only with its system cron. The interval counts from the last run; a dry-run does not move the next one.')); ?></p>
 			</div>
 		</section>
 
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">3</span><h3><?php p($l->t('Structured archive')); ?></h3></div>
-				<p><?php p($l->t('Metadata changes automatically move files to their new path.')); ?></p>
+				<p><?php p($l->t('Metadata changes automatically move files to their new path.')); ?> <?php $help('path-template-variables', $l->t('Structured archive')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field">
@@ -188,7 +203,7 @@ $stateLabels = [
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">4</span><h3><?php p($l->t('Nextcloud inbox')); ?></h3></div>
-				<p><?php p($l->t('Files are submitted through the Paperless API and kept until Paperless reports success.')); ?></p>
+				<p><?php p($l->t('Files are submitted through the Paperless API and kept until Paperless reports success.')); ?> <?php $help('nextcloud-inbox', $l->t('Nextcloud inbox')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field"><span><?php p($l->t('Inbox folder')); ?></span><input data-setting="inbox_folder" type="text" value="<?php p($config->inboxFolder); ?>"></label>
@@ -207,7 +222,7 @@ $stateLabels = [
 		<section class="paperless-sync-card paperless-sync-card--danger">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">5</span><h3><?php p($l->t('Trash and deletion safety')); ?></h3></div>
-				<p><?php p($l->t('Permanent deletion is disabled by default and should be enabled only after successful parallel testing.')); ?></p>
+				<p><?php p($l->t('Permanent deletion is off by default. Turn it on only after a few runs with deletion off looked right.')); ?> <?php $help('deletion-safety', $l->t('Trash and deletion safety')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field">
@@ -230,7 +245,7 @@ $stateLabels = [
 				} ?>> <span><?php p($l->t('Permanently delete the Nextcloud file after permanent Paperless deletion')); ?></span></label>
 				<label><input data-setting="allow_direct_delete" type="checkbox" <?php if ($config->allowDirectDelete) {
 					print_unescaped('checked');
-				} ?>> <span><?php p($l->t('Also allow deletion when the app never observed the Paperless trash state')); ?></span></label>
+				} ?>> <span><?php p($l->t('Also delete copies of documents that disappeared without passing the Paperless trash')); ?></span></label>
 				<label><input data-setting="prune_empty_folders" type="checkbox" <?php if ($config->pruneEmptyFolders) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Remove empty folders after moves and deletions')); ?></span></label>
@@ -248,10 +263,10 @@ $stateLabels = [
 		</details>
 
 		<div class="paperless-sync-actions">
-			<button id="paperless-sync-save" type="submit" class="primary"><?php p($l->t('Test connection and save')); ?></button>
+			<button id="paperless-sync-save" type="submit" class="primary"><?php p($config->enabled ? $l->t('Test connection and save') : $l->t('Save')); ?></button>
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
-			<button id="paperless-sync-reset" type="button" class="paperless-sync-reset"><?php p($l->t('Disconnect')); ?></button>
+			<button id="paperless-sync-reset" type="button"><?php p($l->t('Disconnect')); ?></button>
 			<p id="paperless-sync-unsaved" class="paperless-sync-unsaved" hidden><?php p($l->t('Unsaved changes: "Run dry-run" uses the saved settings, and "Synchronize now" waits until you save.')); ?></p>
 			<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite" tabindex="-1"></p>
 		</div>

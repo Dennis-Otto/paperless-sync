@@ -1,0 +1,24 @@
+flowchart TB
+    accTitle: When a request of Paperless Sync may reach an address of the local network
+    accDescr: Every request of the app goes to the saved Paperless URL. With the setting Paperless runs in my local network on, Nextcloud allows a local address for this request and sends it. With the setting off, Nextcloud sends it only when the address is not a local one; a local address is refused, and the app says to turn the setting on. The requests of other apps keep Nextcloud's protection either way.
+
+    request(["A request of the app<br>to the saved<br>Paperless URL"])
+    setting{"Paperless runs<br>in my local<br>network?"}
+    allowed["Nextcloud allows<br>a local address<br>for this request"]
+    local{"Is the address<br>a local one?"}
+    sent["Sent to Paperless"]
+    refused["Refused: turn on<br>Paperless runs in my<br>local network"]
+    others(["Requests of<br>other apps"])
+    protected["Nextcloud refuses<br>local addresses<br>as before"]
+
+    request --> setting
+    setting -- "on" --> allowed --> sent
+    setting -- "off" --> local
+    local -- "no" --> sent
+    local -- "yes" --> refused
+    others --> protected
+
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class sent,protected done
+    class refused refused
