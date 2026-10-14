@@ -280,7 +280,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		);
 		$task = $page['results'][0] ?? null;
 		if ($task === null) {
-			return ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null];
+			return ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false];
 		}
 		$status = strtoupper(self::text($task['status'] ?? null));
 		$result = $task['result_data'] ?? null;
@@ -302,7 +302,27 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			'status' => $status !== '' ? $status : 'PENDING',
 			'message' => mb_substr($message, 0, self::TASK_MESSAGE_LENGTH),
 			'documentId' => $documentId,
+			'listed' => true,
 		];
+	}
+
+	public function findDocument(DocumentFingerprint $content): ?int {
+		$config = $this->configService->get();
+		foreach ([$content->sha256, $content->md5] as $checksum) {
+			$page = $this->requestPage(
+				$config->paperlessUrl,
+				$this->configService->getToken(),
+				$config->paperlessLocalNetwork,
+				'/api/documents/',
+				['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1],
+			);
+			$documentId = self::documentId($page['results'][0]['id'] ?? null);
+			if ($documentId !== null) {
+				return $documentId;
+			}
+		}
+
+		return null;
 	}
 
 	/**

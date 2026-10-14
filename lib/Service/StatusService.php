@@ -65,6 +65,9 @@ final class StatusService {
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running');
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
+		// Only a run that reaches Paperless names it, so that a failed connection doesn't show the Paperless of an earlier run.
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '');
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '');
 	}
 
 	/**

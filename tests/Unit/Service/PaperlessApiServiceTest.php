@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
@@ -682,6 +683,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'tags' => ['tags'],
 			'download' => ['downloadDocument'],
 			'checksum' => ['documentChecksum'],
+			'document by its checksums' => ['findDocument'],
 			'upload' => ['uploadDocument'],
 			'task' => ['taskStatus'],
 		];
@@ -980,7 +982,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	 * which derives its result from result_data), in a list; version 10 of 3.x
 	 * (TaskSerializerV10), in pages, with a status in lower case and the result in result_data.
 	 *
-	 * @return array<string, array{mixed, array{status: string, message: string, documentId: int|null}}>
+	 * @return array<string, array{mixed, array{status: string, message: string, documentId: int|null, listed: bool}}>
 	 */
 	public static function tasks(): array {
 		$v9 = static fn (array $task): array => [[
@@ -1014,47 +1016,47 @@ final class PaperlessApiServiceTest extends TestCase {
 		]]];
 
 		return [
-			'2.20, pending' => [$v9(['status' => 'PENDING', 'result' => null, 'related_document' => null]), ['status' => 'PENDING', 'message' => '', 'documentId' => null]],
+			'2.20, pending' => [$v9(['status' => 'PENDING', 'result' => null, 'related_document' => null]), ['status' => 'PENDING', 'message' => '', 'documentId' => null, 'listed' => true]],
 			'2.20, success' => [
 				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => '456']),
-				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456],
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456, 'listed' => true],
 			],
 			'2.20, success without related_document' => [
 				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 457 created']),
-				['status' => 'SUCCESS', 'message' => 'Success. New document id 457 created', 'documentId' => 457],
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 457 created', 'documentId' => 457, 'listed' => true],
 			],
 			'2.20, failure' => [
 				$v9(['status' => 'FAILURE', 'result' => 'police.pdf: Unsupported mime type application/octet-stream', 'related_document' => null]),
-				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null, 'listed' => true],
 			],
 			'2.20, duplicate, whose related_document is the original' => [
 				$v9(['status' => 'FAILURE', 'result' => 'Not consuming police.pdf: It is a duplicate of Police (#123).', 'related_document' => '123']),
-				['status' => 'FAILURE', 'message' => 'Not consuming police.pdf: It is a duplicate of Police (#123).', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'Not consuming police.pdf: It is a duplicate of Police (#123).', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 9, success' => [
 				$v9(['status' => 'SUCCESS', 'result' => 'Success. New document id 456 created', 'related_document' => 456, 'duplicate_documents' => []]),
-				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456],
+				['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456, 'listed' => true],
 			],
 			'3.x in version 9, duplicate' => [
 				$v9(['status' => 'FAILURE', 'result' => 'Not consuming: It is a duplicate of document #123', 'related_document' => 123, 'duplicate_documents' => [['id' => 123, 'title' => 'Police', 'deleted_at' => null]]]),
-				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 9, revoked' => [
 				$v9(['status' => 'REVOKED', 'result' => null, 'related_document' => null, 'duplicate_documents' => []]),
-				['status' => 'REVOKED', 'message' => '', 'documentId' => null],
+				['status' => 'REVOKED', 'message' => '', 'documentId' => null, 'listed' => true],
 			],
-			'3.x in version 10, started' => [$v10(['status' => 'started', 'status_display' => 'Started', 'result_data' => null, 'related_document_ids' => []]), ['status' => 'STARTED', 'message' => '', 'documentId' => null]],
+			'3.x in version 10, started' => [$v10(['status' => 'started', 'status_display' => 'Started', 'result_data' => null, 'related_document_ids' => []]), ['status' => 'STARTED', 'message' => '', 'documentId' => null, 'listed' => true]],
 			'3.x in version 10, success' => [
 				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => ['document_id' => 456], 'related_document_ids' => [456]]),
-				['status' => 'SUCCESS', 'message' => '', 'documentId' => 456],
+				['status' => 'SUCCESS', 'message' => '', 'documentId' => 456, 'listed' => true],
 			],
 			'3.x in version 10, success with the ID only in related_document_ids' => [
 				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => [], 'related_document_ids' => [458]]),
-				['status' => 'SUCCESS', 'message' => '', 'documentId' => 458],
+				['status' => 'SUCCESS', 'message' => '', 'documentId' => 458, 'listed' => true],
 			],
 			'3.x in version 10, stopped, such as after a split at a barcode' => [
 				$v10(['status' => 'success', 'status_display' => 'Success', 'result_data' => ['reason' => 'Barcode splitting complete!'], 'related_document_ids' => []]),
-				['status' => 'SUCCESS', 'message' => 'Barcode splitting complete!', 'documentId' => null],
+				['status' => 'SUCCESS', 'message' => 'Barcode splitting complete!', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 10, failure' => [
 				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => [
@@ -1062,37 +1064,75 @@ final class PaperlessApiServiceTest extends TestCase {
 					'error_message' => 'police.pdf: Unsupported mime type application/octet-stream',
 					'traceback' => "Traceback (most recent call last):\n  File \"consumer.py\"",
 				], 'related_document_ids' => []]),
-				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'police.pdf: Unsupported mime type application/octet-stream', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 10, failure with its type alone' => [
 				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['error_type' => 'WorkerLostError', 'error_message' => ''], 'related_document_ids' => []]),
-				['status' => 'FAILURE', 'message' => 'WorkerLostError', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'WorkerLostError', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 10, duplicate' => [
 				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['duplicate_of' => 123, 'duplicate_in_trash' => false], 'related_document_ids' => [123]]),
-				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 10, duplicate of a document in the trash' => [
 				$v10(['status' => 'failure', 'status_display' => 'Failure', 'result_data' => ['duplicate_of' => 123, 'duplicate_in_trash' => true], 'related_document_ids' => [123]]),
-				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123, which is in the trash of Paperless', 'documentId' => null],
+				['status' => 'FAILURE', 'message' => 'Not consuming: It is a duplicate of document #123, which is in the trash of Paperless', 'documentId' => null, 'listed' => true],
 			],
 			'3.x in version 10, revoked' => [
 				$v10(['status' => 'revoked', 'status_display' => 'Revoked', 'result_data' => null, 'related_document_ids' => []]),
-				['status' => 'REVOKED', 'message' => '', 'documentId' => null],
+				['status' => 'REVOKED', 'message' => '', 'documentId' => null, 'listed' => true],
 			],
-			'a status of the future' => [$v9(['status' => 'Retrying', 'result' => ['not text'], 'related_document' => 'none']), ['status' => 'RETRYING', 'message' => '', 'documentId' => null]],
-			'no status' => [[['task_id' => 'task-1']], ['status' => 'PENDING', 'message' => '', 'documentId' => null]],
-			'not listed yet, in version 9' => [[], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null]],
-			'not listed yet, in version 10' => [['count' => 0, 'results' => []], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null]],
+			'a status of the future' => [$v9(['status' => 'Retrying', 'result' => ['not text'], 'related_document' => 'none']), ['status' => 'RETRYING', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'no status' => [[['task_id' => 'task-1']], ['status' => 'PENDING', 'message' => '', 'documentId' => null, 'listed' => true]],
+			'not listed yet, in version 9' => [[], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false]],
+			'not listed yet, in version 10' => [['count' => 0, 'results' => []], ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false]],
 		];
 	}
 
-	/** @param array{status: string, message: string, documentId: int|null} $expected */
+	/** @param array{status: string, message: string, documentId: int|null, listed: bool} $expected */
 	#[DataProvider('tasks')]
 	public function testTaskStatusInEveryShapeOfPaperless(mixed $body, array $expected): void {
 		$this->responses[] = [200, $body];
 
 		self::assertSame($expected, $this->service->taskStatus('task-1'));
+	}
+
+	/**
+	 * A file of the inbox whose task Paperless has not finished a day after the upload may be in
+	 * Paperless already. Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5 before,
+	 * so the SHA-256 is asked for first, then the MD5.
+	 *
+	 * @return array<string, array{list<mixed>, int|null, int}>
+	 */
+	public static function documentsByChecksum(): array {
+		$none = ['count' => 0, 'next' => null, 'previous' => null, 'results' => []];
+		$found = static fn (mixed $id): array => ['count' => 1, 'next' => null, 'previous' => null, 'results' => [['id' => $id]]];
+
+		return [
+			'3.x, by its SHA-256' => [[$found(456)], 456, 1],
+			'2.x, by its MD5' => [[$none, $found(457)], 457, 2],
+			'an ID as a text' => [[$found('458')], 458, 1],
+			'not in Paperless' => [[$none, $none], null, 2],
+			'an answer without an ID' => [[$found(null), $found('none')], null, 2],
+		];
+	}
+
+	/** @param list<mixed> $bodies */
+	#[DataProvider('documentsByChecksum')]
+	public function testDocumentIsFoundByTheChecksumsOfItsOriginal(array $bodies, ?int $expected, int $requests): void {
+		foreach ($bodies as $body) {
+			$this->responses[] = [200, $body];
+		}
+		$content = new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'));
+
+		self::assertSame($expected, $this->service->findDocument($content));
+
+		self::assertCount($requests, $this->requests);
+		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
+		self::assertSame(['checksum__iexact' => $content->sha256, 'fields' => 'id', 'page_size' => 1], $this->requests[0]['options']['query']);
+		if ($requests === 2) {
+			self::assertSame(['checksum__iexact' => $content->md5, 'fields' => 'id', 'page_size' => 1], $this->requests[1]['options']['query']);
+		}
 	}
 
 	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> */
@@ -1148,6 +1188,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'tags' => $this->service->tags(),
 			'downloadDocument' => $this->service->downloadDocument(123, true, self::discard()),
 			'documentChecksum' => $this->service->documentChecksum(123, true),
+			'findDocument' => $this->service->findDocument(new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'))),
 			'uploadDocument' => $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'),
 			'taskStatus' => $this->service->taskStatus('task-1'),
 		};

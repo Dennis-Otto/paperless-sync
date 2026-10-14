@@ -57,6 +57,13 @@ interface PaperlessClientInterface {
 	public function documentChecksum(int $documentId, bool $original): string;
 
 	/**
+	 * The ID of a document whose original has the content of these checksums, or null when
+	 * Paperless has none: Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5
+	 * before, so both are asked for.
+	 */
+	public function findDocument(DocumentFingerprint $content): ?int;
+
+	/**
 	 * @param resource $source
 	 * @throws PaperlessUploadException when Paperless doesn't take the file, or can't be reached
 	 */
@@ -65,10 +72,10 @@ interface PaperlessClientInterface {
 	/**
 	 * The state of the task of an upload: its status in upper case, as Paperless names it, such as
 	 * PENDING, STARTED, SUCCESS, FAILURE or REVOKED, PENDING also while Paperless doesn't list the
-	 * task; what Paperless says about its result, such as the reason of a failure; and the ID of
-	 * the document that it created, if it names one.
+	 * task; what Paperless says about its result, such as the reason of a failure; the ID of the
+	 * document that it created, if it names one; and whether Paperless lists the task at all.
 	 *
-	 * @return array{status: string, message: string, documentId: int|null}
+	 * @return array{status: string, message: string, documentId: int|null, listed: bool}
 	 */
 	public function taskStatus(string $taskId): array;
 }

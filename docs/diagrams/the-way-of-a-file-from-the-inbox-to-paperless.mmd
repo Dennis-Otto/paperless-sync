@@ -5,7 +5,7 @@ config:
 ---
 flowchart TB
     accTitle: The way of a file from the inbox to Paperless
-    accDescr: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, a duplicate or a cancelled task, it moves to the folder Fehler, next to a .error.txt with the reason. A task that Paperless has not finished a day after the upload, or doesn't list, sends the file to the wait as well, and it is uploaded again.
+    accDescr: In the next run, a file in the folder Eingang is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Eingang and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Eingang or kept, as configured; after a failure, a duplicate or a cancelled task, it moves to the folder Fehler, next to a .error.txt with the reason. A day after the upload, a file whose content Paperless has counts as imported; a task that Paperless still lists unfinished moves the file to Fehler, so that a second upload can't make a duplicate; and a task that Paperless doesn't list sends the file to the wait as well, and it is uploaded again.
 
     %% The wait takes the uploads that failed for a time and the tasks without an end back to the upload.
     retry["Waits 15 minutes,<br>then twice as<br>long, up to a day"]
@@ -14,7 +14,7 @@ flowchart TB
     task{"Its task,<br>in the<br>next runs"}
     refused["Refused, such as<br>an unsupported<br>file type: stays<br>in Eingang,<br>skipped until<br>it changes"]
     done["Success:<br>removed from<br>Eingang, or kept,<br>as configured"]
-    failed["Failure, duplicate<br>or cancelled:<br>moved to<br>📁 Fehler, next<br>to a .error.txt<br>with the reason"]
+    failed["Failure, duplicate,<br>cancelled, or still<br>unfinished a day<br>after the upload:<br>moved to<br>📁 Fehler, next<br>to a .error.txt<br>with the reason"]
 
     retry -- "again" --> upload
     file -- "next run" --> upload
@@ -24,7 +24,7 @@ flowchart TB
     refused -- "saved anew,<br>renamed or<br>replaced" --> upload
     task --> done
     task --> failed
-    task -- "no end a day<br>after the upload" --> retry
+    task -- "not listed a day<br>after the upload" --> retry
 
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
     classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px

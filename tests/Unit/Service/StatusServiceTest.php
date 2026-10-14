@@ -51,6 +51,16 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame('', $this->service->get()['paperlessVersion'], 'A Paperless that names no version has none, not the one before.');
 	}
 
+	public function testStartedRunNamesNoPaperlessUntilItReachesOne(): void {
+		$this->service->connected(['version' => '3.3.0', 'apiVersion' => '9']);
+
+		$this->service->started(false);
+
+		$status = $this->service->get();
+		self::assertSame('', $status['paperlessVersion'], 'A run that fails to connect must not show the Paperless of the run before.');
+		self::assertSame('', $status['paperlessApiVersion']);
+	}
+
 	public function testStartedRunClearsThePreviousError(): void {
 		$this->settings['status_last_error'] = 'Paperless was unavailable';
 		$before = time();
