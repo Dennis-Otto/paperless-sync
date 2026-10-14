@@ -15,15 +15,19 @@
 # It names the changed files that reach the app and writes affected=true or
 # affected=false to $GITHUB_OUTPUT, and variants=true or variants=false: whether the
 # change can also behave differently on another database or storage, so that
-# run-all.sh runs PostgreSQL, MariaDB and the object store as well.
+# run-all.sh runs PostgreSQL, MariaDB and the object store as well. With
+# E2E_QUESTION=contract, it asks instead whether the change can alter what the app asks
+# Paperless or how it reads the answers, and writes contract=true or contract=false, for
+# the contract tests against a real Paperless-ngx (run-contract.sh).
 # scripts/check-project.sh sources it to test its rules.
 
 # A file whose change can make the end-to-end tests pass or fail: the code, the
-# metadata and the assets of the app, the tests themselves and their workflow.
-# appinfo/info.xml counts only with info_xml_change_affects_app.
+# metadata and the assets of the app, the tests themselves and their workflow. The
+# contract tests against a real Paperless are no part of them. appinfo/info.xml counts
+# only with info_xml_change_affects_app.
 path_affects_app() {
 	case "$1" in
-		tests/e2e/*.md) return 1 ;;
+		tests/e2e/*.md | tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
 		lib/* | appinfo/* | templates/* | js/* | css/* | l10n/* | img/* | composer.json | tests/e2e/*) return 0 ;;
 		.github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
@@ -40,6 +44,19 @@ path_affects_variants() {
 		tests/e2e/*.md) return 1 ;;
 		lib/Migration/* | lib/Service/SyncStateRepository* | lib/Service/NextcloudStorage*) return 0 ;;
 		lib/Service/PaperlessApiService.php | tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# A file whose change can alter what the app asks Paperless or how it reads the answers:
+# the client of Paperless and the checksums that it compares, the mock that stands in for
+# Paperless and the answers recorded from it, which the unit tests read, and the contract
+# tests themselves and their workflow.
+path_affects_contract() {
+	case "$1" in
+		lib/Service/Paperless* | lib/Model/DocumentFingerprint.php | tests/fixtures/paperless-ngx-*) return 0 ;;
+		tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.yaml | tests/e2e/compose.paperless.yaml) return 0 ;;
+		tests/e2e/mock_server.py | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -81,17 +98,29 @@ cd "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 
 BASE="${1:-HEAD^1}"
 HEAD="${2:-HEAD}"
+QUESTION="${E2E_QUESTION:-app}"
 
+# The answers for the end-to-end tests, or with E2E_QUESTION=contract its third one alone.
 decide() {
-	if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+	if [[ -z "${GITHUB_OUTPUT:-}" ]]; then
+		return
+	elif [[ "${QUESTION}" == contract ]]; then
+		printf 'contract=%s\n' "$3" >>"${GITHUB_OUTPUT}"
+	else
 		printf 'affected=%s\nvariants=%s\n' "$1" "$2" >>"${GITHUB_OUTPUT}"
+	fi
+}
+
+summary() {
+	if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+		printf '### %s\n\n%s\n' "$1" "$2" >>"${GITHUB_STEP_SUMMARY}"
 	fi
 }
 
 if ! git rev-parse --quiet --verify "${BASE}^{commit}" >/dev/null ||
 	! git rev-parse --quiet --verify "${HEAD}^{commit}" >/dev/null; then
 	echo "The commits ${BASE} and ${HEAD} aren't both here, so all end-to-end tests run."
-	decide true true
+	decide true true true
 	exit 0
 fi
 
@@ -104,6 +133,7 @@ git diff --name-only -z --no-renames "${BASE}" "${HEAD}" >"${CHANGED}"
 count=0
 reaching=()
 varying=()
+contracting=()
 while IFS= read -r -d '' path; do
 	count=$((count + 1))
 	if [[ "${path}" == appinfo/info.xml ]]; then
@@ -118,7 +148,24 @@ while IFS= read -r -d '' path; do
 			varying+=("${path}")
 		fi
 	fi
+	if path_affects_contract "${path}"; then
+		contracting+=("${path}")
+	fi
 done <"${CHANGED}"
+
+if [[ "${QUESTION}" == contract ]]; then
+	if ((${#contracting[@]} > 0)); then
+		echo "${#contracting[@]} of the ${count} changed file(s) can alter how the app talks to Paperless, so the contract tests against a real Paperless-ngx run:"
+		printf '  %s\n' "${contracting[@]:0:20}"
+		decide true true true
+	else
+		message="None of the ${count} changed file(s) can alter what the app asks Paperless or how it reads the answers: not its client of Paperless, the mock, the recorded answers or the contract tests. They can't fail here, so they don't run; they run every Monday against the current releases of Paperless-ngx."
+		echo "${message}"
+		summary "Contract tests skipped: the change cannot alter how the app talks to Paperless" "${message}"
+		decide true true false
+	fi
+	exit 0
+fi
 
 if ((${#reaching[@]} > 0)); then
 	echo "${#reaching[@]} of the ${count} changed file(s) can affect the app, so the end-to-end tests run:"
@@ -132,9 +179,7 @@ if ((${#reaching[@]} > 0)); then
 	else
 		message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
 		echo "${message}"
-		if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-			printf '### E2E on SQLite with local storage only\n\n%s\n' "${message}" >>"${GITHUB_STEP_SUMMARY}"
-		fi
+		summary "E2E on SQLite with local storage only" "${message}"
 		decide true false
 	fi
 	exit 0
@@ -142,7 +187,5 @@ fi
 
 message="None of the ${count} changed file(s) can affect the app: no code, metadata or asset of the app, no end-to-end test and not their workflow, and in appinfo/info.xml at most the version of a release. The end-to-end tests can't fail here, so they don't run; main runs them after the merge, and every night."
 echo "${message}"
-if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
-	printf '### E2E skipped: the change cannot affect the app\n\n%s\n' "${message}" >>"${GITHUB_STEP_SUMMARY}"
-fi
+summary "E2E skipped: the change cannot affect the app" "${message}"
 decide false false

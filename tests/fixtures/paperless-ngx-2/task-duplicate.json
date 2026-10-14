@@ -1,0 +1,25 @@
+{
+  "body": [
+    {
+      "acknowledged": false,
+      "date_created": "2026-10-14T11:56:05.035504Z",
+      "date_done": "2026-10-14T11:56:05.138709Z",
+      "id": 5,
+      "owner": 3,
+      "related_document": "1",
+      "result": "copy.pdf: Not consuming copy.pdf: It is a duplicate of invoice (#1).",
+      "status": "FAILURE",
+      "task_file_name": "copy.pdf",
+      "task_id": "33db5c0b-171c-498a-b99d-47458795534c",
+      "task_name": "consume_file",
+      "type": "auto_task"
+    }
+  ],
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/tasks/?task_id=33db5c0b-171c-498a-b99d-47458795534c&page_size=10",
+  "status": 200
+}

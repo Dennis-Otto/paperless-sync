@@ -5,7 +5,7 @@ config:
 ---
 flowchart TB
     accTitle: When the end-to-end tests run
-    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud.
+    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.
 
     pr["Pull request"]
     main["Push to main,<br>every night,<br>by hand"]
@@ -16,6 +16,7 @@ flowchart TB
     result["passed<br>or failed"]
     monday["Every Monday,<br>by hand"]
     canary["canary.sh:<br>the coming Nextcloud"]
+    contract["run-contract.sh:<br>Paperless-ngx<br>2.x and 3.x"]
 
     pr --> affected
     affected -- "lib/, appinfo/,<br>templates/, js/,<br>css/, l10n/, img/,<br>composer.json,<br>tests/e2e/, e2e.yml" --> all
@@ -29,10 +30,12 @@ flowchart TB
     variants --> result
     result ~~~ monday
     monday --> canary
+    monday --> contract
+    affected -- "E2E_QUESTION=contract:<br>the client of Paperless,<br>the mock, the fixtures,<br>the contract tests" --> contract
 
     classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     class pr person
-    class affected,all,variants,canary bot
+    class affected,all,variants,canary,contract bot
     class skipped,result done

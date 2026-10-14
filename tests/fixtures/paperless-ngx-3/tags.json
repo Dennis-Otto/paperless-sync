@@ -1,0 +1,53 @@
+{
+  "body": {
+    "all": [
+      2,
+      1
+    ],
+    "count": 2,
+    "display_count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "children": [],
+        "color": "#a6cee3",
+        "document_count": 2,
+        "id": 2,
+        "is_inbox_tag": false,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Contract",
+        "owner": 2,
+        "parent": null,
+        "slug": "contract",
+        "text_color": "#000000",
+        "user_can_change": true
+      },
+      {
+        "children": [],
+        "color": "#a6cee3",
+        "document_count": 1,
+        "id": 1,
+        "is_inbox_tag": true,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Inbox",
+        "owner": 2,
+        "parent": null,
+        "slug": "inbox",
+        "text_color": "#000000",
+        "user_can_change": true
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/tags/?page=1&page_size=1000",
+  "status": 200
+}

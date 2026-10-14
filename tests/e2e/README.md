@@ -7,7 +7,7 @@ The suite mounts this checkout read-only as a Nextcloud Custom App and connects 
   <img src="../../docs/images/diagrams/what-the-end-to-end-tests-run.svg" alt="What the end-to-end tests run: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs and screenshots.mjs against Nextcloud. On request, Nextcloud keeps its tables in MariaDB or PostgreSQL instead of SQLite, and its files in an object store with the API of S3.">
 </picture>
 
-`run-all.sh` runs the scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and against the newest of them on [other databases and object storage](#databases-and-object-storage), side by side, as the CI does; `run.sh` runs it against one version, by default the one that `compose.yaml` pins, or the image in `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`. Every week, the CI also runs it against [the coming Nextcloud](#the-coming-nextcloud).
+`run-all.sh` runs the scenario against the current release of every Nextcloud version from `min-version` to `max-version` in `appinfo/info.xml`, and against the newest of them on [other databases and object storage](#databases-and-object-storage), side by side, as the CI does; `run.sh` runs it against one version, by default the one that `compose.yaml` pins, or the image in `NEXTCLOUD_IMAGE`, such as `nextcloud:35-apache`. Every week, the CI also runs it against [the coming Nextcloud](#the-coming-nextcloud), and the app against [a real Paperless-ngx](#contract-tests-against-a-real-paperless-ngx) instead of the mock.
 
 Run locally:
 
@@ -81,10 +81,10 @@ The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in two jobs side by s
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/when-the-end-to-end-tests-run.dark.svg">
-  <img src="../../docs/images/diagrams/when-the-end-to-end-tests-run.svg" alt="When the end-to-end tests run: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud.">
+  <img src="../../docs/images/diagrams/when-the-end-to-end-tests-run.svg" alt="When the end-to-end tests run: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.">
 </picture>
 
-In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown, or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*.
+In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown and the [contract tests](#contract-tests-against-a-real-paperless-ngx), or of the workflow itself can make the tests fail. In `appinfo/info.xml`, the lines that the release bot writes in every release, `<version>` and those marked `x-release-please-version`, don't count, so a release pull request passes at once, while the upstream bot's change of `max-version` runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*.
 
 Of the changes that run the tests, those that can behave differently on another database or storage also run [PostgreSQL, and MariaDB with S3](#databases-and-object-storage): the migrations (`lib/Migration/`), the queries of the state (`lib/Service/SyncStateRepository*`), the files in Nextcloud (`lib/Service/NextcloudStorage*`), the uploads to Paperless (`lib/Service/PaperlessApiService.php`), `appinfo/info.xml` as above, the end-to-end tests and their workflow. For any other change of the app, that job passes at once, and its summary says *E2E on SQLite with local storage only*. `scripts/check-project.sh` tests these rules with sample paths and changes.
 
@@ -137,3 +137,45 @@ Optional environment variables, besides those of `run.sh`:
 
 - `CANARY_BASE_IMAGE`: the image whose code the coming Nextcloud replaces, default `nextcloud:apache`
 - `CANARY_IMAGE`: the local image the script builds, default `paperless-sync-e2e:coming`
+
+## Contract tests against a real Paperless-ngx
+
+The mock answers as the app expects Paperless to answer, and so do the answers in the unit tests; twice, both had drifted from Paperless, in the checksums of Paperless-ngx 2.x and in the tasks of 3.x. The contract tests start a real Paperless-ngx instead, the last release of 2.x (2.20) or the current release of 3.x, and check what it answers:
+
+```bash
+bash tests/e2e/run-contract.sh 2
+bash tests/e2e/run-contract.sh 3
+```
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-the-contract-tests-check-against-a-real-paperless.dark.svg">
+  <img src="../../docs/images/diagrams/what-the-contract-tests-check-against-a-real-paperless.svg" alt="What the contract tests check against a real Paperless: run-contract.sh starts a real Paperless-ngx, the last release of 2.x or the current release of 3.x, next to Nextcloud. contract.py seeds Paperless through its REST API and checks every answer that the app reads, then the app runs its export, a move, the trash and the inbox against it. The answers of Paperless become the fixtures of the unit tests in tests/fixtures/, which PaperlessApiServiceTest reads; a later run compares their shapes with the fixtures and fails when a field that the tests read is gone. Every Monday a failure opens an issue.">
+</picture>
+
+`compose.paperless.yaml` adds Paperless and Redis to `compose.yaml`, by the profile `paperless-2` or `paperless-3`, each line in a Compose project and on a port of its own, so that both run side by side. Renovate keeps both images current by their digests, 2.x within 2.x. Paperless reads the text of the PDFs of the tests without OCR and still keeps an archived version of each, as with scanned documents.
+
+`contract.py` runs in the container of the mock, with Python alone, and does what a household does in Paperless, through its REST API with the token of a synthetic administrator: it uploads three PDFs, waits for their tasks, sets their titles, correspondents, document types, a storage path and a custom field of the type select, puts one into the trash and back, and uploads a PDF that Paperless can't read, the same file twice and a file of a type that it doesn't take. It checks each answer that the app reads, with every request as the app sends it:
+
+- the documents of a run, which carry the fields of `PaperlessApiService::DOCUMENT_FIELDS` and no other, in pages that follow each other;
+- the trash with `deleted_at`, and the lists of tags with the inbox tag, correspondents, document types, storage paths, custom fields with the IDs of their choices, users, and the account with its permissions;
+- the tasks of the uploads, in version 9 and, on 3.x, in version 10 of the API: the document of a success, the reason of a failure, a duplicate, which 2.x refuses and 3.x consumes by default, and a task that Paperless doesn't know;
+- the checksums of the metadata, which are the MD5 (2.x) or the SHA-256 (3.x) of the original and the archived download ([decision 0009](../../docs/decisions/0009-checksums-of-paperless-2-and-3.md)), and the search for a document by the checksum of its file;
+- the versions of the API: 9 on both lines, 10 on 3.x only, 99 refused with HTTP 406.
+
+Then the app runs against that Paperless in Nextcloud: it exports two documents with the bytes of their archived versions, moves one to its new title, keeping the ID of its file, follows it into the trash of Paperless and back, and sends a PDF and a broken file from its inbox, which ends as a new document and in the error folder with the reason of Paperless. The status names the version of Paperless, and the log of Nextcloud has no error of the app and never its token.
+
+The answers of Paperless are the fixtures of the unit tests, in `tests/fixtures/paperless-ngx-2/` and `tests/fixtures/paperless-ngx-3/`, which `PaperlessApiServiceTest` reads. Each run compares the shapes of the new answers with them: a field that Paperless added is a note, a field or an answer that is gone, or a field of another type, fails the run. When the app reads the new answers correctly, record them anew and commit them:
+
+```bash
+CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3
+```
+
+In the CI, the jobs *Paperless-ngx 2.x* and *Paperless-ngx 3.x* of `.github/workflows/e2e.yml` run every Monday with the canary, when started by hand, and in a pull request that changes how the app talks to Paperless: its client (`lib/Service/Paperless*`, `lib/Model/DocumentFingerprint.php`), the mock, the fixtures, the contract tests or the workflow (`affected.sh` with `E2E_QUESTION=contract`). Each keeps the answers of Paperless as an artifact of the run, so new fixtures need no Docker. They are no required checks ([decision 0015](../../docs/decisions/0015-check-the-mock-against-a-real-paperless.md)); when they fail on Monday, they open the issue *The contract tests against Paperless-ngx fail*, add every further failed run to it, and close it once they pass again. The contract tests also read the paths, reports, settings and status of the app, so a change there can fail them too; the log of the run says which answer differed.
+
+On Paperless-ngx 2.x, a task that has just failed first reports `<traceback object at 0x…>` as its result and its reason a moment later; the contract tests wait for the reason, and [issue #161](https://github.com/Dennis-Otto/paperless-sync/issues/161) tracks the same wait in the app.
+
+Optional environment variables:
+
+- `CONTRACT_RECORD=1`: write the answers of Paperless into the fixtures instead of comparing them
+- `CONTRACT_RECORDINGS`: a folder that keeps the answers of the run
+- `E2E_PORT`, `E2E_PROJECT_NAME`, `KEEP_E2E=1`: as for `run.sh`; the port defaults to 18092 for 2.x and 18093 for 3.x

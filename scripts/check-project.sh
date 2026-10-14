@@ -68,6 +68,11 @@ for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e
   tests/package/test_check_package.sh; do
   expect skip "$path"
 done
+# The contract tests against a real Paperless are a job of their own.
+for path in tests/e2e/contract.py tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml \
+  tests/fixtures/paperless-ngx-3/documents.json; do
+  expect skip "$path"
+done
 
 # Of those, a change that can behave differently on another database or storage runs
 # PostgreSQL, MariaDB and the object store as well.
@@ -91,6 +96,29 @@ for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
   lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
   tests/e2e/README.md README.md; do
   expect_variants skip "$path"
+done
+
+# The contract tests against a real Paperless-ngx run for a change of what the app asks
+# Paperless or of how it reads the answers.
+expect_contract() {
+  local expected="$1" path="$2" actual=skip
+  if path_affects_contract "$path"; then
+    actual=run
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    echo "A change of $path should $expected the contract tests against a real Paperless, but tests/e2e/affected.sh says $actual."
+    problems=$((problems + 1))
+  fi
+}
+for path in lib/Service/PaperlessApiService.php lib/Service/PaperlessClientInterface.php \
+  lib/Model/DocumentFingerprint.php tests/fixtures/paperless-ngx-2/metadata.json tests/e2e/contract.py \
+  tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml tests/e2e/compose.yaml tests/e2e/mock_server.py \
+  .github/workflows/e2e.yml; do
+  expect_contract run "$path"
+done
+for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php templates/settings.php \
+  tests/e2e/run.sh tests/e2e/README.md tests/Unit/Service/PaperlessApiServiceTest.php README.md; do
+  expect_contract skip "$path"
 done
 
 # A change of appinfo/info.xml, as git diff --unified=0 shows it. A release writes
@@ -149,10 +177,18 @@ if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" 
   echo "tests/e2e/affected.sh HEAD HEAD should find nothing that runs the end-to-end tests."
   problems=$((problems + 1))
 fi
+if [[ "$(E2E_QUESTION=contract decision 0000000000000000000000000000000000000000 HEAD)" != contract=true ]]; then
+  echo "E2E_QUESTION=contract bash tests/e2e/affected.sh should run the contract tests when it can't compare the commits."
+  problems=$((problems + 1))
+fi
+if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(E2E_QUESTION=contract decision HEAD HEAD)" != contract=false ]]; then
+  echo "E2E_QUESTION=contract bash tests/e2e/affected.sh HEAD HEAD should find nothing that runs the contract tests."
+  problems=$((problems + 1))
+fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads."
+echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, and the contract tests against a real Paperless for the client of Paperless."
 
 printf '\n== %s\n' "Icon of the website"
 # The website shows the icon of the app as its logo, its favicon and on its preview

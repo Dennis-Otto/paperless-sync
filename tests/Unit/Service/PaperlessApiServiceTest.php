@@ -1773,6 +1773,256 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	/**
+	 * The answers of a real Paperless-ngx, which the contract tests (tests/e2e/run-contract.sh)
+	 * recorded from the last release of 2.x and the current release of 3.x into
+	 * tests/fixtures/paperless-ngx-<line>/. The answers of the tests above follow what the app
+	 * expects; these are what Paperless sends, and the weekly contract tests fail when Paperless
+	 * stops sending them.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function paperlessLines(): array {
+		return ['Paperless-ngx 2.x' => ['2'], 'Paperless-ngx 3.x' => ['3']];
+	}
+
+	#[DataProvider('paperlessLines')]
+	public function testTheConnectionTestNamesTheVersionThatPaperlessSends(string $line): void {
+		$this->responses[] = self::recorded($line, 'connection');
+
+		$server = $this->service->testConnection(self::URL, 'secret-token', false);
+
+		self::assertSame(['version' => self::recording($line, 'connection')['headers']['X-Version'], 'apiVersion' => '9'], $server);
+		self::assertStringStartsWith("{$line}.", $server['version']);
+	}
+
+	/** Paperless sends the fields of a run alone, and the scan reads every document of the page. */
+	#[DataProvider('paperlessLines')]
+	public function testTheDocumentsOfPaperlessCarryExactlyTheFieldsOfARun(string $line): void {
+		$this->responses[] = self::recorded($line, 'documents');
+
+		$scan = $this->service->documents();
+
+		self::assertTrue($scan->complete);
+		self::assertSame(3, $scan->listed);
+		self::assertCount(3, $scan->documents);
+		$fields = PaperlessApiService::DOCUMENT_FIELDS;
+		sort($fields);
+		foreach ($scan->documents as $document) {
+			$keys = array_keys($document);
+			sort($keys);
+			self::assertSame($fields, $keys, 'Paperless answers with the fields that the run asked for, and only those.');
+			self::assertIsInt($document['id']);
+			self::assertIsString($document['title']);
+			self::assertIsString($document['created']);
+			self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}$/', $document['created']);
+			self::assertIsList($document['tags']);
+			self::assertIsString($document['archived_file_name']);
+			self::assertSame('application/pdf', $document['mime_type']);
+		}
+		self::assertSame(self::recordedQuery($line, 'documents'), self::sentQuery($this->requests[0]), 'The contract tests ask Paperless as the app does.');
+	}
+
+	#[DataProvider('paperlessLines')]
+	public function testTheTrashOfPaperlessIsReadCompletely(string $line): void {
+		$this->responses[] = self::recorded($line, 'trash');
+
+		$scan = $this->service->trash();
+
+		self::assertTrue($scan->complete);
+		self::assertCount(1, $scan->documents);
+		self::assertIsInt($scan->documents[0]['id']);
+		self::assertIsString($scan->documents[0]['deleted_at']);
+		self::assertSame(self::recordedQuery($line, 'trash'), self::sentQuery($this->requests[0]));
+	}
+
+	#[DataProvider('paperlessLines')]
+	public function testTheListsOfPaperlessGiveTheNamesOfThePathTemplate(string $line): void {
+		foreach (['correspondents', 'document_types', 'storage_paths', 'tags', 'users', 'custom_fields'] as $list) {
+			$this->responses[] = self::recorded($line, $list);
+		}
+
+		self::assertEqualsCanonicalizing(['Example GmbH', 'Example Insurance'], array_values($this->service->correspondents()));
+		self::assertEqualsCanonicalizing(['Invoice', 'Statement', 'Letter'], array_values($this->service->documentTypes()));
+		self::assertSame(['Contracts'], array_values($this->service->storagePaths()));
+		$tags = $this->service->tags();
+		self::assertEqualsCanonicalizing(['Inbox', 'Contract'], array_values($tags['names']));
+		self::assertSame(['Inbox'], array_map(static fn (string $id): string => $tags['names'][$id], $tags['inbox']));
+		self::assertContains('contract-admin', $this->service->users());
+		$fields = array_values($this->service->customFields());
+		self::assertCount(1, $fields);
+		self::assertSame('Priority', $fields[0]['name']);
+		self::assertSame('select', $fields[0]['type']);
+		self::assertSame(['High', 'Low'], array_values($fields[0]['options']));
+		self::assertSame(self::recordedQuery($line, 'tags'), self::sentQuery($this->requests[3]));
+	}
+
+	/**
+	 * The tasks of uploads as Paperless lists them for a poll of the app: one that made a document,
+	 * one of a file that Paperless can't read, the second upload of the same file, which Paperless-ngx
+	 * 2.x refuses as a duplicate and 3.x consumes by default, and a task that Paperless doesn't know.
+	 *
+	 * @return array<string, array{string, string, string, string, bool}>
+	 */
+	public static function recordedTasks(): array {
+		$failure = 'broken.pdf: Error occurred while consuming document broken.pdf: ';
+		return [
+			'2.x, success' => ['2', 'task-success', 'SUCCESS', 'Success. New document id ', true],
+			'2.x, failure' => ['2', 'task-failure', 'FAILURE', $failure, false],
+			'2.x, duplicate' => ['2', 'task-duplicate', 'FAILURE', 'copy.pdf: Not consuming copy.pdf: It is a duplicate of ', false],
+			'2.x, unknown' => ['2', 'task-unknown', 'PENDING', 'Paperless does not list the task.', false],
+			'3.x, success' => ['3', 'task-success', 'SUCCESS', 'Success. New document id ', true],
+			'3.x, success in version 10' => ['3', 'task-success.v10', 'SUCCESS', '', true],
+			'3.x, failure' => ['3', 'task-failure', 'FAILURE', $failure, false],
+			'3.x, failure in version 10' => ['3', 'task-failure.v10', 'FAILURE', $failure, false],
+			'3.x, duplicate' => ['3', 'task-duplicate', 'SUCCESS', 'Success. New document id ', true],
+			'3.x, unknown' => ['3', 'task-unknown', 'PENDING', 'Paperless does not list the task.', false],
+		];
+	}
+
+	#[DataProvider('recordedTasks')]
+	public function testTheTasksOfPaperlessTellHowAnUploadEnded(string $line, string $name, string $status, string $message, bool $document): void {
+		$this->responses[] = self::recorded($line, $name);
+
+		$task = $this->service->taskStatus('task-1');
+
+		self::assertSame($status, $task['status']);
+		if ($message === '') {
+			self::assertSame('', $task['message'], 'Version 10 tells a success by the ID of its document alone.');
+		} else {
+			self::assertStringStartsWith($message, $task['message']);
+		}
+		self::assertSame($status !== 'PENDING', $task['listed']);
+		if ($document) {
+			self::assertIsInt($task['documentId']);
+			self::assertStringContainsString((string)$task['documentId'], json_encode(self::recording($line, $name)['body'], JSON_THROW_ON_ERROR));
+		} else {
+			self::assertNull($task['documentId']);
+		}
+	}
+
+	#[DataProvider('paperlessLines')]
+	public function testAnUploadToPaperlessGivesItsTask(string $line): void {
+		$this->responses[] = self::recorded($line, 'upload');
+
+		$task = $this->service->uploadDocument($this->source('%PDF-inbox'), 'invoice.pdf');
+
+		self::assertSame(self::recording($line, 'upload')['body'], $task);
+		self::assertMatchesRegularExpression('/^[0-9a-f-]{36}$/', $task);
+	}
+
+	#[DataProvider('paperlessLines')]
+	public function testAFileOfATypeThatPaperlessDoesNotTakeIsRefusedForGood(string $line): void {
+		$this->responses[] = self::recorded($line, 'upload-refused');
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'notes.bin');
+			self::fail('Paperless refuses the file.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame('Paperless answered the upload with HTTP 400: document: File type application/octet-stream not supported', $exception->getMessage());
+			self::assertTrue($exception->permanent);
+		}
+	}
+
+	/**
+	 * The checksums that Paperless keeps of a document are those of its downloads, MD5 on 2.x and
+	 * SHA-256 on 3.x, and the fingerprint of a download names both (decision 0009), so a run tells
+	 * a change of the metadata from one of the file without a download.
+	 */
+	#[DataProvider('paperlessLines')]
+	public function testTheChecksumsOfPaperlessMatchTheFingerprintsOfItsDownloads(string $line): void {
+		$downloads = self::recording($line, 'downloads');
+		$original = base64_decode((string)$downloads['true']['base64'], true);
+		self::assertIsString($original);
+		$this->responses[] = static function (array $options) use ($original): array {
+			file_put_contents($options['sink'], $original);
+			return [200, null];
+		};
+		$this->responses[] = self::recorded($line, 'metadata');
+		$this->responses[] = self::recorded($line, 'metadata');
+
+		$fingerprint = $this->service->downloadDocument(1, true, self::discard());
+		$checksum = $this->service->documentChecksum(1, true);
+		$archive = $this->service->documentChecksum(1, false);
+
+		self::assertSame($line === '2' ? 32 : 64, strlen($checksum), 'Paperless-ngx 2.x keeps MD5 checksums, 3.x SHA-256.');
+		self::assertTrue(DocumentFingerprint::matches($fingerprint->value(), $checksum));
+		self::assertTrue(DocumentFingerprint::matches("{$downloads['false']['sha256']} {$downloads['false']['md5']}", $archive));
+		self::assertFalse(DocumentFingerprint::matches($fingerprint->value(), $archive), 'The archived version is another file than the original.');
+	}
+
+	/** A file of the inbox whose task got lost is found by the checksum of its original. */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessFindsADocumentByTheChecksumOfItsOriginal(string $line): void {
+		// Paperless-ngx 3.x finds the SHA-256 at once, 2.x the MD5 after it.
+		$checksums = $line === '2' ? ['sha256', 'md5'] : ['sha256'];
+		foreach ($checksums as $checksum) {
+			$this->responses[] = self::recorded($line, "lookup-{$checksum}");
+		}
+		$downloads = self::recording($line, 'downloads');
+
+		$found = $this->service->findDocument(new DocumentFingerprint((string)$downloads['true']['sha256'], (string)$downloads['true']['md5']));
+
+		self::assertSame(1, $found);
+		self::assertCount(count($checksums), $this->requests);
+		foreach ($checksums as $index => $checksum) {
+			self::assertSame(self::recordedQuery($line, "lookup-{$checksum}"), self::sentQuery($this->requests[$index]));
+		}
+	}
+
+	/**
+	 * A recording of tests/fixtures/paperless-ngx-<line>/: the request, the status, the headers
+	 * and the body of an answer of Paperless.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function recording(string $line, string $name): array {
+		$path = dirname(__DIR__, 2) . "/fixtures/paperless-ngx-{$line}/{$name}.json";
+		$recording = json_decode((string)file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($recording);
+
+		return $recording;
+	}
+
+	/**
+	 * A recorded answer as the HTTP client of Nextcloud would give it.
+	 *
+	 * @return array{int, string, array<string, string>}
+	 */
+	private static function recorded(string $line, string $name): array {
+		$recording = self::recording($line, $name);
+		self::assertIsInt($recording['status']);
+		self::assertIsArray($recording['headers']);
+
+		return [$recording['status'], json_encode($recording['body'], JSON_THROW_ON_ERROR), $recording['headers']];
+	}
+
+	/**
+	 * The query of a recorded request, as the values that PHP reads from it.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function recordedQuery(string $line, string $name): array {
+		$request = self::recording($line, $name)['request'];
+		self::assertIsString($request);
+		parse_str((string)parse_url(explode(' ', $request, 2)[1], PHP_URL_QUERY), $query);
+
+		return array_map('strval', $query);
+	}
+
+	/**
+	 * The query of a request of the app, as Paperless reads it.
+	 *
+	 * @param array{method: string, url: string, options: array<string, mixed>} $request
+	 * @return array<string, string>
+	 */
+	private static function sentQuery(array $request): array {
+		$query = $request['options']['query'];
+		self::assertIsArray($query);
+
+		return array_map('strval', $query);
+	}
+
+	/**
 	 * Calls an operation of the client that sends the token, with arguments that work; the test of
 	 * the connection allows the local network as $localNetwork says, the others as the settings do.
 	 */

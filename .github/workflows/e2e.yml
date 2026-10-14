@@ -30,6 +30,15 @@ name: Docker E2E
 # it fails, it opens the issue "The coming Nextcloud breaks the app", or adds the run
 # to it, and closes the issue once the tests pass again. It leaves max-version as it
 # is; the upstream bot raises it when Nextcloud releases the version.
+#
+# On the same Monday, when started by hand, and in a pull request that changes how the
+# app talks to Paperless (tests/e2e/affected.sh), the contract tests run against a real
+# Paperless-ngx instead of the mock (tests/e2e/run-contract.sh): the last release of 2.x
+# and the current one of 3.x, side by side. They check every answer that the app reads
+# and then run the app against it, and they compare the shapes of the answers with the
+# fixtures of the unit tests (tests/fixtures/). They are no required check either; a
+# failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
+# or adds the run to it, and closes it once they pass again.
 
 on:
   push:
@@ -38,7 +47,7 @@ on:
   schedule:
     # Every night: every supported version.
     - cron: "23 2 * * *"
-    # Every Monday: the coming Nextcloud.
+    # Every Monday: the coming Nextcloud and a real Paperless-ngx.
     - cron: "17 5 * * 1"
   workflow_dispatch:
 
@@ -180,6 +189,118 @@ jobs:
           The log of the run shows what failed; `bash tests/e2e/canary.sh` runs the same tests locally.
 
           The canary adds every further failed run here and closes this issue once the tests pass again.
+          TEXT
+          } > "$RUNNER_TEMP/issue.md"
+          gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
+
+  # The contract tests against a real Paperless-ngx, one line of it in each job:
+  # tests/e2e/run-contract.sh. A pull request runs them only when it changes how the app
+  # talks to Paperless; the job passes at once otherwise, and so for a docs change.
+  paperless:
+    name: Paperless-ngx ${{ matrix.line }}.x
+    if: >-
+      github.event.schedule == '17 5 * * 1' || github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      # Each line of Paperless tells its own story.
+      fail-fast: false
+      matrix:
+        line: [2, 3]
+    steps:
+      - name: Record the network traffic of the job
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit of a pull request and its base, which affected.sh compares.
+          fetch-depth: 2
+      - name: Find out whether the change can alter how the app talks to Paperless
+        id: changes
+        if: github.event_name == 'pull_request'
+        env:
+          E2E_QUESTION: contract
+        run: bash tests/e2e/affected.sh
+      - name: Run the contract tests against Paperless-ngx ${{ matrix.line }}.x
+        if: steps.changes.outputs.contract != 'false'
+        env:
+          LINE: ${{ matrix.line }}
+          # The answers of Paperless, for the fixtures of the unit tests when they changed.
+          CONTRACT_RECORDINGS: ${{ runner.temp }}/paperless-ngx-${{ matrix.line }}
+        run: bash tests/e2e/run-contract.sh "$LINE"
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: Paperless-ngx ${{ matrix.line }}.x
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
+      - name: Keep the answers of Paperless
+        if: always() && steps.changes.outputs.contract != 'false'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: paperless-ngx-${{ matrix.line }}
+          path: ${{ runner.temp }}/paperless-ngx-${{ matrix.line }}
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Like the issue about the coming Nextcloud: the only job here that may write issues,
+  # and it runs no code of the repository.
+  paperless-issue:
+    name: issue about Paperless-ngx
+    needs: paperless
+    if: >-
+      always() &&
+      (github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)) &&
+      (needs.paperless.result == 'success' || needs.paperless.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Record the network traffic of the job
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: The contract tests against Paperless-ngx fail
+          RESULT: ${{ needs.paperless.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          number="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
+          if [[ "$RESULT" == success ]]; then
+            if [[ -n "$number" ]]; then
+              gh issue close "$number" --reason completed \
+                --comment "The contract tests pass again against Paperless-ngx 2.x and 3.x: $RUN_URL"
+            fi
+            exit 0
+          fi
+          if [[ -n "$number" ]]; then
+            gh issue comment "$number" --body "The contract tests still fail against Paperless-ngx: $RUN_URL"
+            exit 0
+          fi
+          {
+            printf 'The weekly contract tests against a real Paperless-ngx fail: %s\n\n' "$RUN_URL"
+            cat <<'TEXT'
+          The job `paperless` of `.github/workflows/e2e.yml` runs `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and the current release of 3.x, whose images Renovate keeps current. It checks every answer of Paperless that the app reads, runs the app against it, and compares the shapes of the answers with the fixtures of the unit tests in `tests/fixtures/`. A failure means that a release of Paperless-ngx answers differently than the app expects, that a field the unit tests read is gone, or that a change of the app (its paths, reports, settings or status) no longer matches what `tests/e2e/contract.py` expects: the log of the run says which.
+
+          The log of the failed job names the answer and the field; its artifact holds the answers of Paperless. `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app reads them.
+
+          The job adds every further failed run here and closes this issue once the tests pass again.
           TEXT
           } > "$RUNNER_TEMP/issue.md"
           gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
