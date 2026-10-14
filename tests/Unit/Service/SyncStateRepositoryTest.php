@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use OCA\PaperlessSync\Service\SyncStateRepository;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IExpressionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -26,19 +27,22 @@ final class SyncStateRepositoryTest extends TestCase {
 
 	/** @var array<string, list<array<string, string|null>>> the rows of each table, as the database driver returns them */
 	private array $tables = [self::EXPORTS => [], self::IMPORTS => []];
+	/** @var list<string> the kind of every statement that changed a table, in order */
+	private array $statements = [];
+	private TestClock $clock;
 	private SyncStateRepository $repository;
 
 	protected function setUp(): void {
 		$connection = $this->createMock(IDBConnection::class);
 		$connection->method('getQueryBuilder')->willReturnCallback(fn (): IQueryBuilder => $this->queryBuilder());
-		$this->repository = new SyncStateRepository($connection);
+		$this->clock = new TestClock();
+		$this->repository = new SyncStateRepository($connection, $this->clock);
 	}
 
 	public function testNewExportStartsWithDefaults(): void {
-		$before = time();
-
 		$this->repository->saveExport('paperless', 123, ['path' => 'Archiv/a.pdf', 'fingerprint' => 'abc', 'owner_uid' => 'intruder', 'unknown' => 'x']);
 
+		self::assertSame(['insert'], $this->statements, 'A new export is one insert, and no update follows it.');
 		$export = $this->repository->findExport('paperless', 123);
 		self::assertNotNull($export);
 		self::assertSame('paperless', $export['owner_uid']);
@@ -50,8 +54,9 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(0, $export['missing_runs']);
 		self::assertNull($export['trash_date']);
 		self::assertNull($export['last_error']);
-		self::assertGreaterThanOrEqual($before, $export['created_at']);
-		self::assertSame($export['created_at'], $export['updated_at']);
+		self::assertSame(TestClock::START, $export['last_seen']);
+		self::assertSame(TestClock::START, $export['created_at']);
+		self::assertSame(TestClock::START, $export['updated_at']);
 		self::assertArrayNotHasKey('unknown', $export);
 	}
 
@@ -60,6 +65,7 @@ final class SyncStateRepositoryTest extends TestCase {
 
 		$this->repository->saveExport('paperless', 123, ['state' => 'trash', 'trash_date' => 1788000000, 'document_id' => 999]);
 
+		self::assertSame(['insert', 'update'], $this->statements);
 		$export = $this->repository->findExport('paperless', 123);
 		self::assertNotNull($export);
 		self::assertSame('trash', $export['state']);
@@ -84,9 +90,26 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(['c.pdf'], array_column($this->repository->allExports('someone-else'), 'path'));
 	}
 
+	public function testSavingAnExportOfOneOwnerLeavesTheSameDocumentOfAnotherAlone(): void {
+		$this->repository->saveExport('paperless', 123, ['path' => 'a.pdf', 'state' => 'active']);
+		$this->repository->saveExport('someone-else', 123, ['path' => 'b.pdf', 'state' => 'active']);
+		$this->clock->advance(60);
+
+		$this->repository->saveExport('paperless', 123, ['path' => 'c.pdf', 'state' => 'trash']);
+
+		$other = $this->repository->findExport('someone-else', 123);
+		self::assertNotNull($other);
+		self::assertSame(['b.pdf', 'active', TestClock::START], [$other['path'], $other['state'], $other['updated_at']]);
+		$own = $this->repository->findExport('paperless', 123);
+		self::assertNotNull($own);
+		self::assertSame(['c.pdf', 'trash', TestClock::START + 60], [$own['path'], $own['state'], $own['updated_at']]);
+		self::assertSame(TestClock::START, $own['created_at'], 'An update keeps the time the export was created.');
+	}
+
 	public function testNewImportIsPendingAndFoundByItsPath(): void {
 		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'task_id' => 'task-1', 'path' => 'Eingang/other.pdf']);
 
+		self::assertSame(['insert'], $this->statements, 'A new import is one insert, and no update follows it.');
 		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
 		self::assertNotNull($import);
 		self::assertSame('Eingang/police.pdf', $import['path']);
@@ -94,7 +117,8 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame('pending', $import['status']);
 		self::assertSame('task-1', $import['task_id']);
 		self::assertSame('e1', $import['etag']);
-		self::assertIsInt($import['submitted_at']);
+		self::assertSame(TestClock::START, $import['submitted_at']);
+		self::assertSame(TestClock::START, $import['created_at']);
 		self::assertSame(0, $import['attempts']);
 		self::assertSame(0, $import['retry_at']);
 		self::assertNull($import['last_error']);
@@ -123,6 +147,7 @@ final class SyncStateRepositoryTest extends TestCase {
 
 		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['status' => 'success', 'last_error' => null]);
 
+		self::assertSame(['insert', 'update'], $this->statements);
 		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
 		self::assertNotNull($import);
 		self::assertSame('success', $import['status']);
@@ -139,6 +164,16 @@ final class SyncStateRepositoryTest extends TestCase {
 
 		self::assertSame(['task-2'], array_column($this->repository->allImports('paperless'), 'task_id'));
 		self::assertSame(['task-3'], array_column($this->repository->allImports('someone-else'), 'task_id'));
+	}
+
+	public function testSavingAnImportOfOneOwnerLeavesTheSameFileOfAnotherAlone(): void {
+		$this->repository->saveImport('paperless', 'Eingang/a.pdf', ['task_id' => 'task-1']);
+		$this->repository->saveImport('someone-else', 'Eingang/a.pdf', ['task_id' => 'task-2']);
+
+		$this->repository->saveImport('paperless', 'Eingang/a.pdf', ['status' => 'success']);
+
+		self::assertSame(['pending'], array_column($this->repository->allImports('someone-else'), 'status'));
+		self::assertSame(['success'], array_column($this->repository->allImports('paperless'), 'status'));
 	}
 
 	public function testImportWithTheSameHashButAnotherPathIsNotTheSame(): void {
@@ -241,6 +276,7 @@ final class SyncStateRepositoryTest extends TestCase {
 	 * @param array<string, mixed> $parameters
 	 */
 	private function execute(array $query, array $parameters): int {
+		$this->statements[] = $query['type'];
 		$table = &$this->tables[$query['table']];
 		$values = array_map(fn (string $parameter): ?string => $this->stored($parameters[$parameter]), $query['values']);
 		if ($query['type'] === 'insert') {

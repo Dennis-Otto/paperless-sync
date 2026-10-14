@@ -31,8 +31,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $correspondents = [];
 	/** @var array<string, string> */
 	public array $documentTypes = [];
-	/** @var array<int, string> */
+	/** @var array<int, string> the archived version of each document, which Paperless serves by default */
 	public array $contents = [];
+	/** @var array<int, string> the original of each document whose original differs from $contents */
+	public array $originalContents = [];
 	/** @var array<string, string> */
 	public array $uploads = [];
 	/** @var array<string, array{status: string, message: string, documentId?: int|null, listed?: bool}> the tasks that Paperless lists, by default pending */
@@ -48,6 +50,8 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public int $checksumRequests = 0;
 	/** Paperless-ngx up to 2.x, whose checksums are MD5; 3.x reports SHA-256. */
 	public bool $md5Checksums = false;
+	/** @var list<array{int, bool}> the ID of every downloaded document and whether the run asked for its original */
+	public array $downloadRequests = [];
 	/** @var list<array{string, string, bool}> the URL, the token and whether a local address was allowed, of every test of the connection */
 	public array $connections = [];
 	/** @var array{names: array<string, string>, inbox: list<string>} */
@@ -134,11 +138,12 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	}
 
 	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint {
+		$this->downloadRequests[] = [$documentId, $original];
 		if ($this->downloadException !== null) {
 			throw $this->downloadException;
 		}
 		++$this->downloads;
-		$content = $this->contents[$documentId] ?? '';
+		$content = $this->content($documentId, $original);
 		// Beyond 2 MB, php://temp keeps its content in a file, as the download of the app does.
 		$download = fopen('php://temp', 'w+b');
 		if (!is_resource($download)) {
@@ -160,7 +165,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 
 	public function documentChecksum(int $documentId, bool $original): string {
 		++$this->checksumRequests;
-		return hash($this->md5Checksums ? 'md5' : 'sha256', $this->contents[$documentId] ?? '');
+		return hash($this->md5Checksums ? 'md5' : 'sha256', $this->content($documentId, $original));
 	}
 
 	public function findDocument(DocumentFingerprint $content): ?int {
@@ -187,6 +192,15 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 			throw $this->taskException;
 		}
 		return ($this->tasks[$taskId] ?? ['status' => 'PENDING', 'message' => '']) + ['documentId' => null, 'listed' => true];
+	}
+
+	/** The original of a document, when it has one of its own, or else its archived version. */
+	private function content(int $documentId, bool $original): string {
+		if ($original && isset($this->originalContents[$documentId])) {
+			return $this->originalContents[$documentId];
+		}
+
+		return $this->contents[$documentId] ?? '';
 	}
 
 	/** @param list<array<string, mixed>> $documents */

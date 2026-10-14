@@ -22,18 +22,19 @@ final class SyncReportTest extends TestCase {
 
 		self::assertSame(['IMPORT: Eingang/a.pdf', 'TRASH P2: Archiv/_Gelöscht/b.pdf', 'EXPORT P1: Archiv/a.pdf'], $report->actions);
 		self::assertSame(0, $report->omittedActions);
+		self::assertSame([0, 0], [$report->startedAt, $report->completedAt], 'A report without times has none.');
 	}
 
 	public function testFullReportCountsTheChangesThatItLeavesOut(): void {
 		$report = new SyncReport(true);
 
-		foreach (range(1, SyncReport::ACTION_LIMIT + 5) as $id) {
+		foreach (range(1, 150) as $id) {
 			$report->action("EXPORT P{$id}: Archiv/{$id}.pdf");
 		}
 
-		self::assertCount(SyncReport::ACTION_LIMIT, $report->actions);
+		self::assertCount(100, $report->actions);
 		self::assertSame('EXPORT P100: Archiv/100.pdf', $report->actions[99], 'The first changes stay.');
-		self::assertSame(5, $report->omittedActions);
+		self::assertSame(50, $report->omittedActions);
 	}
 
 	public function testErrorsAndDeletionsNeverHideBehindImports(): void {

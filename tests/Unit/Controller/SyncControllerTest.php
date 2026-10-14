@@ -19,6 +19,7 @@ use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
@@ -45,7 +46,8 @@ final class SyncControllerTest extends TestCase {
 		$configService = $this->configService();
 		$configService->save(self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
-		$status = new StatusService($this->appConfig());
+		$clock = new TestClock();
+		$status = new StatusService($this->appConfig(), $clock);
 		$this->paperless = new TestPaperlessClient();
 		$sync = new SyncService(
 			$configService,
@@ -56,6 +58,7 @@ final class SyncControllerTest extends TestCase {
 			$status,
 			$this->locking,
 			$this->createMock(LoggerInterface::class),
+			$clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 		);
 		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService);

@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
@@ -43,6 +44,7 @@ final class SyncServiceTest extends TestCase {
 	private const ARCHIVE = 'Dokumente/Paperless/Archiv';
 	private const EXPORTED_PATH = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
 
+	private TestClock $clock;
 	private TestPaperlessClient $paperless;
 	private TestStorage $storage;
 	private TestStateRepository $state;
@@ -54,6 +56,7 @@ final class SyncServiceTest extends TestCase {
 	private SyncService $service;
 
 	protected function setUp(): void {
+		$this->clock = new TestClock();
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$this->state = new TestStateRepository();
@@ -68,9 +71,10 @@ final class SyncServiceTest extends TestCase {
 			$this->storage,
 			$this->state,
 			$paths,
-			new StatusService($this->appConfig()),
+			new StatusService($this->appConfig(), $this->clock),
 			$this->locking,
 			$this->logger,
+			$this->clock,
 			$this->activityPublisher($this->storage, $this->logger),
 		);
 	}
@@ -133,7 +137,11 @@ final class SyncServiceTest extends TestCase {
 		$this->configService->reset();
 		$this->locking->expects(self::once())->method('acquireLock');
 		$this->locking->expects(self::once())->method('releaseLock');
-		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization failed');
+		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization failed', self::callback(
+			static fn (array $context): bool => array_keys($context) === ['exception']
+				&& $context['exception'] instanceof RuntimeException
+				&& $context['exception']->getMessage() === 'Paperless Sync is not completely configured.',
+		));
 
 		try {
 			$this->service->run();
@@ -289,6 +297,140 @@ final class SyncServiceTest extends TestCase {
 		);
 	}
 
+	/** @return array<string, array{string}> */
+	public static function incompleteConfigurations(): array {
+		return [
+			'without a URL' => ['paperless_url'],
+			'without a token' => ['token'],
+			'without a target user' => ['target_user'],
+		];
+	}
+
+	/** A run that misses a part of its configuration fails before it sends the token anywhere or touches a file. */
+	#[DataProvider('incompleteConfigurations')]
+	public function testRunWithoutAUrlATokenOrATargetUserChangesNothing(string $missing): void {
+		if ($missing === 'token') {
+			$this->credential = null;
+		} else {
+			$this->settings[$missing] = '';
+		}
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [$this->document()];
+
+		try {
+			$this->service->run();
+			self::fail('A run without its ' . $missing . ' must not start.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
+		}
+
+		self::assertSame([], $this->paperless->connections);
+		self::assertSame([], $this->storage->calls);
+		self::assertSame([], $this->state->owners);
+		self::assertSame('failed', $this->settings['status_last_state']);
+	}
+
+	public function testFailedConnectionTestChangesNothing(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->connectionException = new RuntimeException('Paperless answered with HTTP 401.');
+
+		try {
+			$this->service->run();
+			self::fail('A run that cannot reach Paperless must fail.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless answered with HTTP 401.', $exception->getMessage());
+		}
+
+		self::assertSame([], $this->storage->calls, 'The run neither tests nor prepares the folders.');
+		self::assertSame([], $this->state->owners);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame('failed', $this->settings['status_last_state']);
+		self::assertSame('Paperless answered with HTTP 401.', $this->settings['status_last_error']);
+	}
+
+	public function testFailedTestOfTheBaseFolderChangesNothing(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [$this->document()];
+		$this->storage->testException = new RuntimeException('Nextcloud user paperless does not exist.');
+
+		try {
+			$this->service->run();
+			self::fail('A run without a usable base folder must fail.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Nextcloud user paperless does not exist.', $exception->getMessage());
+		}
+
+		self::assertSame([['test', TestStorage::USER, ['Dokumente/Paperless']]], $this->storage->calls, 'Nothing is prepared, read or written.');
+		self::assertSame([], $this->storage->folders);
+		self::assertSame([], $this->state->owners);
+		self::assertSame([], $this->paperless->downloadRequests);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame('failed', $this->settings['status_last_state']);
+	}
+
+	public function testRunPreparesTheFoldersAndADryRunDoesNot(): void {
+		$this->service->run(true);
+
+		self::assertSame([], $this->storage->folders, 'A dry-run creates no folder.');
+		self::assertNotContains('prepare', $this->storage->methods());
+
+		$this->storage->calls = [];
+		$this->service->run();
+
+		self::assertSame(['test', 'prepare'], array_slice($this->storage->methods(), 0, 2));
+		self::assertSame([TestStorage::USER => [
+			'Dokumente/Paperless',
+			'Dokumente/Paperless/Archiv',
+			'Dokumente/Paperless/Eingang',
+			'Dokumente/Paperless/Fehler',
+		]], $this->storage->folders);
+	}
+
+	public function testEveryCallNamesTheTargetUser(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/police.pdf'] = '%PDF-inbox';
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => ''];
+		$this->trashDocument();
+
+		$this->service->run();
+
+		self::assertContains('move', $this->storage->methods());
+		self::assertSame([TestStorage::USER], $this->storage->users());
+		self::assertSame([TestStateRepository::OWNER], array_values(array_unique($this->state->owners)));
+		self::assertSame([], $this->storage->filesOfOthers);
+	}
+
+	/** The state belongs to the target user, so another one starts with an archive of its own and leaves the copies of the first alone. */
+	public function testAnotherTargetUserGetsAnArchiveOfItsOwn(): void {
+		$this->exportDocument();
+		$files = $this->storage->files;
+		$exports = $this->state->exports;
+		$this->configService->save(['target_user' => 'archivist']);
+		$this->storage->calls = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(['archivist'], $this->storage->users());
+		self::assertSame(['archivist' => [self::EXPORTED_PATH => '%PDF-content']], $this->storage->filesOfOthers);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exportsOfOthers['archivist'][123]['path']);
+		self::assertSame($files, $this->storage->files);
+		self::assertSame($exports, $this->state->exports);
+	}
+
+	public function testRunRecordsWhenItStartedAndEnded(): void {
+		$this->exportDocument();
+		$this->clock->advance(300);
+
+		$report = $this->service->run();
+
+		self::assertSame(TestClock::START + 300, $report->startedAt);
+		self::assertSame(TestClock::START + 300, $report->completedAt);
+		self::assertSame(TestClock::START + 300, $this->settings['status_last_started']);
+		self::assertSame(TestClock::START + 300, $this->settings['status_last_completed']);
+	}
+
 	public function testFailedRunKeepsTheReportOfWhatItDidInTheStatus(): void {
 		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
 		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
@@ -364,6 +506,23 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame('completed', $this->settings['status_last_state']);
 		self::assertSame($report->completedAt, $this->settings['status_last_completed']);
+	}
+
+	/** Every run that sees a document records it, so that documents that keep failing take turns. */
+	public function testStateRecordsWhenARunLastSawEachDocumentAndFile(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+
+		self::assertSame([TestClock::START, TestClock::START], [$this->state->exports[123]['last_seen'], $this->state->exports[124]['last_seen']]);
+		self::assertSame(TestClock::START, $this->state->imports[$path]['submitted_at']);
+
+		$this->clock->advance(60);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->trash = [$this->document(124) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$this->service->run();
+
+		self::assertSame([TestClock::START + 60, TestClock::START + 60], [$this->state->exports[123]['last_seen'], $this->state->exports[124]['last_seen']]);
 	}
 
 	public function testUnchangedDocumentIsNeitherDownloadedNorRewritten(): void {
@@ -663,9 +822,10 @@ final class SyncServiceTest extends TestCase {
 			$storage,
 			$this->state,
 			new PathTemplateService(),
-			new StatusService($this->appConfig()),
+			new StatusService($this->appConfig(), $this->clock),
 			$this->locking,
 			$this->logger,
+			$this->clock,
 			$this->activityPublisher($storage, $this->logger),
 		);
 		memory_reset_peak_usage();
@@ -1007,8 +1167,20 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 	}
 
-	public function testDocumentWithoutAValidIdFailsTheRun(): void {
-		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];
+	/** @return array<string, array{mixed}> */
+	public static function invalidIds(): array {
+		return [
+			'missing' => [null],
+			'text' => ['abc'],
+			'a number followed by text' => ['12abc'],
+			'zero' => [0],
+			'negative' => [-3],
+		];
+	}
+
+	#[DataProvider('invalidIds')]
+	public function testDocumentWithoutAValidIdFailsTheRun(mixed $id): void {
+		$this->paperless->documents = [['id' => $id, 'title' => 'Broken']];
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Paperless returned a document without a valid ID.');
@@ -1032,12 +1204,118 @@ final class SyncServiceTest extends TestCase {
 		self::assertNull($this->state->exports[123]['last_error']);
 	}
 
-	public function testErrorWithoutMessageNamesTheExceptionClass(): void {
-		$this->paperless->downloadException = new LogicException();
+	/** @return array<string, array{string}> */
+	public static function emptyMessages(): array {
+		return [
+			'empty' => [''],
+			'only whitespace' => [" \n"],
+		];
+	}
+
+	#[DataProvider('emptyMessages')]
+	public function testErrorWithoutMessageNamesTheExceptionClass(string $message): void {
+		$this->paperless->downloadException = new LogicException($message);
 
 		$report = $this->exportDocument();
 
 		self::assertSame(['ERROR: P123: LogicException'], $report->actions);
+	}
+
+	public function testErrorIsReportedWithoutTheWhitespaceAroundIt(): void {
+		$this->paperless->downloadException = new RuntimeException("  Paperless timed out\n");
+
+		$report = $this->exportDocument();
+
+		self::assertSame(['ERROR: P123: Paperless timed out'], $report->actions);
+		self::assertSame('Paperless timed out', $this->state->exports[123]['last_error']);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function phasesWithErrors(): array {
+		return [
+			'export' => ['export'],
+			'removal of an excluded copy' => ['excluded'],
+			'move to the trash folder' => ['trash'],
+			'move of a missing document' => ['missing'],
+			'check of an import' => ['task'],
+			'upload that Paperless refused' => ['refused'],
+			'upload that failed' => ['upload'],
+		];
+	}
+
+	/** The state keeps the first 4000 characters of an error, not bytes, in every phase of a run. */
+	#[DataProvider('phasesWithErrors')]
+	public function testLongErrorKeepsItsFirst4000Characters(string $phase): void {
+		$error = str_repeat('ä', 5000);
+		$inbox = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->configService->save(['missing_grace_runs' => 1]);
+		switch ($phase) {
+			case 'export':
+				$this->paperless->downloadException = new RuntimeException($error);
+				$this->exportDocument();
+				break;
+			case 'excluded':
+				$this->exportDocument();
+				$this->paperless->documents[0]['tags'] = [9];
+				$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+				$this->storage->deleteException = new RuntimeException($error);
+				$this->service->run();
+				break;
+			case 'trash':
+				$this->exportDocument();
+				$this->trashDocument();
+				$this->storage->moveException = new RuntimeException($error);
+				$this->service->run();
+				break;
+			case 'missing':
+				$this->exportDocument();
+				$this->paperless->documents = [];
+				$this->storage->moveException = new RuntimeException($error);
+				$this->service->run();
+				break;
+			case 'task':
+				$this->storage->files[$inbox] = '%PDF-inbox';
+				$this->service->run();
+				$this->paperless->taskException = new RuntimeException($error);
+				$this->service->run();
+				break;
+			case 'refused':
+				$this->storage->files[$inbox] = '%PDF-inbox';
+				$this->paperless->uploadException = new PaperlessUploadException($error, true, 400);
+				$this->service->run();
+				break;
+			default:
+				$this->storage->files[$inbox] = '%PDF-inbox';
+				$this->paperless->uploadException = new RuntimeException($error);
+				$this->service->run();
+		}
+
+		$state = in_array($phase, ['task', 'refused', 'upload'], true) ? $this->state->imports[$inbox] : $this->state->exports[123];
+		self::assertSame(str_repeat('ä', 4000), $state['last_error']);
+	}
+
+	public function testLongErrorThatRecursIsLoggedOnce(): void {
+		$error = str_repeat('ä', 5000);
+		$this->paperless->downloadException = new RuntimeException($error);
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			['documentId' => 123, 'path' => self::EXPORTED_PATH, 'error' => $error],
+		);
+
+		$this->exportDocument();
+		$this->service->run();
+	}
+
+	/** A document whose path can't be rendered names the copy of its last export in the warning. */
+	public function testErrorOfAnExportedDocumentWithoutANewPathNamesItsCopy(): void {
+		$this->exportDocument($this->document(12));
+		$this->paperless->documents = [['id' => 12.5] + $this->document(12)];
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless Sync could not synchronize the document P{documentId}: {error}',
+			['documentId' => 12, 'path' => $this->archivePath(12), 'error' => 'Paperless returned a document without a numeric ID.'],
+		);
+
+		$this->service->run();
 	}
 
 	public function testDryRunReportsAnUnusableDocumentWithoutRecordingIt(): void {
@@ -1262,7 +1540,8 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $report->importsFailed);
 		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
 		self::assertSame('broken', $this->storage->files[$errorPath]);
-		self::assertStringContainsString('Unsupported mime type', $this->storage->files[$errorPath . '.error.txt']);
+		self::assertSame("Paperless import failed\n\nUnsupported mime type\n\nPaperless task: task-1\n", $this->storage->files[$errorPath . '.error.txt']);
+		self::assertSame([], $this->state->imports, 'The file left the inbox, and so did its import.');
 	}
 
 	public function testSuccessfulImportNamesTheDocumentThatPaperlessCreated(): void {
@@ -1352,7 +1631,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = $task;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		if ($changed) {
 			$this->storage->files[$path] = '%PDF-inbox, saved anew';
 		}
@@ -1375,7 +1654,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayHasKey($path, $this->storage->files, 'The file stays in the inbox.');
 		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts);
 
-		$this->state->imports[$path]['retry_at'] = time();
+		$this->clock->advance(900);
 		$again = $this->service->run();
 		self::assertSame(1, $again->importsSubmitted);
 		self::assertSame(['police.pdf', 'police.pdf'], $this->paperless->uploadAttempts);
@@ -1406,7 +1685,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = $task;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$error = "Paperless has not finished the import task task-1 a day after the upload ({$state})";
 		$this->logger->expects(self::once())->method('warning')->with(
 			'Paperless has not finished the import of the inbox file {path} a day after its upload; it moves to the error folder, as Paperless may still import it: {error}',
@@ -1456,7 +1735,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = $task;
 		$this->paperless->originals[hash($algorithm, '%PDF-inbox')] = 456;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$this->logger->expects(self::never())->method('warning');
 
 		$report = $this->service->run();
@@ -1481,7 +1760,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'listed' => false];
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$this->storage->readException = new RuntimeException('Synthetic read failure');
 
 		$report = $this->service->run();
@@ -1496,8 +1775,9 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
-		// A minute before the day is over, so that the run doesn't reach it on a slow machine.
-		$this->state->imports[$path]['submitted_at'] = time() - 86400 + 60;
+		// The last second of the day after the upload, which the clock holds: a second later, the
+		// tests above give up on the task.
+		$this->clock->advance(86400 - 1);
 		$this->logger->expects(self::never())->method('warning');
 
 		$report = $this->service->run();
@@ -1521,7 +1801,7 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
-		$this->state->imports[$path]['submitted_at'] = time() - 3 * 86400;
+		$this->clock->advance(3 * 86400);
 		$this->paperless->{$failure} = new RuntimeException('Paperless timed out');
 
 		$report = $this->service->run();
@@ -1552,7 +1832,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = $task;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$imports = $this->state->imports;
 		$files = $this->storage->files;
 		$this->logger->expects(self::never())->method('warning');
@@ -1570,7 +1850,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->originals[hash('sha256', '%PDF-inbox')] = 456;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$imports = $this->state->imports;
 
 		$report = $this->service->run(true);
@@ -1654,6 +1934,57 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 
 		self::assertArrayHasKey('Dokumente/Paperless/Eingang/gone.pdf', $this->state->imports);
+	}
+
+	/** Each import of the state is checked, whatever the imports before it did. */
+	public function testEveryImportOfTheStateIsChecked(): void {
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		foreach (['kept', 'changed', 'due', 'done'] as $name) {
+			$this->storage->files["{$inbox}{$name}.pdf"] = "%PDF-{$name}";
+		}
+		$this->state->imports = [
+			$inbox . 'gone.pdf' => ['path' => $inbox . 'gone.pdf', 'status' => 'pending', 'etag' => 'e', 'task_id' => 'task-7'],
+			$inbox . 'kept.pdf' => ['path' => $inbox . 'kept.pdf', 'status' => 'success', 'etag' => hash('sha256', '%PDF-kept')],
+			$inbox . 'changed.pdf' => ['path' => $inbox . 'changed.pdf', 'status' => 'success', 'etag' => hash('sha256', '%PDF-old')],
+			$inbox . 'due.pdf' => ['path' => $inbox . 'due.pdf', 'status' => 'retry', 'etag' => hash('sha256', '%PDF-due'), 'attempts' => 2, 'retry_at' => $this->clock->time],
+			$inbox . 'done.pdf' => ['path' => $inbox . 'done.pdf', 'status' => 'pending', 'etag' => hash('sha256', '%PDF-done'), 'task_id' => 'task-8'],
+		];
+		$this->paperless->tasks['task-8'] = ['status' => 'SUCCESS', 'message' => ''];
+
+		$report = $this->service->run();
+
+		self::assertSame(['IMPORT SUCCESS: ' . $inbox . 'done.pdf', 'IMPORT: ' . $inbox . 'changed.pdf', 'IMPORT: ' . $inbox . 'due.pdf'], $report->actions);
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(['changed.pdf' => '%PDF-changed', 'due.pdf' => '%PDF-due'], $this->paperless->uploads, 'Only the changed file and the one whose next attempt is due go up.');
+		self::assertSame([$inbox . 'kept.pdf', $inbox . 'due.pdf', $inbox . 'changed.pdf'], array_keys($this->state->imports));
+	}
+
+	/** A file that changed after its import is uploaded again; the import of its old content is forgotten, also while the upload waits for the next run. */
+	public function testFileChangedAfterItsImportForgetsTheImportAlsoWhenItWaits(): void {
+		$this->configService->save(['delete_inbox_after_success' => false]);
+		$changed = 'Dokumente/Paperless/Eingang/b.pdf';
+		$new = 'Dokumente/Paperless/Eingang/a.pdf';
+		$this->storage->files[$changed] = '%PDF-b';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => ''];
+		$this->service->run();
+		$this->configService->save(['batch_size' => 1]);
+		// The new file comes first in the inbox, so the changed one waits for the next run.
+		$this->storage->files[$new] = '%PDF-a';
+		unset($this->storage->files[$changed]);
+		$this->storage->files[$changed] = '%PDF-b-corrected';
+		$imports = $this->state->imports;
+
+		$dryRun = $this->service->run(true);
+
+		self::assertSame(['IMPORT: ' . $new], $dryRun->actions);
+		self::assertSame($imports, $this->state->imports, 'A dry-run changes no state.');
+
+		$report = $this->service->run();
+
+		self::assertSame(['IMPORT: ' . $new], $report->actions);
+		self::assertSame(1, $report->skipped);
+		self::assertSame([$new], array_keys($this->state->imports));
 	}
 
 	public function testKeptInboxFileIsImportedOnceUntilItChanges(): void {
@@ -1760,9 +2091,11 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $failed->errors);
 		self::assertSame('retry', $this->state->imports[$path]['status']);
 		self::assertSame(1, $this->state->imports[$path]['attempts']);
-		self::assertSame(900, $this->state->imports[$path]['retry_at'] - $this->state->imports[$path]['submitted_at']);
+		self::assertSame(TestClock::START, $this->state->imports[$path]['submitted_at']);
+		self::assertSame(TestClock::START + 900, $this->state->imports[$path]['retry_at']);
 		self::assertSame('Paperless answered the upload with HTTP 502: Bad Gateway', $this->state->imports[$path]['last_error']);
 
+		$this->clock->advance(900 - 1);
 		$waiting = $this->service->run();
 		self::assertSame([], $waiting->actions);
 		self::assertSame(0, $waiting->errors);
@@ -1770,7 +2103,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts, 'The file must wait for its next attempt.');
 
 		$this->paperless->uploadException = null;
-		$this->state->imports[$path]['retry_at'] = time();
+		$this->clock->advance(1);
 		$retried = $this->service->run();
 		self::assertSame(1, $retried->importsSubmitted);
 		self::assertSame(['police.pdf' => '%PDF-inbox'], $this->paperless->uploads);
@@ -1780,26 +2113,66 @@ final class SyncServiceTest extends TestCase {
 		self::assertNull($this->state->imports[$path]['last_error']);
 	}
 
-	public function testWaitAfterAFailedUploadDoublesUpToADay(): void {
+	/** @return array<string, array{\Throwable}> */
+	public static function uploadFailuresThatMayPass(): array {
+		return [
+			'a timeout' => [new RuntimeException('Paperless timed out')],
+			'an unavailable Paperless' => [new PaperlessUploadException('Paperless timed out', false, 503)],
+		];
+	}
+
+	#[DataProvider('uploadFailuresThatMayPass')]
+	public function testWaitAfterAFailedUploadDoublesUpToADay(\Throwable $failure): void {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
-		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
-		$levels = [];
-		$this->logger->method('log')->willReturnCallback(static function (string $level, string $message, array $context) use (&$levels): void {
-			$levels[] = $level;
+		$this->paperless->uploadException = $failure;
+		$logs = [];
+		$this->logger->method('log')->willReturnCallback(static function (string $level, string $message, array $context) use (&$logs): void {
+			$logs[] = [$level, $context];
 		});
 
 		$waits = [];
 		for ($run = 1; $run <= 10; ++$run) {
-			$this->service->run();
+			$report = $this->service->run();
 			$import = $this->state->imports[$path];
 			self::assertSame($run, $import['attempts']);
-			$waits[] = intdiv($import['retry_at'] - $import['submitted_at'], 60);
-			$this->state->imports[$path]['retry_at'] = time();
+			self::assertSame($this->clock->time, $import['submitted_at']);
+			$minutes = intdiv($import['retry_at'] - $this->clock->time, 60);
+			self::assertSame(["ERROR: Import {$path}: Paperless timed out (attempt {$run}, the next in {$minutes} minutes)"], $report->actions);
+			$waits[] = $minutes;
+			$this->clock->time = $import['retry_at'];
 		}
 
 		self::assertSame([15, 30, 60, 120, 240, 480, 960, 1440, 1440, 1440], $waits);
-		self::assertSame([LogLevel::WARNING, ...array_fill(0, 9, LogLevel::INFO)], $levels, 'Only the first failure is a warning.');
+		self::assertSame([LogLevel::WARNING, ...array_fill(0, 9, LogLevel::INFO)], array_column($logs, 0), 'Only the first failure is a warning.');
+		self::assertSame(['path' => $path, 'error' => 'Paperless timed out', 'attempts' => 10, 'minutes' => 1440], $logs[9][1]);
+	}
+
+	public function testRefusedFileForgetsItsEarlierAttempts(): void {
+		$path = 'Dokumente/Paperless/Eingang/notes.zip';
+		$this->storage->files[$path] = 'PK-archive';
+		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
+		$this->service->run();
+		$this->clock->advance(900);
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 415.', true, 415);
+
+		$this->service->run();
+
+		$import = $this->state->imports[$path];
+		self::assertSame(['rejected', 0, 0, $this->clock->time], [$import['status'], $import['attempts'], $import['retry_at'], $import['submitted_at']]);
+	}
+
+	public function testEveryFileOpenedForAnUploadIsClosed(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/a.pdf'] = '%PDF-a';
+		$this->storage->files['Dokumente/Paperless/Eingang/b.pdf'] = '%PDF-b';
+		$this->paperless->uploadFailures['a.pdf'] = new RuntimeException('Could not copy the file for the Paperless upload.');
+
+		$this->service->run();
+
+		self::assertCount(2, $this->storage->openedStreams);
+		foreach ($this->storage->openedStreams as $stream) {
+			self::assertIsClosedResource($stream, 'A stream is closed also after a failed upload.');
+		}
 	}
 
 	public function testFileThatPaperlessRefusedWaitsUntilItChanges(): void {
@@ -1938,7 +2311,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
 		$this->service->run();
 		$this->service->run();
-		$this->state->imports[$due]['retry_at'] = time();
+		$this->state->imports[$due]['retry_at'] = $this->clock->time;
 		$imports = $this->state->imports;
 
 		$report = $this->service->run(true);
@@ -1999,6 +2372,100 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayHasKey(124, $this->state->exports);
 	}
 
+	/** @return array<string, array{string, string, bool}> */
+	public static function excludedTagSettings(): array {
+		return [
+			'the second of two names' => ['Privat, Steuer', 'Steuer', true],
+			'a name between spaces' => [' steuer ', 'Steuer', true],
+			'names on lines of their own' => ["Privat\nSteuer", 'Steuer', true],
+			'a name in capitals' => ['STEUER', 'Steuer', true],
+			'a name with an umlaut in capitals' => ['ÄRZTE', 'Ärzte', true],
+			'names set past the settings page' => ['Privat ,  steuer ,', 'Steuer', false],
+		];
+	}
+
+	/** A document with an excluded tag is skipped, whichever way the name was entered, and holds up no other document. */
+	#[DataProvider('excludedTagSettings')]
+	public function testExcludedTagsMatchByTheirNames(string $setting, string $tagName, bool $saved): void {
+		if ($saved) {
+			$this->configService->save(['excluded_tags' => $setting]);
+		} else {
+			$this->settings['excluded_tags'] = $setting;
+		}
+		$this->paperless->tagInfo = ['names' => ['5' => $tagName, '6' => 'Haushalt'], 'inbox' => []];
+		$excluded = $this->document(130);
+		$excluded['tags'] = [6, 5];
+		$household = $this->document(120);
+		$household['tags'] = [6];
+
+		$report = $this->exportDocuments([$household, $excluded]);
+
+		self::assertSame(['EXPORT P120: ' . $this->archivePath(120)], $report->actions);
+		self::assertSame(1, $report->skipped);
+		self::assertArrayNotHasKey(130, $this->state->exports);
+	}
+
+	public function testExcludedDocumentWhoseExportNeverSucceededIsForgottenQuietly(): void {
+		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
+		$this->exportDocument();
+		$this->paperless->downloadException = null;
+		$this->paperless->documents[0]['tags'] = [9];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+
+		$report = $this->service->run();
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->errors);
+		self::assertSame([], $this->state->exports);
+	}
+
+	public function testExcludedDocumentWithoutItsCopyIsForgottenWithoutARemoval(): void {
+		$this->exportDocument();
+		$this->storage->files = [];
+		$this->paperless->documents[0]['tags'] = [9];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+
+		$report = $this->service->run();
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->removedExcluded);
+		self::assertNotContains('delete', $this->storage->methods());
+		self::assertSame([], $this->state->exports);
+	}
+
+	public function testRemovalOfAnExcludedCopyTakesItsPlaceInTheBatch(): void {
+		$this->exportDocument($this->document(125));
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+		$excluded = $this->document(125);
+		$excluded['tags'] = [9];
+		$this->paperless->documents = [$excluded, $this->document(120)];
+		$this->paperless->contents[120] = '%PDF-120';
+
+		$report = $this->service->run();
+
+		self::assertSame(['REMOVE EXCLUDED P125: ' . $this->archivePath(125)], $report->actions);
+		self::assertSame(0, $report->exported);
+		self::assertSame(2, $report->skipped, 'The excluded document, and the export that waits for the next run.');
+	}
+
+	public function testDocumentsBehindAnExcludedCopyThatWaitsAreStillCounted(): void {
+		$this->exportDocuments([$this->document(120), $this->document(125)]);
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+		$excluded = $this->document(125);
+		$excluded['tags'] = [9];
+		$this->paperless->documents = [$this->document(120), $excluded, $this->document(130)];
+		$this->paperless->contents[130] = '%PDF-130';
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P130: ' . $this->archivePath(130)], $report->actions);
+		self::assertSame(0, $report->removedExcluded, 'The batch is full, so the copy waits for the next run.');
+		self::assertArrayHasKey($this->archivePath(125), $this->storage->files);
+		self::assertSame(1, $report->unchanged, 'The document behind it is still counted.');
+	}
+
 	public function testInboxTagDoesNotExcludeWhenTheInboxIsSynchronizedToo(): void {
 		$this->configService->save(['skip_inbox' => false]);
 		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
@@ -2048,12 +2515,14 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
 		$this->storage->deleteException = new RuntimeException('File is locked');
 		$this->expectDocumentWarning(self::EXPORTED_PATH, 'File is locked');
+		$this->clock->advance(60);
 
 		$report = $this->service->run();
 		$this->service->run();
 
 		self::assertSame(['ERROR: Excluded P123: File is locked'], $report->actions);
 		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
+		self::assertSame(TestClock::START + 60, $this->state->exports[123]['last_seen'], 'The document failed in this run, so it waits behind those that failed earlier.');
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 	}
 
@@ -2067,6 +2536,16 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->exports);
 	}
 
+	public function testTrashedDocumentThatWasNeverExportedHoldsUpNoOther(): void {
+		$this->exportDocument();
+		$this->trashDocument();
+		array_unshift($this->paperless->trash, $this->document(99) + ['deleted_at' => '2026-08-27T08:00:00+02:00']);
+
+		$report = $this->service->run();
+
+		self::assertSame(['TRASH P123: ' . $this->trashFolderPath()], $report->actions);
+	}
+
 	public function testDocumentAlreadyInTheTrashFolderStaysThere(): void {
 		$this->exportDocument();
 		$this->trashDocument();
@@ -2077,6 +2556,31 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $report->unchanged);
 		self::assertSame(0, $report->movedToTrash);
 		self::assertSame('trash', $this->state->exports[123]['state']);
+	}
+
+	public function testDocumentsInTheTrashFolderForgetTheirErrors(): void {
+		$this->moveToTheTrashFolder([$this->document(), $this->document(124)]);
+		$this->clock->advance(60);
+
+		$report = $this->service->run();
+
+		self::assertSame(2, $report->unchanged);
+		self::assertSame([], $report->actions);
+		foreach ([123, 124] as $id) {
+			self::assertNull($this->state->exports[$id]['last_error']);
+			self::assertSame(0, $this->state->exports[$id]['missing_runs']);
+			self::assertSame(TestClock::START + 60, $this->state->exports[$id]['last_seen']);
+		}
+	}
+
+	public function testDryRunLeavesTheStateOfDocumentsInTheTrashFolder(): void {
+		$this->moveToTheTrashFolder([$this->document(), $this->document(124)]);
+		$exports = $this->state->exports;
+
+		$report = $this->service->run(true);
+
+		self::assertSame(2, $report->unchanged);
+		self::assertSame($exports, $this->state->exports);
 	}
 
 	public function testDryRunReportsTheMoveToTheTrashFolder(): void {
@@ -2297,8 +2801,7 @@ final class SyncServiceTest extends TestCase {
 
 		$this->service->run();
 
-		$today = gmdate('Y-m-d');
-		self::assertArrayHasKey(self::ARCHIVE . "/_Gelöscht/{$today}/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf", $this->storage->files);
+		self::assertSame([$this->deletedToday() => '%PDF-content'], $this->storage->files);
 	}
 
 	public function testMissingDocumentWaitsForTheConfiguredRuns(): void {
@@ -2310,6 +2813,38 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['WAIT P123: missing run 1/3'], $report->actions);
 		self::assertSame(1, $this->state->exports[123]['missing_runs']);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
+	}
+
+	public function testEveryMissingDocumentCountsItsMissingRuns(): void {
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['WAIT P124: missing run 1/3', 'WAIT P123: missing run 1/3'], $report->actions);
+		self::assertSame([1, 1], [$this->state->exports[123]['missing_runs'], $this->state->exports[124]['missing_runs']]);
+	}
+
+	public function testDocumentWithTheFirstIdCanGoMissing(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument($this->document(1));
+		$this->paperless->documents = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['MISSING P1: ' . $this->deletedToday(1)], $report->actions);
+	}
+
+	public function testUnchangedDocumentListedAgainStartsItsCountOfMissingScansAnew(): void {
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->service->run();
+		$this->paperless->documents = [$this->document()];
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->unchanged);
+		self::assertSame(0, $this->state->exports[123]['missing_runs']);
 	}
 
 	public function testDryRunDoesNotCountMissingRuns(): void {
@@ -2338,16 +2873,32 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $this->state->exports[123]['missing_runs'], 'Only scans in a row without the document count, also when its export fails.');
 	}
 
-	/** @return array<string, array{string, string}> */
+	public function testIncompleteScanStillStartsTheCountOfAListedDocumentAnew(): void {
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->paperless->documents = [];
+		$this->service->run();
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->documentsListed = 2;
+		unset($this->storage->files[self::EXPORTED_PATH]);
+		$this->storage->writeException = new RuntimeException('The file name is not allowed');
+
+		$this->service->run();
+
+		self::assertSame(1, $this->state->exports[124]['missing_runs'], 'The scan was incomplete, so P124 counts no missing run.');
+		self::assertSame(0, $this->state->exports[123]['missing_runs'], 'P123 was listed, also when its export failed.');
+	}
+
+	/** @return array<string, array{string, string, array<string, int|string>}> */
 	public static function incompleteScans(): array {
 		return [
-			'documents' => ['documentsListed', "SCAN INCOMPLETE: Paperless's list of documents came back incomplete or changed while the run read it (1 of 2 received); no document counts as missing in this run."],
-			'trash' => ['trashListed', "SCAN INCOMPLETE: Paperless's list of trashed documents came back incomplete or changed while the run read it (0 of 2 received); no document counts as missing in this run."],
+			'documents' => ['documentsListed', "SCAN INCOMPLETE: Paperless's list of documents came back incomplete or changed while the run read it (1 of 2 received); no document counts as missing in this run.", ['list' => 'documents', 'received' => 1, 'listed' => 2]],
+			'trash' => ['trashListed', "SCAN INCOMPLETE: Paperless's list of trashed documents came back incomplete or changed while the run read it (0 of 2 received); no document counts as missing in this run.", ['list' => 'trashed documents', 'received' => 0, 'listed' => 2]],
 		];
 	}
 
+	/** @param array<string, int|string> $context */
 	#[DataProvider('incompleteScans')]
-	public function testIncompleteScanCountsNoDocumentAsMissing(string $listed, string $action): void {
+	public function testIncompleteScanCountsNoDocumentAsMissing(string $listed, string $action, array $context): void {
 		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
 		$this->exportDocuments([$this->document(), $this->document(124)]);
 		$files = $this->storage->files;
@@ -2355,7 +2906,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->{$listed} = 2;
 		$this->logger->expects(self::once())->method('warning')->with(
 			'Paperless\'s list of {list} came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.',
-			self::callback(static fn (array $context): bool => $context['listed'] === 2),
+			$context,
 		);
 
 		$report = $this->service->run();
@@ -2398,7 +2949,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run();
 
-		$deletedPath = self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
+		$deletedPath = $this->deletedToday();
 		self::assertSame(1, $report->movedToTrash);
 		self::assertSame(['MISSING P123: ' . $deletedPath], $report->actions);
 		self::assertSame([$deletedPath => '%PDF-content'], $this->storage->files);
@@ -2410,6 +2961,35 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $again->movedToTrash);
 		self::assertSame([$deletedPath => '%PDF-content'], $this->storage->files);
 		self::assertSame(2, $this->state->exports[123]['missing_runs']);
+	}
+
+	/** The clock of Nextcloud names the day of the deleted folder, also in the last second of a day. */
+	public function testMoveAtTheEndOfADayLandsInTheFolderOfThatDay(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->clock->time = (int)strtotime('2026-08-28T23:59:59Z');
+
+		$report = $this->service->run();
+
+		$path = self::ARCHIVE . '/_Gelöscht/2026-08-28/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
+		self::assertSame(['MISSING P123: ' . $path], $report->actions);
+		self::assertSame([$path => '%PDF-content'], $this->storage->files);
+	}
+
+	public function testMovesOfMissingDocumentsTakeTheirPlacesInTheBatch(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocuments($this->documents(4));
+		$this->configService->save(['batch_size' => 2]);
+		$this->paperless->documents = [];
+		unset($this->storage->files[$this->archivePath(1)]);
+
+		$report = $this->service->run();
+
+		self::assertSame(['MISSING P4: ' . $this->deletedToday(4), 'MISSING P3: ' . $this->deletedToday(3)], $report->actions);
+		self::assertSame(1, $report->skipped);
+		self::assertSame('active', $this->state->exports[2]['state'], 'P2 waits for the next run.');
+		self::assertSame('missing', $this->state->exports[1]['state'], 'P1 has no copy to move, so it takes no place in the batch.');
 	}
 
 	public function testMissingDocumentWithoutAFileIsOnlyMarked(): void {
@@ -2527,10 +3107,98 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		$deletedPath = self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
-		self::assertSame(['MISSING P123: ' . $deletedPath, self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(1, $report->movedToTrash);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertSame('active', $this->state->exports[123]['state']);
+	}
+
+	/**
+	 * Decision 0004: permanent deletion is off by default, so a document that Paperless purged
+	 * from its trash keeps its copy in the deleted folder, run after run.
+	 */
+	public function testDocumentPurgedFromTheTrashKeepsItsCopyWhilePermanentDeletionIsOff(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->trashDocument();
+		$this->service->run();
+		$this->paperless->trash = [];
+
+		$first = $this->service->run();
+		$second = $this->service->run();
+
+		foreach ([$first, $second] as $report) {
+			self::assertSame([], $report->actions);
+			self::assertSame(0, $report->permanentlyDeleted);
+		}
+		self::assertSame([$this->trashFolderPath() => '%PDF-content'], $this->storage->files);
+		self::assertNotContains('delete', $this->storage->methods());
+		self::assertSame('missing', $this->state->exports[123]['state']);
+		self::assertSame(2, $this->state->exports[123]['missing_runs']);
+	}
+
+	public function testDryRunReportsNoDeletionOfAPurgedDocumentWhilePermanentDeletionIsOff(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->trashDocument();
+		$this->service->run();
+		$this->paperless->trash = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame([], $report->actions);
+		self::assertSame(0, $report->permanentlyDeleted);
+		self::assertSame('trash', $this->state->exports[123]['state']);
+	}
+
+	/**
+	 * Decision 0004: without direct deletion, a document that vanished without the trash of
+	 * Paperless moves to the deleted folder and stays there, even with permanent deletion on.
+	 */
+	public function testVanishedDocumentMovesToTheDeletedFolderWithoutDirectDeletion(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => false]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$first = $this->service->run();
+		$second = $this->service->run();
+
+		self::assertSame(['MISSING P123: ' . $this->deletedToday()], $first->actions);
+		self::assertSame([], $second->actions);
+		self::assertSame(0, $first->permanentlyDeleted + $second->permanentlyDeleted);
+		self::assertSame([$this->deletedToday() => '%PDF-content'], $this->storage->files);
+		self::assertNotContains('delete', $this->storage->methods());
+		self::assertSame('missing', $this->state->exports[123]['state']);
+	}
+
+	public function testDryRunReportsTheMoveNotTheDeletionWithoutDirectDeletion(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => false]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(1, $report->movedToTrash);
+		self::assertSame(0, $report->permanentlyDeleted);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+	}
+
+	public function testPermanentDeletionsTakeTheirPlacesInTheBatch(): void {
+		$this->moveToTheTrashFolder($this->documents(4));
+		$this->configService->save(['permanent_delete' => true, 'missing_grace_runs' => 1, 'batch_size' => 2]);
+		$this->paperless->trash = [];
+		unset($this->storage->files[$this->trashFolderPath(1)]);
+		$this->storage->foldersPerPrune = 2;
+
+		$report = $this->service->run();
+
+		self::assertSame(['DELETE P4: ' . $this->trashFolderPath(4), 'DELETE P3: ' . $this->trashFolderPath(3)], $report->actions);
+		self::assertSame(2, $report->permanentlyDeleted);
+		self::assertSame(1, $report->skipped);
+		self::assertSame(4, $report->foldersPruned, 'Each deletion prunes its empty folders.');
+		self::assertSame([$this->trashFolderPath(2) => '%PDF-content'], $this->storage->files);
+		self::assertSame([2], array_keys($this->state->exports), 'P1 has no copy to delete, so its state goes without a place in the batch.');
 	}
 
 	/** Permanent deletion alone deletes only what the trash showed, so the notice of a missing document still says that it moves. */
@@ -2541,8 +3209,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		$deletedPath = self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
-		self::assertSame(['MISSING P123: ' . $deletedPath, self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
 		self::assertSame(0, $report->permanentlyDeleted);
 	}
 
@@ -2656,6 +3323,97 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $report->permanentlyDeleted);
 		self::assertSame(1, $report->skipped);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
+	}
+
+	/** Every change that leaves a folder empty prunes it, and the report counts every folder. */
+	public function testEveryPrunedFolderCounts(): void {
+		$inbox = 'Dokumente/Paperless/Eingang/Ordner/';
+		$this->configService->save(['missing_grace_runs' => 1]);
+		foreach (['a', 'b', 'c'] as $name) {
+			$this->storage->files["{$inbox}{$name}.pdf"] = "%PDF-{$name}";
+		}
+		$this->exportDocuments([$this->document(100), $this->document(110), $this->document(120), $this->document(130)]);
+		$this->paperless->tasks = [
+			'task-1' => ['status' => 'SUCCESS', 'message' => ''],
+			'task-2' => ['status' => 'SUCCESS', 'message' => ''],
+			'task-3' => ['status' => 'FAILURE', 'message' => 'Unsupported mime type'],
+		];
+		$excluded = $this->document(130);
+		$excluded['tags'] = [9];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+		$renamed = $this->document(120);
+		$renamed['title'] = 'Strom September';
+		$renamed['modified'] = '2026-08-26T11:00:00+02:00';
+		// P110 moves to the trash of Paperless, and P100 is gone from both lists.
+		$this->paperless->documents = [$excluded, $renamed];
+		$this->paperless->trash = [$this->document(110) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$this->storage->foldersPerPrune = 2;
+
+		$report = $this->service->run();
+
+		self::assertSame([
+			"IMPORT SUCCESS: {$inbox}a.pdf",
+			"IMPORT SUCCESS: {$inbox}b.pdf",
+			"IMPORT ERROR: {$inbox}c.pdf -> Dokumente/Paperless/Fehler/Ordner/c.pdf",
+			'REMOVE EXCLUDED P130: ' . $this->archivePath(130),
+			'MOVE P120: ' . self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom September [P120].pdf',
+			'TRASH P110: ' . $this->trashFolderPath(110),
+			'MISSING P100: ' . $this->deletedToday(100),
+		], $report->actions);
+		self::assertSame(14, $report->foldersPruned, 'Each of the seven changes pruned two folders.');
+	}
+
+	/** A dry-run counts its changes against the batch as a run does, so it shows what the next run does. */
+	public function testDryRunCountsItsChangesAgainstTheBatch(): void {
+		$this->exportDocument();
+		$this->configService->save(['batch_size' => 2]);
+		$this->trashDocument();
+		$this->paperless->documents = [$this->document(125), $this->document(130)];
+		$this->paperless->contents += [125 => '%PDF-125', 130 => '%PDF-130'];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['EXPORT P130: ' . $this->archivePath(130), 'EXPORT P125: ' . $this->archivePath(125)], $report->actions);
+		self::assertSame(1, $report->skipped, 'The move to the trash folder waits for the next run.');
+	}
+
+	/** A document that failed waits behind every document without an error, also behind one that a later run saw. */
+	public function testDocumentsWithoutAnErrorComeFirstWhateverTheirLastRun(): void {
+		$this->storage->writeFailures[$this->archivePath(5)] = new RuntimeException('The file name is not allowed');
+		$this->exportDocuments([$this->document(5), $this->document(9)]);
+		$this->state->exports[5]['last_seen'] = TestClock::START - 3600;
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->documents[1]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[9] = '%PDF-9-corrected';
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P9: ' . $this->archivePath(9)], $report->actions);
+		self::assertSame(1, $report->skipped);
+	}
+
+	/** @return array<string, array{bool, string, bool}> */
+	public static function preferredVersions(): array {
+		return [
+			'the archived version by default' => [true, '%PDF-archive', false],
+			'the original when the archived version is not preferred' => [false, '%PDF-original', true],
+		];
+	}
+
+	#[DataProvider('preferredVersions')]
+	public function testExportsThePreferredVersionOfADocument(bool $preferArchive, string $content, bool $original): void {
+		$this->configService->save(['prefer_archive' => $preferArchive]);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-archive';
+		$this->paperless->originalContents[123] = '%PDF-original';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+
+		$this->service->run();
+
+		self::assertSame([self::EXPORTED_PATH => $content], $this->storage->files);
+		self::assertSame([[123, $original]], $this->paperless->downloadRequests);
+		self::assertSame(($original ? 'original:' : 'archive:') . '2026-08-26T10:00:00+02:00', $this->state->exports[123]['source_revision']);
 	}
 
 	public function testFoldersAreKeptWhenPruningIsOff(): void {
@@ -2842,7 +3600,7 @@ final class SyncServiceTest extends TestCase {
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$this->activities = [];
 
 		$this->service->run();
@@ -2861,7 +3619,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'listed' => false];
 		$this->paperless->originals[hash('sha256', '%PDF-inbox')] = 456;
-		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->clock->advance(86400);
 		$this->activities = [];
 
 		$this->service->run();
@@ -2959,14 +3717,31 @@ final class SyncServiceTest extends TestCase {
 		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.";
 	}
 
-	/** The path of the copy of a document that a run of today moves to the deleted folder. */
+	/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
 	private function deletedToday(int $id = 123): string {
-		return self::ARCHIVE . '/_Gelöscht/' . gmdate('Y-m-d') . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
+		return self::ARCHIVE . '/_Gelöscht/' . $this->clock->today() . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
 	/** The path of the copy of a document that Paperless moved to its trash on 2026-08-27. */
 	private function trashFolderPath(int $id = 123): string {
 		return self::ARCHIVE . "/_Gelöscht/2026-08-27/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
+	}
+
+	/**
+	 * Exports the documents, moves them to the trash of Paperless and their copies to the trash
+	 * folder, and gives each an error and missing runs that the next run forgets.
+	 *
+	 * @param list<array<string, mixed>> $documents
+	 */
+	private function moveToTheTrashFolder(array $documents): void {
+		$this->exportDocuments($documents);
+		$this->paperless->documents = [];
+		$this->paperless->trash = array_map(static fn (array $document): array => $document + ['deleted_at' => '2026-08-27T08:00:00+02:00'], $documents);
+		$this->service->run();
+		foreach (array_keys($this->state->exports) as $id) {
+			$this->state->exports[$id]['last_error'] = 'The file was locked';
+			$this->state->exports[$id]['missing_runs'] = 2;
+		}
 	}
 
 	private function trashDocument(): void {

@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 
 /**
@@ -53,11 +54,12 @@ final class StatusService {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IAppConfig $appConfig,
+		private ITimeFactory $timeFactory,
 	) {
 	}
 
 	public function started(bool $dryRun): void {
-		$now = time();
+		$now = $this->timeFactory->getTime();
 		$this->carryOverTheLastRun();
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now);
 		if (!$dryRun) {
@@ -101,7 +103,7 @@ final class StatusService {
 	 * dry-run, counts for the schedule, as every run did before.
 	 */
 	public function failed(\Throwable $exception, ?SyncReport $report = null): void {
-		$now = time();
+		$now = $this->timeFactory->getTime();
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now);
 		if ($report === null || !$report->dryRun) {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now);

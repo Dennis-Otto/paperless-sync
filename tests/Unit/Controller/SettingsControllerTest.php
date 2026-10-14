@@ -23,6 +23,7 @@ use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
@@ -590,15 +591,17 @@ final class SettingsControllerTest extends TestCase {
 
 	private function controller(ConfigService $configService): SettingsController {
 		$paths = new PathTemplateService();
+		$clock = new TestClock();
 		$sync = new SyncService(
 			$configService,
 			$this->paperless,
 			$this->storage,
 			new TestStateRepository(),
 			$paths,
-			new StatusService($this->appConfig()),
+			new StatusService($this->appConfig(), $clock),
 			$this->createMock(ILockingProvider::class),
 			$this->createMock(LoggerInterface::class),
+			$clock,
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
 		);
 

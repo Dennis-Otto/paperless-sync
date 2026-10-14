@@ -258,7 +258,9 @@ final class NextcloudStorageServiceTest extends TestCase {
 		} catch (RuntimeException $exception) {
 			self::assertSame('The storage is full', $exception->getMessage());
 		}
-		self::assertCount(1, $this->temporaryFiles());
+		$temporary = $this->temporaryFiles();
+		self::assertCount(1, $temporary);
+		self::assertMatchesRegularExpression('#^/paperless/files/Archiv/\.a\.pdf\.paperless-[0-9a-f]{16}\.part$#', $temporary[0], 'A hidden file next to the target, with a random name and the ending .part that Nextcloud keeps out of the quota.');
 	}
 
 	public function testWriteThatCreatesNoFileNeedsNoCleanup(): void {
@@ -284,6 +286,24 @@ final class NextcloudStorageServiceTest extends TestCase {
 			self::assertSame('Not enough free space in Nextcloud: the file needs 12 bytes, and 11 are free.', $exception->getMessage());
 		}
 		self::assertSame([self::HOME, self::HOME . '/Archiv'], array_keys($this->nodes));
+	}
+
+	public function testWriteThatExceedsAFreeSpaceOfManyBytesIsRefused(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->freeSpace[self::HOME . '/Archiv'] = 11.0;
+
+		$this->expectException(NotEnoughSpaceException::class);
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
+	}
+
+	/** The free space comes from the deepest folder of the path that exists, not from a folder of the same name elsewhere. */
+	public function testFreeSpaceComesFromTheDeepestFolderOfThePath(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->freeSpace[self::HOME . '/Archiv'] = 0;
+
+		$this->service->writeStream(self::USER, 'Neu/Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
+
+		self::assertSame('%PDF-content', $this->nodes[self::HOME . '/Neu/Archiv/a.pdf']);
 	}
 
 	public function testWriteThatFitsIntoTheFreeSpaceIsStored(): void {
@@ -312,6 +332,9 @@ final class NextcloudStorageServiceTest extends TestCase {
 
 	public function testWriteBelowAFileWithTheNameOfAFolderFails(): void {
 		$this->nodes[self::HOME . '/Archiv'] = 'a file';
+		// The folder of the next part of the path, elsewhere, has no say in the free space.
+		$this->nodes[self::HOME . '/2026'] = null;
+		$this->freeSpace[self::HOME . '/2026'] = 0;
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Nextcloud path component Archiv is not a folder.');
@@ -406,12 +429,15 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->nodes[self::HOME . '/Eingang/z.pdf'] = 'z';
 		$this->nodes[self::HOME . '/Eingang/Versicherung'] = null;
 		$this->nodes[self::HOME . '/Eingang/Versicherung/police.pdf'] = 'police';
+		$this->nodes[self::HOME . '/Eingang/Versicherung/2026'] = null;
+		$this->nodes[self::HOME . '/Eingang/Versicherung/2026/beitrag.pdf'] = 'beitrag';
 		$this->nodes[self::HOME . '/Eingang/.a.pdf.paperless-0123.part'] = 'partial';
 		$this->nodes[self::HOME . '/Eingang/.hidden'] = null;
 		$this->nodes[self::HOME . '/Eingang/.hidden/secret.pdf'] = 'secret';
 		$this->nodes[self::HOME . '/Eingang/a.pdf'] = 'a';
 
 		self::assertSame([
+			['path' => 'Eingang/Versicherung/2026/beitrag.pdf', 'name' => 'beitrag.pdf', 'etag' => md5('beitrag')],
 			['path' => 'Eingang/Versicherung/police.pdf', 'name' => 'police.pdf', 'etag' => md5('police')],
 			['path' => 'Eingang/a.pdf', 'name' => 'a.pdf', 'etag' => md5('a')],
 			['path' => 'Eingang/z.pdf', 'name' => 'z.pdf', 'etag' => md5('z')],
@@ -485,10 +511,13 @@ final class NextcloudStorageServiceTest extends TestCase {
 	public function testPruneLeavesFoldersOutsideTheRootAlone(): void {
 		$this->nodes[self::HOME . '/Archiv'] = null;
 		$this->nodes[self::HOME . '/Eingang'] = null;
+		$this->nodes[self::HOME . '/Archiv-alt'] = null;
 
 		self::assertSame(0, $this->service->pruneEmptyParents(self::USER, 'Eingang/a.pdf', 'Archiv'));
 		self::assertSame(0, $this->service->pruneEmptyParents(self::USER, 'a.pdf', 'Archiv'));
+		self::assertSame(0, $this->service->pruneEmptyParents(self::USER, 'Archiv-alt/a.pdf', 'Archiv'), 'A folder whose name only starts with the name of the root is outside it.');
 		self::assertArrayHasKey(self::HOME . '/Eingang', $this->nodes);
+		self::assertArrayHasKey(self::HOME . '/Archiv-alt', $this->nodes);
 	}
 
 	/** @return resource */

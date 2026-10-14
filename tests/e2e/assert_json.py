@@ -214,6 +214,13 @@ elif mode == "missing-wait":
     expect("permanentlyDeleted", 0)
     if not any(str(action).startswith("WAIT P123:") for action in payload.get("actions", [])):
         raise AssertionError(f"Missing-document grace action absent: {payload!r}")
+elif mode == "deletion-off":
+    expect("dryRun", True)
+    expect("permanentlyDeleted", 0)
+    expect("movedToTrash", 0)
+    expect("errors", 0)
+    if any(str(action).startswith(("DELETE ", "MISSING ")) for action in payload.get("actions", [])):
+        raise AssertionError(f"With permanent deletion off, a document purged from the trash lost its copy: {payload!r}")
 elif mode == "deleted":
     expect("permanentlyDeleted", 1)
     expect("errors", 0)

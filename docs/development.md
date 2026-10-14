@@ -21,7 +21,7 @@ bash tests/e2e/run.sh
 
 ## Tests
 
-Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, incomplete scans of Paperless, the batch size with failing writes, inbox success and failure, dry-run behavior, and release version management. `scripts/check.sh` fails when a line of `lib/` runs in no test.
+Unit tests cover path generation, state transitions, export, metadata moves, exclusions, trash handling, guarded deletion, with permanent deletion off and without direct deletion too, incomplete scans of Paperless, the batch size with failing writes, inbox success and failure, dry-run behavior, and release version management. `scripts/check.sh` fails when a line of `lib/` runs in no test. The doubles of the tests are strict and Nextcloud's clock stands still in them, and mutation tests check every week that the tests notice a change of the code; [Architecture](architecture.md#tests) shows how, with the score and the way to run them on your computer.
 
 `tests/package/test_check_package.sh` tests the check of the release package in a throwaway repository, in a few seconds and without krankerl: the package of a small app passes, packed as krankerl packs it and again as the release workflow packs it after signing, and every package that lacks a runtime file, holds a stray, changed or linked one, or the wrong signature fails with the difference. `scripts/check-project.sh` runs it.
 

@@ -47,6 +47,43 @@ final class Version000100Date20260826000000Test extends TestCase {
 		self::assertSame(64, $imports->columns['path_hash'][1]['length'], 'A SHA-256 hash has 64 hexadecimal digits.');
 	}
 
+	/**
+	 * Nextcloud runs a migration once, so an installed database keeps the columns of this one, and
+	 * a change here would reach new installations only. Every option of every column is pinned.
+	 */
+	public function testColumnsKeepTheirTypesAndOptions(): void {
+		$this->migrate($this->schema([]));
+
+		self::assertSame([
+			'id' => ['bigint', ['autoincrement' => true, 'notnull' => true, 'unsigned' => true]],
+			'owner_uid' => ['string', ['notnull' => true, 'length' => 64]],
+			'document_id' => ['bigint', ['notnull' => true, 'unsigned' => true]],
+			'path' => ['string', ['notnull' => true, 'length' => 1024, 'default' => '']],
+			'fingerprint' => ['string', ['notnull' => true, 'length' => 128, 'default' => '']],
+			'source_revision' => ['string', ['notnull' => true, 'length' => 255, 'default' => '']],
+			'state' => ['string', ['notnull' => true, 'length' => 16, 'default' => 'active']],
+			'missing_runs' => ['integer', ['notnull' => true, 'default' => 0]],
+			'last_seen' => ['bigint', ['notnull' => true, 'default' => 0]],
+			'trash_date' => ['bigint', ['notnull' => false]],
+			'last_error' => ['text', ['notnull' => false]],
+			'created_at' => ['bigint', ['notnull' => true, 'default' => 0]],
+			'updated_at' => ['bigint', ['notnull' => true, 'default' => 0]],
+		], $this->created['paperless_sync_export']->columns);
+		self::assertSame([
+			'id' => ['bigint', ['autoincrement' => true, 'notnull' => true, 'unsigned' => true]],
+			'owner_uid' => ['string', ['notnull' => true, 'length' => 64]],
+			'path_hash' => ['string', ['notnull' => true, 'length' => 64]],
+			'path' => ['string', ['notnull' => true, 'length' => 1024]],
+			'etag' => ['string', ['notnull' => true, 'length' => 255, 'default' => '']],
+			'task_id' => ['string', ['notnull' => true, 'length' => 255, 'default' => '']],
+			'status' => ['string', ['notnull' => true, 'length' => 16, 'default' => 'pending']],
+			'submitted_at' => ['bigint', ['notnull' => true, 'default' => 0]],
+			'last_error' => ['text', ['notnull' => false]],
+			'created_at' => ['bigint', ['notnull' => true, 'default' => 0]],
+			'updated_at' => ['bigint', ['notnull' => true, 'default' => 0]],
+		], $this->created['paperless_sync_import']->columns);
+	}
+
 	public function testNamesFitTheLimitsOfEveryDatabaseOfNextcloud(): void {
 		$this->migrate($this->schema([]));
 
