@@ -71,8 +71,8 @@ done
 
 # The configuration of the quick start, before the first dry-run: Paperless in the
 # same Compose project and synchronization still off. Every setting that the request
-# leaves out keeps its default, such as the folders Dokumente/Paperless, Archiv,
-# Eingang, Fehler and _Gelöscht, which a shell on Windows would garble.
+# leaves out keeps its default, in the default language of Nextcloud, English, such as
+# the folders Documents/Paperless, Archive, Inbox, Failed imports and _Deleted.
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
 	--header 'Accept: application/json' \

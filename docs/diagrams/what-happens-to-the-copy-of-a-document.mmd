@@ -1,9 +1,9 @@
 stateDiagram-v2
     direction TB
     accTitle: What happens to the copy of a document
-    accDescr: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Gelöscht; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Gelöscht is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.
+    accDescr: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Deleted; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Deleted is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.
     state "In the archive" as archive
-    state "In _Gelöscht" as deleted
+    state "In _Deleted" as deleted
     state "Deleted in Nextcloud" as gone
     [*] --> archive: exported
     archive --> deleted: moved to the trash<br>in Paperless, or gone<br>without the trash<br>for N complete scans

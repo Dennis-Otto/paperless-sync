@@ -123,7 +123,7 @@ The Paperless trash shows an account only the documents that it owns and those w
 
 ### Other users don't see the archive
 
-The archive is in the files of the target user alone; the app gives nobody else access. Share its folder, such as `Dokumente/Paperless/Archiv`, from *Files*, with users or with a group, and preferably read-only, since nothing there goes back to Paperless, and a run may replace an edited copy or write a deleted one anew. Share the inbox folder only with those who may send documents to Paperless: whatever reaches it goes to Paperless under the account of the app.
+The archive is in the files of the target user alone; the app gives nobody else access. Share its folder, such as `Documents/Paperless/Archive`, from *Files*, with users or with a group, and preferably read-only, since nothing there goes back to Paperless, and a run may replace an edited copy or write a deleted one anew. Share the inbox folder only with those who may send documents to Paperless: whatever reaches it goes to Paperless under the account of the app.
 
 ### Deleted copies are not in the trash bin
 

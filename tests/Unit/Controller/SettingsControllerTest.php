@@ -84,7 +84,7 @@ final class SettingsControllerTest extends TestCase {
 	}
 
 	public function testSavesSettingsThatWorkWithPaperlessAndNextcloud(): void {
-		$this->storage->expects(self::once())->method('test')->with('paperless', 'Dokumente/Paperless');
+		$this->storage->expects(self::once())->method('test')->with('paperless', 'Documents/Paperless');
 
 		$response = $this->controller->save(self::validSettings() + ['batch_size' => 20], 'secret-token');
 
@@ -97,7 +97,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame([
 			['id' => 'paperless', 'label' => 'Paperless', 'status' => 'passed', 'message' => 'Paperless-ngx 2.20.15 antwortet unter dieser Adresse.', 'hint' => '', 'setting' => ''],
 			['id' => 'documents', 'label' => 'Dokumente', 'status' => 'passed', 'message' => 'Für das Konto sichtbar: 12', 'hint' => '', 'setting' => ''],
-			['id' => 'folder', 'label' => 'Nextcloud-Ordner', 'status' => 'passed', 'message' => 'paperless darf Dateien in Dokumente/Paperless anlegen.', 'hint' => '', 'setting' => ''],
+			['id' => 'folder', 'label' => 'Nextcloud-Ordner', 'status' => 'passed', 'message' => 'paperless darf Dateien in Documents/Paperless anlegen.', 'hint' => '', 'setting' => ''],
 		], $answer['checks'], 'The checklist ends with the folder of the target user.');
 		self::assertSame(20, $this->settings['batch_size']);
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
@@ -136,7 +136,7 @@ final class SettingsControllerTest extends TestCase {
 	/** The schedule will run with the settings, so they are tested with the stored token first. */
 	public function testSavingAScheduleTestsTheStoredToken(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$this->storage->expects(self::once())->method('test')->with('paperless', 'Dokumente/Paperless');
+		$this->storage->expects(self::once())->method('test')->with('paperless', 'Documents/Paperless');
 
 		$response = $this->controller->save(self::validSettings() + ['enabled' => true, 'batch_size' => 30]);
 
@@ -267,7 +267,7 @@ final class SettingsControllerTest extends TestCase {
 		$credentials = $this->createMock(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
 		$credentials->method('store')->willThrowException(new RuntimeException('Unavailable.'));
-		$controller = $this->controller(new ConfigService($this->appConfig(), $credentials, new PathTemplateService()));
+		$controller = $this->controller($this->configService(credentials: $credentials));
 		$this->storage->expects(self::once())->method('test');
 
 		$response = $controller->save(self::validSettings() + ['enabled' => true]);
@@ -462,7 +462,7 @@ final class SettingsControllerTest extends TestCase {
 	 */
 	public function testTheTestListsTheChecklistWithoutSaving(): void {
 		$this->checks = [self::tokenRefused()];
-		$this->storage->expects(self::once())->method('test')->with('paperless', 'Dokumente/Paperless');
+		$this->storage->expects(self::once())->method('test')->with('paperless', 'Documents/Paperless');
 
 		$response = $this->controller->test(self::validSettings() + ['paperless_local_network' => true], 'secret-token');
 
@@ -560,7 +560,7 @@ final class SettingsControllerTest extends TestCase {
 			'connected' => true,
 			'paths' => [
 				['id' => 12, 'title' => 'Strom', 'path' => 'Energie GmbH/March/Strom [P12].pdf', 'skipped' => false],
-				['id' => 11, 'title' => '', 'path' => '_Ohne Korrespondent/February/Ohne Namen [P11].pdf', 'skipped' => false],
+				['id' => 11, 'title' => '', 'path' => '_No correspondent/February/Ohne Namen [P11].pdf', 'skipped' => false],
 			],
 		], self::answer($response));
 		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->configService()->get()->pathTemplate, 'The preview saves nothing.');

@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
+use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
 
 /**
@@ -35,11 +36,6 @@ final class ConfigService {
 		'paperless_local_network' => false,
 		'enabled' => false,
 		'target_user' => '',
-		'base_path' => 'Dokumente/Paperless',
-		'archive_folder' => 'Archiv',
-		'inbox_folder' => 'Eingang',
-		'error_folder' => 'Fehler',
-		'deleted_folder' => '_Gelöscht',
 		'path_template' => PathTemplateService::DEFAULT_TEMPLATE,
 		'export_enabled' => true,
 		'inbox_enabled' => true,
@@ -56,10 +52,24 @@ final class ConfigService {
 		'delete_inbox_after_success' => true,
 		'recursive_inbox' => true,
 		'conflict_mode' => 'replace',
-		'empty_correspondent' => '_Ohne Korrespondent',
-		'empty_document_type' => '_Ohne Dokumenttyp',
-		'empty_date' => '_Ohne Datum',
-		'untitled' => 'Ohne Titel',
+	];
+
+	/**
+	 * The names of the folders and the fallbacks for empty metadata that a new installation
+	 * proposes, in English. They follow the default language of Nextcloud through the catalog of the
+	 * app, so that a German instance proposes Dokumente/Paperless, Archiv and Eingang, and an
+	 * English one Documents/Paperless, Archive and Inbox. Once saved, a name stays as it is.
+	 */
+	private const NAMES = [
+		'base_path' => 'Documents/Paperless',
+		'archive_folder' => 'Archive',
+		'inbox_folder' => 'Inbox',
+		'error_folder' => 'Failed imports',
+		'deleted_folder' => '_Deleted',
+		'empty_correspondent' => '_No correspondent',
+		'empty_document_type' => '_No document type',
+		'empty_date' => '_No date',
+		'untitled' => 'Untitled',
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -67,6 +77,7 @@ final class ConfigService {
 		private IAppConfig $appConfig,
 		private ICredentialsManager $credentialsManager,
 		private PathTemplateService $pathTemplate,
+		private IFactory $l10nFactory,
 	) {
 	}
 
@@ -76,7 +87,7 @@ final class ConfigService {
 	 */
 	public function storeLazily(): int {
 		$changed = 0;
-		foreach (array_keys(self::DEFAULTS) as $key) {
+		foreach (self::keys() as $key) {
 			if ($this->appConfig->updateLazy(AppConstants::APP_ID, $this->storageKey($key), true)) {
 				++$changed;
 			}
@@ -149,7 +160,7 @@ final class ConfigService {
 	 */
 	public function validate(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$values = $this->readValues();
-		foreach (array_keys(self::DEFAULTS) as $key) {
+		foreach (self::keys() as $key) {
 			if (array_key_exists($key, $settings)) {
 				/** @psalm-suppress MixedAssignment */
 				$values[$key] = $settings[$key];
@@ -280,6 +291,26 @@ final class ConfigService {
 	}
 
 	/**
+	 * Keep the names of the folders and the fallbacks of an installation that is in use: store
+	 * each of $names whose setting has no stored value, so that the default of a newer version,
+	 * in the default language of Nextcloud, doesn't move its archive. Returns how many it stored.
+	 *
+	 * @param array<string, string> $names by setting, such as base_path
+	 */
+	public function keepNames(array $names): int {
+		$kept = 0;
+		foreach (array_intersect_key($names, self::NAMES) as $key => $name) {
+			$storageKey = $this->storageKey($key);
+			if (!$this->appConfig->hasKey(AppConstants::APP_ID, $storageKey, null)) {
+				$this->appConfig->setValueString(AppConstants::APP_ID, $storageKey, $name, lazy: true);
+				++$kept;
+			}
+		}
+
+		return $kept;
+	}
+
+	/**
 	 * The configured Paperless URL alone, without a trailing slash. Unlike get(), it doesn't read the
 	 * token, which a link to Paperless, such as in the activity stream, doesn't need.
 	 */
@@ -290,7 +321,7 @@ final class ConfigService {
 	/** @return array<string, mixed> */
 	private function readValues(): array {
 		$values = [];
-		foreach (self::DEFAULTS as $key => $default) {
+		foreach ($this->defaults() as $key => $default) {
 			$storageKey = $this->storageKey($key);
 			if (is_bool($default)) {
 				$values[$key] = $this->appConfig->getValueBool(AppConstants::APP_ID, $storageKey, $default, lazy: true);
@@ -304,6 +335,45 @@ final class ConfigService {
 		$values['sync_interval_minutes'] = max(self::MINIMUM_INTERVAL_MINUTES, (int)$values['sync_interval_minutes']);
 
 		return $values;
+	}
+
+	/** @return list<string> every setting, by its key */
+	private static function keys(): array {
+		return array_keys(self::DEFAULTS + self::NAMES);
+	}
+
+	/**
+	 * The default of every setting, with the names in the default language of Nextcloud: the
+	 * language of the instance, not that of whoever reads the settings, so that the settings page
+	 * and a scheduled run, which has no reader, agree on them.
+	 *
+	 * @return array<string, bool|int|string>
+	 */
+	private function defaults(): array {
+		$l10n = $this->l10nFactory->get(AppConstants::APP_ID, $this->defaultLanguage());
+		$defaults = self::DEFAULTS;
+		foreach (array_keys(self::NAMES) as $key) {
+			$defaults[$key] = $l10n->t(self::NAMES[$key]);
+		}
+
+		return $defaults;
+	}
+
+	/**
+	 * The default language of Nextcloud, or else its generic language, such as de for de_DE, when
+	 * the app has no catalog for the regional one, or else English. Nextcloud would fall back to
+	 * the language of the user who reads, which differs between administrators and is missing in
+	 * a scheduled run.
+	 */
+	private function defaultLanguage(): string {
+		$language = $this->l10nFactory->findGenericLanguage(AppConstants::APP_ID);
+		foreach ([$language, explode('_', $language)[0]] as $candidate) {
+			if ($this->l10nFactory->languageExists(AppConstants::APP_ID, $candidate)) {
+				return $candidate;
+			}
+		}
+
+		return 'en';
 	}
 
 	/** @param array<string, mixed> $values @return array<string, mixed> */

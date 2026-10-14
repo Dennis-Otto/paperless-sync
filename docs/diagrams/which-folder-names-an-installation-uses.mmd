@@ -1,0 +1,16 @@
+flowchart TB
+    accTitle: Which folder names an installation uses
+    accDescr: For each folder name and fallback name, an installation uses the name that its settings saved, whatever the language. An installation that an earlier version set up, with a target user or with copies and imports of its runs, keeps the German name of those versions, such as Archiv, for a name that it never saved. A new installation proposes the name in the default language of Nextcloud when the app has a catalog for that language or for its generic one, such as German for de_DE, and in English otherwise, such as Archive. Saving the settings keeps the names that the page shows. The questions are indigo and the names in Nextcloud blue.
+
+    name["A folder name or<br>a fallback name"] --> saved{"Saved in<br>the settings?"}
+    saved -->|yes| keep["The saved name"]
+    saved -->|no| earlier{"Set up by an<br>earlier version, with a<br>target user or a run?"}
+    earlier -->|yes| german["The German name of<br>the earlier versions,<br>such as Archiv"]
+    earlier -->|no| language{"A catalog for the<br>default language of<br>Nextcloud, or for its<br>generic one?"}
+    language -->|yes| localized["The name in that<br>language, such as<br>Archiv for de or de_DE"]
+    language -->|no| english["The English name,<br>such as Archive"]
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class saved,earlier,language check
+    class keep,german,localized,english nextcloud

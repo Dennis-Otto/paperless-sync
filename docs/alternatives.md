@@ -127,16 +127,16 @@ The container copies the media folder of Paperless into a folder of a Nextcloud 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-folder-of-the-container-becomes-the-base-folder-of-paperless-sync.dark.svg">
-  <img src="images/diagrams/the-folder-of-the-container-becomes-the-base-folder-of-paperless-sync.svg" alt="The folder of the container becomes the base folder of Paperless Sync: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archiv, the archive, Eingang, the inbox to Paperless, and Fehler, the failed imports. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.">
+  <img src="images/diagrams/the-folder-of-the-container-becomes-the-base-folder-of-paperless-sync.svg" alt="The folder of the container becomes the base folder of Paperless Sync: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archive, the archive, Inbox, the inbox to Paperless, and Failed imports, the files that Paperless failed to import. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.">
 </picture>
 
 1. **Stop the container** and remove it from the Compose file of Paperless. At every start, it deletes the files of its folder that the media folder of Paperless doesn't have, so it would delete the archive of Paperless Sync. Its folder and its shares stay as they are.
 2. **Choose the account and the folder.** In the settings of Paperless Sync, the target user is the account of `WEBDRIVE_USER`, and the base folder is the folder of `WEBDRIVE_URL`, the part after `/remote.php/dav/files/<user>/`, such as `Paperless`.
 3. **Write the path template** for the folders of `PAPERLESS_FILENAME_FORMAT`, as in steps 2 and 3 [from a mount](#from-an-external-storage-mount), and choose the archive PDF when the container read `documents/archive`, as its README suggests.
-4. **Start a dry run**, then turn synchronization on. The archive grows in `Archiv`, next to the old folders, in as many runs as the batch size needs.
+4. **Start a dry run**, then turn synchronization on. The archive grows in `Archive`, next to the old folders, in as many runs as the batch size needs.
 5. **Decide about the inbox**, as in step 7 [from a mount](#from-an-external-storage-mount): the container copied every document, also those that Paperless Sync leaves out: by default those still in the inbox of Paperless, and those with an excluded tag.
-6. **Delete the old folders** once the status shows a run without errors and a dry run exports nothing more: everything in the base folder but `Archiv`, `Eingang` and `Fehler`. They go to the trash bin of the account, from where you can restore them, and every document in the archive is left with one copy.
-7. **Open the inbox to others**, if they should send files to Paperless: a read-only share of the base folder doesn't let them, so share `Eingang` with them with permission to upload.
+6. **Delete the old folders** once the status shows a run without errors and a dry run exports nothing more: everything in the base folder but `Archive`, `Inbox` and `Failed imports`. They go to the trash bin of the account, from where you can restore them, and every document in the archive is left with one copy.
+7. **Open the inbox to others**, if they should send files to Paperless: a read-only share of the base folder doesn't let them, so share `Inbox` with them with permission to upload.
 
 ## Sources
 

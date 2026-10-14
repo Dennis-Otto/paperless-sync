@@ -12,6 +12,8 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCP\IAppConfig;
+use OCP\IL10N;
+use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\MockObject\MockObject;
 
@@ -29,9 +31,11 @@ trait InMemoryConfiguration {
 	private mixed $credential = null;
 	/** How often the credentials store was read, for code that must not read the token. */
 	private int $credentialReads = 0;
+	/** The default language of Nextcloud, which the names of the folders of a new installation follow. */
+	private string $defaultLanguage = 'en';
 
-	private function configService(?PathTemplateService $paths = null): ConfigService {
-		return new ConfigService($this->appConfig(), $this->credentialsManager(), $paths ?? new PathTemplateService());
+	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
+		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory());
 	}
 
 	/**
@@ -91,11 +95,47 @@ trait InMemoryConfiguration {
 
 			return true;
 		});
+		// Whether a key is stored, as a lazy one or not, or as either for null.
+		$mock->method('hasKey')->willReturnCallback(fn (string $app, string $key, ?bool $lazy = false): bool => array_key_exists($key, $this->settings)
+			&& ($lazy === null || isset($this->lazyKeys[$key]) === $lazy));
 		$mock->method('deleteKey')->willReturnCallback(function (string $app, string $key): void {
 			unset($this->settings[$key]);
 		});
 
 		return $mock;
+	}
+
+	/**
+	 * Nextcloud's translations of the app, with $defaultLanguage as the language of the instance:
+	 * German from the catalog l10n/de.json, so that a test also finds a text that the catalog
+	 * lacks, and English, the language of the texts in the code; the app has no other catalog.
+	 *
+	 * @return IFactory&MockObject
+	 */
+	private function l10nFactory(): IFactory {
+		$catalog = json_decode((string)file_get_contents(__DIR__ . '/../../l10n/de.json'), true, 512, JSON_THROW_ON_ERROR);
+		/** @var array<string, string> $german */
+		$german = $catalog['translations'];
+		$factory = $this->createMock(IFactory::class);
+		$factory->method('findGenericLanguage')->willReturnCallback(fn (): string => $this->defaultLanguage);
+		$factory->method('languageExists')->willReturnCallback(static fn (?string $app, string $language): bool => in_array($language, ['en', 'de'], true));
+		$factory->method('get')->willReturnCallback(function (string $app, ?string $language = null) use ($german): IL10N {
+			// Nextcloud would take the language of whoever reads instead of one without a catalog.
+			self::assertContains($language, ['en', 'de'], 'The app has no catalog for this language.');
+			$l10n = $this->createMock(IL10N::class);
+			$l10n->method('t')->willReturnCallback(static function (string $text, array|string $parameters = []) use ($language, $german): string {
+				if ($language === 'de') {
+					self::assertArrayHasKey($text, $german, 'l10n/de.json has no translation of this text.');
+					$text = $german[$text];
+				}
+
+				return vsprintf($text, (array)$parameters);
+			});
+
+			return $l10n;
+		});
+
+		return $factory;
 	}
 
 	/** @return ICredentialsManager&MockObject */

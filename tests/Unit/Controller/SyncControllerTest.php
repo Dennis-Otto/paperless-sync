@@ -161,7 +161,7 @@ final class SyncControllerTest extends TestCase {
 		$report = $response->getData();
 		self::assertInstanceOf(SyncReport::class, $report);
 		self::assertTrue($report->unsavedSettings);
-		self::assertSame(['EXPORT P5: Dokumente/Paperless/Archiv/2026/Strom [P5].pdf'], $report->actions);
+		self::assertSame(['EXPORT P5: Documents/Paperless/Archive/2026/Strom [P5].pdf'], $report->actions);
 		foreach (['path_template', 'inbox_enabled', 'paperless_url', 'target_user'] as $key) {
 			self::assertSame($saved[$key], $this->settings[$key], "The dry-run saves no setting, {$key} neither.");
 		}

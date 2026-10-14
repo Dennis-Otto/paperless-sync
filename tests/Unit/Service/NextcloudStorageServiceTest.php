@@ -52,6 +52,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private NextcloudStorageService $service;
 
 	protected function setUp(): void {
+		// A German instance, as the documents of the tests: the folders have their German names.
+		$this->defaultLanguage = 'de';
 		$rootFolder = $this->createMock(IRootFolder::class);
 		$rootFolder->method('getUserFolder')->willReturnCallback(fn (string $userId): Folder => $this->folder('/' . $userId . '/files'));
 		$userManager = $this->createMock(IUserManager::class);
