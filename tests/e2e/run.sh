@@ -599,6 +599,16 @@ control /control/scenario/empty >/dev/null
 sync_run false "${TMP_DIR}/missing-wait.json"
 assert_json missing-wait "${TMP_DIR}/missing-wait.json"
 assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+# Deletion off: the document that Paperless purged from its trash would be deleted in this run,
+# but with permanent deletion off it keeps its copy. A dry-run shows it without changing the
+# state, so that the next run deletes the copy with permanent deletion on again. The setting
+# changes through the settings page, as an administrator changes it: after a change through occ,
+# the runs of the web server still saw the old value.
+save_settings "${TMP_DIR}/deletion-off-settings.json" permanent_delete=0
+sync_run true "${TMP_DIR}/deletion-off.json"
+save_settings "${TMP_DIR}/deletion-on-settings.json" permanent_delete=1
+assert_json deletion-off "${TMP_DIR}/deletion-off.json"
+assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
 sync_run false "${TMP_DIR}/deleted.json"
 assert_json deleted "${TMP_DIR}/deleted.json"
 assert_dav_missing sync-target "${TRASH_PATH}"

@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -167,6 +168,6 @@ final class AdminSettingsTest extends TestCase {
 			$this->initialState[$key] = $data;
 		});
 
-		return new AdminSettings($this->configService(), new StatusService($this->appConfig()), $this->urlGenerator, $initialState);
+		return new AdminSettings($this->configService(), new StatusService($this->appConfig(), new TestClock()), $this->urlGenerator, $initialState);
 	}
 }

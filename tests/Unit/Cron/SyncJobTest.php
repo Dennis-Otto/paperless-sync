@@ -16,11 +16,11 @@ use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
-use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -35,7 +35,7 @@ use Psr\Log\NullLogger;
 final class SyncJobTest extends TestCase {
 	use InMemoryConfiguration;
 
-	private int $now;
+	private TestClock $clock;
 	private ConfigService $configService;
 	/** @var ILockingProvider&MockObject */
 	private ILockingProvider $locking;
@@ -45,14 +45,12 @@ final class SyncJobTest extends TestCase {
 	private SyncJob $job;
 
 	protected function setUp(): void {
-		$this->now = time();
+		$this->clock = new TestClock();
 		$this->configService = $this->configService();
 		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$time = $this->createMock(ITimeFactory::class);
-		$time->method('getTime')->willReturnCallback(fn (): int => $this->now);
-		$status = new StatusService($this->appConfig());
+		$status = new StatusService($this->appConfig(), $this->clock);
 		$this->sync = new SyncService(
 			$this->configService,
 			new TestPaperlessClient(),
@@ -62,8 +60,9 @@ final class SyncJobTest extends TestCase {
 			$status,
 			$this->locking,
 			$this->createMock(LoggerInterface::class),
+			$this->clock,
 		);
-		$this->job = new SyncJob($time, $this->configService, $status, $this->sync, $this->logger);
+		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
 	}
 
@@ -91,26 +90,26 @@ final class SyncJobTest extends TestCase {
 	}
 
 	public function testRunWaitsForTheConfiguredInterval(): void {
-		$this->settings['status_last_completed'] = $this->now - 60;
-		$this->settings['status_last_started'] = $this->now - 14 * 60;
+		$this->settings['status_last_completed'] = $this->clock->time - 60;
+		$this->settings['status_last_started'] = $this->clock->time - 14 * 60;
 
 		$this->start();
 		self::assertArrayNotHasKey('status_last_state', $this->settings, 'A run one minute ago is too recent.');
 
-		$this->now += 14 * 60;
+		$this->clock->advance(14 * 60);
 		$this->start();
 		self::assertSame('completed', $this->settings['status_last_state'], 'Fifteen minutes after the last run, the next one is due.');
 	}
 
 	public function testRunAfterAFailedRunWaitsForTheConfiguredInterval(): void {
-		$this->settings['status_last_started'] = $this->now - 15 * 60;
-		$this->settings['status_last_ended'] = $this->now - 60;
+		$this->settings['status_last_started'] = $this->clock->time - 15 * 60;
+		$this->settings['status_last_ended'] = $this->clock->time - 60;
 		$this->settings['status_last_state'] = 'failed';
 
 		$this->start();
 		self::assertSame('failed', $this->settings['status_last_state'], 'A run that failed one minute ago is too recent.');
 
-		$this->now += 14 * 60;
+		$this->clock->advance(14 * 60);
 		$this->start();
 		self::assertSame('completed', $this->settings['status_last_state']);
 	}
@@ -120,8 +119,8 @@ final class SyncJobTest extends TestCase {
 	 * administrator starts shortly before the next run is due doesn't push it back by an interval.
 	 */
 	public function testADryRunDoesNotPostponeTheScheduledRun(): void {
-		$this->settings['status_last_sync_started'] = $this->now - 16 * 60;
-		$this->settings['status_last_sync_ended'] = $this->now - 16 * 60 + 30;
+		$this->settings['status_last_sync_started'] = $this->clock->time - 16 * 60;
+		$this->settings['status_last_sync_ended'] = $this->clock->time - 16 * 60 + 30;
 		$this->sync->run(true);
 		self::assertSame('dry-run-completed', $this->settings['status_last_state']);
 
@@ -145,8 +144,8 @@ final class SyncJobTest extends TestCase {
 
 	/** A real run, also one started with "Synchronize now", is the one that the schedule counts from. */
 	public function testARealRunPostponesTheScheduledRun(): void {
-		$this->settings['status_last_sync_started'] = $this->now - 16 * 60;
-		$this->settings['status_last_sync_ended'] = $this->now - 16 * 60 + 30;
+		$this->settings['status_last_sync_started'] = $this->clock->time - 16 * 60;
+		$this->settings['status_last_sync_ended'] = $this->clock->time - 16 * 60 + 30;
 		$this->sync->run(false);
 		$this->settings['status_last_state'] = 'completed by hand';
 

@@ -13,16 +13,19 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 final class StatusServiceTest extends TestCase {
 	use InMemoryConfiguration;
 
+	private TestClock $clock;
 	private StatusService $service;
 
 	protected function setUp(): void {
-		$this->service = new StatusService($this->appConfig());
+		$this->clock = new TestClock();
+		$this->service = new StatusService($this->appConfig(), $this->clock);
 	}
 
 	public function testNothingRanYet(): void {
@@ -63,15 +66,14 @@ final class StatusServiceTest extends TestCase {
 
 	public function testStartedRunClearsThePreviousError(): void {
 		$this->settings['status_last_error'] = 'Paperless was unavailable';
-		$before = time();
 
 		$this->service->started(false);
 
 		$status = $this->service->get();
 		self::assertSame('running', $status['state']);
 		self::assertSame('', $status['error']);
-		self::assertGreaterThanOrEqual($before, $status['lastStarted']);
-		self::assertSame($status['lastStarted'], $this->settings['status_last_sync_started'], 'The schedule counts from the start of a real run.');
+		self::assertSame(TestClock::START, $status['lastStarted']);
+		self::assertSame(TestClock::START, $this->settings['status_last_sync_started'], 'The schedule counts from the start of a real run.');
 
 		$this->settings['status_last_sync_started'] = 1;
 		$this->service->started(true);
@@ -135,16 +137,25 @@ final class StatusServiceTest extends TestCase {
 
 	public function testFailedRunKeepsAShortenedErrorAndTheEndOfTheLastCompletedRun(): void {
 		$this->service->completed(new SyncReport(false, 1000, 1060));
-		$before = time();
 
-		$this->service->failed(new RuntimeException(str_repeat('x', 1500)));
+		$this->service->failed(new RuntimeException(str_repeat('ä', 1500)));
 
 		$status = $this->service->get();
 		self::assertSame('failed', $status['state']);
-		self::assertSame(str_repeat('x', 1000), $status['error']);
+		self::assertSame(str_repeat('ä', 1000), $status['error'], 'The error keeps its first thousand characters, not bytes.');
 		self::assertSame(1060, $status['lastCompleted'], 'A run that failed completed nothing.');
-		self::assertGreaterThanOrEqual($before, $status['lastEnded']);
+		self::assertSame(TestClock::START, $status['lastEnded']);
 		self::assertSame(1060, $status['report']['completedAt'], 'Without a report of its own, the report of the last run stays.');
+	}
+
+	public function testCompletedRunAfterAFailedOneEndsAndClearsItsError(): void {
+		$this->service->failed(new RuntimeException('Paperless was unavailable'));
+
+		$this->service->completed(new SyncReport(false, TestClock::START + 60, TestClock::START + 120));
+
+		$status = $this->service->get();
+		self::assertSame(TestClock::START + 120, $status['lastEnded'], 'The end of the failed run is no longer the end of the last run.');
+		self::assertSame('', $status['error']);
 	}
 
 	public function testFailedRunKeepsTheReportOfWhatItDid(): void {
@@ -183,6 +194,22 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame('SCAN INCOMPLETE: notice 199', $kept['actions'][199]);
 		self::assertSame([str_repeat('é', 1000)], $kept['errorMessages']);
 		self::assertSame(4 + 100, $kept['omittedActions'], 'The changes that the report leaves out, and the 100 lines past the limit of the kept report.');
+	}
+
+	/**
+	 * A line of a run may quote a name from Paperless that is not valid UTF-8; the report keeps it,
+	 * with a replacement for the invalid byte: a question mark from PHP 8.3, U+FFFD before.
+	 */
+	public function testReportKeepsALineThatIsNotValidUtf8(): void {
+		$report = new SyncReport(false, 1000, 1060);
+		$report->action("EXPORT P1: Archiv/Rechnung \xC3(.pdf");
+
+		$this->service->completed($report);
+
+		$actions = $this->service->get()['report']['actions'];
+		self::assertIsArray($actions);
+		self::assertCount(1, $actions);
+		self::assertMatchesRegularExpression('#^EXPORT P1: Archiv/Rechnung [?\x{FFFD}]\(\.pdf$#u', $actions[0]);
 	}
 
 	public function testUnreadableSummaryOrReportIsIgnored(): void {
@@ -228,7 +255,7 @@ final class StatusServiceTest extends TestCase {
 	 */
 	public function testADryRunDoesNotPostponeTheNextScheduledRun(): void {
 		$config = $this->config(true);
-		$now = time();
+		$now = $this->clock->time;
 		$this->settings['status_last_started'] = $this->settings['status_last_sync_started'] = $now - 600;
 		$this->service->completed(new SyncReport(false, $now - 600, $now - 540));
 		$scheduled = $now - 540 + 15 * 60;
@@ -256,15 +283,17 @@ final class StatusServiceTest extends TestCase {
 	 */
 	public function testARealRunThatFailedCountsFromItsEnd(): void {
 		$config = $this->config(true);
-		$before = time();
+		$now = $this->clock->time;
 
-		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(false, $before));
-		self::assertGreaterThanOrEqual($before + 15 * 60, $this->service->nextRun($config));
-		self::assertGreaterThanOrEqual($before, $this->settings['status_last_sync_ended']);
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(false, $now - 30));
+		self::assertSame($now + 15 * 60, $this->service->nextRun($config), 'The schedule counts from the end of the failed run.');
+		self::assertSame($now, $this->settings['status_last_sync_ended']);
+		self::assertSame($now, $this->settings['status_last_ended']);
 
 		$this->settings['status_last_sync_ended'] = 0;
+		$this->clock->advance(60);
 		$this->service->failed(new RuntimeException('Paperless was unavailable'));
-		self::assertGreaterThanOrEqual($before, $this->settings['status_last_sync_ended']);
+		self::assertSame($now + 60, $this->settings['status_last_sync_ended']);
 	}
 
 	/**
@@ -284,7 +313,7 @@ final class StatusServiceTest extends TestCase {
 		$this->service->started(true);
 		self::assertSame(10_000, $this->settings['status_last_sync_started'], 'The first run after the update takes the last run over.');
 		self::assertSame(10_120, $this->settings['status_last_sync_ended']);
-		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], $this->clock->time));
 		self::assertSame(10_120 + 15 * 60, $this->service->nextRun($config), 'A dry-run after the update leaves the schedule alone.');
 
 		$this->service->started(true);
@@ -318,11 +347,11 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame(0, $this->settings['status_last_sync_ended']);
 		self::assertSame((int)$this->settings['status_last_started'] + 15 * 60, $this->service->nextRun($config), 'An active dry-run holds the lock, so the first run waits for it.');
 
-		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], time()));
+		$this->service->completed(new SyncReport(true, (int)$this->settings['status_last_started'], $this->clock->time));
 		self::assertSame(0, $this->service->nextRun($config), 'After the dry-run, the next background job starts the first run.');
 
 		$this->service->started(true);
-		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(true, time()));
+		$this->service->failed(new RuntimeException('Paperless was unavailable'), new SyncReport(true, $this->clock->time));
 		self::assertSame(0, $this->service->nextRun($config), 'A dry-run that failed changes that neither.');
 	}
 

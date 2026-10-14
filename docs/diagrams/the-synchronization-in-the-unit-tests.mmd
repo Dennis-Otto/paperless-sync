@@ -1,0 +1,23 @@
+flowchart TB
+    accTitle: The synchronization in the unit tests
+    accDescr: A unit test sets up Paperless-ngx, the files of Nextcloud, the state, the configuration and the clock in memory, and runs the synchronization of the app through the interfaces it uses in Nextcloud. Then the test checks the report, the files of every user, the state of every owner, the status and the record of every call.
+
+    test(["Unit test"])
+    sync["The app:<br>the code<br>under test"]
+    subgraph doubles ["Doubles in memory"]
+        paperless["Paperless-ngx:<br>documents,<br>trash, uploads,<br>tasks"]
+        storage["Nextcloud:<br>each user's<br>files apart,<br>every call<br>recorded"]
+        state["State:<br>each owner's<br>apart"]
+        platform["Settings,<br>token and a<br>clock that<br>stands still<br>until a test<br>moves it"]
+    end
+
+    test -- "set up, run" --> sync
+    sync --> paperless & storage & state & platform
+    test -. "check the report,<br>files, state, status<br>and calls" .-> doubles
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class sync check
+    class paperless paperless
+    class storage,state,platform nextcloud

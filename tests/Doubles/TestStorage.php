@@ -15,18 +15,33 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use RuntimeException;
 
 /**
- * The files of the Nextcloud target user in memory, keyed by their path, each with its file ID as
- * Nextcloud gives it: a new file gets a new ID, a move takes the ID along, and a write over an
- * existing file updates it in place and keeps its ID.
+ * The files of Nextcloud in memory, each user's apart and keyed by their path, with a record of
+ * every call: a run that names another user than the target user, or that prepares folders in a
+ * dry-run, shows in the files and in the calls. Each file has its file ID as Nextcloud gives it: a
+ * new file gets a new ID, a move takes the ID along, and a write over an existing file updates it
+ * in place and keeps its ID.
  */
 final class TestStorage implements NextcloudStorageInterface {
-	/** @var array<string, string> */
+	/** The target user of the tests, whose files $files holds. */
+	public const USER = 'paperless';
+
+	/** @var array<string, string> the files of the target user */
 	public array $files = [];
 	/** @var list<array{string, 'created'|'updated'}> every write of a file, with whether it created the file or updated it in place */
 	public array $writes = [];
-	/** @var array<string, int> the file ID of every file whose ID was asked for or that a write created */
+	/** @var array<string, array<string, int>> the file ID of every file whose ID was asked for or that a write created, by user */
 	private array $fileIds = [];
 	private int $lastFileId = 0;
+	/** @var array<string, array<string, string>> the files of every other user, by user */
+	public array $filesOfOthers = [];
+	/** @var array<string, list<string>> the folders that prepare() created, by user */
+	public array $folders = [];
+	/** @var list<array{string, string, list<string>}> every call: the method, the user and the paths it names */
+	public array $calls = [];
+	/** @var list<resource> every stream that openRead() opened */
+	public array $openedStreams = [];
+	/** The failure of the test of the base folder, such as of a user that does not exist. */
+	public ?\Throwable $testException = null;
 	/** The failure of every write of a document, such as of a full quota or a read-only storage. */
 	public ?\Throwable $writeException = null;
 	public ?\Throwable $writeTextException = null;
@@ -40,23 +55,42 @@ final class TestStorage implements NextcloudStorageInterface {
 	public array $writeFailures = [];
 	/** @var list<array{string, string}> the file paths and roots that pruneEmptyParents was asked about */
 	public array $prunes = [];
+	/** The number of empty folders that each pruneEmptyParents() removes. */
+	public int $foldersPerPrune = 1;
 	/** Whether the user may create files in every folder, or the failure of that check. */
 	public bool|\Throwable $writable = true;
 	/** @var list<string> the folders that isWritableFolder was asked about */
 	public array $writableChecks = [];
 
 	public function test(string $userId, string $basePath): void {
+		$this->record('test', $userId, $basePath);
+		if ($this->testException !== null) {
+			throw $this->testException;
+		}
 	}
 
+	/** Creates the folders of the enabled directions, as Nextcloud's storage does. */
 	public function prepare(SyncConfig $config): void {
+		$this->record('prepare', $config->targetUser, $config->basePath);
+		$folders = [$config->basePath];
+		if ($config->exportEnabled) {
+			$folders[] = $config->basePath . '/' . $config->archiveFolder;
+		}
+		if ($config->inboxEnabled) {
+			$folders[] = $config->basePath . '/' . $config->inboxFolder;
+			$folders[] = $config->basePath . '/' . $config->errorFolder;
+		}
+		$this->folders[$config->targetUser] = array_values(array_unique([...($this->folders[$config->targetUser] ?? []), ...$folders]));
 	}
 
 	public function exists(string $userId, string $path): bool {
+		$files = &$this->filesOf('exists', $userId, $path);
 		$this->requirePath($path);
-		return array_key_exists($path, $this->files);
+		return array_key_exists($path, $files);
 	}
 
 	public function isWritableFolder(string $userId, string $path): bool {
+		$this->record('isWritableFolder', $userId, $path);
 		$this->writableChecks[] = $path;
 		if ($this->writable instanceof \Throwable) {
 			throw $this->writable;
@@ -65,44 +99,48 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function writeStream(string $userId, string $path, $source, string $conflictMode): void {
+		$this->record('writeStream', $userId, $path);
 		$failure = $this->writeFailures[$path] ?? $this->writeException;
 		if ($failure !== null) {
 			throw $failure;
 		}
 		$content = stream_get_contents($source);
-		$this->write($path, is_string($content) ? $content : '', $conflictMode);
+		$this->write($userId, $path, is_string($content) ? $content : '', $conflictMode);
 		fclose($source);
 	}
 
 	public function move(string $userId, string $source, string $destination, string $conflictMode): bool {
+		$files = &$this->filesOf('move', $userId, $source, $destination);
 		$this->requirePath($source);
 		$this->requirePath($destination);
 		if ($this->moveException !== null) {
 			throw $this->moveException;
 		}
-		if (!isset($this->files[$source])) {
+		if (!isset($files[$source])) {
 			return false;
 		}
-		if ($conflictMode === 'skip' && isset($this->files[$destination])) {
+		if ($conflictMode === 'skip' && isset($files[$destination])) {
 			throw new RuntimeException('conflict');
 		}
-		$this->files[$destination] = $this->files[$source];
-		$this->fileIds[$destination] = $this->fileId($source);
-		unset($this->files[$source], $this->fileIds[$source]);
+		$files[$destination] = $files[$source];
+		$this->fileIds[$userId][$destination] = $this->fileId($source, $userId);
+		unset($files[$source], $this->fileIds[$userId][$source]);
 		return true;
 	}
 
 	public function delete(string $userId, string $path): void {
+		$files = &$this->filesOf('delete', $userId, $path);
 		$this->requirePath($path);
 		if ($this->deleteException !== null) {
 			throw $this->deleteException;
 		}
-		unset($this->files[$path], $this->fileIds[$path]);
+		unset($files[$path], $this->fileIds[$userId][$path]);
 	}
 
 	public function listFiles(string $userId, string $path, bool $recursive): array {
+		$files = &$this->filesOf('listFiles', $userId, $path);
 		$result = [];
-		foreach ($this->files as $filePath => $content) {
+		foreach ($files as $filePath => $content) {
 			if (!str_starts_with($filePath, rtrim($path, '/') . '/')) {
 				continue;
 			}
@@ -116,48 +154,92 @@ final class TestStorage implements NextcloudStorageInterface {
 	}
 
 	public function openRead(string $userId, string $path) {
+		$files = &$this->filesOf('openRead', $userId, $path);
 		$this->reads[] = $path;
 		if ($this->readException !== null) {
 			throw $this->readException;
 		}
 		$stream = fopen('php://temp', 'w+b');
-		fwrite($stream, $this->files[$path]);
+		fwrite($stream, $files[$path]);
 		rewind($stream);
+		$this->openedStreams[] = $stream;
 		return $stream;
 	}
 
 	public function writeText(string $userId, string $path, string $content, string $conflictMode = 'replace'): void {
+		$this->record('writeText', $userId, $path);
 		if ($this->writeTextException !== null) {
 			throw $this->writeTextException;
 		}
-		$this->write($path, $content, $conflictMode);
+		$this->write($userId, $path, $content, $conflictMode);
 	}
 
 	public function pruneEmptyParents(string $userId, string $filePath, string $stopAt): int {
+		$this->record('pruneEmptyParents', $userId, $filePath, $stopAt);
 		$this->prunes[] = [$filePath, $stopAt];
-		return 1;
+		return $this->foldersPerPrune;
+	}
+
+	/** @return list<string> the users that the calls named, each once */
+	public function users(): array {
+		return array_values(array_unique(array_column($this->calls, 1)));
+	}
+
+	/** @return list<string> the methods of the calls, in their order */
+	public function methods(): array {
+		return array_column($this->calls, 0);
+	}
+
+	/**
+	 * Records a call and returns the files of its user, to change them in place.
+	 *
+	 * @return array<string, string>
+	 */
+	private function &filesOf(string $method, string $userId, string ...$paths): array {
+		$this->record($method, $userId, ...$paths);
+
+		return $this->filesOfUser($userId);
+	}
+
+	/**
+	 * The files of the user, to change them in place.
+	 *
+	 * @return array<string, string>
+	 */
+	private function &filesOfUser(string $userId): array {
+		if ($userId === self::USER) {
+			return $this->files;
+		}
+		$this->filesOfOthers[$userId] ??= [];
+
+		return $this->filesOfOthers[$userId];
+	}
+
+	private function record(string $method, string $userId, string ...$paths): void {
+		$this->calls[] = [$method, $userId, array_values($paths)];
 	}
 
 	/** The file ID of the file at the path, which Nextcloud gives a file when it creates it. */
-	public function fileId(string $path): int {
-		if (!isset($this->files[$path])) {
-			throw new InvalidArgumentException("No file at {$path}.");
+	public function fileId(string $path, string $userId = self::USER): int {
+		if (!isset($this->filesOfUser($userId)[$path])) {
+			throw new InvalidArgumentException("No file of {$userId} at {$path}.");
 		}
-		return $this->fileIds[$path] ??= ++$this->lastFileId;
+		return $this->fileIds[$userId][$path] ??= ++$this->lastFileId;
 	}
 
 	/** Like the Nextcloud storage: a new file gets a new file ID, an existing one is updated in place. */
-	private function write(string $path, string $content, string $conflictMode): void {
+	private function write(string $userId, string $path, string $content, string $conflictMode): void {
 		$this->requirePath($path);
-		$exists = isset($this->files[$path]);
+		$files = &$this->filesOfUser($userId);
+		$exists = isset($files[$path]);
 		if ($exists && $conflictMode === 'skip') {
 			throw new RuntimeException('conflict');
 		}
-		$this->files[$path] = $content;
+		$files[$path] = $content;
 		if ($exists) {
 			$this->writes[] = [$path, 'updated'];
 		} else {
-			$this->fileIds[$path] = ++$this->lastFileId;
+			$this->fileIds[$userId][$path] = ++$this->lastFileId;
 			$this->writes[] = [$path, 'created'];
 		}
 	}
