@@ -27,6 +27,8 @@ trait InMemoryConfiguration {
 	private array $lazyReads = [];
 	/** What the credentials store holds, as it gives it back: decoded from JSON. */
 	private mixed $credential = null;
+	/** How often the credentials store was read, for code that must not read the token. */
+	private int $credentialReads = 0;
 
 	private function configService(?PathTemplateService $paths = null): ConfigService {
 		return new ConfigService($this->appConfig(), $this->credentialsManager(), $paths ?? new PathTemplateService());
@@ -85,7 +87,11 @@ trait InMemoryConfiguration {
 	/** @return ICredentialsManager&MockObject */
 	private function credentialsManager(): ICredentialsManager {
 		$credentials = $this->createMock(ICredentialsManager::class);
-		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
+		$credentials->method('retrieve')->willReturnCallback(function (): mixed {
+			++$this->credentialReads;
+
+			return $this->credential;
+		});
 		$credentials->method('store')->willReturnCallback(function (string $userId, string $identifier, mixed $value): void {
 			/** @psalm-suppress MixedAssignment */
 			$this->credential = json_decode(json_encode($value, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);

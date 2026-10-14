@@ -14,6 +14,7 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\NotEnoughSpaceException;
+use OCP\Files\NotFoundException;
 use OCP\IUserManager;
 use RuntimeException;
 
@@ -55,6 +56,14 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 
 	public function exists(string $userId, string $path): bool {
 		return $this->rootFolder->getUserFolder($userId)->nodeExists($this->normalize($path));
+	}
+
+	public function findFileId(string $userId, string $path): ?int {
+		try {
+			return $this->rootFolder->getUserFolder($userId)->get($this->normalize($path))->getId();
+		} catch (NotFoundException) {
+			return null;
+		}
 	}
 
 	public function isWritableFolder(string $userId, string $path): bool {

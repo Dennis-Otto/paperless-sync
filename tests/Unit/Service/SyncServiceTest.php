@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use LogicException;
+use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
@@ -20,6 +21,7 @@ use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
@@ -36,6 +38,7 @@ use RuntimeException;
 
 final class SyncServiceTest extends TestCase {
 	use InMemoryConfiguration;
+	use RecordedActivities;
 
 	private const ARCHIVE = 'Dokumente/Paperless/Archiv';
 	private const EXPORTED_PATH = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
@@ -68,6 +71,7 @@ final class SyncServiceTest extends TestCase {
 			new StatusService($this->appConfig()),
 			$this->locking,
 			$this->logger,
+			$this->activityPublisher($this->storage, $this->logger),
 		);
 	}
 
@@ -519,6 +523,7 @@ final class SyncServiceTest extends TestCase {
 			new StatusService($this->appConfig()),
 			$this->locking,
 			$this->logger,
+			$this->activityPublisher($storage, $this->logger),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();
@@ -2567,6 +2572,190 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertTrue($this->settings['sync_enabled']);
 		self::assertArrayNotHasKey('enabled', $this->settings);
+	}
+
+	public function testActivityStreamShowsWhatTheRunChangedWithTheFilesThatItWrote(): void {
+		$this->exportDocument();
+
+		self::assertCount(1, $this->activities);
+		$event = $this->activities[0];
+		self::assertSame(ActivityPublisher::SUBJECT_RUN, $event->getSubject());
+		self::assertSame('paperless', $event->getAffectedUser());
+		$parameters = $event->getSubjectParameters();
+		self::assertSame(1, $parameters['exported']);
+		self::assertSame([['id' => $this->storage->fileId(self::EXPORTED_PATH), 'path' => self::EXPORTED_PATH]], $parameters['files']);
+		self::assertSame(0, $parameters['more']);
+	}
+
+	public function testRunWithoutChangesAndDryRunLeaveTheActivityStreamAlone(): void {
+		$this->exportDocument();
+		$this->activities = [];
+
+		$unchanged = $this->service->run();
+		$this->paperless->documents[0]['title'] = 'Strom September';
+		$dryRun = $this->service->run(true);
+
+		self::assertSame(1, $unchanged->unchanged);
+		self::assertSame(1, $dryRun->moved);
+		self::assertSame([], $this->activities);
+	}
+
+	public function testMoveToTheDeletedFolderLinksTheSameFile(): void {
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->trashDocument();
+		$this->activities = [];
+
+		$this->service->run();
+
+		$parameters = $this->activities[0]->getSubjectParameters();
+		self::assertSame(1, $parameters['trashed']);
+		self::assertSame([['id' => $fileId, 'path' => $this->trashFolderPath()]], $parameters['files'], 'The link of the file leads to it in the deleted folder.');
+		self::assertSame(self::ARCHIVE . '/_Gelöscht', $parameters['trash']['path']);
+	}
+
+	public function testDocumentThatVanishedMovesToTheDeletedFolderInTheActivityStreamToo(): void {
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+		$this->activities = [];
+
+		$this->service->run();
+
+		$parameters = $this->activities[0]->getSubjectParameters();
+		self::assertSame(1, $parameters['trashed']);
+		self::assertSame($this->deletedToday(), $parameters['files'][0]['path']);
+	}
+
+	public function testEveryImportResultReachesTheActivityStream(): void {
+		$scan = 'Dokumente/Paperless/Eingang/scan.pdf';
+		$broken = 'Dokumente/Paperless/Eingang/broken.pdf';
+		$this->storage->files[$scan] = '%PDF-scan';
+		$this->storage->files[$broken] = 'broken';
+
+		$this->service->run();
+		self::assertSame([ActivityPublisher::SUBJECT_RUN], $this->subjects());
+		self::assertSame(2, $this->activities[0]->getSubjectParameters()['submitted']);
+
+		$this->activities = [];
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => 'Success. New document id 456 created', 'documentId' => 456];
+		$this->paperless->tasks['task-2'] = ['status' => 'FAILURE', 'message' => 'Unsupported mime type'];
+		$this->service->run();
+
+		self::assertSame([ActivityPublisher::SUBJECT_IMPORTED, ActivityPublisher::SUBJECT_IMPORT_FAILED], $this->subjects(), 'A run whose only news are import results has no entry of its own.');
+		self::assertSame(['file' => ['id' => 0, 'path' => $scan], 'document' => 456], $this->activities[0]->getSubjectParameters(), 'The imported file is gone from the inbox.');
+		$errorPath = 'Dokumente/Paperless/Fehler/broken.pdf';
+		self::assertSame(['file' => ['id' => $this->storage->fileId($errorPath), 'path' => $errorPath], 'reason' => 'Unsupported mime type'], $this->activities[1]->getSubjectParameters());
+	}
+
+	public function testImportOfAFileThatChangedSinceItsUploadReachesTheActivityStream(): void {
+		$path = 'Dokumente/Paperless/Eingang/scan.pdf';
+		$this->storage->files[$path] = '%PDF-scan';
+		$this->service->run();
+		$this->storage->files[$path] = '%PDF-scan, signed';
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => ''];
+		$this->activities = [];
+
+		$this->service->run();
+
+		self::assertSame(ActivityPublisher::SUBJECT_IMPORTED, $this->activities[0]->getSubject());
+		self::assertSame(['file' => ['id' => $this->storage->fileId($path), 'path' => $path], 'document' => null], $this->activities[0]->getSubjectParameters());
+	}
+
+	public function testFileThatPaperlessRefusedReachesTheActivityStreamOnce(): void {
+		$path = 'Dokumente/Paperless/Eingang/notes.bin';
+		$this->storage->files[$path] = 'notes';
+		$reason = 'Paperless answered the upload with HTTP 400: document: File type application/octet-stream not supported';
+		$this->paperless->uploadException = new PaperlessUploadException($reason, true, 400);
+
+		$this->service->run();
+		self::assertSame([ActivityPublisher::SUBJECT_IMPORT_REJECTED], $this->subjects());
+		self::assertSame(['file' => ['id' => $this->storage->fileId($path), 'path' => $path], 'reason' => $reason], $this->activities[0]->getSubjectParameters());
+
+		$this->activities = [];
+		$this->service->run();
+		self::assertSame([], $this->activities, 'The runs after it skip the file quietly.');
+	}
+
+	public function testImportThatPaperlessCancelledReachesTheActivityStreamWithItsReason(): void {
+		$path = 'Dokumente/Paperless/Eingang/scan.pdf';
+		$this->storage->files[$path] = '%PDF-scan';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'REVOKED', 'message' => ''];
+		$this->activities = [];
+
+		$this->service->run();
+
+		$errorPath = 'Dokumente/Paperless/Fehler/scan.pdf';
+		self::assertSame([ActivityPublisher::SUBJECT_IMPORT_FAILED], $this->subjects());
+		self::assertSame(
+			['file' => ['id' => $this->storage->fileId($errorPath), 'path' => $errorPath], 'reason' => 'Paperless cancelled the task before it finished (REVOKED), so it created no document.'],
+			$this->activities[0]->getSubjectParameters(),
+		);
+	}
+
+	public function testImportThatPaperlessHasNotFinishedADayAfterTheUploadReachesTheActivityStream(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
+		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->activities = [];
+
+		$this->service->run();
+
+		$errorPath = 'Dokumente/Paperless/Fehler/police.pdf';
+		self::assertSame([ActivityPublisher::SUBJECT_IMPORT_FAILED], $this->subjects());
+		self::assertSame(
+			['file' => ['id' => $this->storage->fileId($errorPath), 'path' => $errorPath], 'reason' => 'Paperless has not finished the import a day after the upload (STARTED), so it may still create the document.'],
+			$this->activities[0]->getSubjectParameters(),
+		);
+	}
+
+	public function testFileThatPaperlessHasADayAfterTheUploadReachesTheActivityStreamAsImported(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'listed' => false];
+		$this->paperless->originals[hash('sha256', '%PDF-inbox')] = 456;
+		$this->state->imports[$path]['submitted_at'] = time() - 86400;
+		$this->activities = [];
+
+		$this->service->run();
+
+		self::assertSame([ActivityPublisher::SUBJECT_IMPORTED], $this->subjects());
+		self::assertSame(['file' => ['id' => 0, 'path' => $path], 'document' => 456], $this->activities[0]->getSubjectParameters(), 'The imported file is gone from the inbox.');
+	}
+
+	public function testRunThatFailsAfterItsFirstChangesStillShowsThem(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$this->paperless->documents = [['title' => 'A document without an ID']];
+
+		try {
+			$this->service->run();
+			self::fail('The run should fail.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless returned a document without a valid ID.', $exception->getMessage());
+		}
+
+		self::assertSame([ActivityPublisher::SUBJECT_RUN], $this->subjects());
+		self::assertSame(1, $this->activities[0]->getSubjectParameters()['submitted']);
+	}
+
+	public function testActivityStreamThatRefusesTheEntryLeavesTheRunAlone(): void {
+		$this->activityFailure = new RuntimeException('The database is full.');
+		$this->logger->expects(self::once())->method('warning')->with('Paperless Sync could not add the changes of its run to the activity stream: {error}', self::anything());
+
+		$report = $this->exportDocument();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame(0, $report->errors);
+		self::assertSame('completed', $this->settings['status_last_state']);
+	}
+
+	/** @return list<string> the subjects of the entries of the activity stream */
+	private function subjects(): array {
+		return array_map(static fn ($event): string => $event->getSubject(), $this->activities);
 	}
 
 	/** Expects the warning about the error of the document P123, once in every run that follows. */
