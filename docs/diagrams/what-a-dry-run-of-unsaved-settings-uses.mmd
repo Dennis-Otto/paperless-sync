@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What a dry-run of unsaved settings uses
+    accDescr: With unsaved changes in the form, Run dry-run sends the settings of the form. When their Paperless URL, local network setting or target user differ from the saved ones, the dry-run is refused, and the page moves the focus to the setting to save first. An invalid setting is refused as a save would refuse it. Otherwise the dry-run reads Paperless with the saved connection and token and lists what a run with the settings of the form would change, without saving the settings or changing a file; its report says Dry-run of unsaved settings.
+
+    dryrun(["🧪 Run dry-run<br>with unsaved changes"])
+    connection{"Same Paperless URL,<br>local network and<br>target user as saved?"}
+    valid{"Is every<br>setting valid?"}
+    run["`🔍 Dry-run with the form<br>*the saved connection and token*`"]
+    report["`✅ Report of a *dry-run of<br>unsaved settings*: nothing saved`"]
+    first["❌ Save first:<br>the page moves to the setting"]
+    refused["❌ Refused:<br>the page says why"]
+
+    dryrun --> connection
+    connection -- "no" --> first
+    connection -- "yes" --> valid
+    valid -- "no" --> refused
+    valid -- "yes" --> run
+    run --> report
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class dryrun,connection,valid,run nextcloud
+    class report done
+    class first,refused refused

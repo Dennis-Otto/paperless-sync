@@ -74,6 +74,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Archive
 
 - A folder tree in the files of the configured Nextcloud user, by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
+- Variables with the names that Paperless-ngx uses for its own file names, such as the archive serial number, the owner, the tags, the name of the month and custom fields, and a preview under the template that shows where the newest documents go while you type, before you save
 - The archive PDF of each document, or its original file
 - Renames and moves when the metadata changes in Paperless, and no empty folders left behind
 - Each copy stays the same file in Nextcloud: a new content of its document, such as a new archive version, updates it in place, so its shares, public links, comments, tags, favorites and versions stay with it
@@ -98,7 +99,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Operations
 
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
-- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run
+- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run; a dry-run tries changes of the settings before you save them
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
@@ -242,7 +243,12 @@ Saving checks every setting first. When scheduled synchronization is on, or when
 
 To pause synchronization, such as while Paperless is down, its token is revoked or the target user is disabled, uncheck **Enable scheduled synchronization** and save. A save that fails while the schedule is on says so and moves the focus to that switch.
 
-After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so. **Run dry-run** and **Synchronize now** use the saved settings, so **Synchronize now** waits until you save, and the browser asks before you leave the page.
+After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so, and the browser asks before you leave the page. **Run dry-run** then tries the changes without saving them, and its report says *Dry-run of unsaved settings*: a new path template, other folders or another deletion policy show what they would do before anything uses them. It keeps the saved connection to Paperless and the saved target user, which only a save tests and confirms with your password: a token that you enter waits for the save, and with a new URL, local network setting or target user, the dry-run asks you to save first. **Synchronize now** uses the saved settings only, so it waits until you save.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-a-dry-run-of-unsaved-settings-uses.dark.svg">
+  <img src="docs/images/diagrams/what-a-dry-run-of-unsaved-settings-uses.svg" alt="What a dry-run of unsaved settings uses: With unsaved changes in the form, Run dry-run sends the settings of the form. When their Paperless URL, local network setting or target user differ from the saved ones, the dry-run is refused, and the page moves the focus to the setting to save first. An invalid setting is refused as a save would refuse it. Otherwise the dry-run reads Paperless with the saved connection and token and lists what a run with the settings of the form would change, without saving the settings or changing a file; its report says Dry-run of unsaved settings.">
+</picture>
 
 **Disconnect** deletes the stored API token and turns off scheduled synchronization and **Paperless runs in my local network**. The other settings, the synchronized files and their state stay as they are; to connect again, enter the token, turn the local network on again if Paperless runs there, and save.
 
@@ -266,17 +272,40 @@ The *File conflict policy* decides what a run does when a file other than its ow
 
 ### Path template variables
 
-- `{{ id }}`
-- `{{ title }}`
-- `{{ correspondent }}`
-- `{{ document_type }}`
-- `{{ storage_path }}`
-- `{{ created }}`, `{{ created_year }}`, `{{ created_month }}`
-- `{{ added }}`, `{{ added_year }}`
-- `{{ original_filename }}`
-- `{{ extension }}`
+Most variables have the names that Paperless-ngx uses for its own file names, so many templates of a storage path of Paperless work here once `{{ id }}` is added. Templates with logic of Jinja, with `custom_fields|get_cf_value(...)` or with a variable that the table below doesn't list don't. For a document created on 26 August 2026 and added on 1 September:
+
+| Variable | Value | Example |
+| --- | --- | --- |
+| `{{ id }}` | The ID of the document in Paperless | `123` |
+| `{{ title }}` | Its title | `Electricity bill` |
+| `{{ correspondent }}` | The name of its correspondent | `City Utilities` |
+| `{{ document_type }}` | The name of its document type | `Invoice` |
+| `{{ storage_path }}` | The name of its storage path in Paperless | `Household` |
+| `{{ owner_username }}` | The user name of its owner in Paperless | `dennis` |
+| `{{ tag_list }}` | The names of its tags, sorted and separated by commas | `Energy,Taxes` |
+| `{{ asn }}` | Its archive serial number | `1042` |
+| `{{ page_count }}` | The number of its pages | `2` |
+| `{{ created }}` | The date of the document | `2026-08-26` |
+| `{{ created_year }}`, `{{ created_year_short }}` | Its year, in four or two digits | `2026`, `26` |
+| `{{ created_month }}`, `{{ created_month_name }}` | Its month, as a number or by its name in the language of Nextcloud | `08`, `August` |
+| `{{ created_day }}` | Its day | `26` |
+| `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | When it was added to Paperless | `2026-09-01`, `2026`, `09`, `01` |
+| `{{ original_filename }}` | The name of the uploaded file, without its extension | `scan` |
+| `{{ extension }}` | The extension of the exported version, with its dot | `.pdf` |
+| `{{ custom_fields.<name> }}` | The value of the custom field of that name | `{{ custom_fields.Invoice number }}`: `INV-2026-08` |
 
 The template must contain `{{ id }}`. A variable may be written with or without spaces, such as `{{id}}`, and is saved as `{{ id }}`. Every value goes into the path as plain text, so a `$1` or a `{{ title }}` in a title stays as it is.
+
+A value that a document lacks is empty, such as an owner, tags, an archive serial number or a custom field, and a folder that only such a value would name is called `Folder`; a missing correspondent, document type, date or title takes its fallback name from *Advanced fallback names*. The name of a custom field is written as in Paperless, with its spaces and capitals, and may hold any character but `{`, `}` and `/`. A select field gives the label of its choice, a document link the IDs of the documents, a yes or no field `true` or `false`, and a monetary field its amount as Paperless writes it, such as `EUR12.30`. `{{ created_month_name }}` names the month in the language that Nextcloud forces or has as its default, `force_language` or `default_language` in its `config.php`, and in English without either: never in the language of the administrator who starts a run, so the paths are the same in every run. A change of that language moves the files, like a change of the template. The names in the language of Nextcloud need PHP's `intl` extension; without it they are English, so installing or removing `intl` also moves the files of such a template.
+
+The users and the custom fields of Paperless are read only for a template that uses them. For `{{ owner_username }}`, the account of the app needs the permission to view users in Paperless, and for a custom field the permission to view custom fields; without it, the run fails before a file moves and names the permission. A custom field that Paperless doesn't have, such as one with a typo or one that was renamed, stops the run too, because its value would be empty in the path of every document.
+
+Under the template, the settings show where the five newest documents of Paperless would go with the template that you type, a moment after you stop, before you save, with the fallback names and the switches of the page and a note for a document that a run skips. The buttons under the field put a variable in at the cursor. An invalid template says why there, as saving would:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/path-preview-dark.png">
+  <img alt="The path template in the settings, with a button for every variable under it and the paths of the five newest documents of Paperless with the template that was typed, before a save" src="docs/images/path-preview-light.png">
+</picture>
 
 Every file name keeps the marker `[P{{ id }}]` and ends with `{{ extension }}`: when the last part of the template leaves them out, the app adds them at its end. The marker keeps the paths of two documents apart and ties each file to its document.
 

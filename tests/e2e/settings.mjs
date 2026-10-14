@@ -197,13 +197,54 @@ try {
 	await batchSize.fill(String(Number(savedBatchSize) + 1))
 	expect(await unsaved.isVisible(), 'A change must show the note about unsaved changes.')
 	expect(await run.isDisabled(), '"Synchronize now" must wait for the save of a change.')
-	expect(await dryRun.isEnabled(), 'A dry-run of the saved settings stays possible.')
+	expect(await dryRun.isEnabled(), 'A dry-run of the unsaved settings stays possible.')
 	expect(await asksBeforeLeaving(), 'Leaving the page with a change must ask first.')
 	await batchSize.fill(savedBatchSize)
 	expect(await unsaved.isHidden(), 'Undoing the change leaves nothing unsaved.')
 	expect(await run.isEnabled(), '"Synchronize now" is possible again.')
 	expect(!(await asksBeforeLeaving()), 'Leaving the page without a change asks nothing.')
 	console.log('Settings: a change shows the note, holds "Synchronize now" back and asks before leaving the page.')
+
+	// The preview under the path template shows where the newest documents of Paperless go
+	// with the template of the form, once the typing pauses, without a save; an invalid
+	// template says why, as a save would, and a variable goes in at the cursor.
+	const template = page.locator('#paperless-sync-path-template')
+	const previewList = page.locator('#paperless-sync-path-preview-list')
+	const savedTemplate = await template.inputValue()
+	await template.fill('{{ created_year }}/{{ title }} [P{{ id }}]')
+	await previewList.locator('li', { hasText: /^\d{4}\/[^/]+ \[P\d+\]\.\w+/ }).first().waitFor({ timeout: 5000 })
+	expect(await unsaved.isVisible(), 'A new template is an unsaved change.')
+	await template.fill('{{ titel }} [P{{ id }}]')
+	await page.locator('#paperless-sync-path-preview-status', { hasText: 'Unknown archive path variable: {{ titel }}.' }).waitFor({ timeout: 5000 })
+	expect((await template.getAttribute('aria-invalid')) === 'true' && await previewList.isHidden(), 'An invalid template is marked as invalid, without paths.')
+	await template.fill('[P{{ id }}]')
+	await template.press('Home')
+	await page.locator('[data-variable="created_year"]').click()
+	expect((await template.inputValue()) === '{{ created_year }}[P{{ id }}]', `The variable must go in at the cursor: ${await template.inputValue()}`)
+	await template.fill(savedTemplate)
+	await previewList.locator('li').first().waitFor({ timeout: 5000 })
+	expect((await template.getAttribute('aria-invalid')) === null && await unsaved.isHidden(), 'The saved template is valid and nothing is unsaved.')
+	console.log('Settings: the preview shows the paths of the newest documents with the template of the form, and a variable goes in at the cursor.')
+
+	// A dry-run tries the unsaved settings of the form, and the report says so; without a
+	// change, it sends none.
+	const sentRuns = []
+	await page.route(`**${RUN}`, async (route) => {
+		sentRuns.push(route.request().postDataJSON())
+		await route.continue()
+	})
+	await template.fill('{{ created_year }}/{{ title }} [P{{ id }}]')
+	await dryRun.click()
+	await settle()
+	expect(sentRuns[0].dryRun === true && sentRuns[0].settings?.path_template === '{{ created_year }}/{{ title }} [P{{ id }}]', `The dry-run must send the template of the form: ${JSON.stringify(sentRuns[0])}`)
+	expect((await page.locator('#paperless-sync-report-meta').textContent()).startsWith('Dry-run of unsaved settings, finished'), `The report must say that it shows unsaved settings: ${await page.locator('#paperless-sync-report-meta').textContent()}`)
+	expect(await unsaved.isVisible(), 'The dry-run saves nothing.')
+	await template.fill(savedTemplate)
+	await dryRun.click()
+	await settle()
+	expect(sentRuns[1].settings === undefined, `Without a change, the dry-run sends no settings: ${JSON.stringify(sentRuns[1])}`)
+	await page.unroute(`**${RUN}`)
+	console.log('Settings: a dry-run tries the unsaved settings without saving them.')
 
 	// A change made while the server answers a save stays in the form, as an unsaved change.
 	let answer = () => {}

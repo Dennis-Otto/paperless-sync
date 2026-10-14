@@ -59,6 +59,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
+		self::assertSame('/route/paperless_sync.settings.preview', $parameters['previewUrl']);
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
 	}
 

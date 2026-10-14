@@ -147,6 +147,36 @@ elif mode == "dry-run":
     expect("errors", 0)
     if not any(str(action).startswith("EXPORT P123:") for action in payload.get("actions", [])):
         raise AssertionError(f"Dry-run export action missing: {payload!r}")
+elif mode == "preview":
+    expect("connected", True)
+    expect(
+        "template",
+        "{{ owner_username }}/{{ created_month_name }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }} ({{ page_count }} pages) [P{{ id }}]",
+    )
+    expect(
+        "paths",
+        [
+            {
+                "id": 123,
+                "title": "Monthly invoice",
+                "path": "e2e-owner/August/42 Monthly invoice INV-2026-08 (2 pages) [P123].pdf",
+                "skipped": False,
+            }
+        ],
+    )
+elif mode == "dry-run-unsaved":
+    expect("dryRun", True)
+    expect("unsavedSettings", True)
+    expect("importsSubmitted", 0)
+    expect("errors", 0)
+    expect_action("EXPORT P123: Documents/Paperless/Archive/2026/Monthly invoice [P123].pdf")
+elif mode == "dry-run-other-user":
+    expect(
+        "message",
+        "A dry-run of unsaved settings uses the saved connection to Paperless and the saved target user. "
+        "Save the settings to try another one.",
+    )
+    expect("setting", "target_user")
 elif mode == "export":
     expect("dryRun", False)
     expect("exported", 1)

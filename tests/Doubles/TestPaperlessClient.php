@@ -65,6 +65,16 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	/** @var list<string> the names of the files of every upload, also of the failed ones */
 	public array $uploadAttempts = [];
 	public ?\Throwable $taskException = null;
+	/** @var array<string, string> the names of the users by their IDs */
+	public array $users = [];
+	/** @var array<string, array{name: string, type: string, options: array<string, string>}> the custom fields by their IDs */
+	public array $customFields = [];
+	/** The failure of the list of the users, as for a token without the permission to view them. */
+	public ?\Throwable $usersException = null;
+	/** The failure of the list of the custom fields. */
+	public ?\Throwable $customFieldsException = null;
+	/** @var list<string> the lists that a run read, in their order, of those that only some templates need */
+	public array $listsRead = [];
 
 	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
 		$this->connections[] = [$url, $token, $localNetwork];
@@ -101,6 +111,30 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 
 	public function tags(): array {
 		return $this->tagInfo;
+	}
+
+	public function users(): array {
+		$this->listsRead[] = 'users';
+		if ($this->usersException !== null) {
+			throw $this->usersException;
+		}
+		return $this->users;
+	}
+
+	public function customFields(): array {
+		$this->listsRead[] = 'custom fields';
+		if ($this->customFieldsException !== null) {
+			throw $this->customFieldsException;
+		}
+		return $this->customFields;
+	}
+
+	/** The documents with the latest "added" first, as Paperless orders them for ordering=-added. */
+	public function newestDocuments(int $count): array {
+		$documents = $this->documents;
+		usort($documents, static fn (array $first, array $second): int => strcmp((string)($second['added'] ?? ''), (string)($first['added'] ?? '')));
+
+		return array_slice($documents, 0, $count);
 	}
 
 	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint {

@@ -27,6 +27,7 @@ The scenario verifies:
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again, with the SHA-256 checksums of Paperless-ngx 3 and, in a mode of the mock, the MD5 checksums of Paperless-ngx 2
 - a mirrored file that keeps its file ID through every move and every new content, a share of it that shows the new content, and the version of the previous content that the background job leaves, which a dry-run right before it doesn't hold back
+- the preview of the path template, with the variables of the file names of Paperless, such as the owner, the archive serial number, the name of the month and a custom field, which saves nothing, and a dry-run of unsaved settings, which keeps the saved target user
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
 - Paperless inbox-tag exclusion and empty-folder pruning
 - Paperless trash mirroring and guarded permanent deletion, also after a page of Paperless came back incomplete, and no deletion of a document purged from the trash while permanent deletion is off
@@ -116,7 +117,7 @@ The pictures of the documentation in `docs/images/` and of the App Store in `scr
 bash tests/e2e/screenshots.sh
 ```
 
-The Paperless mock serves a small household archive of invented documents (`showcase.py`): fourteen documents of seven correspondents, one still in the Paperless inbox, each a one-page PDF. `screenshots.mjs` then follows the quick start in Chromium: a dry-run and the first synchronization, recorded as `dry-run.gif`; the settings, each of their sections, and the archive in Files, in the light and the dark theme; a walk through the archive to a document in the viewer, recorded as `archive.gif`; and a dry-run a few days later, when the archive has a new title, a document in the trash, one with the excluded tag *Private*, two new documents and a finished import.
+The Paperless mock serves a small household archive of invented documents (`showcase.py`): fourteen documents of seven correspondents, one still in the Paperless inbox, each a one-page PDF. `screenshots.mjs` then follows the quick start in Chromium: a dry-run and the first synchronization, recorded as `dry-run.gif`; the settings, each of their sections, the preview under the path template with a new template, and the archive in Files, in the light and the dark theme; a walk through the archive to a document in the viewer, recorded as `archive.gif`; and a dry-run a few days later, when the archive has a new title, a document in the trash, one with the excluded tag *Private*, two new documents and a finished import.
 
 The GIFs show a drawn pointer, since a screenshot has none, and share one palette across their frames. The image of Playwright has no font for the interface of Nextcloud, so the script installs Inter (`fonts.conf`). `E2E_PORT` (default `18084`), `E2E_PROJECT_NAME` and `KEEP_E2E=1` work as for `run.sh`. Look at every picture before committing it.
 

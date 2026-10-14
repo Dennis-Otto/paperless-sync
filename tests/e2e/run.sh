@@ -198,6 +198,47 @@ sync_run() {
 		"${BASE_URL}/apps/paperless_sync/sync/run"
 }
 
+# The settings of the page as curl sends them, from setting=value, such as
+# path_template=…, into the array settings.
+settings_data() {
+	settings=()
+	for setting in "$@"; do
+		settings+=(--data-urlencode "settings[${setting%%=*}]=${setting#*=}")
+	done
+}
+
+# The preview of the path template with settings of the page, which it doesn't save.
+settings_preview() {
+	output="$1"
+	shift
+	settings_data "$@"
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		"${settings[@]}" \
+		--output "${output}" \
+		"${BASE_URL}/apps/paperless_sync/settings/preview"
+}
+
+# A dry-run with settings of the page that are not saved; prints the HTTP status.
+dry_run_unsaved() {
+	output="$1"
+	shift
+	settings_data "$@"
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=true' \
+		"${settings[@]}" \
+		--output "${output}" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run"
+}
+
 # The entries of Paperless Sync in the Activity stream of the target user, newest first,
 # as the Activity app gives them to its clients. A stream without entries answers 304
 # without a body.
@@ -400,6 +441,8 @@ for attribute in \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
 	'data-status-url="/apps/paperless_sync/sync/status"' \
+	'data-preview-url="/apps/paperless_sync/settings/preview"' \
+	'data-variable="created_month_name"' \
 	'id="initial-state-paperless_sync-status"' \
 	'id="initial-state-paperless_sync-config"' \
 	'data-setting="paperless_local_network"'; do
@@ -431,11 +474,11 @@ fi
 ROUTES="$("${COMPOSE[@]}" exec -T --user www-data nextcloud php -r '
 	require "/var/www/html/lib/base.php";
 	$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
-	foreach (["settings.save", "settings.test", "settings.reset", "sync.run", "sync.status"] as $route) {
+	foreach (["settings.save", "settings.test", "settings.reset", "settings.preview", "sync.run", "sync.status"] as $route) {
 		echo "route=", $urls->linkToRoute("paperless_sync." . $route), "\n";
 	}
 ' 2>/dev/null | grep '^route=' | sed 's#^route=/index.php/#route=/#' | tr '\n' ' ')"
-EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/test route=/apps/paperless_sync/settings route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
+EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/test route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/preview route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
 if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
 	echo "The routes are missing before the app is loaded: ${ROUTES}" >&2
 	exit 1
@@ -533,6 +576,27 @@ assert_dav_missing sync-target "${INITIAL_PATH}"
 # A dry-run changes nothing, so the Activity stream of the target user stays empty.
 activities "${TMP_DIR}/activity-dry-run.json"
 assert_json activity-none "${TMP_DIR}/activity-dry-run.json"
+
+# The preview of the path template: where the newest documents go with the template of the
+# page, with the variables of Paperless's own file names, before anything is saved.
+settings_preview "${TMP_DIR}/preview.json" \
+	'path_template={{ owner_username }}/{{ created_month_name }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }} ({{ page_count }} pages) [P{{ id }}]'
+assert_json preview "${TMP_DIR}/preview.json"
+# A dry-run tries unsaved settings without saving them; the export below still takes the
+# saved template. It keeps the saved target user, which only a save may change.
+DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-unsaved.json" 'path_template={{ created_year }}/{{ title }} [P{{ id }}]' 'inbox_enabled=0')"
+if [[ "${DRY_RUN_STATUS}" != "200" ]]; then
+	echo "The dry-run of unsaved settings answered HTTP ${DRY_RUN_STATUS}: $(cat "${TMP_DIR}/dry-run-unsaved.json")" >&2
+	exit 1
+fi
+assert_json dry-run-unsaved "${TMP_DIR}/dry-run-unsaved.json"
+DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-other-user.json" 'target_user=e2e-other')"
+if [[ "${DRY_RUN_STATUS}" != "400" ]]; then
+	echo "A dry-run for another target user answered HTTP ${DRY_RUN_STATUS} instead of 400: $(cat "${TMP_DIR}/dry-run-other-user.json")" >&2
+	exit 1
+fi
+assert_json dry-run-other-user "${TMP_DIR}/dry-run-other-user.json"
+assert_dav_missing sync-target "${INITIAL_PATH}"
 
 sync_run false "${TMP_DIR}/export.json"
 assert_json export "${TMP_DIR}/export.json"

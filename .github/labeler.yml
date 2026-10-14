@@ -10,6 +10,7 @@
           - lib/Settings/**
           - lib/Service/ConfigService.php
           - lib/Service/PaperlessLocalNetworkException.php
+          - lib/Service/UnsavedSettingException.php
           - lib/Model/SyncConfig.php
           - lib/Model/ConnectionCheck.php
           - lib/Migration/Version000111Date20261013000000.php

@@ -50,7 +50,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Schedule and modules: switches for the scheduled synchronization, the archive export and the inbox import, the interval in minutes and the maximum changes per module and run" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the path template, the archive version or the original, and which documents stay out.
+**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the [path template](guide.md#path-template-variables) with a button for each of its variables and the paths of the newest documents with it while you type, the archive version or the original, and which documents stay out.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
