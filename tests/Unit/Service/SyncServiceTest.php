@@ -3385,7 +3385,7 @@ final class SyncServiceTest extends TestCase {
 		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.";
 	}
 
-		/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
+	/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
 	private function deletedToday(int $id = 123): string {
 		return self::ARCHIVE . '/_Gelöscht/' . $this->clock->today() . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
