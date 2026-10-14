@@ -34,7 +34,7 @@ const THEMES = ['light', 'dark']
 const VIEWPORT = { width: 1280, height: 800 }
 const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
-const ARCHIVE = '/Dokumente/Paperless/Archiv'
+const ARCHIVE = '/Documents/Paperless/Archive'
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion']
 
 function files(dir) {
@@ -290,7 +290,7 @@ try {
 	const owner = await signIn(browser, OWNER)
 	await control('reset')
 	await control('scenario/showcase')
-	await upload('Dokumente/Paperless/Eingang/Receipts/Hardware store.pdf', '%PDF-1.4 Synthetic receipt of the screenshots.\n')
+	await upload('Documents/Paperless/Inbox/Receipts/Hardware store.pdf', '%PDF-1.4 Synthetic receipt of the screenshots.\n')
 
 	// The quick start: a dry-run lists what would change, then the first synchronization.
 	{
@@ -364,7 +364,7 @@ try {
 		const { context, page } = await open(browser, owner, 'light', files(ARCHIVE))
 		const row = (name) => page.locator(`[data-cy-files-list-row-name^="${name}"] [data-cy-files-list-row-name-link]`)
 		await row('Example Insurance').waitFor()
-		await expandFolderTree(page, ['Dokumente', 'Paperless', 'Archiv'])
+		await expandFolderTree(page, ['Documents', 'Paperless', 'Archive'])
 		const animation = new Animation(page)
 		await animation.hold(1500)
 		for (const [folder, next] of [['Example Insurance', 'Contract'], ['Contract', '2026'], ['2026', '2026-01-15 - Home insurance policy']]) {
@@ -385,7 +385,7 @@ try {
 	for (const theme of THEMES) {
 		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
 		await page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]').waitFor()
-		await expandFolderTree(page, ['Dokumente', 'Paperless', 'Archiv', 'City Utilities', 'Invoice'])
+		await expandFolderTree(page, ['Documents', 'Paperless', 'Archive', 'City Utilities', 'Invoice'])
 		const archive = await page.screenshot()
 		save(`docs/images/archive-${theme}.png`, archive)
 		if (theme === 'light') {

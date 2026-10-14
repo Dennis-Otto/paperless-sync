@@ -35,6 +35,8 @@ final class ActivityPublisherTest extends TestCase {
 	private SyncConfig $config;
 
 	protected function setUp(): void {
+		// A German instance, as the documents of the tests: the folders have their German names.
+		$this->defaultLanguage = 'de';
 		$this->storage = new TestStorage();
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->publisher = $this->activityPublisher($this->storage, $this->logger);

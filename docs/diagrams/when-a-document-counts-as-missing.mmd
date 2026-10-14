@@ -8,7 +8,7 @@ flowchart TB
     listed -->|yes| reset["Its count of missing<br>scans starts anew"]
     listed -->|no| scans{"Missing in N<br>scans in a row?"}
     scans -->|not yet| wait["WAIT: one more<br>missing scan"]
-    scans -->|yes| change["Moved to _Gelöscht,<br>or deleted when allowed,<br>within the batch size"]
+    scans -->|yes| change["Moved to _Deleted,<br>or deleted when allowed,<br>within the batch size"]
     classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px

@@ -65,6 +65,8 @@ final class SyncServiceTest extends TestCase {
 	private SyncService $service;
 
 	protected function setUp(): void {
+		// A German instance, as the documents of the tests: the folders have their German names.
+		$this->defaultLanguage = 'de';
 		$this->clock = new TestClock();
 		$this->timeZones = new TestTimeZones();
 		$this->paperless = new TestPaperlessClient();

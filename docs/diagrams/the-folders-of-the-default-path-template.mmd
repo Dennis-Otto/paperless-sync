@@ -5,14 +5,14 @@ config:
 ---
 flowchart TB
     accTitle: The folders of the default path template
-    accDescr: The base folder Dokumente/Paperless holds three folders: Eingang, the inbox folder; Archiv, the archive folder; and Fehler, the error folder. Archiv holds a folder per correspondent, such as Example GmbH, and _Gelöscht, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.
+    accDescr: The base folder Documents/Paperless holds three folders: Inbox, the inbox folder; Archive, the archive folder; and Failed imports, the error folder. Archive holds a folder per correspondent, such as Example GmbH, and _Deleted, the deleted folder. In the folder of a correspondent, a folder per document type, such as Invoice, holds a folder per year, such as 2026, which holds the file 2026-08-26 - Example invoice [P123].pdf, built from created, title, the marker with the id and the extension.
 
-    base["`📁 Dokumente/Paperless<br>*base folder*`"]
-    inbox["`📁 Eingang<br>*inbox folder*`"]
-    archive["`📁 Archiv<br>*archive folder*`"]
-    errors["`📁 Fehler<br>*error folder*`"]
+    base["`📁 Documents/Paperless<br>*base folder*`"]
+    inbox["`📁 Inbox<br>*inbox folder*`"]
+    archive["`📁 Archive<br>*archive folder*`"]
+    errors["`📁 Failed imports<br>*error folder*`"]
     correspondent["`📁 Example GmbH<br>*{{ correspondent }}*`"]
-    deleted["`📁 _Gelöscht<br>*deleted folder*`"]
+    deleted["`📁 _Deleted<br>*deleted folder*`"]
     type["`📁 Invoice<br>*{{ document_type }}*`"]
     year["`📁 2026<br>*{{ created_year }}*`"]
     file["`📄 2026-08-26 -<br>Example invoice<br>[P123].pdf<br>*{{ created }} -<br>{{ title }} [P{{ id }}]<br>{{ extension }}*`"]

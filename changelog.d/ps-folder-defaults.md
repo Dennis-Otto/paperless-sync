@@ -1,0 +1,3 @@
+### Features
+
+- A new installation proposes the names of its folders and the fallback names for missing metadata in the default language of Nextcloud: `Documents/Paperless`, `Archive`, `Inbox`, `Failed imports`, `_Deleted`, `_No correspondent`, `_No document type`, `_No date` and `Untitled` in English and in every language without a translation yet, and the German names as before on a German Nextcloud, also one set to a regional variant such as `de_DE`. Before, every Nextcloud got the German names, such as `Dokumente/Paperless/Archiv`, in the files of its users. An installation that an earlier version set up keeps the German names with the update, also those that it never saved, so no folder moves; the README lists both sets under *Folder names*.

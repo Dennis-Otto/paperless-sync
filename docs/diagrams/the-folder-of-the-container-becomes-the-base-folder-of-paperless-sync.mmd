@@ -5,13 +5,13 @@ config:
 ---
 flowchart TB
     accTitle: The folder of the container becomes the base folder of Paperless Sync
-    accDescr: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archiv, the archive, Eingang, the inbox to Paperless, and Fehler, the failed imports. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.
+    accDescr: The account of the container owns the folder Paperless, which it shares with others as before. During the move, the folder holds the old folders of the container, such as 2025 and 2026, and the folders of Paperless Sync: Archive, the archive, Inbox, the inbox to Paperless, and Failed imports, the files that Paperless failed to import. Once the archive is complete, the old folders go to the trash bin of the account, and the share shows only the folders of Paperless Sync. The folders of Paperless Sync are blue, the old folders orange.
 
     base["`📁 Paperless<br>*the folder of the container,<br>shared as before,<br>now the base folder*`"]
     old["`📁 2025, 2026, …<br>*the old folders of the<br>container: to the trash<br>bin once the archive<br>is complete*`"]
-    archive["`📁 Archiv<br>*the archive of<br>Paperless Sync*`"]
-    inbox["`📁 Eingang<br>*files for<br>Paperless*`"]
-    errors["`📁 Fehler<br>*failed<br>imports*`"]
+    archive["`📁 Archive<br>*the archive of<br>Paperless Sync*`"]
+    inbox["`📁 Inbox<br>*files for<br>Paperless*`"]
+    errors["`📁 Failed imports<br>*files that Paperless<br>failed to import*`"]
 
     base --> old & archive
     %% Invisible links put the inbox and the error folder one level lower, so that the diagram stays narrow.

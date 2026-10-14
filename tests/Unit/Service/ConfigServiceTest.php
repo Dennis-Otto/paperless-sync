@@ -34,12 +34,93 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('', $config->paperlessUrl);
 		self::assertFalse($config->tokenConfigured);
 		self::assertFalse($config->enabled);
-		self::assertSame('Dokumente/Paperless', $config->basePath);
-		self::assertSame(['Archiv', 'Eingang', 'Fehler', '_Gelöscht'], [$config->archiveFolder, $config->inboxFolder, $config->errorFolder, $config->deletedFolder]);
+		self::assertSame('Documents/Paperless', $config->basePath);
+		self::assertSame(['Archive', 'Inbox', 'Failed imports', '_Deleted'], [$config->archiveFolder, $config->inboxFolder, $config->errorFolder, $config->deletedFolder]);
 		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $config->pathTemplate);
 		self::assertSame([5, 100, 3], [$config->syncIntervalMinutes, $config->batchSize, $config->missingGraceRuns]);
 		self::assertSame(['move', 'replace'], [$config->trashMode, $config->conflictMode]);
 		self::assertSame('', $this->service->getToken());
+	}
+
+	/** @return array<string, array{string, list<string>}> the default language of Nextcloud and the names that it proposes */
+	public static function defaultLanguages(): array {
+		$english = ['Documents/Paperless', 'Archive', 'Inbox', 'Failed imports', '_Deleted', '_No correspondent', '_No document type', '_No date', 'Untitled'];
+		$german = ['Dokumente/Paperless', 'Archiv', 'Eingang', 'Fehler', '_Gelöscht', '_Ohne Korrespondent', '_Ohne Dokumenttyp', '_Ohne Datum', 'Ohne Titel'];
+
+		return [
+			'English' => ['en', $english],
+			'British English, without a catalog of its own' => ['en_GB', $english],
+			'German' => ['de', $german],
+			'formal German, with the catalog of German' => ['de_DE', $german],
+			'French, without a catalog yet' => ['fr', $english],
+			'Brazilian Portuguese, without a catalog of it or of Portuguese' => ['pt_BR', $english],
+		];
+	}
+
+	/**
+	 * A new installation proposes the names of its folders, and the fallbacks for empty metadata,
+	 * in the default language of Nextcloud, also to an administrator who reads another one.
+	 *
+	 * @param list<string> $names
+	 */
+	#[DataProvider('defaultLanguages')]
+	public function testNamesFollowTheDefaultLanguageOfNextcloud(string $language, array $names): void {
+		$this->defaultLanguage = $language;
+
+		$config = $this->service->get();
+
+		self::assertSame($names, [
+			$config->basePath, $config->archiveFolder, $config->inboxFolder, $config->errorFolder, $config->deletedFolder,
+			$config->emptyCorrespondent, $config->emptyDocumentType, $config->emptyDate, $config->untitled,
+		]);
+		self::assertSame($names[1], $this->service->validate(self::validSettings(), 'secret-token')->archiveFolder, 'A dry-run and a save take the same names.');
+	}
+
+	/** @return array<string, array{bool|string, string, string}> force_language, default_language and the proposed archive folder */
+	public static function systemLanguages(): array {
+		return [
+			'a forced language before the default one' => ['de_DE', 'en', 'Archiv'],
+			'force_language true, which names no language' => [true, 'de', 'Archiv'],
+			'no default language' => [false, '', 'Archive'],
+		];
+	}
+
+	/** The names follow force_language before default_language, as Nextcloud does, and English without either. */
+	#[DataProvider('systemLanguages')]
+	public function testNamesFollowTheForcedLanguageOfNextcloud(bool|string $forced, string $default, string $archive): void {
+		[$this->forcedLanguage, $this->defaultLanguage] = [$forced, $default];
+
+		self::assertSame($archive, $this->service->get()->archiveFolder);
+	}
+
+	/** The settings that only tell whether the app is set up don't read the token. */
+	public function testReadsTheTargetUserWithoutTheToken(): void {
+		self::assertSame('', $this->service->targetUser());
+		$this->settings['target_user'] = ' paperless ';
+
+		self::assertSame('paperless', $this->service->targetUser());
+		self::assertSame(0, $this->credentialReads);
+	}
+
+	/** A saved name stays when the default language of Nextcloud changes. */
+	public function testASavedNameKeepsItsLanguage(): void {
+		$this->defaultLanguage = 'de';
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->defaultLanguage = 'en';
+
+		self::assertSame(['Dokumente/Paperless', 'Archiv', 'Ohne Titel'], [$this->service->get()->basePath, $this->service->get()->archiveFolder, $this->service->get()->untitled]);
+	}
+
+	/** An installation in use keeps the names that it has: those that it saved, and given ones for the others. */
+	public function testKeepsTheGivenNamesOfTheSettingsThatHaveNone(): void {
+		$this->settings = ['target_user' => 'paperless', 'archive_folder' => 'Akten'];
+
+		self::assertSame(1, $this->service->keepNames(['base_path' => 'Dokumente/Paperless', 'archive_folder' => 'Archiv', 'paperless_url' => 'https://elsewhere.example.test']));
+
+		$config = $this->service->get();
+		self::assertSame(['Dokumente/Paperless', 'Akten', 'Inbox', ''], [$config->basePath, $config->archiveFolder, $config->inboxFolder, $config->paperlessUrl], 'Only the names without a value of their own, and no other setting.');
+		self::assertArrayHasKey('base_path', $this->lazyKeys);
+		self::assertSame(0, $this->service->keepNames(['base_path' => 'Scans']), 'A kept name is a saved one.');
 	}
 
 	public function testSavesNormalizedSettingsAndTheToken(): void {
@@ -349,7 +430,7 @@ final class ConfigServiceTest extends TestCase {
 			'base path leaving the user folder' => [['base_path' => 'Dokumente/../..'], 'Folder paths must be relative and must not contain empty, . or .. components.', '', 'Ordnerpfade müssen relativ sein und dürfen keine leeren Teile, . oder .. enthalten.'],
 			'no base path' => [['base_path' => ' / '], 'A relative folder path is required.', '', 'Ein relativer Ordnerpfad ist erforderlich.'],
 			'nested folder name' => [['archive_folder' => 'Archiv/2026'], 'Folder names must contain exactly one path component.', '', 'Ordnernamen müssen aus genau einem Pfadteil bestehen.'],
-			'shared folder name' => [['error_folder' => 'Eingang'], 'Archive, inbox, and error folders must have different names.', '', 'Archiv-, Eingangs- und Fehlerordner müssen verschiedene Namen haben.'],
+			'shared folder name' => [['error_folder' => 'Inbox'], 'Archive, inbox, and error folders must have different names.', '', 'Archiv-, Eingangs- und Fehlerordner müssen verschiedene Namen haben.'],
 			'template without ID' => [['path_template' => '{{ title }}{{ extension }}'], 'The archive path template must contain {{ id }}.', 'path_template', 'Die Archiv-Pfadvorlage muss {{ id }} enthalten.'],
 			'interval shorter than the background job' => [['sync_interval_minutes' => 4], '"Interval in minutes" must be between 5 and 1440.', 'sync_interval_minutes', $interval],
 			'interval longer than a day' => [['sync_interval_minutes' => 1441], '"Interval in minutes" must be between 5 and 1440.', 'sync_interval_minutes', $interval],

@@ -5,17 +5,17 @@ config:
 ---
 flowchart TB
     accTitle: How Paperless Sync moves documents
-    accDescr: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archiv of Nextcloud, by correspondent, type and year, and mirrors the trash into Archiv/_Gelöscht. The other way, it picks up the files of the folder Eingang and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Fehler. Paperless-ngx is green, the folders of Nextcloud are blue.
+    accDescr: Paperless Sync reads the finished documents and the trash of Paperless-ngx through its REST API. It writes, renames and moves their files in the folder Archive of Nextcloud, by correspondent, type and year, and mirrors the trash into Archive/_Deleted. The other way, it picks up the files of the folder Inbox and uploads them to Paperless-ngx as new documents; a failed import goes to the folder Failed imports. Paperless-ngx is green, the folders of Nextcloud are blue.
 
     documents["Paperless-ngx<br>finished documents"]
     trash["Paperless-ngx<br>trash"]
     export(["Paperless Sync"])
-    archive["📁 Archiv<br>correspondent /<br>type / year"]
-    deleted["📁 Archiv/<br>_Gelöscht"]
-    inbox["📁 Eingang"]
+    archive["📁 Archive<br>correspondent /<br>type / year"]
+    deleted["📁 Archive/<br>_Deleted"]
+    inbox["📁 Inbox"]
     import(["Paperless Sync"])
     consume["Paperless-ngx<br>new documents"]
-    errors["📁 Fehler"]
+    errors["📁 Failed imports"]
 
     documents -- "read through<br>the REST API" --> export
     trash -- "read" --> export
