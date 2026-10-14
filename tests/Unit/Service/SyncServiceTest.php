@@ -2896,7 +2896,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		self::assertSame([], $report->actions);
+		self::assertSame([self::trashEmpty(1, 1)], $report->actions);
 		self::assertSame(0, $report->movedToTrash);
 	}
 
@@ -2959,7 +2959,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		self::assertSame(['MISSING P123: ' . $this->deletedToday()], $report->actions);
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
 		self::assertSame(1, $report->movedToTrash);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertSame('active', $this->state->exports[123]['state']);
@@ -3030,7 +3030,7 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		self::assertSame(['MISSING P123: ' . $this->deletedToday()], $report->actions);
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
 		self::assertSame(1, $report->movedToTrash);
 		self::assertSame(0, $report->permanentlyDeleted);
 		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
@@ -3053,6 +3053,60 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([2], array_keys($this->state->exports), 'P1 has no copy to delete, so its state goes without a place in the batch.');
 	}
 
+	/** Permanent deletion alone deletes only what the trash showed, so the notice of a missing document still says that it moves. */
+	public function testDryRunWithPermanentDeletionAloneSaysThatMissingCopiesMove(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => false]);
+		$this->exportDocument();
+		$this->paperless->documents = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['MISSING P123: ' . $this->deletedToday(), self::trashEmpty(1, 1)], $report->actions);
+		self::assertSame(0, $report->permanentlyDeleted);
+	}
+
+	/**
+	 * Paperless lists in its trash only the documents that the account of the app owns, so a
+	 * document of another owner in the trash looks gone without the trash. A dry-run, which an
+	 * administrator reads before turning on the schedule, says so when exported documents go
+	 * missing while the trash lists none.
+	 */
+	public function testDryRunExplainsMissingDocumentsWhileTheTrashListsNone(): void {
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$this->paperless->documents = [];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['WAIT P124: missing run 1/3', 'WAIT P123: missing run 1/3', self::trashEmpty(2, 3)], $report->actions);
+	}
+
+	/** @return array<string, array{array<string, mixed>, bool, string, bool}> the settings, whether the trash lists a document, the state of the missing one, and whether the run is a dry-run */
+	public static function missingDocumentsThatNeedNoExplanation(): array {
+		return [
+			'a run, not a dry-run' => [[], false, 'active', false],
+			'a trash that lists a document' => [[], true, 'active', true],
+			'copies that stay in place' => [['trash_mode' => 'keep'], false, 'active', true],
+			'a document that the run saw in the trash before' => [[], false, 'trash', true],
+		];
+	}
+
+	/** @param array<string, mixed> $settings */
+	#[DataProvider('missingDocumentsThatNeedNoExplanation')]
+	public function testMissingDocumentsNeedNoExplanationOtherwise(array $settings, bool $trashListsOne, string $state, bool $dryRun): void {
+		$this->configService->save($settings);
+		$this->exportDocument();
+		$this->state->exports[123]['state'] = $state;
+		$this->paperless->documents = [];
+		if ($trashListsOne) {
+			$this->paperless->trash = [$this->document(124)];
+		}
+
+		$report = $this->service->run($dryRun);
+
+		self::assertSame([], array_values(array_filter($report->actions, static fn (string $action): bool => str_starts_with($action, 'TRASH EMPTY:'))));
+		self::assertNotSame([], $report->actions, 'The missing document has its line.');
+	}
+
 	public function testMissingDocumentIsDeletedDirectlyWhenAllowed(): void {
 		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
 		$this->exportDocument();
@@ -3073,7 +3127,8 @@ final class SyncServiceTest extends TestCase {
 
 		$report = $this->service->run(true);
 
-		self::assertSame(['DELETE P123: ' . self::EXPORTED_PATH], $report->actions);
+		// The notice says that the copy is deleted, although the document may be in a trash that the account doesn't see.
+		self::assertSame(['DELETE P123: ' . self::EXPORTED_PATH, self::trashEmpty(1, 1, true)], $report->actions);
 		self::assertSame(1, $report->permanentlyDeleted);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertArrayHasKey(123, $this->state->exports);
@@ -3318,7 +3373,19 @@ final class SyncServiceTest extends TestCase {
 		return self::ARCHIVE . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}
 
-	/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
+	/**
+	 * The notice of a dry-run about documents that go missing while the trash of Paperless lists
+	 * none, with $deleted when permanent and direct deletion are both on.
+	 */
+	private static function trashEmpty(int $missing, int $scans, bool $deleted = false): string {
+		$fate = $deleted
+			? "their copies are deleted after the required missing scans ({$scans} in a row), although the documents can still be restored in Paperless"
+			: "their copies move to the deleted folder only after the required missing scans ({$scans} in a row), as those of documents deleted without the trash do";
+
+		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.";
+	}
+
+		/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
 	private function deletedToday(int $id = 123): string {
 		return self::ARCHIVE . '/_Gelöscht/' . $this->clock->today() . "/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P{$id}].pdf";
 	}

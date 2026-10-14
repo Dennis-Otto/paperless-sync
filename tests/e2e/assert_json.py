@@ -13,14 +13,67 @@ argument = sys.argv[2] if len(sys.argv) > 2 else ""
 payload = json.load(sys.stdin)
 serialized = json.dumps(payload, sort_keys=True)
 
-if "e2e-only-token" in serialized:
-    raise AssertionError("A response exposed the synthetic Paperless token")
+if any(token in serialized for token in ("e2e-only-token", "e2e-view-only-token", "e2e-no-ui-settings-token")):
+    raise AssertionError("A response exposed a synthetic Paperless token")
 
 
 def expect(key, value):
     actual = payload.get(key)
     if actual != value:
         raise AssertionError(f"{mode}: expected {key}={value!r}, got {actual!r}; payload={payload!r}")
+
+
+# Every line of the connection checklist with the export and the inbox on, in its order.
+CHECKLIST = ["paperless", "documents", "trash", "correspondents", "document_types", "storage_paths", "tags", "upload", "folder"]
+
+
+def checks():
+    """The lines of the connection checklist of the answer, by their ID, in their order."""
+    lines = payload.get("checks")
+    if not isinstance(lines, list):
+        raise AssertionError(f"{mode}: the answer has no checklist: {payload!r}")
+    return {line["id"]: line for line in lines}
+
+
+def expect_line(line_id, status, message=None, hint=None):
+    line = checks().get(line_id)
+    if line is None or line["status"] != status:
+        raise AssertionError(f"{mode}: expected the line {line_id} {status}, got {line!r}")
+    if message is not None and line["message"] != message:
+        raise AssertionError(f"{mode}: the line {line_id} says {line['message']!r} instead of {message!r}")
+    if hint is not None and line["hint"] != hint:
+        raise AssertionError(f"{mode}: the line {line_id} advises {line['hint']!r} instead of {hint!r}")
+
+
+# What the checklist says of the account of the view-only token of the mock.
+def expect_view_only_checklist():
+    if list(checks()) != CHECKLIST:
+        raise AssertionError(f"{mode}: the checklist has the lines {list(checks())!r}")
+    expect_line("paperless", "passed", "Paperless-ngx 3.3.0 answers at this URL.")
+    expect_line("documents", "passed", "Visible to the account: 1")
+    expect_line(
+        "tags",
+        "failed",
+        "The account may not view them (HTTP 403).",
+        "In Paperless, under Users & Groups, give the account the permission View for Tags.",
+    )
+    expect_line(
+        "upload",
+        "failed",
+        "The account may neither add documents nor view the tasks that import them.",
+        "In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.",
+    )
+    # It sees the document of the account of the app, which the trash of Paperless leaves out.
+    expect_line(
+        "trash",
+        "warning",
+        "Visible to the account: 0",
+        "Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees 1 of them. "
+        "When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. "
+        "Make the account of the app their owner.",
+    )
+    for line_id in ("correspondents", "document_types", "storage_paths", "folder"):
+        expect_line(line_id, "passed")
 
 
 def expect_action(action):
@@ -37,8 +90,44 @@ if mode == "config":
     expect("tokenConfigured", True)
     expect("permanentDelete", True)
     expect("paperlessLocalNetwork", True)
-    # A save with a token entered tests the connection first.
+    # A save with a token entered tests the connection first, with every line of the checklist.
     expect("connectionTested", True)
+    if list(checks()) != CHECKLIST:
+        raise AssertionError(f"{mode}: the checklist has the lines {list(checks())!r}")
+    for line_id in CHECKLIST:
+        expect_line(line_id, "passed")
+    expect_line("folder", "passed", "sync-target may create files in Documents/Paperless.")
+elif mode == "checklist-view-only":
+    # Test connection lists every check of the settings in the form, without saving them.
+    if set(payload) != {"checks"}:
+        raise AssertionError(f"{mode}: the test answers with more than its checklist: {payload!r}")
+    expect_view_only_checklist()
+elif mode == "checklist-no-ui-settings":
+    # Every list passes, but without View for UI Settings, Paperless names neither the
+    # permissions nor the ID of the account.
+    if set(payload) != {"checks"} or list(checks()) != CHECKLIST:
+        raise AssertionError(f"{mode}: the test answers with another checklist: {payload!r}")
+    for line_id in ("paperless", "documents", "correspondents", "document_types", "storage_paths", "tags", "folder"):
+        expect_line(line_id, "passed")
+    expect_line(
+        "trash",
+        "warning",
+        hint="Paperless shows the account in its trash only the documents that it owns and those without an owner. "
+        "Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. "
+        "Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.",
+    )
+    expect_line(
+        "upload",
+        "warning",
+        "Paperless did not say whether the account may add documents and view the tasks that import them.",
+        "In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. "
+        "The inbox needs Add for Documents and View for Paperless Tasks.",
+    )
+elif mode == "saved-with-failures":
+    # A permission that one module needs is saved with the settings, and the checklist says what to do.
+    expect("tokenConfigured", True)
+    expect("connectionTested", True)
+    expect_view_only_checklist()
 elif mode == "local-network-refused":
     expect(
         "message",
@@ -47,6 +136,11 @@ elif mode == "local-network-refused":
         "and save the settings.",
     )
     expect("setting", "paperless_local_network")
+    if list(checks()) != ["paperless", "folder"]:
+        raise AssertionError(f"{mode}: a refused address ends the checks of Paperless: {payload!r}")
+    expect_line("paperless", "failed")
+    if checks()["paperless"]["setting"] != "paperless_local_network":
+        raise AssertionError(f"{mode}: the line of Paperless names no setting: {payload!r}")
 elif mode == "dry-run":
     expect("dryRun", True)
     expect("exported", 1)

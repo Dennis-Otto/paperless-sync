@@ -120,9 +120,10 @@ mock_state() {
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
 # network of the Compose project, and settings.mjs then uses the settings as an
-# administrator does: it saves them with the confirmation of the password, disconnects
-# and connects again with the token, and checks what the page says about unsaved
-# changes, results and errors, also in German. The files of the checks reach the
+# administrator does: it saves them with the confirmation of the password, tests the
+# connection with the token of an account with too few permissions, disconnects and
+# connects again with the token, and checks what the page says about unsaved changes,
+# results and errors, also in German. The files of the checks reach the
 # browser through standard input, so that npm leaves nothing in the checkout.
 accessibility() {
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
@@ -136,6 +137,7 @@ accessibility() {
 			--env E2E_USER=e2e-admin \
 			--env "E2E_PASSWORD=${PASSWORD}" \
 			--env E2E_TOKEN=e2e-only-token \
+			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs'
 }
@@ -372,6 +374,7 @@ curl --fail-with-body --silent --show-error \
 	"${BASE_URL}/index.php/settings/admin/paperless_sync"
 for attribute in \
 	'data-save-url="/apps/paperless_sync/settings"' \
+	'data-test-url="/apps/paperless_sync/settings/test"' \
 	'data-reset-url="/apps/paperless_sync/settings"' \
 	'data-run-url="/apps/paperless_sync/sync/run"' \
 	'data-status-url="/apps/paperless_sync/sync/status"' \
@@ -406,11 +409,11 @@ fi
 ROUTES="$("${COMPOSE[@]}" exec -T --user www-data nextcloud php -r '
 	require "/var/www/html/lib/base.php";
 	$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
-	foreach (["settings.save", "settings.reset", "sync.run", "sync.status"] as $route) {
+	foreach (["settings.save", "settings.test", "settings.reset", "sync.run", "sync.status"] as $route) {
 		echo "route=", $urls->linkToRoute("paperless_sync." . $route), "\n";
 	}
 ' 2>/dev/null | grep '^route=' | sed 's#^route=/index.php/#route=/#' | tr '\n' ' ')"
-EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
+EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/test route=/apps/paperless_sync/settings route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
 if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
 	echo "The routes are missing before the app is loaded: ${ROUTES}" >&2
 	exit 1
@@ -434,6 +437,44 @@ if [[ "${REFUSED_STATUS}" != "400" ]]; then
 	exit 1
 fi
 assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
+
+# The connection checklist of an account that may view the documents but neither the tags
+# nor add documents, which the test of the documents alone would have passed: Test
+# connection names each permission to grant, and saves nothing.
+checklist() {
+	endpoint="$1"
+	output="$2"
+	token="${3:-e2e-view-only-token}"
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+		--data-urlencode 'settings[paperless_local_network]=1' \
+		--data-urlencode 'settings[target_user]=sync-target' \
+		--data-urlencode 'settings[base_path]=Documents/Paperless' \
+		--data-urlencode 'settings[export_enabled]=1' \
+		--data-urlencode 'settings[inbox_enabled]=1' \
+		--data-urlencode "token=${token}" \
+		--output "${output}" \
+		"${BASE_URL}/apps/paperless_sync/${endpoint}"
+}
+checklist settings/test "${TMP_DIR}/checklist-view-only.json"
+assert_json checklist-view-only "${TMP_DIR}/checklist-view-only.json"
+if occ config:app:get paperless_sync paperless_url >/dev/null 2>&1; then
+	echo "Test connection saved the settings." >&2
+	exit 1
+fi
+# Saving goes on with a permission that one module lacks, so that it can be granted in
+# Paperless afterwards, and the answer lists the same checklist. The save below replaces
+# the token with the one of the full account.
+checklist settings "${TMP_DIR}/saved-with-failures.json"
+assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
+# Without the permission View for UI Settings, Paperless doesn't tell the checklist the
+# permissions of the account: the lines of the trash and the inbox name that permission.
+checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
+assert_json checklist-no-ui-settings "${TMP_DIR}/checklist-no-ui-settings.json"
 
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
@@ -852,7 +893,7 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

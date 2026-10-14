@@ -9,8 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
+use OCA\PaperlessSync\Model\SyncConfig;
 
 interface PaperlessClientInterface {
 	/**
@@ -25,6 +27,18 @@ interface PaperlessClientInterface {
 	 * @throws PaperlessVersionException when Paperless doesn't serve the version of its API that the app uses
 	 */
 	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array;
+
+	/**
+	 * The checks of Paperless for the connection checklist, with $token to the URL of $config and
+	 * its local network: that Paperless answers there and takes the token, and that its account
+	 * may read every list that the modules of $config need, owns the documents that it sees, so
+	 * that the trash shows them, and may add documents and view their tasks for the inbox. A
+	 * check that fails is a line of the list, not an exception; after a failure of the connection
+	 * itself, the list ends there.
+	 *
+	 * @return list<ConnectionCheck>
+	 */
+	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array;
 
 	/** The active documents, and whether the run received all of them. */
 	public function documents(): PaperlessScan;
