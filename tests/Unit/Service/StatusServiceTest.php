@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\IAppConfig;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -391,6 +392,92 @@ final class StatusServiceTest extends TestCase {
 
 		self::assertSame($this->service->get() + ['nextRun' => 10_060 + 15 * 60], $overview);
 		self::assertNull($this->service->overview($this->config(false))['nextRun']);
+	}
+
+	public function testNoRunFailedBeforeTheFirstRun(): void {
+		self::assertSame(['runs' => 0, 'since' => 0, 'failed' => false, 'errors' => 0, 'error' => ''], $this->service->failures());
+	}
+
+	/**
+	 * Runs that failed and runs that completed with errors count in one row, which the first
+	 * keeps the start of and the last its error, until a successful run ends it.
+	 */
+	public function testRunsThatDidNotSucceedCountInARowUntilASuccess(): void {
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, TestClock::START));
+		self::assertSame(['runs' => 1, 'since' => TestClock::START, 'failed' => true, 'errors' => 0, 'error' => 'Paperless is down.'], $this->service->failures());
+
+		$this->clock->advance(900);
+		$withErrors = new SyncReport(false, $this->clock->time, $this->clock->time + 60);
+		$withErrors->error('P123: the download failed');
+		$withErrors->error('P124: the download failed');
+		$this->service->completed($withErrors);
+		self::assertSame(['runs' => 2, 'since' => TestClock::START, 'failed' => false, 'errors' => 2, 'error' => 'P123: the download failed'], $this->service->failures());
+
+		$this->clock->advance(900);
+		$this->service->failed(new RuntimeException(str_repeat('x', 1200)));
+		$failures = $this->service->failures();
+		self::assertSame(3, $failures['runs'], 'A failure without a report counts as a run.');
+		self::assertSame(1000, mb_strlen($failures['error']));
+
+		$this->service->completed(new SyncReport(false, $this->clock->time, $this->clock->time + 60));
+		self::assertSame(0, $this->service->failures()['runs']);
+		self::assertArrayNotHasKey('status_failures', $this->settings, 'A success deletes the row.');
+	}
+
+	public function testDryRunsNeitherCountNorEndTheRow(): void {
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(true, TestClock::START));
+		$withErrors = new SyncReport(true, TestClock::START, TestClock::START + 60);
+		$withErrors->error('P123: the download failed');
+		$this->service->completed($withErrors);
+		self::assertSame(0, $this->service->failures()['runs'], 'A dry-run changes nothing in the mirror.');
+
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, TestClock::START));
+		$this->service->completed(new SyncReport(true, TestClock::START, TestClock::START + 60));
+		self::assertSame(1, $this->service->failures()['runs'], 'A dry-run that succeeds does not mean that the mirror works.');
+	}
+
+	public function testASuccessAfterASuccessWritesNothing(): void {
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueString')->willReturnCallback(static fn (string $app, string $key, string $default): string => $default);
+		$appConfig->expects(self::never())->method('deleteKey');
+
+		(new StatusService($appConfig, $this->clock))->completed(new SyncReport(false, 1000, 1060));
+	}
+
+	public function testUnreadableFailuresCountAsNone(): void {
+		$this->settings['status_failures'] = '{"runs":"3","since":"yesterday","failed":1,"errors":-2,"error":[]}';
+
+		self::assertSame(['runs' => 0, 'since' => 0, 'failed' => false, 'errors' => 0, 'error' => ''], $this->service->failures());
+	}
+
+	public function testHealthFollowsTheRunsThatAreNoDryRuns(): void {
+		self::assertSame('off', $this->service->health($this->config(false)));
+		$config = $this->config(true);
+		self::assertSame('waiting', $this->service->health($config), 'Before the first success, the mirror waits for one.');
+
+		$this->service->completed(new SyncReport(false, TestClock::START - 60, TestClock::START));
+		self::assertSame('ok', $this->service->health($config));
+
+		$this->clock->advance(StatusService::STALE_MINIMUM);
+		self::assertSame('ok', $this->service->health($config), 'Three intervals of 15 minutes are less than the minimum of an hour.');
+		$this->clock->advance(1);
+		self::assertSame('stale', $this->service->health($config));
+
+		$withErrors = new SyncReport(false, $this->clock->time, $this->clock->time + 60);
+		$withErrors->error('P123: the download failed');
+		$this->service->completed($withErrors);
+		self::assertSame('errors', $this->service->health($config));
+
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, $this->clock->time));
+		self::assertSame('failed', $this->service->health($config));
+		self::assertSame('failed', $this->service->health($this->config(false)), 'Turning scheduled runs off does not complete the mirror.');
+	}
+
+	public function testAMirrorIsStaleAfterThreeIntervals(): void {
+		$config = $this->configService()->save(['enabled' => true, 'sync_interval_minutes' => 120] + self::validSettings(), 'secret-token');
+
+		self::assertSame(3 * 120 * 60, StatusService::staleAfter($config));
+		self::assertSame(StatusService::STALE_MINIMUM, StatusService::staleAfter($this->config(true)));
 	}
 
 	private function config(bool $enabled): SyncConfig {

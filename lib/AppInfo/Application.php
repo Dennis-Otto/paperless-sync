@@ -9,12 +9,15 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\AppInfo;
 
+use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
+use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
+use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -32,6 +35,11 @@ final class Application extends App implements IBootstrap {
 		$context->registerServiceAlias(PaperlessClientInterface::class, PaperlessApiService::class);
 		$context->registerServiceAlias(NextcloudStorageInterface::class, NextcloudStorageService::class);
 		$context->registerServiceAlias(SyncStateRepositoryInterface::class, SyncStateRepository::class);
+		// The notifications of a failing mirror and of failed imports, and the checks of
+		// Administration → Overview.
+		$context->registerNotifierService(Notifier::class);
+		$context->registerSetupCheck(SyncHealth::class);
+		$context->registerSetupCheck(BackgroundJobMode::class);
 	}
 
 	public function boot(IBootContext $context): void {

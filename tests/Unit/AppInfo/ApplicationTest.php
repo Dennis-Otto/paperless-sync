@@ -9,12 +9,15 @@ use OCA\PaperlessSync\Activity\Filter;
 use OCA\PaperlessSync\Activity\Provider;
 use OCA\PaperlessSync\Activity\Setting;
 use OCA\PaperlessSync\AppInfo\Application;
+use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
+use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
+use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
 use OCP\Activity\ActivitySettings;
 use OCP\Activity\IFilter;
@@ -23,6 +26,8 @@ use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\AppFramework\IAppContainer;
 use OCP\IConfig;
+use OCP\Notification\INotifier;
+use OCP\SetupCheck\ISetupCheck;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use SimpleXMLElement;
@@ -81,6 +86,28 @@ final class ApplicationTest extends TestCase {
 			NextcloudStorageInterface::class => NextcloudStorageService::class,
 			SyncStateRepositoryInterface::class => SyncStateRepository::class,
 		], $aliases);
+	}
+
+	/** The notifications and the setup checks of Administration → Overview come from the registration of the app. */
+	public function testTheAppRegistersItsNotifierAndItsSetupChecks(): void {
+		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
+		$notifiers = [];
+		$checks = [];
+		$registration = $this->createMock(IRegistrationContext::class);
+		$registration->method('registerNotifierService')->willReturnCallback(function (string $notifier) use (&$notifiers): void {
+			$notifiers[] = $notifier;
+		});
+		$registration->method('registerSetupCheck')->willReturnCallback(function (string $check) use (&$checks): void {
+			$checks[] = $check;
+		});
+
+		$application->register($registration);
+
+		self::assertSame([Notifier::class], $notifiers);
+		self::assertSame([SyncHealth::class, BackgroundJobMode::class], $checks);
+		self::assertTrue(is_subclass_of(Notifier::class, INotifier::class));
+		self::assertTrue(is_subclass_of(SyncHealth::class, ISetupCheck::class));
+		self::assertTrue(is_subclass_of(BackgroundJobMode::class, ISetupCheck::class));
 	}
 
 	/** The Activity app reads its setting, filter and provider from the app info, by their classes. */

@@ -48,6 +48,9 @@
           - lib/AppInfo/**
           - lib/Cron/**
           - lib/Controller/SyncController.php
+          - lib/Controller/StatusApiController.php
+          - lib/Notification/**
+          - lib/SetupChecks/**
           - lib/Service/SyncService.php
           - lib/Service/PaperlessApiService.php
           - lib/Service/PaperlessClientInterface.php
@@ -65,6 +68,9 @@
           - tests/Unit/Cron/**
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Controller/SyncController*
+          - tests/Unit/Controller/StatusApiController*
+          - tests/Unit/Notification/**
+          - tests/Unit/SetupChecks/**
           - tests/Unit/Service/SyncServiceTest.php
           - tests/Unit/Service/PaperlessApiServiceTest.php
           - tests/Unit/Service/StatusServiceTest.php

@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
@@ -51,6 +52,7 @@ final class SyncService {
 		private ITimeFactory $timeFactory,
 		private ActivityPublisher $activity,
 		private UserTimeZones $timeZones,
+		private NotificationPublisher $notifications,
 	) {
 	}
 
@@ -100,6 +102,9 @@ final class SyncService {
 			if ($config !== null) {
 				$this->activity->publish($config, $report);
 			}
+			// The administrators hear of a mirror that keeps failing, and the target user of the
+			// imports that failed, once the status has kept how the run ended.
+			$this->notifications->publish($config, $report);
 			$this->lockingProvider->releaseLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}

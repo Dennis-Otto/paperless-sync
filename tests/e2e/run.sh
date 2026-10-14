@@ -271,6 +271,28 @@ sync_status() {
 		"${BASE_URL}/apps/paperless_sync/sync/status"
 }
 
+# The notifications of a user, as the Notifications app gives them to its clients.
+notifications() {
+	curl --fail-with-body --silent --show-error \
+		--user "$1:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "$2" \
+		"${BASE_URL}/ocs/v2.php/apps/notifications/api/v2/notifications"
+}
+
+# The health of the mirror from the status API of the app, as a monitor reads it with the
+# password of a user; prints the HTTP status.
+status_api() {
+	curl --silent --show-error \
+		--user "$1:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "$2" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/ocs/v2.php/apps/paperless_sync/api/v1/status"
+}
+
 dav_status() {
 	user="$1"
 	method="$2"
@@ -801,6 +823,9 @@ assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic uns
 # Every import that Paperless finished, failed or refused has an entry of its own.
 activities "${TMP_DIR}/activity-imports.json"
 assert_json activity-imports "${TMP_DIR}/activity-imports.json"
+# The target user hears of every import that failed or was refused in a notification as well.
+notifications sync-target "${TMP_DIR}/notifications-imports.json"
+assert_json notifications-imports "${TMP_DIR}/notifications-imports.json"
 
 sync_status "${TMP_DIR}/status.json"
 assert_json status "${TMP_DIR}/status.json"
@@ -991,8 +1016,56 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
+# A mirror that keeps failing tells the administrators. The run above without Paperless was the
+# first of a row of runs that failed; after the third, every administrator has one notification,
+# the setup check of the app names the error, and the status API reports it to a monitor, but
+# not to a user who is no administrator. The next run that succeeds removes the notification.
+"${COMPOSE[@]}" stop paperless-mock >/dev/null
+for attempt in 2 3; do
+	FAILING_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=false' \
+		--output "${TMP_DIR}/failing-${attempt}.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	if [[ "${FAILING_STATUS}" != "500" ]]; then
+		echo "Run ${attempt} without Paperless answered HTTP ${FAILING_STATUS} instead of 500: $(cat "${TMP_DIR}/failing-${attempt}.json")" >&2
+		exit 1
+	fi
+done
+"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
+assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
+FAILING_API_STATUS="$(status_api e2e-admin "${TMP_DIR}/status-api-failing.json")"
+if [[ "${FAILING_API_STATUS}" != "200" ]]; then
+	echo "The status API answered HTTP ${FAILING_API_STATUS} to an administrator: $(cat "${TMP_DIR}/status-api-failing.json")" >&2
+	exit 1
+fi
+assert_json status-api-failing "${TMP_DIR}/status-api-failing.json"
+USER_API_STATUS="$(status_api sync-target "${TMP_DIR}/status-api-user.json")"
+if [[ "${USER_API_STATUS}" != "403" ]]; then
+	echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a user who is no administrator: $(cat "${TMP_DIR}/status-api-user.json")" >&2
+	exit 1
+fi
+# occ setupchecks fails while a check fails, which is the point here.
+occ setupchecks >"${TMP_DIR}/setupchecks.txt" 2>&1 || true
+if ! grep --fixed-strings 'runs of Paperless Sync failed, the last one with:' "${TMP_DIR}/setupchecks.txt" >/dev/null; then
+	echo "occ setupchecks does not name the failing mirror:" >&2
+	cat "${TMP_DIR}/setupchecks.txt" >&2
+	exit 1
+fi
+sync_run false "${TMP_DIR}/recovered.json"
+assert_json recovered "${TMP_DIR}/recovered.json"
+notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
+assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
+status_api e2e-admin "${TMP_DIR}/status-api-recovered.json" >/dev/null
+assert_json status-api-recovered "${TMP_DIR}/status-api-recovered.json"
+
 checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi
-echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, and a URL changed past the settings page that does not get the token."
+echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, a URL changed past the settings page that does not get the token, and a failing mirror that notifies the administrators, shows in the setup checks and the status API, and clears after a success."

@@ -12,10 +12,13 @@ namespace OCA\PaperlessSync\Settings;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
+use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IURLGenerator;
 use OCP\Settings\ISettings;
+use OCP\SetupCheck\SetupResult;
 
 final class AdminSettings implements ISettings {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -24,6 +27,8 @@ final class AdminSettings implements ISettings {
 		private StatusService $statusService,
 		private IURLGenerator $urlGenerator,
 		private IInitialState $initialState,
+		private SyncHealth $syncHealth,
+		private BackgroundJobMode $backgroundJobMode,
 	) {
 	}
 
@@ -45,7 +50,26 @@ final class AdminSettings implements ISettings {
 			'runUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.run'),
 			'statusUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.status'),
 			'previewUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.preview'),
+			'health' => $this->health(),
 		]);
+	}
+
+	/**
+	 * What the setup checks of the app say under Administration → Overview, also on top of this
+	 * page: their warnings and errors, that of the runs before that of the background jobs.
+	 *
+	 * @return list<array{severity: string, description: string}>
+	 */
+	private function health(): array {
+		$results = [];
+		foreach ([$this->syncHealth, $this->backgroundJobMode] as $check) {
+			$result = $check->run();
+			if (in_array($result->getSeverity(), [SetupResult::WARNING, SetupResult::ERROR], true)) {
+				$results[] = ['severity' => $result->getSeverity(), 'description' => (string)$result->getDescription()];
+			}
+		}
+
+		return $results;
 	}
 
 	public function getSection(): string {

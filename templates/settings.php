@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, health: list<array{severity: string, description: string}>} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -19,6 +19,9 @@ style('paperless_sync', 'settings');
 
 $config = $_['config'];
 $status = $_['status'];
+// The warnings and errors of the setup checks of Administration → Overview, as they were when the
+// page loaded, which it shows on top.
+$health = $_['health'];
 // The state of the last run as StatusService stores it, and its label; js/settings.js has the same.
 $state = (string)($status['state'] ?? 'never-run');
 $stateLabels = [
@@ -57,6 +60,14 @@ $help = static function (string $anchor, string $section) use ($l): void {
 			<p><?php p($l->t('Keep Paperless as your authoritative archive and make finalized documents available through Nextcloud Files.')); ?></p>
 		</div>
 	</div>
+
+	<?php foreach ($health as $result) { ?>
+	<p class="paperless-sync-health paperless-sync-health--<?php p($result['severity']); ?>" role="<?php p($result['severity'] === 'error' ? 'alert' : 'status'); ?>">
+		<strong><?php p($result['severity'] === 'error' ? $l->t('Error') : $l->t('Warning')); ?>:</strong>
+		<?php p($result['description']); ?>
+		<?php $help('being-notified', $l->t('Being notified')); ?>
+	</p>
+	<?php } ?>
 
 	<div id="paperless-sync-status" class="paperless-sync-status">
 		<div class="paperless-sync-status-card">

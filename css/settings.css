@@ -84,6 +84,22 @@
 	color: var(--color-error-text);
 }
 
+/* The warnings and errors of the setup checks of the app, on top of the page. */
+.paperless-sync-health {
+	margin: 0 0 12px;
+	padding: 12px 20px;
+	border: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+	border-left-width: 4px;
+	border-radius: var(--border-radius-large);
+	background: color-mix(in srgb, var(--color-warning) 7%, var(--color-main-background));
+	color: var(--color-main-text);
+}
+
+.paperless-sync-health--error {
+	border-color: color-mix(in srgb, var(--color-error) 45%, var(--color-border));
+	background: color-mix(in srgb, var(--color-error) 7%, var(--color-main-background));
+}
+
 .paperless-sync-errors {
 	margin-top: 12px;
 	padding: 14px 20px;

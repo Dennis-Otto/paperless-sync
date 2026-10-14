@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Cron;
 
 use OC;
 use OCA\PaperlessSync\Cron\SyncJob;
+use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
@@ -18,6 +19,7 @@ use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
@@ -32,6 +34,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use RuntimeException;
 
 /**
  * The background job, started the way Nextcloud's cron starts it.
@@ -39,6 +42,7 @@ use Psr\Log\NullLogger;
 final class SyncJobTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;
+	use RecordedNotifications;
 
 	private TestClock $clock;
 	private ConfigService $configService;
@@ -47,6 +51,7 @@ final class SyncJobTest extends TestCase {
 	/** @var LoggerInterface&MockObject */
 	private LoggerInterface $logger;
 	private SyncService $sync;
+	private TestPaperlessClient $paperless;
 	private SyncJob $job;
 
 	protected function setUp(): void {
@@ -56,9 +61,10 @@ final class SyncJobTest extends TestCase {
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$status = new StatusService($this->appConfig(), $this->clock);
+		$this->paperless = new TestPaperlessClient();
 		$this->sync = new SyncService(
 			$this->configService,
-			new TestPaperlessClient(),
+			$this->paperless,
 			new TestStorage(),
 			new TestStateRepository(),
 			new PathTemplateService(),
@@ -68,6 +74,7 @@ final class SyncJobTest extends TestCase {
 			$this->clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
+			$this->notificationPublisher($status, new TestStorage(), $this->clock, $this->createMock(LoggerInterface::class)),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
@@ -172,6 +179,33 @@ final class SyncJobTest extends TestCase {
 		);
 
 		$this->start();
+	}
+
+	/**
+	 * The third scheduled run in a row that can't reach Paperless notifies every administrator once,
+	 * the runs after it add none, and the first run that succeeds again removes the notification.
+	 * Dry-runs of an administrator who looks into it change nothing of that.
+	 */
+	public function testAMirrorThatKeepsFailingNotifiesTheAdministratorsOnce(): void {
+		$this->paperless->connectionException = new RuntimeException('Paperless answered 401: Invalid token.');
+		for ($run = 1; $run <= 5; ++$run) {
+			$this->start();
+			self::assertSame('failed', $this->settings['status_last_state']);
+			self::assertCount($run < 3 ? 0 : 2, $this->notifications, "Scheduled run {$run}");
+			try {
+				$this->sync->run(true);
+			} catch (RuntimeException) {
+			}
+			$this->clock->advance(15 * 60);
+		}
+		self::assertSame(['e2e-admin', 'second-admin'], $this->notifiedUsers(NotificationPublisher::SUBJECT_FAILING));
+		self::assertSame('Paperless answered 401: Invalid token.', $this->notifications[0]->getSubjectParameters()['error']);
+
+		$this->paperless->connectionException = null;
+		$this->start();
+
+		self::assertSame('completed', $this->settings['status_last_state']);
+		self::assertSame([], $this->notifications, 'The first success removes the notification.');
 	}
 
 	private function start(): void {

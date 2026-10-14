@@ -21,13 +21,25 @@ use OCP\IAppConfig;
  * reached. Every key is lazy: Nextcloud loads the status when the app asks for it, not with every
  * request of every user.
  *
+ * It also counts the runs in a row that did not succeed, from which the notifications, the setup
+ * checks and the status API tell a mirror that keeps failing from one that failed once.
+ *
  * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
+ * @psalm-type Failures = array{runs: int, since: int, failed: bool, errors: int, error: string}
+ * @psalm-type Health = 'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
  */
 final class StatusService {
 	/** The most lines of changes that the kept report holds. */
 	public const REPORT_ACTIONS = 200;
 	/** The most characters of an error and of a line of the kept report. */
 	private const LINE_LENGTH = 1000;
+	/**
+	 * A mirror is stale when its last successful run is older than this many intervals of the
+	 * settings, but at least STALE_MINIMUM seconds, so that a cron job that comes a few minutes
+	 * late doesn't count as a stopped mirror.
+	 */
+	public const STALE_INTERVALS = 3;
+	public const STALE_MINIMUM = 3600;
 
 	/** The start of the last run, also of a dry-run. */
 	private const LAST_STARTED = 'status_last_started';
@@ -50,12 +62,18 @@ final class StatusService {
 	/** The version of Paperless-ngx that the last run reached, as Paperless names it, and the version of its API that the run used. */
 	private const PAPERLESS_VERSION = 'status_paperless_version';
 	private const PAPERLESS_API_VERSION = 'status_paperless_api_version';
+	/**
+	 * The runs in a row, not dry-runs, that did not succeed since the last one that did: how many,
+	 * when the first of them ended, whether the last one failed or completed with errors, and its
+	 * error. A successful run deletes it.
+	 */
+	private const FAILURES = 'status_failures';
 
 	/** Every key of the status. */
 	private const KEYS = [
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
 		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
-		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION,
+		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES,
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -112,6 +130,10 @@ final class StatusService {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $report->completedAt, lazy: true);
 			if ($report->errors === 0) {
 				$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, $report->completedAt, lazy: true);
+				$this->recovered();
+			} else {
+				// Some documents were not mirrored, so the mirror is not complete either.
+				$this->unsuccessful(false, $report->errors, $report->errorMessages[0] ?? '');
 			}
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'), lazy: true);
@@ -129,6 +151,7 @@ final class StatusService {
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now, lazy: true);
 		if ($report === null || !$report->dryRun) {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now, lazy: true);
+			$this->unsuccessful(true, $report === null ? 0 : $report->errors, $exception->getMessage());
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed', lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH), lazy: true);
@@ -155,6 +178,62 @@ final class StatusService {
 			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true),
 			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true),
 		];
+	}
+
+	/**
+	 * The runs in a row, not dry-runs, that did not succeed: none after a successful run, and before
+	 * the first run.
+	 *
+	 * @return Failures
+	 */
+	public function failures(): array {
+		$values = $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::FAILURES, '{}', lazy: true));
+
+		return [
+			'runs' => max(0, self::integer($values, 'runs')),
+			'since' => self::integer($values, 'since'),
+			'failed' => ($values['failed'] ?? false) === true,
+			'errors' => max(0, self::integer($values, 'errors')),
+			'error' => isset($values['error']) && is_string($values['error']) ? $values['error'] : '',
+		];
+	}
+
+	/** @param array<string, mixed> $values */
+	private static function integer(array $values, string $key): int {
+		return isset($values[$key]) && is_int($values[$key]) ? $values[$key] : 0;
+	}
+
+	/**
+	 * How the mirror is, as the setup checks and the status API say it:
+	 *
+	 * - failed or errors: the last run, not a dry-run, failed or completed with errors, also one by
+	 *   hand while scheduled runs are off: the mirror is incomplete until a run succeeds.
+	 * - off: scheduled runs are off.
+	 * - waiting: no run has succeeded yet.
+	 * - stale: the last successful run is older than staleAfter(), so runs have stopped.
+	 * - ok: the last run succeeded in time.
+	 *
+	 * @return Health
+	 */
+	public function health(SyncConfig $config): string {
+		$failures = $this->failures();
+		if ($failures['runs'] > 0) {
+			return $failures['failed'] ? 'failed' : 'errors';
+		}
+		if (!$config->enabled) {
+			return 'off';
+		}
+		$lastSuccess = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0, lazy: true);
+		if ($lastSuccess === 0) {
+			return 'waiting';
+		}
+
+		return $this->timeFactory->getTime() - $lastSuccess > self::staleAfter($config) ? 'stale' : 'ok';
+	}
+
+	/** After how many seconds without a successful run a mirror counts as stale. */
+	public static function staleAfter(SyncConfig $config): int {
+		return max(self::STALE_INTERVALS * $config->syncIntervalMinutes * 60, self::STALE_MINIMUM);
 	}
 
 	/**
@@ -212,6 +291,25 @@ final class StatusService {
 		}
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true), lazy: true);
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true), lazy: true), lazy: true);
+	}
+
+	/** A run, not a dry-run, that did not succeed: one more in the row, which starts with the first. */
+	private function unsuccessful(bool $failed, int $errors, string $error): void {
+		$failures = $this->failures();
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::FAILURES, json_encode([
+			'runs' => $failures['runs'] + 1,
+			'since' => $failures['runs'] > 0 ? $failures['since'] : $this->timeFactory->getTime(),
+			'failed' => $failed,
+			'errors' => $errors,
+			'error' => mb_substr($error, 0, self::LINE_LENGTH),
+		], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), lazy: true);
+	}
+
+	/** A successful run ends the row of those that did not succeed; one after another success writes nothing. */
+	private function recovered(): void {
+		if ($this->failures()['runs'] > 0) {
+			$this->appConfig->deleteKey(AppConstants::APP_ID, self::FAILURES);
+		}
 	}
 
 	/**

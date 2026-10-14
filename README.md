@@ -107,6 +107,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run; a dry-run tries changes of the settings before you save them
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English and German: the settings, their messages and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
+- [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
 <!-- --8<-- [end:features] -->
@@ -394,11 +395,11 @@ A large archive takes many runs at first: about the number of documents divided 
 ## Status, report and log
 
 <!-- --8<-- [start:status] -->
-Every run leaves its outcome in four places, also a scheduled run that nobody watched:
+Every run leaves its outcome in five places, also a scheduled run that nobody watched:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-outcome-of-a-run-goes.dark.svg">
-  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes. A run that changed something, and every import that Paperless finished, failed or refused, adds an entry to the Activity stream of the target user, with links to the files, but a dry-run adds none.">
+  <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes. A run that changed something, and every import that Paperless finished, failed or refused, adds an entry to the Activity stream of the target user, with links to the files, but a dry-run adds none. A mirror that keeps failing, and every import that failed or was refused, sends a notification, but a dry-run sends none.">
 </picture>
 
 The top of the settings page shows how the last run ended, when it finished, the last run without errors, roughly the next scheduled run, as Nextcloud's background jobs start it a few minutes after the interval, and below them the Paperless that the last run reached: its version, as Paperless names it, and the version of its API that the app uses, such as *The last run reached Paperless-ngx 3.3.0 through version 9 of its API.* A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
@@ -431,6 +432,56 @@ The *Activity* app of Nextcloud tells the target user what Paperless Sync did, i
 
 A dry-run and a run without changes add no entry. The filter *Paperless Sync* in the navigation of the Activity app shows the entries alone, and in the personal settings under *Activity*, each user can have them sent by mail or as notifications as well, which is off until then. Nextcloud's own entries of the *Files* app don't tell this story: they leave out the files of a run by hand, and they show those of a scheduled run as changes of a *remote account*.
 <!-- --8<-- [end:activity] -->
+
+### Being notified
+
+<!-- --8<-- [start:notifications] -->
+A mirror that stops is the worst failure of a backup, and nobody looks at the settings page every day. Paperless Sync says so on its own, in three places, without another service:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/when-the-administrators-hear-of-a-failing-mirror.dark.svg">
+  <img src="docs/images/diagrams/when-the-administrators-hear-of-a-failing-mirror.svg" alt="When the administrators hear of a failing mirror: After every run that is no dry-run, Paperless Sync counts the runs in a row that failed or completed with errors. A successful run ends the row and removes the notification. After the third run in a row, or once the first of them ended a day ago, every administrator gets one notification with the error of the last run and a link to the settings, once for the whole row. The setup checks under Administration, Overview and the status API show the same state at any time.">
+</picture>
+
+- **Notifications.** Three runs in a row that failed or completed with errors, or fewer once the first of them ended a day ago, as with an interval of a day, send every administrator one notification, with the first 200 characters of the error and a link to the settings: *Paperless Sync failed 3 times in a row*. It comes once for the whole row, also by mail or as a push notification of the Nextcloud apps where the user has turned those on, and the next successful run removes it. Two failed runs, such as during a restart of Paperless, notify nobody. The target user gets a notification for each file of the inbox that Paperless could not import or refused, with its reason. A dry-run notifies nobody.
+- **Setup checks.** *Administration → Overview* and `occ setupchecks` show two checks of the app. *Paperless Sync* is an error when the last run failed, a warning when it completed with errors or when no run succeeded for three intervals, at least an hour, as when the background jobs stopped. *Paperless Sync background job* warns when scheduled runs are on but Nextcloud runs its background jobs with AJAX or Webcron, which start them only while someone uses Nextcloud. The settings page shows their warnings on top.
+- **The status API** gives a monitor, such as Uptime Kuma or Home Assistant, the health of the mirror. Only administrators may read it; give the monitor an app password of an administrator, from *Personal settings → Security*, here in the variable `APP_PASSWORD`:
+
+```sh
+curl --user "admin:$APP_PASSWORD" --header "OCS-APIRequest: true" \
+  "https://cloud.example.com/ocs/v2.php/apps/paperless_sync/api/v1/status?format=json"
+```
+
+It answers, with the counts of `summary` shortened:
+
+```json
+{"ocs": {"meta": {"status": "ok", "statuscode": 200, "message": "OK"}, "data": {
+  "healthy": false, "health": "failed", "enabled": true, "state": "failed",
+  "lastStarted": 1787911200, "lastEnded": 1787911205, "lastSuccess": 1787900400, "nextRun": 1787912100,
+  "error": "Paperless answered 401: Invalid token.", "failedRuns": 3, "failingSince": 1787909405,
+  "summary": {"dryRun": false, "exported": 0, "errors": 0},
+  "paperlessVersion": "", "paperlessApiVersion": ""}}}
+```
+
+`health` is `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, and `error` the error of the last run of the row that failed. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
+
+```yaml
+rest:
+  - resource: https://cloud.example.com/ocs/v2.php/apps/paperless_sync/api/v1/status?format=json
+    headers:
+      OCS-APIRequest: "true"
+    authentication: basic
+    username: admin
+    password: !secret nextcloud_app_password
+    scan_interval: 300
+    binary_sensor:
+      - name: Paperless Sync problem
+        device_class: problem
+        value_template: "{{ not value_json.ocs.data.healthy }}"
+```
+
+The notification of a failing mirror goes to the group `admin`. Another group, such as one for the people who look after the archive, gets it in its place with `occ config:app:set paperless_sync notification_group --value=archive-admins`; a group that doesn't exist leaves it to the administrators, with a warning in the log.
+<!-- --8<-- [end:notifications] -->
 
 ## FAQ and troubleshooting
 
