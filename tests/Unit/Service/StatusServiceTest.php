@@ -470,7 +470,7 @@ final class StatusServiceTest extends TestCase {
 
 		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, $this->clock->time));
 		self::assertSame('failed', $this->service->health($config));
-		self::assertSame('off', $this->service->health($this->config(false)), 'Scheduled runs that are off have no health.');
+		self::assertSame('failed', $this->service->health($this->config(false)), 'Turning scheduled runs off does not complete the mirror.');
 	}
 
 	public function testAMirrorIsStaleAfterThreeIntervals(): void {

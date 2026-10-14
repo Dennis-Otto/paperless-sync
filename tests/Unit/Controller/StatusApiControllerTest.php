@@ -88,5 +88,8 @@ final class StatusApiControllerTest extends TestCase {
 		$data = $this->controller->status()->getData();
 
 		self::assertSame([true, 'off', false, null], [$data['healthy'], $data['health'], $data['enabled'], $data['nextRun']]);
+
+		$this->status->failed(new RuntimeException('Paperless answered 401.'));
+		self::assertSame([false, 'failed'], [$this->controller->status()->getData()['healthy'], $this->controller->status()->getData()['health']], 'A run by hand that failed is an alarm while scheduled runs are off, too.');
 	}
 }

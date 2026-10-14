@@ -206,8 +206,9 @@ final class StatusService {
 	/**
 	 * How the mirror is, as the setup checks and the status API say it:
 	 *
+	 * - failed or errors: the last run, not a dry-run, failed or completed with errors, also one by
+	 *   hand while scheduled runs are off: the mirror is incomplete until a run succeeds.
 	 * - off: scheduled runs are off.
-	 * - failed or errors: the last run, not a dry-run, failed or completed with errors.
 	 * - waiting: no run has succeeded yet.
 	 * - stale: the last successful run is older than staleAfter(), so runs have stopped.
 	 * - ok: the last run succeeded in time.
@@ -215,12 +216,12 @@ final class StatusService {
 	 * @return Health
 	 */
 	public function health(SyncConfig $config): string {
-		if (!$config->enabled) {
-			return 'off';
-		}
 		$failures = $this->failures();
 		if ($failures['runs'] > 0) {
 			return $failures['failed'] ? 'failed' : 'errors';
+		}
+		if (!$config->enabled) {
+			return 'off';
 		}
 		$lastSuccess = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0, lazy: true);
 		if ($lastSuccess === 0) {

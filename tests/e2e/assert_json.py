@@ -486,7 +486,8 @@ elif mode == "status-api-failing":
         raise AssertionError(f"status-api-failing: the status API does not report the failing mirror: {data!r}")
 elif mode == "status-api-recovered":
     data = payload["ocs"]["data"]
-    if data.get("healthy") is not True or data.get("health") != "ok" or data.get("failedRuns") != 0 or data.get("error") != "":
+    # ok, or off while the scheduled runs of the tests are off.
+    if data.get("healthy") is not True or data.get("health") not in ("ok", "off") or data.get("failedRuns") != 0 or data.get("error") != "":
         raise AssertionError(f"status-api-recovered: the status API does not report the recovered mirror: {data!r}")
 elif mode == "recovered":
     if payload.get("errors") != 0 or payload.get("dryRun") is not False:

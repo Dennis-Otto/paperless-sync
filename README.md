@@ -463,7 +463,7 @@ It answers, with the counts of `summary` shortened:
   "paperlessVersion": "", "paperlessApiVersion": ""}}}
 ```
 
-`health` is `ok`, `waiting` before the first successful run, `off` while scheduled runs are off, or `failed`, `errors` and `stale` as the setup check names them; `healthy` is false for the last three. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, and `error` the error of the last run of the row that failed. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
+`health` is `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, and `error` the error of the last run of the row that failed. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
 
 ```yaml
 rest:
