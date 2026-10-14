@@ -41,7 +41,7 @@ final class PaperlessLocalNetworkException extends PaperlessRequestException {
 	}
 
 	public function translated(IL10N $l10n): string {
-		return $l10n->t($this->advice(), [$this->host]);
+		return $l10n->t($this->withoutDnsRecord ? self::ADVICE_WITHOUT_DNS_RECORD : self::ADVICE, [$this->host]);
 	}
 
 	/** The advice in English, with %s for the host, as translated() looks it up. */

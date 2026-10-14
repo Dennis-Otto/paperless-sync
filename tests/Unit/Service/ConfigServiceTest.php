@@ -11,12 +11,15 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use InvalidArgumentException;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class ConfigServiceTest extends TestCase {
+	use GermanTranslations;
 	use InMemoryConfiguration;
 
 	private ConfigService $service;
@@ -325,40 +328,57 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame($allowed, $this->settings['paperless_local_network']);
 	}
 
-	/** @return array<string, array{array<string, mixed>, string}> */
+	/**
+	 * Settings that a save refuses, with the message in English, the setting that the page moves
+	 * the focus to, and the message in German, which names a setting by its label on the page.
+	 *
+	 * @return array<string, array{array<string, mixed>, string, string, string}>
+	 */
 	public static function invalidSettings(): array {
+		$url = 'Die Paperless-Adresse darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.';
+		$interval = 'Der Wert von „Intervall in Minuten“ muss zwischen 5 und 1440 liegen.';
+
 		return [
-			'empty URL' => [['paperless_url' => ' '], 'Enter a valid Paperless URL.'],
-			'URL without scheme' => [['paperless_url' => 'paperless.example.test'], 'Enter a valid Paperless URL.'],
-			'FTP URL' => [['paperless_url' => 'ftp://paperless.example.test'], 'The Paperless URL must use HTTP or HTTPS.'],
-			'URL with credentials' => [['paperless_url' => 'https://user:secret@paperless.example.test'], 'The Paperless URL must not contain credentials, a query, or a fragment.'],
-			'URL with a query' => [['paperless_url' => 'https://paperless.example.test/?page=1'], 'The Paperless URL must not contain credentials, a query, or a fragment.'],
-			'URL with a fragment' => [['paperless_url' => 'https://paperless.example.test/#top'], 'The Paperless URL must not contain credentials, a query, or a fragment.'],
-			'no target user' => [['target_user' => '  '], 'A Nextcloud target user is required.'],
-			'base path leaving the user folder' => [['base_path' => 'Dokumente/../..'], 'Folder paths must be relative and must not contain empty, . or .. components.'],
-			'nested folder name' => [['archive_folder' => 'Archiv/2026'], 'Folder names must contain exactly one path component.'],
-			'shared folder name' => [['error_folder' => 'Eingang'], 'Archive, inbox, and error folders must have different names.'],
-			'template without ID' => [['path_template' => '{{ title }}{{ extension }}'], 'The archive path template must contain {{ id }}.'],
-			'interval shorter than the background job' => [['sync_interval_minutes' => 4], 'Synchronization interval must be between 5 and 1440.'],
-			'interval longer than a day' => [['sync_interval_minutes' => 1441], 'Synchronization interval must be between 5 and 1440.'],
-			'batch too large' => [['batch_size' => 1001], 'Batch size must be between 1 and 1000.'],
-			'too many confirmation runs' => [['missing_grace_runs' => 31], 'Missing-document confirmation runs must be between 1 and 30.'],
-			'unknown trash policy' => [['trash_mode' => 'delete'], 'Invalid Paperless trash policy.'],
-			'unknown conflict policy' => [['conflict_mode' => 'rename'], 'Invalid file conflict policy.'],
+			'empty URL' => [['paperless_url' => ' '], 'Enter a valid Paperless URL.', 'paperless_url', 'Gib eine gültige Paperless-Adresse ein.'],
+			'URL without scheme' => [['paperless_url' => 'paperless.example.test'], 'Enter a valid Paperless URL.', 'paperless_url', 'Gib eine gültige Paperless-Adresse ein.'],
+			'FTP URL' => [['paperless_url' => 'ftp://paperless.example.test'], 'The Paperless URL must use HTTP or HTTPS.', 'paperless_url', 'Die Paperless-Adresse muss HTTP oder HTTPS verwenden.'],
+			'URL with credentials' => [['paperless_url' => 'https://user:secret@paperless.example.test'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
+			'URL with a query' => [['paperless_url' => 'https://paperless.example.test/?page=1'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
+			'URL with a fragment' => [['paperless_url' => 'https://paperless.example.test/#top'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
+			'no target user' => [['target_user' => '  '], 'A Nextcloud target user is required.', 'target_user', 'Ein Nextcloud-Zielbenutzer ist erforderlich.'],
+			'base path leaving the user folder' => [['base_path' => 'Dokumente/../..'], 'Folder paths must be relative and must not contain empty, . or .. components.', '', 'Ordnerpfade müssen relativ sein und dürfen keine leeren Teile, . oder .. enthalten.'],
+			'no base path' => [['base_path' => ' / '], 'A relative folder path is required.', '', 'Ein relativer Ordnerpfad ist erforderlich.'],
+			'nested folder name' => [['archive_folder' => 'Archiv/2026'], 'Folder names must contain exactly one path component.', '', 'Ordnernamen müssen aus genau einem Pfadteil bestehen.'],
+			'shared folder name' => [['error_folder' => 'Eingang'], 'Archive, inbox, and error folders must have different names.', '', 'Archiv-, Eingangs- und Fehlerordner müssen verschiedene Namen haben.'],
+			'template without ID' => [['path_template' => '{{ title }}{{ extension }}'], 'The archive path template must contain {{ id }}.', 'path_template', 'Die Archiv-Pfadvorlage muss {{ id }} enthalten.'],
+			'interval shorter than the background job' => [['sync_interval_minutes' => 4], '"Interval in minutes" must be between 5 and 1440.', 'sync_interval_minutes', $interval],
+			'interval longer than a day' => [['sync_interval_minutes' => 1441], '"Interval in minutes" must be between 5 and 1440.', 'sync_interval_minutes', $interval],
+			'batch too large' => [['batch_size' => 1001], '"Maximum changes per module and run" must be between 1 and 1000.', 'batch_size', 'Der Wert von „Maximale Änderungen je Modul und Lauf“ muss zwischen 1 und 1000 liegen.'],
+			'too many confirmation runs' => [['missing_grace_runs' => 31], '"Required consecutive missing scans" must be between 1 and 30.', 'missing_grace_runs', 'Der Wert von „Erforderliche aufeinanderfolgende Läufe ohne das Dokument“ muss zwischen 1 und 30 liegen.'],
+			'unknown trash policy' => [['trash_mode' => 'delete'], 'Choose one of the options of "Paperless trash behavior".', 'trash_mode', 'Wähle eine der Optionen von „Verhalten beim Paperless-Papierkorb“.'],
+			'unknown conflict policy' => [['conflict_mode' => 'rename'], 'Choose one of the options of "File conflict policy".', 'conflict_mode', 'Wähle eine der Optionen von „Dateikonflikt-Regel“.'],
 		];
 	}
 
 	/** @param array<string, mixed> $settings */
 	#[DataProvider('invalidSettings')]
-	public function testRejectsInvalidSettings(array $settings, string $message): void {
-		$this->expectException(InvalidArgumentException::class);
-		$this->expectExceptionMessage($message);
-
+	public function testRejectsInvalidSettings(array $settings, string $message, string $setting, string $german): void {
 		try {
 			$this->service->save($settings + self::validSettings(), 'secret-token');
-		} finally {
-			self::assertSame([], $this->settings, 'Invalid settings must not be stored.');
+			self::fail('A save must refuse invalid settings.');
+		} catch (InvalidSettingException $exception) {
+			self::assertSame($message, $exception->getMessage());
+			self::assertSame($setting, $exception->setting, 'The page moves the focus to the setting that the message names.');
+			self::assertSame($german, $exception->translated($this->germanL10n()));
 		}
+		self::assertSame([], $this->settings, 'Invalid settings must not be stored.');
+	}
+
+	/** The limits of the numbers are those of the fields on the settings page, which a save accepts. */
+	public function testTheLimitsOfTheNumbersAreAccepted(): void {
+		$config = $this->service->save(['sync_interval_minutes' => 1440, 'batch_size' => 1, 'missing_grace_runs' => 30] + self::validSettings(), 'secret-token');
+
+		self::assertSame([1440, 1, 30], [$config->syncIntervalMinutes, $config->batchSize, $config->missingGraceRuns]);
 	}
 
 	public function testUppercaseSchemeIsAccepted(): void {

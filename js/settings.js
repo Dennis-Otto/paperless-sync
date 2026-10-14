@@ -23,6 +23,24 @@
 		return (count === 1 ? singular : plural).replace('%n', String(count))
 	}
 
+	// The locale of Nextcloud for dates and times, which the administrator chose in the personal
+	// settings and the page names on its html element, such as de_DE, or else its language: that of
+	// the browser may be another one. A name that the browser doesn't know leaves it to the browser.
+	function nextcloudLocale() {
+		const html = document.documentElement
+		for (const name of [html.dataset.locale, html.lang]) {
+			const tag = (name || '').replace(/@.*$/, '').replace(/_/g, '-')
+			try {
+				if (tag !== '' && Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0) {
+					return tag
+				}
+			} catch (error) {
+				// Not a language tag, such as a name of Nextcloud that the browser can't read.
+			}
+		}
+		return undefined
+	}
+
 	// What the server put into the page, as @nextcloud/initial-state reads it: JSON in Base64, in
 	// a hidden input. The status of the last run, and the stored configuration without the token.
 	function initialState(key) {
@@ -418,7 +436,7 @@
 			if (!timestamp) {
 				return '—'
 			}
-			return new Date(timestamp * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+			return new Date(timestamp * 1000).toLocaleString(nextcloudLocale(), { dateStyle: 'medium', timeStyle: 'short' })
 		}
 
 		// Changes a text only when it differs, so that a screen reader doesn't read it out again

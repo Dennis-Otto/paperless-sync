@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
@@ -79,7 +80,7 @@ final class SettingsController extends Controller {
 				'paths' => $this->syncService->previewPaths($config, self::PREVIEW_DOCUMENTS),
 			]);
 		} catch (InvalidArgumentException $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+			return $this->invalid($exception);
 		} catch (PaperlessLocalNetworkException $exception) {
 			return new JSONResponse(['message' => $exception->translated($this->l10n)], Http::STATUS_BAD_GATEWAY);
 		} catch (\Throwable $exception) {
@@ -137,9 +138,9 @@ final class SettingsController extends Controller {
 				'checks' => $this->translated($checks),
 			]);
 		} catch (InvalidArgumentException $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+			return $this->invalid($exception);
 		} catch (\Throwable $exception) {
-			$message = 'Could not validate the Paperless and Nextcloud configuration: ' . $exception->getMessage();
+			$message = $this->l10n->t('Could not validate the Paperless and Nextcloud configuration: %s', [$exception->getMessage()]);
 			if (!$onlyForTheSchedule) {
 				return new JSONResponse(['message' => $message], Http::STATUS_BAD_REQUEST);
 			}
@@ -168,10 +169,28 @@ final class SettingsController extends Controller {
 			$config = $this->configService->validate($settings, $token);
 			$checks = $this->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
 		} catch (InvalidArgumentException $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+			return $this->invalid($exception);
 		}
 
 		return new JSONResponse(['checks' => $this->translated($checks)]);
+	}
+
+	/**
+	 * The answer to settings that the app can't use: what to do, in the language of the
+	 * administrator, and the setting that it names, which the page moves the focus to.
+	 */
+	private function invalid(InvalidArgumentException $exception): JSONResponse {
+		$answer = ['message' => $this->message($exception)];
+		if ($exception instanceof InvalidSettingException && $exception->setting !== '') {
+			$answer['setting'] = $exception->setting;
+		}
+
+		return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
+	}
+
+	/** The message of an exception, in the language of the administrator when the app translates it. */
+	private function message(\Throwable $exception): string {
+		return $exception instanceof InvalidSettingException ? $exception->translated($this->l10n) : $exception->getMessage();
 	}
 
 	/**
@@ -210,7 +229,7 @@ final class SettingsController extends Controller {
 			$checks[] = ConnectionCheck::failed(
 				ConnectionCheck::FOLDER,
 				'Nextcloud cannot store the files there: %s',
-				[$exception->getMessage()],
+				[$this->message($exception)],
 				'Check the target user ID, and that the base folder is a folder in which that user may create files.',
 				true,
 			);

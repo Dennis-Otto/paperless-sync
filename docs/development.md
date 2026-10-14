@@ -17,7 +17,7 @@ bash scripts/check.sh
 bash tests/e2e/run.sh
 ```
 
-`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds, which `scripts/check-package.sh` compares file by file with the runtime files of the commit ([what the package holds](releases.md#what-the-package-holds)), and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, the tests of its hook, the versions in the README, the same description of the app on GitHub, on the website and in `composer.json`, an [area label](automation.md#a-pull-request) for every file of the app and of its unit tests, the tests of `scripts/check-package.sh`, and the JavaScript and the translations.
+`scripts/check.sh` runs the checks of the CI: Composer, `appinfo/info.xml` against the schema of the App Store, PHP syntax, the coding standard, Psalm, PHPUnit, the package that krankerl builds, which `scripts/check-package.sh` compares file by file with the runtime files of the commit ([what the package holds](releases.md#what-the-package-holds)), and the checks of this app alone in `scripts/check-project.sh`: the version of Playwright in the end-to-end tests, the rules of `tests/e2e/affected.sh`, the icon of the website, the tests of its hook, the versions in the README, the same description of the app on GitHub, on the website and in `composer.json`, an [area label](automation.md#a-pull-request) for every file of the app and of its unit tests, the tests of `scripts/check-package.sh`, and the JavaScript and the [translations](#translations).
 
 ## Tests
 
@@ -66,6 +66,23 @@ The same hook shows an alert of GitHub, a quote that begins with `[!NOTE]`, `[!T
 ## Code
 
 The app ID is `paperless_sync` and the PHP namespace is `OCA\PaperlessSync`. Psalm analyzes the PHP code, CodeQL scans the JavaScript, and the SBOM workflow continuously inventories dependencies. The [architecture](architecture.md) describes the parts of the app, and the [decisions](decisions/README.md) why it works as it does.
+
+## Translations
+
+Paperless Sync speaks English and German. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The German texts are in `l10n/de.json`, which PHP reads, and in its copy `l10n/de.js` for the browser.
+
+`node scripts/check-l10n.mjs`, which `scripts/check-project.sh` runs, compares them with the code, so that no message stays English on a German page:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/what-the-check-of-the-translations-finds.dark.svg">
+  <img src="images/diagrams/what-the-check-of-the-translations-finds.svg" alt="What the check of the translations finds: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck and an InvalidSettingException, with the constants that they name. It compares them with the German catalog l10n/de.json. A text that the catalog lacks, or a German text with other placeholders than its English one, fails the check with the place in the code; it needs German words. A text that no code translates, a text twice, or an l10n/de.js that differs from l10n/de.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/de.js anew. Otherwise the check passes.">
+</picture>
+
+- **A text that the code translates** is the first argument of `translate()` and `translatePlural()` in `js/`, of `$l->t()` and `$l->n()` in `templates/` and `lib/`, and a text that `lib/` translates later, when it knows the language of the reader: the message and the hint of a `ConnectionCheck` and the text of an `InvalidSettingException`. Write it as a string at that place, or as a class constant that the call names, such as `self::STATUS_HINT`, never as a variable: the check can't read it, so it fails with the file and the line, and `--fix` then changes nothing, instead of dropping the German words of a text that looks unused.
+- **A missing text** fails with its file and line, and **a German text whose placeholders differ** from those of its English one, `{name}` in JavaScript, `%s` or `%1$s` in PHP, `%n` in a plural, fails with both texts: PHP stops at a placeholder without its value, and one that is missing loses it.
+- **A text that no code translates any more, a text twice and an `l10n/de.js` that differs** fail as well; `node scripts/check-l10n.mjs --fix` removes them and writes `l10n/de.js` from `l10n/de.json`.
+
+A new text is English in the code; add it with its German words to `l10n/de.json`, in the terms of the settings page, such as *Basisordner* for *Base folder*, and run `node scripts/check-l10n.mjs --fix`. A message about a setting names it by its label in quotes, and an `InvalidSettingException` names the setting as well, so that the page moves the focus there. The unit tests read the German of `l10n/de.json` through `tests/Doubles/GermanTranslations.php`, and fail on a text that it lacks.
 
 ## Release process
 

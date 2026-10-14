@@ -12,10 +12,12 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SyncController;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
@@ -23,7 +25,9 @@ use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
+use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -40,6 +44,7 @@ final class SyncControllerTest extends TestCase {
 	/** @var ILockingProvider&MockObject */
 	private ILockingProvider $locking;
 	private TestPaperlessClient $paperless;
+	private TestStorage $storage;
 	private SyncController $controller;
 
 	protected function setUp(): void {
@@ -49,10 +54,11 @@ final class SyncControllerTest extends TestCase {
 		$clock = new TestClock();
 		$status = new StatusService($this->appConfig(), $clock);
 		$this->paperless = new TestPaperlessClient();
+		$this->storage = new TestStorage();
 		$sync = new SyncService(
 			$configService,
 			$this->paperless,
-			new TestStorage(),
+			$this->storage,
 			new TestStateRepository(),
 			new PathTemplateService(),
 			$status,
@@ -60,6 +66,7 @@ final class SyncControllerTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 		);
 		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService);
 	}
@@ -83,7 +90,7 @@ final class SyncControllerTest extends TestCase {
 		$response = $this->controller->run(false);
 
 		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
-		self::assertSame(['message' => 'Another synchronization run is already active.'], $response->getData());
+		self::assertSame(['message' => 'Es läuft bereits eine andere Synchronisation.'], $response->getData());
 	}
 
 	public function testFailedRunReturnsItsError(): void {
@@ -92,7 +99,35 @@ final class SyncControllerTest extends TestCase {
 		$response = $this->controller->run(false);
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
-		self::assertSame(['message' => 'Paperless Sync is not completely configured.'], $response->getData());
+		self::assertSame(['message' => 'Paperless Sync ist noch nicht vollständig eingerichtet.'], $response->getData());
+	}
+
+	/** An error that names no setting reaches the page as it is. */
+	public function testAnUnexpectedErrorReturnsItsMessage(): void {
+		$this->storage->testException = new \RuntimeException('The disk is full.');
+
+		$response = $this->controller->run(false);
+
+		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		self::assertSame(['message' => 'The disk is full.'], $response->getData());
+	}
+
+	/** A run checks the target user again, who may be gone since the save, and says so in German. */
+	public function testARunWithoutItsTargetUserSaysSoInGerman(): void {
+		$this->storage->testException = new InvalidSettingException('Nextcloud user %s does not exist.', ['paperless'], 'target_user');
+
+		$response = $this->controller->run(false);
+
+		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		self::assertSame(['message' => 'Den Nextcloud-Benutzer paperless gibt es nicht.'], $response->getData());
+	}
+
+	/** A dry-run of settings with an invalid folder says why, also without a setting to move the focus to. */
+	public function testADryRunOfAnInvalidFolderSaysWhy(): void {
+		$response = $this->controller->run(true, ['base_path' => '../Paperless']);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Ordnerpfade müssen relativ sein und dürfen keine leeren Teile, . oder .. enthalten.'], $response->getData());
 	}
 
 	/** A run that Nextcloud doesn't let reach Paperless in the local network says what to do. */
@@ -172,7 +207,7 @@ final class SyncControllerTest extends TestCase {
 		$response = $this->controller->run(true, ['sync_interval_minutes' => 3]);
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		self::assertSame(['message' => 'Synchronization interval must be between 5 and 1440.'], $response->getData());
+		self::assertSame(['message' => 'Der Wert von „Intervall in Minuten“ muss zwischen 5 und 1440 liegen.', 'setting' => 'sync_interval_minutes'], $response->getData());
 	}
 
 	public function testStatusOfTheLastRun(): void {

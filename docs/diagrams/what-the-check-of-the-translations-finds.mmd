@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the check of the translations finds
+    accDescr: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck and an InvalidSettingException, with the constants that they name. It compares them with the German catalog l10n/de.json. A text that the catalog lacks, or a German text with other placeholders than its English one, fails the check with the place in the code; it needs German words. A text that no code translates, a text twice, or an l10n/de.js that differs from l10n/de.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/de.js anew. Otherwise the check passes.
+
+    code["The code<br>js · templates · lib"]
+    texts["`The texts it translates<br>*and those that lib*<br>*translates later*`"]
+    catalog["The catalog<br>l10n/de.json"]
+    compare{"Each text once in the catalog,<br>with its placeholders,<br>and nothing more?"}
+    missing["❌ A missing text or<br>other placeholders:<br>add the German words"]
+    unused["🔧 An unused text, one twice<br>or another l10n/de.js:<br>--fix drops it and writes it"]
+    passed["✅ Passes: every text<br>is in German"]
+
+    code --> texts --> compare
+    catalog --> compare
+    compare -- "missing" --> missing
+    compare -- "more" --> unused
+    compare -- "yes" --> passed
+
+    classDef source fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class code,catalog source
+    class texts,compare,unused check
+    class passed done
+    class missing refused

@@ -9,6 +9,7 @@
           - lib/Controller/SettingsController.php
           - lib/Settings/**
           - lib/Service/ConfigService.php
+          - lib/Service/InvalidSettingException.php
           - lib/Service/PaperlessLocalNetworkException.php
           - lib/Service/UnsavedSettingException.php
           - lib/Model/SyncConfig.php
@@ -53,6 +54,7 @@
           - lib/Service/PaperlessRequestException.php
           - lib/Service/PaperlessVersionException.php
           - lib/Service/StatusService.php
+          - lib/Service/UserTimeZones.php
           - lib/Service/SyncStateRepository*.php
           - lib/Service/ExportStates.php
           - lib/Migration/Version000120Date20261014000000.php

@@ -29,17 +29,17 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 
 	public function test(string $userId, string $basePath): void {
 		if ($this->userManager->get($userId) === null) {
-			throw new RuntimeException("Nextcloud user {$userId} does not exist.");
+			throw new InvalidSettingException('Nextcloud user %s does not exist.', [$userId], 'target_user');
 		}
 		$userFolder = $this->rootFolder->getUserFolder($userId);
 		$basePath = $this->pathTemplate->normalizeRelativePath($basePath);
 		if ($userFolder->nodeExists($basePath)) {
 			$node = $userFolder->get($basePath);
 			if (!$node instanceof Folder || !$node->isCreatable()) {
-				throw new RuntimeException('The configured Nextcloud base folder is not a writable folder.');
+				throw new InvalidSettingException('The configured Nextcloud base folder is not a writable folder.', [], 'base_path');
 			}
 		} elseif (!$userFolder->isCreatable()) {
-			throw new RuntimeException('The configured Nextcloud user folder is not writable.');
+			throw new InvalidSettingException('The configured Nextcloud user folder is not writable.', [], 'target_user');
 		}
 	}
 

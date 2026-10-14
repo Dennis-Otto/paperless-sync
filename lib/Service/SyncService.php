@@ -50,6 +50,7 @@ final class SyncService {
 		private LoggerInterface $logger,
 		private ITimeFactory $timeFactory,
 		private ActivityPublisher $activity,
+		private UserTimeZones $timeZones,
 	) {
 	}
 
@@ -71,7 +72,7 @@ final class SyncService {
 		try {
 			$config = $settings ?? $this->configService->get();
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
-				throw new RuntimeException('Paperless Sync is not completely configured.');
+				throw new InvalidSettingException('Paperless Sync is not completely configured.');
 			}
 			$this->status->connected($this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork));
 			$this->storage->test($config->targetUser, $config->basePath);
@@ -1158,9 +1159,18 @@ final class SyncService {
 		return is_scalar($value) ? (string)$value : '';
 	}
 
+	/**
+	 * Where a copy goes when its document went to the trash or vanished: below the deleted folder, in
+	 * the folder of the day, in the time zone of the target user, from the personal settings or else
+	 * the default of Nextcloud. In UTC, a document deleted in Berlin shortly after midnight would
+	 * land in the folder of the day before.
+	 */
 	private function deletedPath(SyncConfig $config, string $oldPath, string $archiveRoot, int $timestamp): string {
 		$relative = $this->relativeTo($oldPath, $archiveRoot);
-		return $this->join($archiveRoot, $config->deletedFolder, gmdate('Y-m-d', $timestamp > 0 ? $timestamp : $this->now()), $relative);
+		$timestamp = $timestamp > 0 ? $timestamp : $this->now();
+		$day = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->timeZones->of($config->targetUser))->format('Y-m-d');
+
+		return $this->join($archiveRoot, $config->deletedFolder, $day, $relative);
 	}
 
 	private function relativeTo(string $path, string $root): string {
