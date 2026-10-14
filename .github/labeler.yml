@@ -11,6 +11,7 @@
           - lib/Service/ConfigService.php
           - lib/Service/PaperlessLocalNetworkException.php
           - lib/Model/SyncConfig.php
+          - lib/Model/ConnectionCheck.php
           - lib/Migration/Version000111Date20261013000000.php
           - js/settings.js
           - css/settings.css
@@ -19,6 +20,7 @@
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Settings/**
           - tests/Unit/Service/ConfigServiceTest.php
+          - tests/Unit/Model/ConnectionCheckTest.php
           - tests/Unit/Migration/Version000111*
 "area: archive":
   - changed-files:
