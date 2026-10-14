@@ -96,4 +96,15 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 		<admin>OCA\PaperlessSync\Settings\AdminSettings</admin>
 		<admin-section>OCA\PaperlessSync\Settings\AdminSection</admin-section>
 	</settings>
+	<activity>
+		<settings>
+			<setting>OCA\PaperlessSync\Activity\Setting</setting>
+		</settings>
+		<filters>
+			<filter>OCA\PaperlessSync\Activity\Filter</filter>
+		</filters>
+		<providers>
+			<provider>OCA\PaperlessSync\Activity\Provider</provider>
+		</providers>
+	</activity>
 </info>

@@ -56,6 +56,21 @@ final class TestStorage implements NextcloudStorageInterface {
 		return array_key_exists($path, $this->files);
 	}
 
+	/** A folder exists while a file is in it, and has an ID of its own as well. */
+	public function findFileId(string $userId, string $path): ?int {
+		$this->requirePath($path);
+		if (isset($this->files[$path])) {
+			return $this->fileId($path);
+		}
+		foreach (array_keys($this->files) as $file) {
+			if (str_starts_with($file, rtrim($path, '/') . '/')) {
+				return $this->fileIds[$path] ??= ++$this->lastFileId;
+			}
+		}
+
+		return null;
+	}
+
 	public function isWritableFolder(string $userId, string $path): bool {
 		$this->writableChecks[] = $path;
 		if ($this->writable instanceof \Throwable) {

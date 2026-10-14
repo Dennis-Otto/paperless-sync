@@ -156,4 +156,52 @@ final class SyncReportTest extends TestCase {
 		self::assertArrayNotHasKey('errorMessages', $summary);
 		self::assertSame(json_encode($data, JSON_THROW_ON_ERROR), json_encode($report, JSON_THROW_ON_ERROR));
 	}
+
+	public function testActivityNamesTheFirstChangedFilesAndCountsThemAll(): void {
+		$report = new SyncReport(false);
+
+		foreach (range(1, SyncReport::ACTIVITY_FILE_LIMIT + 2) as $id) {
+			$report->changedFile("Archiv/{$id}.pdf");
+		}
+
+		self::assertSame(['Archiv/1.pdf', 'Archiv/2.pdf', 'Archiv/3.pdf', 'Archiv/4.pdf', 'Archiv/5.pdf'], $report->changedFiles());
+		self::assertSame(SyncReport::ACTIVITY_FILE_LIMIT + 2, $report->changedFileCount());
+	}
+
+	public function testActivityKeepsEveryImportResult(): void {
+		$report = new SyncReport(false);
+
+		$report->importResult(SyncReport::IMPORTED, 'Eingang/scan.pdf', 123);
+		$report->importResult(SyncReport::IMPORT_FAILED, 'Fehler/broken.pdf', null, 'Unsupported mime type');
+		$report->importResult(SyncReport::IMPORT_REJECTED, 'Eingang/notes.bin', null, 'File type not supported');
+
+		self::assertSame([
+			['outcome' => 'imported', 'path' => 'Eingang/scan.pdf', 'document' => 123, 'reason' => ''],
+			['outcome' => 'failed', 'path' => 'Fehler/broken.pdf', 'document' => null, 'reason' => 'Unsupported mime type'],
+			['outcome' => 'rejected', 'path' => 'Eingang/notes.bin', 'document' => null, 'reason' => 'File type not supported'],
+		], $report->importResults());
+	}
+
+	public function testDryRunChangesNoFileForTheActivity(): void {
+		$report = new SyncReport(true);
+
+		$report->changedFile('Archiv/1.pdf');
+		$report->importResult(SyncReport::IMPORTED, 'Eingang/scan.pdf', 123);
+
+		self::assertSame([], $report->changedFiles());
+		self::assertSame(0, $report->changedFileCount());
+		self::assertSame([], $report->importResults());
+	}
+
+	public function testWhatTheActivityShowsStaysOutOfTheStatus(): void {
+		$report = new SyncReport(false);
+		$report->changedFile('Archiv/1.pdf');
+		$report->importResult(SyncReport::IMPORTED, 'Eingang/scan.pdf', 123);
+
+		$data = $report->jsonSerialize();
+
+		self::assertArrayNotHasKey('changedFiles', $data);
+		self::assertArrayNotHasKey('changedFileCount', $data);
+		self::assertArrayNotHasKey('importResults', $data);
+	}
 }
