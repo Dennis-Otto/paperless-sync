@@ -53,6 +53,32 @@ All notable changes to this project are documented in this file.
 - Control characters beyond ASCII and invalid bytes become `_` in names too, and names of Windows devices such as `COM0`, `LPT¹` or `CONIN$` get a leading `_` as well.
 - The next run moves the files whose names these fixes change once to their corrected path. Two documents that shared one file are downloaded again instead, so that each gets its own content back.
 
+## [0.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.10...v0.2.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **inbox:** read Paperless 3.x task results, give up on lost tasks and pin the API version ([#144](https://github.com/Dennis-Otto/paperless-sync/issues/144))
+
+### Features
+
+* **status:** keep and show the errors and the report of the last run ([#106](https://github.com/Dennis-Otto/paperless-sync/issues/106)) ([68f172f](https://github.com/Dennis-Otto/paperless-sync/commit/68f172ff399eb6d5d33e21f54bba4d3756c2422f))
+
+
+### Bug fixes
+
+* **archive:** render path templates safely and always keep the [P id] marker and the extension ([#94](https://github.com/Dennis-Otto/paperless-sync/issues/94)) ([2642dec](https://github.com/Dennis-Otto/paperless-sync/commit/2642dec750f0144381f014e1e3ea8d24712899f4))
+* **inbox:** read Paperless 3.x task results, give up on lost tasks and pin the API version ([#144](https://github.com/Dennis-Otto/paperless-sync/issues/144)) ([817cfd5](https://github.com/Dennis-Otto/paperless-sync/commit/817cfd541171e1654334f46b7fa32b7b61c9c12e))
+* **security:** keep the Paperless API token out of logs and ask for it again for a new address ([#105](https://github.com/Dennis-Otto/paperless-sync/issues/105)) ([e0898f9](https://github.com/Dennis-Otto/paperless-sync/commit/e0898f9f5d9ce0bf5ce258fbfa4d98a403e291c4))
+* **security:** reach a Paperless in the local network without turning off Nextcloud's SSRF protection ([#111](https://github.com/Dennis-Otto/paperless-sync/issues/111)) ([31c5bc3](https://github.com/Dennis-Otto/paperless-sync/commit/31c5bc33a7e96de2ee5b5033f5d96a3f017f0ec5))
+* **settings:** an honest save button, visible focus, no endless running state and a translated schedule hint ([#146](https://github.com/Dennis-Otto/paperless-sync/issues/146)) ([628c886](https://github.com/Dennis-Otto/paperless-sync/commit/628c8862f1f4b881609fe8f894fd16f58dc7abba))
+* **settings:** honest interval, dry-runs that don't postpone the schedule, aligned checkboxes and Disconnect ([#137](https://github.com/Dennis-Otto/paperless-sync/issues/137)) ([cf70a84](https://github.com/Dennis-Otto/paperless-sync/commit/cf70a84f8c3db7cf1b846c0bb3df528a5cd61877))
+* **settings:** keep the form in step with the server, allow pausing while Paperless is down, and make feedback reliable ([#122](https://github.com/Dennis-Otto/paperless-sync/issues/122)) ([a5a18df](https://github.com/Dennis-Otto/paperless-sync/commit/a5a18dfee6f33b40e09846a11fc02041c49652e7))
+* **sync:** keep every run within the batch size and never treat an incomplete scan as deletions ([#92](https://github.com/Dennis-Otto/paperless-sync/issues/92)) ([f9030c0](https://github.com/Dennis-Otto/paperless-sync/commit/f9030c0918fc547d78869ddcd8d7fc152e32cc64))
+* **sync:** read a mirrored file once also when its move waits for a later run ([#133](https://github.com/Dennis-Otto/paperless-sync/issues/133)) ([1cd1a77](https://github.com/Dennis-Otto/paperless-sync/commit/1cd1a778325aeac5241213ad7a47aa3df8269964))
+* **sync:** recognize Paperless 2.x checksums and hash downloads without loading them into memory ([#120](https://github.com/Dennis-Otto/paperless-sync/issues/120)) ([a25b4e3](https://github.com/Dennis-Otto/paperless-sync/commit/a25b4e316b96ab04de3f29f80eff272a0351f9cb))
+* **sync:** update mirrored files in place so shares, versions and the file ID survive ([#125](https://github.com/Dennis-Otto/paperless-sync/issues/125)) ([dd59ca4](https://github.com/Dennis-Otto/paperless-sync/commit/dd59ca46f14242ec2c033fee6dff1bc1fcefbc3f))
+
 ## [0.1.10](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.9...v0.1.10) (2026-10-08)
 
 ### Bug fixes
