@@ -48,33 +48,47 @@ trait InMemoryConfiguration {
 		];
 	}
 
-	/** @return IAppConfig&MockObject */
+	/**
+	 * Nextcloud's app configuration: a lazy key comes back only to a lazy read, as Nextcloud loads
+	 * lazy keys only when asked for one, and a lazy read gets every key.
+	 *
+	 * @return IAppConfig&MockObject
+	 */
 	private function appConfig(): IAppConfig {
 		$mock = $this->createMock(IAppConfig::class);
-		$mock->method('getValueString')->willReturnCallback(function (string $app, string $key, string $default = '', bool $lazy = false): string {
+		$read = function (string $key, bool|int|string $default, bool $lazy): bool|int|string {
 			if ($lazy) {
 				$this->lazyReads[$key] = true;
 			}
 
-			return isset($this->lazyKeys[$key]) && !$lazy ? $default : (string)($this->settings[$key] ?? $default);
-		});
-		$mock->method('getValueBool')->willReturnCallback(fn (string $app, string $key, bool $default = false): bool => (bool)($this->settings[$key] ?? $default));
-		$mock->method('getValueInt')->willReturnCallback(fn (string $app, string $key, int $default = 0): int => (int)($this->settings[$key] ?? $default));
-		$mock->method('setValueString')->willReturnCallback(function (string $app, string $key, string $value, bool $lazy = false): bool {
+			return isset($this->lazyKeys[$key]) && !$lazy ? $default : ($this->settings[$key] ?? $default);
+		};
+		$write = function (string $key, bool|int|string $value, bool $lazy): bool {
 			$this->settings[$key] = $value;
 			if ($lazy) {
 				$this->lazyKeys[$key] = true;
 			} else {
 				unset($this->lazyKeys[$key]);
 			}
+
 			return true;
-		});
-		$mock->method('setValueBool')->willReturnCallback(function (string $app, string $key, bool $value): bool {
-			$this->settings[$key] = $value;
-			return true;
-		});
-		$mock->method('setValueInt')->willReturnCallback(function (string $app, string $key, int $value): bool {
-			$this->settings[$key] = $value;
+		};
+		$mock->method('getValueString')->willReturnCallback(fn (string $app, string $key, string $default = '', bool $lazy = false): string => (string)$read($key, $default, $lazy));
+		$mock->method('getValueBool')->willReturnCallback(fn (string $app, string $key, bool $default = false, bool $lazy = false): bool => (bool)$read($key, $default, $lazy));
+		$mock->method('getValueInt')->willReturnCallback(fn (string $app, string $key, int $default = 0, bool $lazy = false): int => (int)$read($key, $default, $lazy));
+		$mock->method('setValueString')->willReturnCallback(fn (string $app, string $key, string $value, bool $lazy = false): bool => $write($key, $value, $lazy));
+		$mock->method('setValueBool')->willReturnCallback(fn (string $app, string $key, bool $value, bool $lazy = false): bool => $write($key, $value, $lazy));
+		$mock->method('setValueInt')->willReturnCallback(fn (string $app, string $key, int $value, bool $lazy = false): bool => $write($key, $value, $lazy));
+		$mock->method('updateLazy')->willReturnCallback(function (string $app, string $key, bool $lazy): bool {
+			if (!array_key_exists($key, $this->settings) || isset($this->lazyKeys[$key]) === $lazy) {
+				return false;
+			}
+			if ($lazy) {
+				$this->lazyKeys[$key] = true;
+			} else {
+				unset($this->lazyKeys[$key]);
+			}
+
 			return true;
 		});
 		$mock->method('deleteKey')->willReturnCallback(function (string $app, string $key): void {

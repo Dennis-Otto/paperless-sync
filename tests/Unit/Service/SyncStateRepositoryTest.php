@@ -29,6 +29,8 @@ final class SyncStateRepositoryTest extends TestCase {
 	private array $tables = [self::EXPORTS => [], self::IMPORTS => []];
 	/** @var list<string> the kind of every statement that changed a table, in order */
 	private array $statements = [];
+	/** The queries that read a table. */
+	private int $selects = 0;
 	private TestClock $clock;
 	private SyncStateRepository $repository;
 
@@ -73,6 +75,28 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame('Archiv/a.pdf', $export['path']);
 		self::assertSame('abc', $export['fingerprint']);
 		self::assertCount(1, $this->tables[self::EXPORTS]);
+	}
+
+	/** A caller that knows whether the export exists saves the query for it. */
+	public function testAnExportThatIsKnownToExistOrNotIsSavedWithoutAQuery(): void {
+		$this->repository->saveExport('paperless', 123, ['path' => 'Archiv/a.pdf'], false);
+		$this->clock->advance(60);
+		$this->repository->saveExport('paperless', 123, ['remote_checksum' => 'abc', 'remote_revision' => 'archive:2026-08-26T11:00:00+02:00'], true);
+
+		self::assertSame(['insert', 'update'], $this->statements);
+		self::assertSame(0, $this->selects);
+		$export = $this->repository->findExport('paperless', 123);
+		self::assertNotNull($export);
+		self::assertSame(['Archiv/a.pdf', 'abc', 'archive:2026-08-26T11:00:00+02:00', TestClock::START, TestClock::START + 60], [$export['path'], $export['remote_checksum'], $export['remote_revision'], $export['created_at'], $export['updated_at']]);
+	}
+
+	public function testANewExportKnowsNoChecksumOfPaperless(): void {
+		$this->repository->saveExport('paperless', 123, ['path' => 'Archiv/a.pdf']);
+
+		$export = $this->repository->findExport('paperless', 123);
+		self::assertNotNull($export);
+		self::assertSame([null, null], [$export['remote_checksum'], $export['remote_revision']]);
+		self::assertSame(2, $this->selects, 'Without a hint, the save asks whether the export exists.');
 	}
 
 	public function testExportsBelongToTheirOwner(): void {
@@ -258,6 +282,7 @@ final class SyncStateRepositoryTest extends TestCase {
 		}
 		$builder->method('executeQuery')->willReturnCallback(function () use (&$query, &$parameters): IResult {
 			self::assertSame('select', $query['type']);
+			++$this->selects;
 
 			return $this->queryResult(array_values(array_filter(
 				$this->tables[$query['table']],

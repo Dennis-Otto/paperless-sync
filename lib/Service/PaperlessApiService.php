@@ -39,6 +39,17 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** The longest message of a task that the app keeps, such as the reason of a failed import. */
 	private const TASK_MESSAGE_LENGTH = 4000;
 	private const PAGE_SIZE = 1000;
+	/**
+	 * The fields of a document that a run reads: those of the path template, the tags of the
+	 * exclusion, the revision and the files of the document. A run asks Paperless for these alone,
+	 * because the whole document holds its text, which Paperless would send of every document in
+	 * every run.
+	 */
+	public const DOCUMENT_FIELDS = [
+		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'created', 'added', 'modified',
+		'tags', 'original_file_name', 'archived_file_name', 'mime_type', 'owner', 'archive_serial_number',
+		'page_count', 'custom_fields',
+	];
 	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
 	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
 	private const REASON_LENGTH = 300;
@@ -150,8 +161,14 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	public function documents(): PaperlessScan {
 		// Ordered by their IDs, a document added during the scan joins the last page instead of
-		// shifting the pages that the run has not read yet.
-		return $this->scan('/api/documents/', ['ordering' => 'id']);
+		// shifting the pages that the run has not read yet. Only the fields that a run reads come
+		// back, without the text of the documents, their notes and permissions. A Paperless that
+		// ignored the list of fields would still cut the text short.
+		return $this->scan('/api/documents/', [
+			'ordering' => 'id',
+			'fields' => implode(',', self::DOCUMENT_FIELDS),
+			'truncate_content' => 'true',
+		]);
 	}
 
 	public function trash(): PaperlessScan {
@@ -225,7 +242,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			$this->configService->getToken(),
 			$config->paperlessLocalNetwork,
 			'/api/documents/',
-			['page' => 1, 'page_size' => $count, 'ordering' => '-added'],
+			[
+				'page' => 1,
+				'page_size' => $count,
+				'ordering' => '-added',
+				'fields' => implode(',', self::DOCUMENT_FIELDS),
+				'truncate_content' => 'true',
+			],
 		);
 
 		return array_slice($page['results'], 0, $count);

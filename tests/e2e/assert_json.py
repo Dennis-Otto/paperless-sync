@@ -344,6 +344,20 @@ elif mode == "mock-after-move":
     if payload.get("metadataRequests", 0) < 1:
         raise AssertionError(f"Metadata-only move did not request a checksum: {payload!r}")
     expect("invalidAuth", 0)
+    # Every run asked for the documents by their IDs, the live path preview for the newest ones,
+    # and both for the fields that the app reads, without the text of the documents.
+    scans = payload.get("documentScans", [])
+    if sum(scan.get("ordering") == "id" for scan in scans) < 4:
+        raise AssertionError(f"Expected a scan of the documents by their IDs in every run: {scans!r}")
+    for scan in scans:
+        fields = scan.get("fields", "").split(",")
+        if (
+            scan.get("ordering") not in ("id", "-added")
+            or "title" not in fields
+            or "content" in fields
+            or "notes" in fields
+        ):
+            raise AssertionError(f"A scan asked for more of the documents than the app reads: {scan!r}")
 elif mode == "names":
     # Every name within the bytes of Nextcloud, with the marker and the extension whole;
     # the paths go to standard output, for run.sh to read through WebDAV.

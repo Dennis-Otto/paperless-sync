@@ -132,9 +132,11 @@ final class SyncService {
 		$archiveRoot = $this->join($config->basePath, $config->archiveFolder);
 		/** @var list<string> $excludedNames */
 		$excludedNames = array_values(array_map('mb_strtolower', array_filter(array_map('trim', explode(',', $config->excludedTags)))));
-		$sharedPaths = $this->sharedPaths($config);
+		// The run reads the state of every export once, and writes only the values that change.
+		$states = new ExportStates($this->state, $config->targetUser);
+		$sharedPaths = $this->sharedPaths($states);
 
-		foreach ($this->exportQueue($config, $documents) as [$document, $documentId, $entry]) {
+		foreach ($this->exportQueue($states, $documents) as [$document, $documentId, $entry]) {
 			$seen[$documentId] = true;
 			if ($this->isExcluded($config, $document, $tags, $excludedNames)) {
 				++$report->skipped;
@@ -160,20 +162,23 @@ final class SyncService {
 						++$report->removedExcluded;
 					}
 					if (!$report->dryRun) {
-						$this->state->deleteExport($config->targetUser, $documentId);
+						$states->delete($documentId);
 					}
 				} catch (\Throwable $exception) {
 					$error = $this->exceptionMessage($exception);
 					$report->error("Excluded P{$documentId}: {$error}");
 					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry);
 					if (!$report->dryRun) {
-						$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
+						$states->save($documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 					}
 				}
 				continue;
 			}
 
 			$target = '';
+			// The checksum and the fingerprint that a run learned of a changed document, written with
+			// the next save of its state, so a document that finishes unchanged costs one write.
+			$checksumValues = [];
 			try {
 				$relative = $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields);
 				$target = $this->join($archiveRoot, $relative);
@@ -184,20 +189,32 @@ final class SyncService {
 				$fingerprintValue = $entry !== null ? ($entry['fingerprint'] ?? null) : null;
 				$oldPath = is_string($oldPathValue) ? $oldPathValue : '';
 				$fingerprint = is_string($fingerprintValue) ? $fingerprintValue : '';
+				// The batch is full when the run has tried as many exports and moves, or made as many
+				// changes, as the batch size allows, or Nextcloud refused a write for the whole archive.
+				$batchFull = $attempts >= $config->batchSize || $changes >= $config->batchSize || $storageFailed;
 				// The mirrored file has the content of the document while its revision is the same, and
 				// after a change while Paperless reports one of its checksums, MD5 or SHA-256.
 				$sameContent = false;
 				if ($entry !== null && $fingerprint !== '' && $fingerprint !== DocumentFingerprint::PENDING) {
 					$sameContent = ($entry['source_revision'] ?? '') === $sourceRevision;
 					if (!$sameContent) {
-						$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
-						$stored = $fingerprint;
+						// A document with a new path changes, whatever its content, so it waits for a
+						// later run when the batch is full, and so does the question for its checksum.
+						if ($batchFull && $oldPath !== $target) {
+							++$report->skipped;
+							continue;
+						}
+						// Paperless reads the checksum from the files of the document, so the state keeps it
+						// with its revision, for a document that waits for a later run or whose change fails.
+						$checksum = $this->knownChecksum($entry, $sourceRevision);
+						if ($checksum === null) {
+							$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
+							$checksumValues = ['remote_checksum' => $checksum, 'remote_revision' => $sourceRevision];
+						}
 						$fingerprint = $this->completedFingerprint($config, $oldPath, $fingerprint, $checksum);
 						// The completed fingerprint names the content of the mirrored file, whatever the run does
 						// next, so a move that waits for the next run doesn't read the file once more.
-						if ($fingerprint !== $stored && !$report->dryRun) {
-							$this->state->saveExport($config->targetUser, $documentId, ['fingerprint' => $fingerprint]);
-						}
+						$checksumValues['fingerprint'] = $fingerprint;
 						$sameContent = DocumentFingerprint::matches($fingerprint, $checksum);
 					}
 				}
@@ -209,21 +226,22 @@ final class SyncService {
 					&& $this->storage->exists($config->targetUser, $target);
 				if ($unchanged) {
 					++$report->unchanged;
+					// Only what changed is written, so a document that stayed as it was costs no write.
 					if (!$report->dryRun) {
-						$this->state->saveExport($config->targetUser, $documentId, [
+						$states->save($documentId, $checksumValues + [
 							'fingerprint' => $fingerprint,
 							'source_revision' => $sourceRevision,
 							'state' => 'active',
 							'missing_runs' => 0,
-							'last_seen' => $this->now(),
 							'trash_date' => null,
 							'last_error' => null,
 						]);
 					}
 					continue;
 				}
-				if ($attempts >= $config->batchSize || $changes >= $config->batchSize || $storageFailed) {
+				if ($batchFull) {
 					++$report->skipped;
+					$this->saveChecksum($states, $report, $documentId, $checksumValues);
 					continue;
 				}
 				++$attempts;
@@ -260,11 +278,13 @@ final class SyncService {
 					continue;
 				}
 
+				$this->saveChecksum($states, $report, $documentId, $checksumValues);
+				$checksumValues = [];
 				if ($canMove) {
 					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
 					// The state follows the file at once, so that the next run finds it at its new
 					// path also when the download or the pruning that follows fails.
-					$this->state->saveExport($config->targetUser, $documentId, ['path' => $target]);
+					$states->save($documentId, ['path' => $target]);
 					if ($config->pruneEmptyFolders) {
 						$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 					}
@@ -279,13 +299,13 @@ final class SyncService {
 						$documentId,
 						$useOriginal,
 						/** @param resource $download */
-						function ($download) use ($config, $documentId, $target, $writeMode, $ownTarget): void {
+						function ($download) use ($config, $states, $documentId, $target, $writeMode, $ownTarget): void {
 							// While the new content replaces the content of the app's own copy, the
 							// state says so: a write in place that fails halfway leaves the copy
 							// incomplete, and the next run still takes it as its own and writes it
 							// again, also when conflicts are skipped.
 							if ($ownTarget) {
-								$this->state->saveExport($config->targetUser, $documentId, ['fingerprint' => DocumentFingerprint::PENDING]);
+								$states->save($documentId, ['fingerprint' => DocumentFingerprint::PENDING]);
 							}
 							$this->storage->writeStream($config->targetUser, $target, $download, $writeMode);
 						},
@@ -299,7 +319,7 @@ final class SyncService {
 				++$changes;
 				$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
 				$report->changedFile($target);
-				$this->state->saveExport($config->targetUser, $documentId, [
+				$states->save($documentId, [
 					'path' => $target,
 					'fingerprint' => $fingerprint,
 					'source_revision' => $sourceRevision,
@@ -316,7 +336,7 @@ final class SyncService {
 				$error = $this->exceptionMessage($exception);
 				$report->error("P{$documentId}: {$error}");
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
+					$states->save($documentId, $checksumValues + ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 				}
 				// The warning about the archive names the error that stops the writes.
 				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
@@ -330,7 +350,7 @@ final class SyncService {
 		foreach ($trash as $document) {
 			$documentId = $this->documentId($document);
 			$seen[$documentId] = true;
-			$entry = $this->state->findExport($config->targetUser, $documentId);
+			$entry = $states->find($documentId);
 			if ($entry === null) {
 				continue;
 			}
@@ -340,7 +360,7 @@ final class SyncService {
 				if (($entry['state'] ?? '') === 'trash' && $exists) {
 					++$report->unchanged;
 					if (!$report->dryRun) {
-						$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0, 'last_seen' => $this->now(), 'last_error' => null]);
+						$states->save($documentId, ['missing_runs' => 0, 'last_error' => null]);
 					}
 					continue;
 				}
@@ -370,13 +390,13 @@ final class SyncService {
 					}
 				}
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, $values);
+					$states->save($documentId, $values);
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
 				$report->error("Trash P{$documentId}: {$error}");
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['last_error' => mb_substr($error, 0, 4000)]);
+					$states->save($documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
@@ -388,13 +408,12 @@ final class SyncService {
 
 		// The exported documents that the run counts as missing without having seen them in the trash.
 		$missingActive = 0;
-		foreach ($this->state->allExports($config->targetUser) as $entry) {
-			$documentId = (int)($entry['document_id'] ?? 0);
+		foreach ($states->all() as $documentId => $entry) {
 			if (isset($seen[$documentId])) {
 				// Paperless listed the document, so its count of missing scans starts anew, also when
 				// its export failed or waits for the next run.
 				if ((int)($entry['missing_runs'] ?? 0) > 0 && !$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => 0]);
+					$states->save($documentId, ['missing_runs' => 0]);
 				}
 				continue;
 			}
@@ -410,7 +429,7 @@ final class SyncService {
 			}
 			if ($missingRuns < $config->missingGraceRuns) {
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['missing_runs' => $missingRuns]);
+					$states->save($documentId, ['missing_runs' => $missingRuns]);
 				}
 				$report->action("WAIT P{$documentId}: missing run {$missingRuns}/{$config->missingGraceRuns}");
 				continue;
@@ -440,7 +459,7 @@ final class SyncService {
 						++$report->permanentlyDeleted;
 					}
 					if (!$report->dryRun) {
-						$this->state->deleteExport($config->targetUser, $documentId);
+						$states->delete($documentId);
 					}
 					continue;
 				}
@@ -467,13 +486,13 @@ final class SyncService {
 					}
 				}
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, $values);
+					$states->save($documentId, $values);
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
 				$report->error("Missing P{$documentId}: {$error}");
 				if (!$report->dryRun) {
-					$this->state->saveExport($config->targetUser, $documentId, ['last_error' => mb_substr($error, 0, 4000)]);
+					$states->save($documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
 				if (!$storageFailed && $this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
 					$storageFailed = true;
@@ -579,12 +598,12 @@ final class SyncService {
 	 * @param list<array<string, mixed>> $documents
 	 * @return list<array{array<string, mixed>, int, array<string, int|string|null>|null}>
 	 */
-	private function exportQueue(SyncConfig $config, array $documents): array {
+	private function exportQueue(ExportStates $states, array $documents): array {
 		$queue = [];
 		$failed = [];
 		foreach ($documents as $document) {
 			$documentId = $this->documentId($document);
-			$entry = $this->state->findExport($config->targetUser, $documentId);
+			$entry = $states->find($documentId);
 			if (($entry['last_error'] ?? null) !== null) {
 				$failed[] = [$document, $documentId, $entry];
 			} else {
@@ -681,6 +700,30 @@ final class SyncService {
 		$mirrored = $this->mirroredFingerprint($config, $path);
 
 		return $mirrored !== null && DocumentFingerprint::matches($fingerprint, $mirrored->sha256);
+	}
+
+	/**
+	 * Writes the checksum and the fingerprint that the run learned of a document that doesn't finish
+	 * as unchanged, before its file changes, so that they outlast a change that fails.
+	 *
+	 * @param array<string, int|string|null> $values
+	 */
+	private function saveChecksum(ExportStates $states, SyncReport $report, int $documentId, array $values): void {
+		if ($values !== [] && !$report->dryRun) {
+			$states->save($documentId, $values);
+		}
+	}
+
+	/**
+	 * The checksum that Paperless reported for the revision of the document, which an earlier run
+	 * kept, or null when the run has to ask for it: a run asks once for each revision.
+	 *
+	 * @param array<string, int|string|null> $entry
+	 */
+	private function knownChecksum(array $entry, string $sourceRevision): ?string {
+		$checksum = $entry['remote_checksum'] ?? null;
+
+		return ($entry['remote_revision'] ?? null) === $sourceRevision && is_string($checksum) && $checksum !== '' ? $checksum : null;
 	}
 
 	/** The checksums of the mirrored file at the path, from one read of it, or null when it is gone or can't be read. */
@@ -1085,9 +1128,9 @@ final class SyncService {
 	 *
 	 * @return array<string, true>
 	 */
-	private function sharedPaths(SyncConfig $config): array {
+	private function sharedPaths(ExportStates $states): array {
 		$counts = [];
-		foreach ($this->state->allExports($config->targetUser) as $entry) {
+		foreach ($states->all() as $entry) {
 			$path = $entry['path'] ?? null;
 			if (is_string($path) && $path !== '') {
 				$counts[$path] = ($counts[$path] ?? 0) + 1;

@@ -99,6 +99,8 @@ def reset_state():
                 "checksum": "sha256",
                 "downloads": 0,
                 "metadataRequests": 0,
+                # The ordering and the fields that each scan of the documents asked for.
+                "documentScans": [],
                 "invalidAuth": 0,
                 "uploads": [],
                 "refusedUploads": [],
@@ -223,6 +225,9 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "original_file_name": "scan.pdf",
         "archived_file_name": "archive.pdf",
         "mime_type": "application/pdf",
+        # Paperless-ngx sends the text of a document and its notes unless the request names the fields it needs.
+        "content": "Synthetic OCR text of the monthly invoice. " * 100,
+        "notes": [],
         # The fields of the variables of Paperless's own file names, which the default path
         # template doesn't use.
         "owner": 3,
@@ -361,6 +366,15 @@ class Handler(BaseHTTPRequestHandler):
             others = query["owner__id__none"][0] != str(OWNER_ID) and query.get("owner__isnull") == ["0"]
             self._page(documents if others else [])
         elif parsed.path == "/api/documents/":
+            # Paperless-ngx sends only the fields that a request names, and the scan of a run names them.
+            if "ordering" in query:
+                with LOCK:
+                    STATE["documentScans"].append(
+                        {"ordering": query["ordering"][0], "fields": query.get("fields", [""])[0]}
+                    )
+            if "fields" in query:
+                fields = query["fields"][0].split(",")
+                documents = [{key: value for key, value in item.items() if key in fields} for item in documents]
             # An incomplete answer, as of a proxy or a permission glitch: an empty page whose count
             # still lists the document.
             self._page(documents, 1 if STATE["scenario"] == "incomplete" else None)

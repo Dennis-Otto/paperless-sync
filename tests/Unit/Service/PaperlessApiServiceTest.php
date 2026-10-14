@@ -153,13 +153,37 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(self::entries(1, 2001), $scan->documents);
 		self::assertTrue($scan->complete);
 		self::assertSame(2001, $scan->listed);
+		$fields = 'id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields';
 		self::assertSame([
-			['ordering' => 'id', 'page' => 1, 'page_size' => 1000],
-			['ordering' => 'id', 'page' => 2, 'page_size' => 1000],
-			['ordering' => 'id', 'page' => 3, 'page_size' => 1000],
+			['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 1, 'page_size' => 1000],
+			['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 2, 'page_size' => 1000],
+			['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 3, 'page_size' => 1000],
 		], array_map(static fn (array $request): mixed => $request['options']['query'], $this->requests), 'Ordered by ID, a document added during the scan joins the last page.');
 		self::assertSame(self::URL . '/api/documents/', $this->requests[2]['url']);
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
+	}
+
+	/**
+	 * A run asks Paperless only for the fields that it reads, so a field that the code reads from
+	 * a document and the list leaves out would be empty in every run: the path template would put
+	 * every document into the folder of an empty value. The text of the documents stays at home.
+	 */
+	public function testTheDocumentsCarryEveryFieldThatTheAppReadsAndNoText(): void {
+		$read = [];
+		$files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(dirname(__DIR__, 3) . '/lib', \FilesystemIterator::SKIP_DOTS));
+		foreach ($files as $file) {
+			if ($file instanceof \SplFileInfo && $file->getExtension() === 'php') {
+				preg_match_all('/\$document\[\'([a-z_]+)\'\]/', (string)file_get_contents($file->getPathname()), $matches);
+				$read = [...$read, ...$matches[1]];
+			}
+		}
+		// The trash is read whole: Paperless ignores the list of fields there.
+		$read = array_values(array_diff(array_unique($read), ['deleted_at']));
+
+		self::assertNotEmpty($read);
+		self::assertSame([], array_values(array_diff($read, PaperlessApiService::DOCUMENT_FIELDS)), 'Every field that the app reads from a document is asked for.');
+		self::assertNotContains('content', PaperlessApiService::DOCUMENT_FIELDS);
+		self::assertNotContains('notes', PaperlessApiService::DOCUMENT_FIELDS);
 	}
 
 	/** @return array<string, array{list<array{int, int, int}>}> the count, the first and the last ID of each page; no IDs when the last is lower */
@@ -316,7 +340,13 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		self::assertSame(self::entries(1, 5), $this->service->newestDocuments(5));
 		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
-		self::assertSame(['page' => 1, 'page_size' => 5, 'ordering' => '-added'], $this->requests[0]['options']['query']);
+		self::assertSame([
+			'page' => 1,
+			'page_size' => 5,
+			'ordering' => '-added',
+			'fields' => implode(',', PaperlessApiService::DOCUMENT_FIELDS),
+			'truncate_content' => 'true',
+		], $this->requests[0]['options']['query']);
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
 	}
 

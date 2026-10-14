@@ -74,6 +74,35 @@ final class ConfigServiceTest extends TestCase {
 		];
 	}
 
+	/** Nextcloud loads the settings when the app asks for them, not with every request of every user. */
+	public function testEverySettingIsStoredAndReadLazily(): void {
+		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
+		$this->service->reset();
+
+		self::assertNotSame([], $this->settings);
+		self::assertSame([], array_keys(array_diff_key($this->settings, $this->lazyKeys)));
+		$this->lazyReads = [];
+		$config = $this->service->get();
+		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
+		self::assertCount(29, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
+	}
+
+	/** The settings of an earlier version, which Nextcloud loaded with every request, become lazy and keep their values. */
+	public function testSettingsOfAnEarlierVersionBecomeLazy(): void {
+		$this->settings = ['paperless_url' => 'https://paperless.example.test', 'sync_enabled' => true, 'batch_size' => 20, 'enabled' => 'yes', 'installed_version' => '0.2.0'];
+		$this->lazyKeys = ['batch_size' => true];
+
+		self::assertSame(2, $this->service->storeLazily());
+
+		$lazy = array_keys($this->lazyKeys);
+		sort($lazy);
+		self::assertSame(['batch_size', 'paperless_url', 'sync_enabled'], $lazy, 'The keys of Nextcloud for the app, such as enabled, stay as they are.');
+		self::assertSame(0, $this->service->storeLazily());
+		$config = $this->service->get();
+		self::assertSame(['https://paperless.example.test', true, 20], [$config->paperlessUrl, $config->enabled, $config->batchSize]);
+	}
+
 	#[DataProvider('sameUrls')]
 	public function testSavingTheSameUrlWithoutATokenKeepsTheStoredOne(string $url): void {
 		$this->service->save(self::validSettings(), 'secret-token');

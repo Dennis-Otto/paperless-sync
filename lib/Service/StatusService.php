@@ -18,7 +18,8 @@ use OCP\IAppConfig;
 /**
  * The status of the latest run, kept in the app configuration: when it started and ended, how it
  * ended, its summary, its error, its report for the settings page, and the Paperless that it
- * reached.
+ * reached. Every key is lazy: Nextcloud loads the status when the app asks for it, not with every
+ * request of every user.
  *
  * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
  */
@@ -39,7 +40,6 @@ final class StatusService {
 	private const LAST_STATE = 'status_last_state';
 	private const LAST_SUMMARY = 'status_last_summary';
 	private const LAST_ERROR = 'status_last_error';
-	/** The report of the last run; lazy, so that Nextcloud loads it only when it is asked for. */
 	private const LAST_REPORT = 'status_last_report';
 	/**
 	 * The start and the end of the last run that was not a dry-run, from which the schedule
@@ -51,6 +51,13 @@ final class StatusService {
 	private const PAPERLESS_VERSION = 'status_paperless_version';
 	private const PAPERLESS_API_VERSION = 'status_paperless_api_version';
 
+	/** Every key of the status. */
+	private const KEYS = [
+		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
+		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
+		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION,
+	];
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -58,18 +65,33 @@ final class StatusService {
 	) {
 	}
 
+	/**
+	 * Makes lazy the status that an earlier version stored to be loaded with every request of
+	 * Nextcloud, and returns how many keys it changed.
+	 */
+	public function storeLazily(): int {
+		$changed = 0;
+		foreach (self::KEYS as $key) {
+			if ($this->appConfig->updateLazy(AppConstants::APP_ID, $key, true)) {
+				++$changed;
+			}
+		}
+
+		return $changed;
+	}
+
 	public function started(bool $dryRun): void {
 		$now = $this->timeFactory->getTime();
 		$this->carryOverTheLastRun();
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now);
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now, lazy: true);
 		if (!$dryRun) {
-			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $now);
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $now, lazy: true);
 		}
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running');
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running', lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
 		// Only a run that reaches Paperless names it, so that a failed connection doesn't show the Paperless of an earlier run.
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '');
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '');
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true);
 	}
 
 	/**
@@ -79,21 +101,21 @@ final class StatusService {
 	 * @param array{version: string, apiVersion: string} $server
 	 */
 	public function connected(array $server): void {
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, $server['version']);
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, $server['apiVersion']);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, $server['version'], lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, $server['apiVersion'], lazy: true);
 	}
 
 	public function completed(SyncReport $report): void {
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, $report->completedAt);
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $report->completedAt);
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, $report->completedAt, lazy: true);
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $report->completedAt, lazy: true);
 		if (!$report->dryRun) {
-			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $report->completedAt);
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $report->completedAt, lazy: true);
 			if ($report->errors === 0) {
-				$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, $report->completedAt);
+				$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, $report->completedAt, lazy: true);
 			}
 		}
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'));
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '');
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'), lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
 		$this->keep($report);
 	}
 
@@ -104,12 +126,12 @@ final class StatusService {
 	 */
 	public function failed(\Throwable $exception, ?SyncReport $report = null): void {
 		$now = $this->timeFactory->getTime();
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now);
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now, lazy: true);
 		if ($report === null || !$report->dryRun) {
-			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now);
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now, lazy: true);
 		}
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed');
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH));
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed', lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH), lazy: true);
 		if ($report !== null) {
 			$this->keep($report);
 		}
@@ -117,21 +139,21 @@ final class StatusService {
 
 	/** @return Status */
 	public function get(): array {
-		$lastCompleted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0);
+		$lastCompleted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true);
 
 		return [
-			'lastStarted' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0),
+			'lastStarted' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true),
 			'lastCompleted' => $lastCompleted,
 			// A status from before the end of every run was kept: a run that failed set the end of
 			// the last completed run then.
-			'lastEnded' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $lastCompleted),
-			'lastSuccess' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0),
-			'state' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run'),
-			'summary' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_SUMMARY, '{}')),
-			'error' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR, ''),
+			'lastEnded' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $lastCompleted, lazy: true),
+			'lastSuccess' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0, lazy: true),
+			'state' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run', lazy: true),
+			'summary' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_SUMMARY, '{}', lazy: true)),
+			'error' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true),
 			'report' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_REPORT, '{}', lazy: true)),
-			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, ''),
-			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, ''),
+			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true),
+			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true),
 		];
 	}
 
@@ -155,21 +177,20 @@ final class StatusService {
 	 * passed, or 0 before the first run, means the next background job. Null when scheduled runs
 	 * are off.
 	 *
-	 * It reads only the times of the last run, because the background job asks for it in every
-	 * check, and the lazy report stays unloaded then.
+	 * It reads only the times of the last run, which the background job asks for in every check.
 	 */
 	public function nextRun(SyncConfig $config): ?int {
 		if (!$config->enabled) {
 			return null;
 		}
-		$started = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0);
-		$ended = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0));
+		$started = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true);
+		$ended = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true), lazy: true);
 		// A status of an earlier version, which didn't tell runs and dry-runs apart, counts from its
 		// last run of any kind until the first run after the update takes that run over.
 		// started() writes both keys from then on, also on a new installation.
 		$last = max(
-			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $started),
-			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $ended),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $started, lazy: true),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $ended, lazy: true),
 		);
 		if ($started > $ended) {
 			$last = max($last, $started);
@@ -186,11 +207,11 @@ final class StatusService {
 	 * have ended.
 	 */
 	private function carryOverTheLastRun(): void {
-		if ($this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, -1) >= 0) {
+		if ($this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, -1, lazy: true) >= 0) {
 			return;
 		}
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0));
-		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0)));
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true), lazy: true);
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true), lazy: true), lazy: true);
 	}
 
 	/**
@@ -199,7 +220,7 @@ final class StatusService {
 	 */
 	private function keep(SyncReport $report): void {
 		$summary = $report->summary();
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_SUMMARY, json_encode($summary, JSON_THROW_ON_ERROR));
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_SUMMARY, json_encode($summary, JSON_THROW_ON_ERROR), lazy: true);
 		$shorten = static fn (string $line): string => mb_substr($line, 0, self::LINE_LENGTH);
 		$kept = $summary;
 		$kept['omittedActions'] = $report->omittedActions + max(0, count($report->actions) - self::REPORT_ACTIONS);
