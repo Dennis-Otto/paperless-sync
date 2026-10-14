@@ -14,15 +14,21 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
+use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
+use OCA\PaperlessSync\SetupChecks\SyncHealth;
+use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\IDateTimeFormatter;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class AdminSettingsTest extends TestCase {
+	use GermanTranslations;
 	use InMemoryConfiguration;
 
 	/** @var IURLGenerator&MockObject */
@@ -61,6 +67,28 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
 		self::assertSame('/route/paperless_sync.settings.preview', $parameters['previewUrl']);
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
+	}
+
+	/**
+	 * The warnings and errors of the setup checks of the app appear on top of the page as under
+	 * Administration → Overview, that of the runs first; what is fine adds nothing.
+	 */
+	public function testThePageShowsTheWarningsOfTheSetupChecks(): void {
+		$this->configService()->save(['enabled' => false] + self::validSettings(), 'secret-token');
+		self::assertSame([], $this->adminSettings()->getForm()->getParams()['health'], 'Scheduled runs that are off need nothing.');
+
+		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->settings['backgroundjobs_mode'] = 'cron';
+		self::assertSame([], $this->adminSettings()->getForm()->getParams()['health'], 'A mirror that waits for its first run is no warning.');
+
+		unset($this->settings['backgroundjobs_mode']);
+		(new StatusService($this->appConfig(), new TestClock()))->failed(new RuntimeException('Paperless is down.'));
+		$health = $this->adminSettings()->getForm()->getParams()['health'];
+
+		self::assertSame([
+			['severity' => 'error', 'description' => 'Der letzte Lauf von Paperless Sync ist fehlgeschlagen: Paperless is down.'],
+			['severity' => 'warning', 'description' => 'Nextcloud führt seine Hintergrundjobs mit AJAX aus, das sie nur startet, während jemand Nextcloud benutzt, sodass die geplanten Läufe von Paperless Sync zurückfallen oder mittendrin abbrechen. Stelle die Hintergrundjobs in den Grundeinstellungen auf Cron und richte den Cron-Job des Systems ein.'],
+		], $health);
 	}
 
 	/** The page has the stored configuration without the token, which never reaches the browser. */
@@ -111,7 +139,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertIsString($guide);
 		self::assertIsString($readme);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(5, $links[1], 'Each of the five sections links to the guide.');
+		self::assertCount(6, $links[1], 'Each of the five sections, and each warning of the setup checks, links to the guide.');
 
 		$page = preg_replace_callback('/^--8<-- "README\.md:([a-z-]+)"$/m', static function (array $include) use ($readme): string {
 			$name = preg_quote($include[1], '/');
@@ -170,6 +198,17 @@ final class AdminSettingsTest extends TestCase {
 			$this->initialState[$key] = $data;
 		});
 
-		return new AdminSettings($this->configService(), new StatusService($this->appConfig(), new TestClock()), $this->urlGenerator, $initialState);
+		$status = new StatusService($this->appConfig(), new TestClock());
+		$formatter = $this->createMock(IDateTimeFormatter::class);
+		$formatter->method('formatTimeSpan')->willReturn('vor 2 Stunden');
+
+		return new AdminSettings(
+			$this->configService(),
+			$status,
+			$this->urlGenerator,
+			$initialState,
+			new SyncHealth($status, $this->configService(), $this->germanL10n(), $formatter),
+			new BackgroundJobMode($this->appConfig(), $this->configService(), $this->germanL10n()),
+		);
 	}
 }

@@ -449,5 +449,47 @@ elif mode == "activity-imports":
     submitted = [subject for subject in entries if subject == "Paperless Sync sent 1 file to Paperless"]
     if not submitted:
         raise AssertionError(f"activity-imports: no entry of the uploads: {list(entries)!r}")
+elif mode == "notifications-imports":
+    # The target user has a notification for every import that failed or was refused, with the
+    # reason of Paperless, and one that leads to the file in the error folder.
+    entries = {str(entry.get("subject")): entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync"}
+    failed = entries.get("Paperless could not import broken.pdf")
+    if failed is None or failed.get("message") != "broken.pdf: Synthetic unsupported mime type":
+        raise AssertionError(f"notifications-imports: no notification of the failed import with its reason: {list(entries)!r}")
+    if failed.get("object_type") != "import" or not str(failed.get("link", "")).endswith(f"/f/{failed.get('object_id')}"):
+        raise AssertionError(f"notifications-imports: the failed import does not lead to its file: {failed!r}")
+    if failed["subjectRichParameters"]["file"].get("path") != "Documents/Paperless/Errors/broken.pdf":
+        raise AssertionError(f"notifications-imports: the failed import does not name the file in the error folder: {failed!r}")
+    refused = entries.get("Paperless refused notes.bin; it stays in the inbox until it changes")
+    if refused is None or "File type application/octet-stream not supported" not in str(refused.get("message")):
+        raise AssertionError(f"notifications-imports: no notification of the refusal with its reason: {list(entries)!r}")
+    if any(subject.endswith("was imported into Paperless") or " as P" in subject for subject in entries):
+        raise AssertionError(f"notifications-imports: a successful import notified the user: {list(entries)!r}")
+elif mode == "notifications-failing":
+    entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "synchronization"]
+    if len(entries) != 1:
+        raise AssertionError(f"notifications-failing: expected one notification of the failing mirror, got {entries!r}")
+    entry = entries[0]
+    if not str(entry.get("subject")).startswith("Paperless Sync failed ") or not str(entry.get("subject")).endswith(" times in a row"):
+        raise AssertionError(f"notifications-failing: unexpected subject: {entry!r}")
+    if not entry.get("message") or len(entry["message"]) > 200:
+        raise AssertionError(f"notifications-failing: the notification has no error of at most 200 characters: {entry!r}")
+    if "/settings/admin/paperless_sync" not in str(entry.get("link")):
+        raise AssertionError(f"notifications-failing: the notification does not lead to the settings: {entry!r}")
+elif mode == "notifications-recovered":
+    entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "synchronization"]
+    if entries:
+        raise AssertionError(f"notifications-recovered: a successful run left the notification of the failing mirror: {entries!r}")
+elif mode == "status-api-failing":
+    data = payload["ocs"]["data"]
+    if data.get("healthy") is not False or data.get("health") != "failed" or data.get("failedRuns", 0) < 3 or not data.get("error"):
+        raise AssertionError(f"status-api-failing: the status API does not report the failing mirror: {data!r}")
+elif mode == "status-api-recovered":
+    data = payload["ocs"]["data"]
+    if data.get("healthy") is not True or data.get("health") != "ok" or data.get("failedRuns") != 0 or data.get("error") != "":
+        raise AssertionError(f"status-api-recovered: the status API does not report the recovered mirror: {data!r}")
+elif mode == "recovered":
+    if payload.get("errors") != 0 or payload.get("dryRun") is not False:
+        raise AssertionError(f"recovered: the run after the failures did not succeed: {payload!r}")
 else:
     raise AssertionError(f"Unknown assertion mode: {mode}")

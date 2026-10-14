@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Controller;
 
 use OCA\PaperlessSync\Controller\SettingsController;
+use OCA\PaperlessSync\Controller\StatusApiController;
 use OCA\PaperlessSync\Controller\SyncController;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -47,6 +48,11 @@ final class ControllerRoutesTest extends TestCase {
 		$route = $attributes[0]->newInstance();
 		self::assertSame($verb, $route->getVerb());
 		self::assertSame($url, $route->getUrl());
+	}
+
+	/** The status of the OCS API has its route there alone, which StatusApiControllerTest checks. */
+	public function testTheStatusApiHasNoRouteOfThePages(): void {
+		self::assertSame([], (new ReflectionMethod(StatusApiController::class, 'status'))->getAttributes(FrontpageRoute::class));
 	}
 
 	public function testNoRoutesComeFromTheLegacyRoutesFile(): void {

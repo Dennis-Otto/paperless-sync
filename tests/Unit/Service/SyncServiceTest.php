@@ -25,6 +25,7 @@ use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
@@ -45,6 +46,7 @@ use RuntimeException;
 final class SyncServiceTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;
+	use RecordedNotifications;
 
 	private const ARCHIVE = 'Dokumente/Paperless/Archiv';
 	private const EXPORTED_PATH = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
@@ -59,6 +61,7 @@ final class SyncServiceTest extends TestCase {
 	private ILockingProvider $locking;
 	/** @var LoggerInterface&MockObject */
 	private LoggerInterface $logger;
+	private StatusService $status;
 	private SyncService $service;
 
 	protected function setUp(): void {
@@ -72,18 +75,20 @@ final class SyncServiceTest extends TestCase {
 		$this->configService->save(self::validSettings(), 'test-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
+		$this->status = new StatusService($this->appConfig(), $this->clock);
 		$this->service = new SyncService(
 			$this->configService,
 			$this->paperless,
 			$this->storage,
 			$this->state,
 			$paths,
-			new StatusService($this->appConfig(), $this->clock),
+			$this->status,
 			$this->locking,
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($this->storage, $this->logger),
 			new UserTimeZones($this->userConfig(), $this->timeZones),
+			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
 		);
 	}
 
@@ -972,12 +977,13 @@ final class SyncServiceTest extends TestCase {
 			$storage,
 			$this->state,
 			new PathTemplateService(),
-			new StatusService($this->appConfig(), $this->clock),
+			$this->status,
 			$this->locking,
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($storage, $this->logger),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
+			$this->notificationPublisher($this->status, $storage, $this->clock, $this->logger),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();

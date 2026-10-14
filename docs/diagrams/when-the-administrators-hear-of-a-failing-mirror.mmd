@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: When the administrators hear of a failing mirror
+    accDescr: After every run that is no dry-run, Paperless Sync counts the runs in a row that failed or completed with errors. A successful run ends the row and removes the notification. After the third run in a row, or once the first of them ended a day ago, every administrator gets one notification with the error of the last run and a link to the settings, once for the whole row. The setup checks under Administration, Overview and the status API show the same state at any time.
+
+    run["A run ends,<br>not a dry-run"] --> success{"Did it succeed,<br>without errors?"}
+    success -->|yes| clear["The row ends, and the<br>notification goes away"]
+    success -->|no| count["One more run in the row<br>that did not succeed"]
+    count --> enough{"Three runs in a row,<br>or a day since the first?"}
+    enough -->|no| quiet["Nobody hears of it yet:<br>Paperless may be restarting"]
+    enough -->|yes| sent{"Notified for<br>this row already?"}
+    sent -->|yes| quiet2["No second notification"]
+    sent -->|no| notify["Every administrator gets<br>one notification with the error<br>and a link to the settings"]
+    count -.-> checks["Setup checks and the status API<br>show the state at any time"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,success,count,enough,sent,checks check
+    class clear,quiet,quiet2 kept
+    class notify changed
