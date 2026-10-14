@@ -140,6 +140,18 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertFalse($this->service->exists(self::USER, 'Archiv/b.pdf'));
 	}
 
+	public function testFindsTheIdOfAFileOrFolderAtTheNormalizedPath(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+		$this->nodes[self::HOME . '/Archiv/a.pdf'] = '%PDF';
+
+		$file = $this->service->findFileId(self::USER, '/Archiv\\a.pdf');
+
+		self::assertSame($this->fileId(self::HOME . '/Archiv/a.pdf'), $file);
+		self::assertSame($this->fileId(self::HOME . '/Archiv'), $this->service->findFileId(self::USER, 'Archiv/'));
+		self::assertNotSame($file, $this->service->findFileId(self::USER, 'Archiv'));
+		self::assertNull($this->service->findFileId(self::USER, 'Archiv/b.pdf'), 'A path without a file has no ID.');
+	}
+
 	public function testWriteStreamStoresTheWholeStreamInNewFolders(): void {
 		$stream = $this->stream('%PDF-content');
 

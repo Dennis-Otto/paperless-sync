@@ -105,6 +105,14 @@ The log has a warning when an error of a document first occurs or changes, and a
 
 Nextcloud logs warnings and errors by default. To see that a run completed, with its counts, turn the level down to info for a while with `occ log:manage --level info`, and back with `occ log:manage --level warning`. The app keeps the API token of Paperless out of the log.
 
+### The Activity app shows nothing of Paperless Sync
+
+The entries go to the target user alone, so another account, such as the administrator who started the run, sees none of them. A dry-run and a run that changed nothing add no entry, and neither does a run that stopped before its first change, such as one that can't reach Paperless; the status on the settings page tells about those. Nextcloud keeps the entries only while its app *Activity* is enabled, and from the version of Paperless Sync that brought them on: earlier runs have none. The filter *Paperless Sync* in the navigation of the Activity app shows them alone.
+
+### The link to a new document in Paperless doesn't open
+
+The link of an imported file in the Activity app starts with the saved Paperless URL, which is the address under which the Nextcloud server reaches Paperless. A name or an address that only the server knows, such as `http://paperless:8000` in a Docker network, leads the browser nowhere. Open the document in Paperless by its number instead, such as *P123*, or save a URL that both the server and the browsers reach, such as the public address of Paperless behind its reverse proxy.
+
 ### Documents of the trash come late
 
 The Paperless trash shows an account only the documents that it owns and those without an owner. A document of someone else that goes to the trash disappears for the app from both lists, so it counts as missing: its copy moves to the deleted folder only after the configured number of complete scans, below the date of that run instead of the date of the trash. With permanent deletion and *Also delete copies of documents that disappeared without passing the Paperless trash* both on, the copy is even deleted then, although the document can still be restored in Paperless.

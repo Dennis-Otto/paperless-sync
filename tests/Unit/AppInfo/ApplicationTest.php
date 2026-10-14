@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\AppInfo;
 
 use OC;
+use OCA\PaperlessSync\Activity\Filter;
+use OCA\PaperlessSync\Activity\Provider;
+use OCA\PaperlessSync\Activity\Setting;
 use OCA\PaperlessSync\AppInfo\Application;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
@@ -13,6 +16,9 @@ use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
+use OCP\Activity\ActivitySettings;
+use OCP\Activity\IFilter;
+use OCP\Activity\IProvider;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\AppFramework\IAppContainer;
@@ -75,5 +81,17 @@ final class ApplicationTest extends TestCase {
 			NextcloudStorageInterface::class => NextcloudStorageService::class,
 			SyncStateRepositoryInterface::class => SyncStateRepository::class,
 		], $aliases);
+	}
+
+	/** The Activity app reads its setting, filter and provider from the app info, by their classes. */
+	public function testTheAppInfoRegistersTheActivityOfTheApp(): void {
+		$activity = self::appInfo()->activity;
+
+		self::assertSame([Setting::class], array_map('strval', $activity->xpath('settings/setting') ?: []));
+		self::assertSame([Filter::class], array_map('strval', $activity->xpath('filters/filter') ?: []));
+		self::assertSame([Provider::class], array_map('strval', $activity->xpath('providers/provider') ?: []));
+		self::assertTrue(is_subclass_of(Setting::class, ActivitySettings::class));
+		self::assertTrue(is_subclass_of(Filter::class, IFilter::class));
+		self::assertTrue(is_subclass_of(Provider::class, IProvider::class));
 	}
 }

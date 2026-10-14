@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
@@ -34,6 +35,7 @@ use Psr\Log\NullLogger;
  */
 final class SyncJobTest extends TestCase {
 	use InMemoryConfiguration;
+	use RecordedActivities;
 
 	private TestClock $clock;
 	private ConfigService $configService;
@@ -61,6 +63,7 @@ final class SyncJobTest extends TestCase {
 			$this->locking,
 			$this->createMock(LoggerInterface::class),
 			$this->clock,
+			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);

@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the Activity stream shows
+    accDescr: A run, scheduled or by hand, that changed something adds one entry for the target user, with the counts of its changes and links to its first five files and to the archive folder. Every file of the inbox that Paperless imported adds an entry with a link to its new document in Paperless, every file that Paperless failed to import one with the reason and a link to the file in the error folder, and every file that Paperless refused one with the reason, as the file stays in the inbox. A dry-run and a run without changes add none.
+
+    run(["`⚙️ Run<br>*scheduled or by hand*`"])
+    changes["`🔔 One entry for the run<br>*added or updated 3 documents,<br>moved 1 document: a.pdf, b.pdf …*`"]
+    inbox["`📂 Files of the inbox<br>*whose tasks or uploads<br>Paperless answered*`"]
+    none["`∅ No entry<br>*for a dry-run or<br>a run without changes*`"]
+    imported["`📥 One entry per import<br>*scan.pdf was imported<br>into Paperless as P123*`"]
+    failed["`⚠️ One entry per failed import<br>*the reason of Paperless,<br>the file in the error folder*`"]
+    refused["`⛔ One entry per refusal<br>*the reason of Paperless,<br>the file stays in the inbox*`"]
+
+    run -- "files changed" --> changes
+    run --> inbox
+    run -. "nothing changed" .-> none
+    inbox -- "imported" --> imported
+    inbox -- "failed" --> failed
+    inbox -- "refused" --> refused
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class run,changes,inbox nextcloud
+    class imported paperless
+    class failed warning
+    class refused refused
