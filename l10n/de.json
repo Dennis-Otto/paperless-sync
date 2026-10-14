@@ -184,6 +184,7 @@
 		"Paperless could not be read for the preview: %s": "Paperless konnte für die Vorschau nicht gelesen werden: %s",
 		"Could not validate the Paperless and Nextcloud configuration: %s": "Die Konfiguration von Paperless und Nextcloud konnte nicht geprüft werden: %s",
 		"Another synchronization run is already active.": "Es läuft bereits eine andere Synchronisation.",
+		"Paperless Sync is not completely configured.": "Paperless Sync ist noch nicht vollständig eingerichtet.",
 		"A Paperless API token is required.": "Ein Paperless-API-Token ist erforderlich.",
 		"Enter the API token again to connect to another Paperless URL.": "Gib das API-Token erneut ein, um dich mit einer anderen Paperless-Adresse zu verbinden.",
 		"Enter a valid Paperless URL.": "Gib eine gültige Paperless-Adresse ein.",

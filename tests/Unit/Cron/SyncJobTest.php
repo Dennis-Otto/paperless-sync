@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -24,6 +25,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\BackgroundJob\IJobList;
+use OCP\Config\IUserConfig;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -65,7 +67,7 @@ final class SyncJobTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$this->clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
-			new TestTimeZones(),
+			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);

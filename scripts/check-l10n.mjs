@@ -24,6 +24,8 @@
 //   InvalidSettingException.
 // A class constant there, self::NAME or self::NAME[…], counts with its text or the texts of its
 // array, and a text that an argument only compares, such as in $a === self::NAME ? …, doesn't.
+// Any other argument, such as a variable, fails the check with its place, and --fix then writes
+// nothing: its translation would look unused, and --fix would drop it.
 
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -174,6 +176,19 @@ function textsOf(parts, constants) {
 
 /** Each text that the code translates, with the first place that does. */
 const used = new Map()
+/** The calls whose text the check can't read, which would make its translation look unused. */
+const unreadable = []
+/**
+ * The calls that translate a text which their class holds, each counted where it is written: the
+ * message and the hint of a ConnectionCheck and the text of an InvalidSettingException, at the
+ * calls above, and the advice of a PaperlessLocalNetworkException, in its constants.
+ */
+const generic = new Set([
+	'lib/Model/ConnectionCheck.php: $this->message',
+	'lib/Model/ConnectionCheck.php: $this->hint',
+	'lib/Service/InvalidSettingException.php: $this->text',
+	'lib/Service/PaperlessApiService.php: $exception->advice',
+])
 function use(text, file, line) {
 	if (!used.has(text)) {
 		used.set(text, `${file}:${line}`)
@@ -201,6 +216,14 @@ for (const file of [...files('templates', '.php'), ...files('lib', '.php')]) {
 				return argument === undefined ? [] : textsOf(argument.parts, constants)
 			})
 			const line = lineOf(source, match.index)
+			texts.forEach(([position, name], index) => {
+				const argument = list.find((candidate) => candidate.name === name) ??
+					(list[position]?.name === null ? list[position] : undefined)
+				const spelled = argument?.parts.map((part) => part.word ?? part.string ?? `self::${part.constant}`).join('')
+				if (found[index].length === 0 && spelled !== undefined && !generic.has(`${file}: ${spelled}`)) {
+					unreadable.push(`${file}:${line} passes a text that the check can't read, ${spelled}; write it as a string or a self:: constant.`)
+				}
+			})
 			if (!plural) {
 				found.flat().forEach((text) => use(text, file, line))
 			} else if (found[0].length === 1 && found[1].length === 1) {
@@ -247,8 +270,9 @@ function placeholders(text) {
 	return [...found].sort().join(', ') || 'none'
 }
 
-// What --fix can't do: the German words of a text.
-const problems = []
+// What --fix can't do: the German words of a text, and a text that the check can't read, whose
+// translation would look unused.
+const problems = [...unreadable]
 for (const text of used.keys()) {
 	if (!Object.hasOwn(translations, text)) {
 		problems.push(`${used.get(text)} translates a text that l10n/de.json lacks: ${JSON.stringify(text)}`)
@@ -275,7 +299,7 @@ const unused = Object.keys(translations).filter((text) => !used.has(text))
 const fixedTranslations = Object.fromEntries(Object.entries(translations).filter(([text]) => used.has(text)))
 const fixedJson = `${JSON.stringify({ translations: fixedTranslations, pluralForm: catalog.pluralForm }, null, '\t')}\n`
 const fixedJavaScript = `OC.L10N.register(\n\t${JSON.stringify(appId)},\n${JSON.stringify(fixedTranslations, null, '\t').replace(/^/gm, '\t')},\n\t${JSON.stringify(catalog.pluralForm)}\n)\n`
-if (fix) {
+if (fix && unreadable.length === 0) {
 	writeFileSync(jsonPath, fixedJson)
 	writeFileSync(javaScriptPath, fixedJavaScript)
 	process.stdout.write(`Wrote the catalog without ${unused.length} unused and ${repeated.length} repeated text(s), and l10n/de.js from l10n/de.json.\n`)

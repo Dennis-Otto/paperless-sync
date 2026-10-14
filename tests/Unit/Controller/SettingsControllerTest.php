@@ -21,6 +21,7 @@ use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
@@ -30,6 +31,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
@@ -631,7 +633,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$clock,
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
-			new TestTimeZones(),
+			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 		);
 
 		return new SettingsController(

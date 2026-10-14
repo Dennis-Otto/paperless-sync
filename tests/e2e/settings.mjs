@@ -503,6 +503,13 @@ try {
 		expect(!(await required()), 'Dismissing the question keeps the token.')
 		console.log('Settings: the questions of the page are in the language of the administrator.')
 
+		// The times of the runs are in the format of the locale of Nextcloud, not in that of the
+		// browser, which is en-US here and would write "Oct 14, 2026".
+		await page.waitForFunction(() => /\d/.test(document.querySelector('#paperless-sync-last-ended').textContent), null, { timeout: 10000 })
+		const time = await page.locator('#paperless-sync-last-ended').textContent()
+		expect(/^\d{1,2}\.\d{1,2}\.\d{4}/.test(time), `The time of the last run must be in the German format: ${time}`)
+		console.log('Settings: the times of the runs are in the format of the locale of Nextcloud.')
+
 		// So is what the server refuses, and the setting that it names gets the focus. The
 		// browser checks the numbers itself, so a URL that only the server refuses.
 		const urlBefore = await url.inputValue()

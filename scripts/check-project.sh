@@ -407,4 +407,17 @@ cp l10n/de.json l10n/de.js "$l10n_copy/"
 sed -n '3p' l10n/de.json >"$l10n_copy/line"
 sed -i "3r $l10n_copy/line" "$l10n_copy/de.json"
 broken_catalog 'l10n/de.json has a text twice'
-echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated text and a wrong placeholder, and --fix writes l10n/de.js anew."
+# A text that the check can't read, such as a variable, would make its translation look unused,
+# and --fix would drop it: the check names the call instead, and --fix leaves the catalog alone.
+mkdir -p "$l10n_copy/app/scripts" "$l10n_copy/app/lib/Model"
+cp -r js templates l10n "$l10n_copy/app/"
+cp scripts/check-l10n.mjs "$l10n_copy/app/scripts/"
+# shellcheck disable=SC2016 # PHP code, whose variables the shell must not expand.
+printf '%s\n' '<?php' 'ConnectionCheck::failed(ConnectionCheck::PAPERLESS, $message, $details);' >"$l10n_copy/app/lib/Model/Unreadable.php"
+if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" --fix 2>&1)" \
+  || [[ "$output" != *"lib/Model/Unreadable.php:2 passes a text that the check can't read, \$message"* ]] \
+  || ! cmp -s l10n/de.json "$l10n_copy/app/l10n/de.json"; then
+  echo "scripts/check-l10n.mjs --fix should refuse a text that it can't read and keep the catalog, but says: $output"
+  exit 1
+fi
+echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text and a wrong placeholder, and --fix writes l10n/de.js anew."

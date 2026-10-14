@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
@@ -26,6 +27,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
+use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -64,7 +66,7 @@ final class SyncControllerTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
-			new TestTimeZones(),
+			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 		);
 		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService);
 	}
@@ -97,7 +99,17 @@ final class SyncControllerTest extends TestCase {
 		$response = $this->controller->run(false);
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
-		self::assertSame(['message' => 'Paperless Sync is not completely configured.'], $response->getData());
+		self::assertSame(['message' => 'Paperless Sync ist noch nicht vollständig eingerichtet.'], $response->getData());
+	}
+
+	/** An error that names no setting reaches the page as it is. */
+	public function testAnUnexpectedErrorReturnsItsMessage(): void {
+		$this->storage->testException = new \RuntimeException('The disk is full.');
+
+		$response = $this->controller->run(false);
+
+		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		self::assertSame(['message' => 'The disk is full.'], $response->getData());
 	}
 
 	/** A run checks the target user again, who may be gone since the save, and says so in German. */

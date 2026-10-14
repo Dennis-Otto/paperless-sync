@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
@@ -21,6 +22,7 @@ use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -28,6 +30,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
+use OCP\Config\IUserConfig;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
@@ -80,8 +83,18 @@ final class SyncServiceTest extends TestCase {
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($this->storage, $this->logger),
-			$this->timeZones,
+			new UserTimeZones($this->userConfig(), $this->timeZones),
 		);
+	}
+
+	/** The personal settings of the users, with the time zones that $this->timeZones holds. */
+	private function userConfig(): IUserConfig {
+		$userConfig = $this->createStub(IUserConfig::class);
+		$userConfig->method('getValueString')->willReturnCallback(
+			fn (string $userId, string $app, string $key): string => $app === 'core' && $key === 'timezone' ? ($this->timeZones->users[$userId] ?? '') : '',
+		);
+
+		return $userConfig;
 	}
 
 	public function testExportsMovesTrashesRestoresAndPermanentlyDeletes(): void {
@@ -144,14 +157,14 @@ final class SyncServiceTest extends TestCase {
 		$this->locking->expects(self::once())->method('releaseLock');
 		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization failed', self::callback(
 			static fn (array $context): bool => array_keys($context) === ['exception']
-				&& $context['exception'] instanceof RuntimeException
+				&& $context['exception'] instanceof InvalidSettingException
 				&& $context['exception']->getMessage() === 'Paperless Sync is not completely configured.',
 		));
 
 		try {
 			$this->service->run();
 			self::fail('An unconfigured app must not synchronize.');
-		} catch (RuntimeException $exception) {
+		} catch (InvalidSettingException $exception) {
 			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
 		}
 
@@ -342,7 +355,7 @@ final class SyncServiceTest extends TestCase {
 		try {
 			$this->service->run();
 			self::fail('A run without its ' . $missing . ' must not start.');
-		} catch (RuntimeException $exception) {
+		} catch (InvalidSettingException $exception) {
 			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
 		}
 
@@ -482,7 +495,7 @@ final class SyncServiceTest extends TestCase {
 		try {
 			$this->service->run();
 			self::fail('A URL that the token was not saved with must not get it.');
-		} catch (RuntimeException $exception) {
+		} catch (InvalidSettingException $exception) {
 			self::assertSame('Paperless Sync is not completely configured.', $exception->getMessage());
 		}
 
@@ -964,7 +977,7 @@ final class SyncServiceTest extends TestCase {
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($storage, $this->logger),
-			new TestTimeZones(),
+			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();
@@ -2946,7 +2959,7 @@ final class SyncServiceTest extends TestCase {
 	 * The time zones of the target user and of Nextcloud, and the day of a deletion at 22:30 UTC, at
 	 * half past midnight in Berlin.
 	 *
-	 * @return array<string, array{array<string, string>, string, string}>
+	 * @return array<string, array{array<string, string>, string, string, 3?: string}>
 	 */
 	public static function timeZonesOfADeletion(): array {
 		return [
@@ -2954,6 +2967,8 @@ final class SyncServiceTest extends TestCase {
 			'Nextcloud in Berlin' => [[], 'Europe/Berlin', '2026-08-27'],
 			'another user in Berlin' => [['admin' => 'Europe/Berlin'], 'UTC', '2026-08-26'],
 			'the target user in New York' => [['paperless' => 'America/New_York'], 'Europe/Berlin', '2026-08-26'],
+			'a time zone that PHP no longer knows' => [['paperless' => 'Europe/Atlantis'], 'Europe/Berlin', '2026-08-27'],
+			'a target user without one, run by an administrator in Tokyo' => [[], 'UTC', '2026-08-26', 'Asia/Tokyo'],
 		];
 	}
 
@@ -2961,14 +2976,16 @@ final class SyncServiceTest extends TestCase {
 	 * The folder of a trashed document is the day of its deletion in the time zone of the target
 	 * user, whose files they are, or else in that of Nextcloud: a document trashed in Berlin shortly
 	 * after midnight lands in the folder of that day, not in the one of the day before, as in UTC.
+	 * Never in that of the browser of whoever started the run.
 	 *
 	 * @param array<string, string> $users
 	 */
 	#[DataProvider('timeZonesOfADeletion')]
-	public function testTrashFolderIsTheDayOfTheDeletionWhereTheTargetUserLives(array $users, string $default, string $day): void {
+	public function testTrashFolderIsTheDayOfTheDeletionWhereTheTargetUserLives(array $users, string $default, string $day, string $session = ''): void {
 		$this->exportDocument();
 		$this->timeZones->users = $users;
 		$this->timeZones->default = $default;
+		$this->timeZones->session = $session;
 		$this->paperless->trash = [$this->paperless->documents[0] + ['deleted_at' => '2026-08-26T22:30:00+00:00']];
 		$this->paperless->documents = [];
 

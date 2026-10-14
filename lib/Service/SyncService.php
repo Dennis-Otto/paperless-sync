@@ -20,7 +20,6 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
-use OCP\IDateTimeZone;
 use OCP\Lock\ILockingProvider;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
@@ -51,7 +50,7 @@ final class SyncService {
 		private LoggerInterface $logger,
 		private ITimeFactory $timeFactory,
 		private ActivityPublisher $activity,
-		private IDateTimeZone $timeZones,
+		private UserTimeZones $timeZones,
 	) {
 	}
 
@@ -73,7 +72,7 @@ final class SyncService {
 		try {
 			$config = $settings ?? $this->configService->get();
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
-				throw new RuntimeException('Paperless Sync is not completely configured.');
+				throw new InvalidSettingException('Paperless Sync is not completely configured.');
 			}
 			$this->status->connected($this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork));
 			$this->storage->test($config->targetUser, $config->basePath);
@@ -1169,7 +1168,7 @@ final class SyncService {
 	private function deletedPath(SyncConfig $config, string $oldPath, string $archiveRoot, int $timestamp): string {
 		$relative = $this->relativeTo($oldPath, $archiveRoot);
 		$timestamp = $timestamp > 0 ? $timestamp : $this->now();
-		$day = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->timeZones->getTimeZone($timestamp, $config->targetUser))->format('Y-m-d');
+		$day = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->timeZones->of($config->targetUser))->format('Y-m-d');
 
 		return $this->join($archiveRoot, $config->deletedFolder, $day, $relative);
 	}
