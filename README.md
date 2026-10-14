@@ -136,7 +136,7 @@ The [guide](https://dennis-otto.github.io/paperless-sync/guide.html#the-settings
 
 ## Usage
 
-After installation, open **Administration settings → Paperless Sync**. Configure and test the connection while synchronization remains disabled. Run a dry-run, review the summary, and only then enable scheduled synchronization.
+After installation, open **Administration settings → Paperless Sync**. Configure the connection while synchronization remains disabled: saving tests it when you enter the token. Run a dry-run, review the summary, and only then enable scheduled synchronization.
 
 The default archive path template is:
 
@@ -200,7 +200,7 @@ If you turned on `allow_local_remote_servers` for this app before, turn on the s
 
 ### Saving, pausing and disconnecting
 
-**Test connection and save** checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the settings are saved without the test:
+Saving checks every setting first. When scheduled synchronization is on, or when you enter a token, it also tests the connection to Paperless and the base folder of the target user, and saves only when both work, so that the schedule never runs with settings that fail; the button then says **Test connection and save**. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the button says **Save** and stores the settings without the test. To test the connection then, run a dry-run:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-saving-the-settings-tests.dark.svg">
