@@ -25,6 +25,7 @@ use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
@@ -46,6 +47,7 @@ final class SettingsControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
 	use RecordedActivities;
+	use RecordedNotifications;
 
 	/** What the checklist says when Paperless refuses the token, with what to do, in German. */
 	private const TOKEN_REFUSED = 'Paperless hat das API-Token abgelehnt (HTTP 401). Kopiere das Token noch einmal aus Paperless, unter „Mein Profil“ im Menü seines Kontos, und prüfe, ob das Konto aktiv ist.';
@@ -622,18 +624,20 @@ final class SettingsControllerTest extends TestCase {
 	private function controller(ConfigService $configService): SettingsController {
 		$paths = new PathTemplateService();
 		$clock = new TestClock();
+		$status = new StatusService($this->appConfig(), $clock);
 		$sync = new SyncService(
 			$configService,
 			$this->paperless,
 			$this->storage,
 			new TestStateRepository(),
 			$paths,
-			new StatusService($this->appConfig(), $clock),
+			$status,
 			$this->createMock(ILockingProvider::class),
 			$this->createMock(LoggerInterface::class),
 			$clock,
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
+			$this->notificationPublisher($status, $this->storage, $clock, $this->createMock(LoggerInterface::class)),
 		);
 
 		return new SettingsController(

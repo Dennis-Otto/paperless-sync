@@ -21,6 +21,7 @@ use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
@@ -40,6 +41,7 @@ final class SyncControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
 	use RecordedActivities;
+	use RecordedNotifications;
 
 	/** @var ILockingProvider&MockObject */
 	private ILockingProvider $locking;
@@ -67,6 +69,7 @@ final class SyncControllerTest extends TestCase {
 			$clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
+			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
 		);
 		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService);
 	}

@@ -309,7 +309,33 @@ OC.L10N.register(
 		"Nextcloud could not be reached. Check the connection and try again.": "Nextcloud war nicht erreichbar. Prüfe die Verbindung und versuche es noch einmal.",
 		"Your session has expired. Reload the page and try again.": "Deine Sitzung ist abgelaufen. Lade die Seite neu und versuche es noch einmal.",
 		"The server answered with status {status}.": "Der Server hat mit dem Status {status} geantwortet.",
-		"The web server answered with status {status}. The status above shows how the run ended.": "Der Webserver hat mit dem Status {status} geantwortet. Der Status oben zeigt, wie der Lauf endete."
+		"The web server answered with status {status}. The status above shows how the run ended.": "Der Webserver hat mit dem Status {status} geantwortet. Der Status oben zeigt, wie der Lauf endete.",
+		"Error": "Fehler",
+		"Warning": "Warnung",
+		"Being notified": "Benachrichtigungen",
+		"_Paperless Sync failed %n time in a row_::_Paperless Sync failed %n times in a row_": [
+			"Paperless Sync ist %n Mal in Folge fehlgeschlagen",
+			"Paperless Sync ist %n Mal in Folge fehlgeschlagen"
+		],
+		"_Paperless Sync completed with errors %n time in a row_::_Paperless Sync completed with errors %n times in a row_": [
+			"Paperless Sync endete %n Mal in Folge mit Fehlern",
+			"Paperless Sync endete %n Mal in Folge mit Fehlern"
+		],
+		"Paperless Sync background job": "Hintergrundjob von Paperless Sync",
+		"Scheduled runs of Paperless Sync are off.": "Die geplanten Läufe von Paperless Sync sind ausgeschaltet.",
+		"Nextcloud runs its background jobs with cron, as the scheduled runs of Paperless Sync need.": "Nextcloud führt seine Hintergrundjobs mit Cron aus, wie es die geplanten Läufe von Paperless Sync brauchen.",
+		"Nextcloud runs its background jobs with %s, which starts them only while someone uses Nextcloud, so the scheduled runs of Paperless Sync fall behind or stop halfway. Set the background jobs to cron in the basic settings and set up the cron job of the system.": "Nextcloud führt seine Hintergrundjobs mit %s aus, das sie nur startet, während jemand Nextcloud benutzt, sodass die geplanten Läufe von Paperless Sync zurückfallen oder mittendrin abbrechen. Stelle die Hintergrundjobs in den Grundeinstellungen auf Cron und richte den Cron-Job des Systems ein.",
+		"Paperless Sync has not completed a run yet; the next background job starts one.": "Paperless Sync hat noch keinen Lauf abgeschlossen; der nächste Hintergrundjob startet einen.",
+		"_The last run of Paperless Sync failed: %s_::_The last %n runs of Paperless Sync failed, the last one with: %s_": [
+			"Der letzte Lauf von Paperless Sync ist fehlgeschlagen: %s",
+			"Die letzten %n Läufe von Paperless Sync sind fehlgeschlagen, der letzte mit: %s"
+		],
+		"_The last run of Paperless Sync completed with errors: %s_::_The last %n runs of Paperless Sync completed with errors, the last one with: %s_": [
+			"Der letzte Lauf von Paperless Sync endete mit Fehlern: %s",
+			"Die letzten %n Läufe von Paperless Sync endeten mit Fehlern, der letzte mit: %s"
+		],
+		"The last successful run of Paperless Sync was %s. Check that the background jobs of Nextcloud run.": "Der letzte erfolgreiche Lauf von Paperless Sync war %s. Prüfe, ob die Hintergrundjobs von Nextcloud laufen.",
+		"The last run of Paperless Sync succeeded %s.": "Der letzte Lauf von Paperless Sync war %s erfolgreich."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

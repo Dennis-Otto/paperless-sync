@@ -1,0 +1,5 @@
+### Features
+
+- **Notifications of a failing mirror:** when three runs in a row fail or complete with errors, or the first of them ended a day ago, every administrator gets one notification with the error and a link to the settings, and the next successful run removes it. The group `admin` gets it unless `occ config:app:set paperless_sync notification_group` names another. The target user gets a notification for each file of the inbox that Paperless could not import or refused. A dry-run notifies nobody.
+- **Setup checks:** *Administration → Overview* and `occ setupchecks` show whether the mirror works, with an error when the last run failed and a warning when it completed with errors or no run succeeded for three intervals, and warn when scheduled runs are on but Nextcloud's background jobs don't run with cron. The settings page shows the same warnings on top.
+- **Status API for monitors:** administrators, and monitors such as Uptime Kuma or Home Assistant with an app password, read the health of the mirror, the last run and its error at `/ocs/v2.php/apps/paperless_sync/api/v1/status`.

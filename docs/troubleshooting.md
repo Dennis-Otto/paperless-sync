@@ -105,6 +105,14 @@ The log has a warning when an error of a document first occurs or changes, and a
 
 Nextcloud logs warnings and errors by default. To see that a run completed, with its counts, turn the level down to info for a while with `occ log:manage --level info`, and back with `occ log:manage --level warning`. The app keeps the API token of Paperless out of the log.
 
+### Nobody was notified of a failing mirror
+
+The notification of a failing mirror comes after the third run in a row that failed or completed with errors, or once the first of them ended a day ago, and once for the whole row: two failed runs, such as during a restart of Paperless, notify nobody, and neither does a dry-run. It goes to the enabled members of the group `admin`, or of the group that `occ config:app:get paperless_sync notification_group` names; a group that doesn't exist leaves it to the administrators, with a warning in the log. Nextcloud shows notifications only while its app *Notifications* is enabled, and sends them by mail or to the phone only as each user set it up in the personal settings under *Notifications*. The next successful run removes the notification, so a mirror that works again has none. *Administration → Overview* and the [status API](guide.md#being-notified) show the health of the mirror at any time.
+
+### The overview warns about the background jobs of Nextcloud
+
+The check *Paperless Sync background job* warns while scheduled runs are on and Nextcloud runs its background jobs with AJAX or Webcron. Both start a job only while someone uses Nextcloud, so a night without visitors has no runs, and a run may stop halfway when the request ends. Set *Background jobs* to *Cron* in *Administration → Basic settings*, or with `occ background:cron`, and add the cron job of the system that runs `cron.php` every five minutes as the user of the web server, as the [manual of Nextcloud](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/background_jobs_configuration.html#cron) describes.
+
 ### The Activity app shows nothing of Paperless Sync
 
 The entries go to the target user alone, so another account, such as the administrator who started the run, sees none of them. A dry-run and a run that changed nothing add no entry, and neither does a run that stopped before its first change, such as one that can't reach Paperless; the status on the settings page tells about those. Nextcloud keeps the entries only while its app *Activity* is enabled, and from the version of Paperless Sync that brought them on: earlier runs have none. The filter *Paperless Sync* in the navigation of the Activity app shows them alone.
