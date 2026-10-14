@@ -15,6 +15,11 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
 use OCP\Security\ICredentialsManager;
 
+/**
+ * The settings of the app, in the app configuration of Nextcloud, and the API token, in its
+ * credentials store. Every setting is lazy: Nextcloud loads it when the app asks for it, not with
+ * every request of every user.
+ */
 final class ConfigService {
 	/**
 	 * The shortest interval of the scheduled synchronization: Nextcloud starts the background job
@@ -64,6 +69,21 @@ final class ConfigService {
 		private ICredentialsManager $credentialsManager,
 		private PathTemplateService $pathTemplate,
 	) {
+	}
+
+	/**
+	 * Makes lazy the settings that an earlier version stored to be loaded with every request of
+	 * Nextcloud, and returns how many it changed.
+	 */
+	public function storeLazily(): int {
+		$changed = 0;
+		foreach (array_keys(self::DEFAULTS) as $key) {
+			if ($this->appConfig->updateLazy(AppConstants::APP_ID, $this->storageKey($key), true)) {
+				++$changed;
+			}
+		}
+
+		return $changed;
 	}
 
 	public function get(): SyncConfig {
@@ -167,11 +187,11 @@ final class ConfigService {
 			$value = $values[$property];
 			$storageKey = $this->storageKey($key);
 			if (is_bool($value)) {
-				$this->appConfig->setValueBool(AppConstants::APP_ID, $storageKey, $value);
+				$this->appConfig->setValueBool(AppConstants::APP_ID, $storageKey, $value, lazy: true);
 			} elseif (is_int($value)) {
-				$this->appConfig->setValueInt(AppConstants::APP_ID, $storageKey, $value);
+				$this->appConfig->setValueInt(AppConstants::APP_ID, $storageKey, $value, lazy: true);
 			} else {
-				$this->appConfig->setValueString(AppConstants::APP_ID, $storageKey, $value);
+				$this->appConfig->setValueString(AppConstants::APP_ID, $storageKey, $value, lazy: true);
 			}
 		}
 		$this->storeToken($config->paperlessUrl, $token);
@@ -189,7 +209,7 @@ final class ConfigService {
 	public function reset(): SyncConfig {
 		$this->credentialsManager->delete('', self::TOKEN_IDENTIFIER);
 		foreach (['enabled', 'paperless_local_network'] as $key) {
-			$this->appConfig->setValueBool(AppConstants::APP_ID, $this->storageKey($key), false);
+			$this->appConfig->setValueBool(AppConstants::APP_ID, $this->storageKey($key), false, lazy: true);
 		}
 
 		return $this->get();
@@ -238,7 +258,7 @@ final class ConfigService {
 	 * token, which a link to Paperless, such as in the activity stream, doesn't need.
 	 */
 	public function configuredUrl(): string {
-		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '')), '/');
+		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '', lazy: true)), '/');
 	}
 
 	/** @return array<string, mixed> */
@@ -247,11 +267,11 @@ final class ConfigService {
 		foreach (self::DEFAULTS as $key => $default) {
 			$storageKey = $this->storageKey($key);
 			if (is_bool($default)) {
-				$values[$key] = $this->appConfig->getValueBool(AppConstants::APP_ID, $storageKey, $default);
+				$values[$key] = $this->appConfig->getValueBool(AppConstants::APP_ID, $storageKey, $default, lazy: true);
 			} elseif (is_int($default)) {
-				$values[$key] = $this->appConfig->getValueInt(AppConstants::APP_ID, $storageKey, $default);
+				$values[$key] = $this->appConfig->getValueInt(AppConstants::APP_ID, $storageKey, $default, lazy: true);
 			} else {
-				$values[$key] = $this->appConfig->getValueString(AppConstants::APP_ID, $storageKey, $default);
+				$values[$key] = $this->appConfig->getValueString(AppConstants::APP_ID, $storageKey, $default, lazy: true);
 			}
 		}
 		// A shorter interval, which an earlier version or occ stored, always acted as the shortest.

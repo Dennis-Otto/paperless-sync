@@ -103,12 +103,30 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame(0, $status['report']['omittedActions']);
 	}
 
-	public function testReportIsKeptAsALazyValue(): void {
-		$this->service->completed(new SyncReport(true, 1000, 1060));
+	public function testEveryKeyOfTheStatusIsLazy(): void {
+		$this->service->started(false);
+		$this->service->connected(['version' => '2.20.15', 'apiVersion' => '9']);
+		$this->service->completed(new SyncReport(false, 1000, 1060));
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, 1100));
 
-		self::assertArrayHasKey('status_last_report', $this->lazyKeys, 'Nextcloud loads the report only when it is asked for.');
-		self::assertArrayNotHasKey('status_last_state', $this->lazyKeys, 'Only the report is lazy.');
-		self::assertTrue($this->service->get()['report']['dryRun']);
+		self::assertNotSame([], $this->settings);
+		self::assertSame([], array_keys(array_diff_key($this->settings, $this->lazyKeys)), 'Nextcloud loads the status only when it is asked for, not with every request.');
+		self::assertSame('failed', $this->service->get()['state']);
+		self::assertSame(['Paperless is down.', '2.20.15'], [$this->service->get()['error'], $this->service->get()['paperlessVersion']]);
+	}
+
+	/** The status that an earlier version stored, which Nextcloud loaded with every request, becomes lazy. */
+	public function testStatusOfAnEarlierVersionBecomesLazy(): void {
+		$this->settings = ['status_last_state' => 'completed', 'status_last_summary' => '{}', 'status_last_report' => '{}', 'sync_enabled' => true];
+		$this->lazyKeys = ['status_last_report' => true];
+
+		self::assertSame(2, $this->service->storeLazily());
+
+		$lazy = array_keys($this->lazyKeys);
+		sort($lazy);
+		self::assertSame(['status_last_report', 'status_last_state', 'status_last_summary'], $lazy, 'The settings of the app are the concern of its settings.');
+		self::assertSame(0, $this->service->storeLazily());
+		self::assertSame('completed', $this->service->get()['state']);
 	}
 
 	public function testCompletedStateTellsDryRunsAndErrorsApart(): void {
@@ -355,7 +373,7 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame(0, $this->service->nextRun($config), 'A dry-run that failed changes that neither.');
 	}
 
-	public function testNextScheduledRunLeavesTheLazyReportUnloaded(): void {
+	public function testNextScheduledRunReadsOnlyTheTimesOfTheLastRun(): void {
 		$report = new SyncReport(false, 10_000, 10_060);
 		$report->action('EXPORT P1: Archiv/P1.pdf');
 		$this->service->completed($report);
@@ -363,7 +381,7 @@ final class StatusServiceTest extends TestCase {
 		$this->lazyReads = [];
 
 		self::assertSame(10_060 + 15 * 60, $this->service->nextRun($config));
-		self::assertSame([], $this->lazyReads, 'The background job asks for the next run in every check.');
+		self::assertSame([], array_values(array_filter(array_keys($this->lazyReads), static fn (string $key): bool => !str_ends_with($key, '_started') && !str_ends_with($key, '_ended') && !str_ends_with($key, '_completed'))), 'The background job asks for the next run in every check.');
 	}
 
 	public function testOverviewHasTheStatusAndTheNextScheduledRun(): void {

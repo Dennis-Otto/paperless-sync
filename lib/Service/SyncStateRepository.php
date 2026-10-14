@@ -41,28 +41,21 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		return $this->allByOwner(self::EXPORT_TABLE, $ownerUid);
 	}
 
-	public function saveExport(string $ownerUid, int $documentId, array $values): void {
-		$existing = $this->findExport($ownerUid, $documentId);
+	public function saveExport(string $ownerUid, int $documentId, array $values, ?bool $exists = null): void {
+		$exists ??= $this->findExport($ownerUid, $documentId) !== null;
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
 			'path', 'fingerprint', 'source_revision', 'state', 'missing_runs', 'last_seen', 'trash_date', 'last_error',
+			'remote_checksum', 'remote_revision',
 		]));
 		$values['updated_at'] = $now;
 
-		if ($existing === null) {
-			$values = array_merge([
-				'owner_uid' => $ownerUid,
-				'document_id' => $documentId,
-				'path' => '',
-				'fingerprint' => '',
-				'source_revision' => '',
-				'state' => 'active',
-				'missing_runs' => 0,
-				'last_seen' => $now,
-				'trash_date' => null,
-				'last_error' => null,
-				'created_at' => $now,
-			], $values);
+		if (!$exists) {
+			$values = array_merge(
+				['owner_uid' => $ownerUid, 'document_id' => $documentId, 'last_seen' => $now, 'created_at' => $now],
+				self::EXPORT_DEFAULTS,
+				$values,
+			);
 			$this->insert(self::EXPORT_TABLE, $values);
 			return;
 		}

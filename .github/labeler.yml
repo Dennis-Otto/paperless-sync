@@ -53,6 +53,8 @@
           - lib/Service/PaperlessVersionException.php
           - lib/Service/StatusService.php
           - lib/Service/SyncStateRepository*.php
+          - lib/Service/ExportStates.php
+          - lib/Migration/Version000120Date20261014000000.php
           - lib/Model/PaperlessScan.php
           - lib/Model/SyncReport.php
           - tests/Unit/Activity/**
@@ -64,5 +66,7 @@
           - tests/Unit/Service/PaperlessApiServiceTest.php
           - tests/Unit/Service/StatusServiceTest.php
           - tests/Unit/Service/SyncStateRepositoryTest.php
+          - tests/Unit/Service/ExportStatesTest.php
+          - tests/Unit/Migration/Version000120*
           - tests/Unit/Model/SyncReportTest.php
           - tests/Unit/SensitiveParametersTest.php

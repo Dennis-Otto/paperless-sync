@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use LogicException;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
 
 /**
@@ -30,23 +31,40 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 	public array $importsOfOthers = [];
 	/** @var list<string> the owner of every call, in its order */
 	public array $owners = [];
+	/** @var list<string> the method of every call of the exports, in its order, for the count of reads and writes */
+	public array $exportCalls = [];
 
 	public function findExport(string $ownerUid, int $documentId): ?array {
+		$this->exportCalls[] = 'findExport';
+
 		return $this->exportsOf($ownerUid)[$documentId] ?? null;
 	}
 
 	public function allExports(string $ownerUid): array {
+		$this->exportCalls[] = 'allExports';
+
 		return array_values($this->exportsOf($ownerUid));
 	}
 
-	public function saveExport(string $ownerUid, int $documentId, array $values): void {
+	public function saveExport(string $ownerUid, int $documentId, array $values, ?bool $exists = null): void {
+		$this->exportCalls[] = 'saveExport';
 		$exports = &$this->exportsOf($ownerUid);
+		// The database would insert a second row, or update none, after a wrong hint.
+		if ($exists !== null && $exists !== isset($exports[$documentId])) {
+			throw new LogicException("The export of document {$documentId} " . ($exists ? 'does not exist.' : 'exists already.'));
+		}
 		$exports[$documentId] = array_merge($exports[$documentId] ?? ['document_id' => $documentId], $values);
 	}
 
 	public function deleteExport(string $ownerUid, int $documentId): void {
+		$this->exportCalls[] = 'deleteExport';
 		$exports = &$this->exportsOf($ownerUid);
 		unset($exports[$documentId]);
+	}
+
+	/** The writes of the exports since the calls were last cleared. */
+	public function exportWrites(): int {
+		return count(array_filter($this->exportCalls, static fn (string $call): bool => in_array($call, ['saveExport', 'deleteExport'], true)));
 	}
 
 	public function findImport(string $ownerUid, string $path): ?array {

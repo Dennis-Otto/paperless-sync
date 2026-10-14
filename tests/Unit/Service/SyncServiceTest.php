@@ -365,8 +365,11 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame($report->completedAt, $this->settings['status_last_completed']);
 	}
 
-	/** Every run that sees a document records it, so that documents that keep failing take turns. */
-	public function testStateRecordsWhenARunLastSawEachDocumentAndFile(): void {
+	/**
+	 * A run records when it changed a document, or tried to and failed, so that documents that keep
+	 * failing take turns. A document that stayed as it was costs no write.
+	 */
+	public function testStateRecordsWhenARunLastChangedEachDocumentAndFile(): void {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->exportDocuments([$this->document(), $this->document(124)]);
@@ -379,7 +382,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->trash = [$this->document(124) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
 		$this->service->run();
 
-		self::assertSame([TestClock::START + 60, TestClock::START + 60], [$this->state->exports[123]['last_seen'], $this->state->exports[124]['last_seen']]);
+		self::assertSame([TestClock::START, TestClock::START + 60], [$this->state->exports[123]['last_seen'], $this->state->exports[124]['last_seen']]);
 	}
 
 	public function testUnchangedDocumentIsNeitherDownloadedNorRewritten(): void {
@@ -403,6 +406,99 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $this->paperless->checksumRequests);
 		self::assertSame(1, $this->paperless->downloads);
 		self::assertSame('archive:2026-08-26T11:00:00+02:00', $this->state->exports[123]['source_revision']);
+	}
+
+	/**
+	 * After a change of their titles, documents move to their new paths, a batch in each run.
+	 * Paperless reads the checksum of a document from its files, so a run asks for it only for the
+	 * documents that it moves: one for each document, not one for each document in each run.
+	 */
+	public function testRenamedDocumentsAskForTheirChecksumOnceEach(): void {
+		$this->exportDocuments($this->documents(50));
+		$this->configService->save(['batch_size' => 5]);
+		foreach (array_keys($this->paperless->documents) as $index) {
+			$this->paperless->documents[$index]['title'] = 'Strom September';
+			$this->paperless->documents[$index]['modified'] = '2026-08-26T11:00:00+02:00';
+		}
+
+		$moved = [];
+		do {
+			$report = $this->service->run();
+			$moved[] = $report->moved;
+		} while ($report->moved > 0 && count($moved) < 20);
+
+		self::assertSame([5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0], $moved);
+		self::assertSame(50, $report->unchanged);
+		self::assertSame(50, $this->paperless->checksumRequests, 'Not 275, one for each document that waits in each run.');
+		self::assertSame(50, $this->paperless->downloads, 'A move downloads nothing.');
+	}
+
+	/**
+	 * A document whose content changed at its path waits for a later run when the batch is full,
+	 * and keeps the checksum that Paperless reported for its revision until the revision changes.
+	 */
+	public function testAWaitingDocumentAsksForItsChecksumOnceForEachRevision(): void {
+		$this->exportDocuments($this->documents(2));
+		$this->configService->save(['batch_size' => 1]);
+		foreach ([0, 1] as $index) {
+			$this->paperless->documents[$index]['modified'] = '2026-08-26T11:00:00+02:00';
+		}
+		$this->paperless->contents = [1 => '%PDF-new-1', 2 => '%PDF-new-2'];
+
+		$first = $this->service->run();
+
+		self::assertSame([1, 1], [$first->exported, $first->skipped]);
+		self::assertSame(2, $this->paperless->checksumRequests);
+		self::assertSame(['remote_checksum' => hash('sha256', '%PDF-new-1'), 'remote_revision' => 'archive:2026-08-26T11:00:00+02:00'], array_intersect_key($this->state->exports[1], array_flip(['remote_checksum', 'remote_revision'])));
+
+		$second = $this->service->run();
+
+		self::assertSame(['EXPORT P1: ' . $this->archivePath(1)], $second->actions);
+		self::assertSame(2, $this->paperless->checksumRequests, 'The document that waited asks Paperless no more.');
+		self::assertSame('%PDF-new-1', $this->storage->files[$this->archivePath(1)]);
+
+		$this->paperless->documents[0]['modified'] = '2026-08-26T12:00:00+02:00';
+		$third = $this->service->run();
+
+		self::assertSame(2, $third->unchanged);
+		self::assertSame(3, $this->paperless->checksumRequests, 'A new revision has a checksum of its own.');
+	}
+
+	/** A dry-run asks for the checksums that it needs, and keeps none of them. */
+	public function testDryRunKeepsNoChecksum(): void {
+		$this->exportDocument();
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$exports = $this->state->exports;
+
+		$this->service->run(true);
+		$this->service->run(true);
+
+		self::assertSame(2, $this->paperless->checksumRequests);
+		self::assertSame($exports, $this->state->exports);
+	}
+
+	/**
+	 * A run reads the state of the exports once, and writes it only where something changed: a run
+	 * over an archive without changes, also with documents in the trash folder, writes nothing.
+	 */
+	public function testARunWithoutChangesReadsTheStateOnceAndWritesNothing(): void {
+		$this->exportDocuments($this->documents(3));
+		$this->paperless->documents = $this->documents(2);
+		$this->paperless->trash = [$this->document(3) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$this->state->exportCalls = [];
+
+		$moving = $this->service->run();
+
+		self::assertSame(1, $moving->movedToTrash);
+		self::assertSame(['allExports', 'saveExport'], $this->state->exportCalls, 'One read for the run, one write for the move.');
+		$this->state->exportCalls = [];
+		$this->clock->advance(300);
+
+		$report = $this->service->run();
+
+		self::assertSame(3, $report->unchanged);
+		self::assertSame(['allExports'], $this->state->exportCalls);
+		self::assertSame(0, $this->state->exportWrites());
 	}
 
 	public function testOriginalIsExportedWhenPaperlessHasNoArchiveVersion(): void {
@@ -2426,7 +2522,7 @@ final class SyncServiceTest extends TestCase {
 		foreach ([123, 124] as $id) {
 			self::assertNull($this->state->exports[$id]['last_error']);
 			self::assertSame(0, $this->state->exports[$id]['missing_runs']);
-			self::assertSame(TestClock::START + 60, $this->state->exports[$id]['last_seen']);
+			self::assertSame(TestClock::START, $this->state->exports[$id]['last_seen'], 'Only what changed is written.');
 		}
 	}
 
