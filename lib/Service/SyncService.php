@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use InvalidArgumentException;
+use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
@@ -46,6 +47,7 @@ final class SyncService {
 		private StatusService $status,
 		private ILockingProvider $lockingProvider,
 		private LoggerInterface $logger,
+		private ActivityPublisher $activity,
 	) {
 	}
 
@@ -63,6 +65,7 @@ final class SyncService {
 		$this->lockingProvider->acquireLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
 		$report = new SyncReport($dryRun, time(), unsavedSettings: $settings !== null);
 		$this->status->started($dryRun);
+		$config = null;
 		try {
 			$config = $settings ?? $this->configService->get();
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
@@ -89,6 +92,11 @@ final class SyncService {
 			$this->logger->error('Paperless synchronization failed', ['exception' => $exception]);
 			throw $exception;
 		} finally {
+			// The activity stream of the target user shows what the run changed, also when it failed
+			// after its first changes.
+			if ($config !== null) {
+				$this->activity->publish($config, $report);
+			}
 			$this->lockingProvider->releaseLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}
@@ -288,6 +296,7 @@ final class SyncService {
 				$moveOnly ? ++$report->moved : ++$report->exported;
 				++$changes;
 				$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+				$report->changedFile($target);
 				$this->state->saveExport($config->targetUser, $documentId, [
 					'path' => $target,
 					'fingerprint' => $fingerprint,
@@ -354,6 +363,7 @@ final class SyncService {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 						}
 						$report->action("TRASH P{$documentId}: {$target}");
+						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
 				}
@@ -450,6 +460,7 @@ final class SyncService {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 						}
 						$report->action("MISSING P{$documentId}: {$target}");
+						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
 				}
@@ -740,7 +751,8 @@ final class SyncService {
 				if (in_array($task['status'], self::TASK_SUCCEEDED, true)) {
 					$this->importSucceeded($config, $report, $path, $file['etag'], $unchangedFile, $task['documentId'], $inboxRoot);
 				} elseif (in_array($task['status'], self::TASK_FAILED, true)) {
-					$this->importFailed($config, $report, $path, $this->importDiagnostic($taskId, $task), $inboxRoot, $errorRoot);
+					$reason = $this->importFailureReason($task);
+					$this->importFailed($config, $report, $path, $reason, $this->importDiagnostic($taskId, $reason), $inboxRoot, $errorRoot);
 				} elseif ($now - (int)($pending['submitted_at'] ?? 0) >= self::TASK_TIMEOUT) {
 					$this->endUnfinishedImport($config, $report, $path, $file['etag'], $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task, $inboxRoot, $errorRoot);
 				}
@@ -824,6 +836,7 @@ final class SyncService {
 			'last_error' => mb_substr($reason, 0, 4000),
 		]);
 		$report->action("IMPORT REJECTED: {$path}: {$reason}");
+		$report->importResult(SyncReport::IMPORT_REJECTED, $path, null, $reason);
 		++$report->importsFailed;
 		$this->logger->warning('Paperless refused the inbox file {path}; it stays in the inbox until it changes: {reason}', [
 			'path' => $path,
@@ -833,18 +846,24 @@ final class SyncService {
 	}
 
 	/**
-	 * The text of the .error.txt next to a file whose import failed: what Paperless said about its
-	 * task, and the ID of the task, by which the task list of Paperless shows more.
+	 * What Paperless said about the task of a failed import, for the .error.txt next to the file and
+	 * for the entry in the activity stream.
 	 *
 	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
 	 */
-	private function importDiagnostic(string $taskId, array $task): string {
+	private function importFailureReason(array $task): string {
 		if ($task['status'] === 'REVOKED') {
-			$reason = 'Paperless cancelled the task before it finished (REVOKED), so it created no document' . ($task['message'] !== '' ? ': ' . $task['message'] : '.');
-		} else {
-			$reason = $task['message'] !== '' ? $task['message'] : 'Paperless gave no reason; its log may have one.';
+			return 'Paperless cancelled the task before it finished (REVOKED), so it created no document' . ($task['message'] !== '' ? ': ' . $task['message'] : '.');
 		}
 
+		return $task['message'] !== '' ? $task['message'] : 'Paperless gave no reason; its log may have one.';
+	}
+
+	/**
+	 * The text of the .error.txt next to a file whose import failed: the reason, and the ID of the
+	 * task, by which the task list of Paperless shows more.
+	 */
+	private function importDiagnostic(string $taskId, string $reason): string {
 		return "Paperless import failed\n\n{$reason}\n\nPaperless task: {$taskId}\n";
 	}
 
@@ -867,11 +886,15 @@ final class SyncService {
 		} elseif (!$report->dryRun) {
 			$this->state->deleteImport($config->targetUser, $path);
 		}
+		$report->importResult(SyncReport::IMPORTED, $path, $documentId);
 		++$report->importsSucceeded;
 	}
 
-	/** The import of a file of the inbox created no document, so it moves to the error folder, next to a text that says why. */
-	private function importFailed(SyncConfig $config, SyncReport $report, string $path, string $diagnostic, string $inboxRoot, string $errorRoot): void {
+	/**
+	 * The import of a file of the inbox created no document, so it moves to the error folder, next to
+	 * a text that says why; its entry in the activity stream gives the reason alone.
+	 */
+	private function importFailed(SyncConfig $config, SyncReport $report, string $path, string $reason, string $diagnostic, string $inboxRoot, string $errorRoot): void {
 		$destination = $this->join($errorRoot, $this->relativeTo($path, $inboxRoot));
 		if (!$report->dryRun) {
 			$this->storage->move($config->targetUser, $path, $destination, $config->conflictMode);
@@ -882,6 +905,7 @@ final class SyncService {
 			}
 		}
 		$report->action("IMPORT ERROR: {$path} -> {$destination}");
+		$report->importResult(SyncReport::IMPORT_FAILED, $destination, null, $reason);
 		++$report->importsFailed;
 	}
 
@@ -915,7 +939,7 @@ final class SyncService {
 			$this->retryUnfinishedImport($config, $report, $path, $etag, $attempts, $taskId, $error);
 			return;
 		}
-		$this->importFailed($config, $report, $path, $this->unfinishedDiagnostic($taskId, $state), $inboxRoot, $errorRoot);
+		$this->importFailed($config, $report, $path, "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.", $this->unfinishedDiagnostic($taskId, $state), $inboxRoot, $errorRoot);
 		if (!$report->dryRun) {
 			$this->logger->warning('Paperless has not finished the import of the inbox file {path} a day after its upload; it moves to the error folder, as Paperless may still import it: {error}', [
 				'path' => $path,

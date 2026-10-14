@@ -1,6 +1,43 @@
 {
 	"translations": {
 		"Paperless Sync": "Paperless Sync",
+		"<strong>Paperless Sync</strong> changed the document archive or imported a file": "<strong>Paperless Sync</strong> hat das Dokumentenarchiv geändert oder eine Datei importiert",
+		"Files": "Dateien",
+		"_added or updated %n document_::_added or updated %n documents_": [
+			"%n Dokument hinzugefügt oder aktualisiert",
+			"%n Dokumente hinzugefügt oder aktualisiert"
+		],
+		"_moved %n document_::_moved %n documents_": [
+			"%n Dokument verschoben",
+			"%n Dokumente verschoben"
+		],
+		"_moved %n document to {trash}_::_moved %n documents to {trash}_": [
+			"%n Dokument nach {trash} verschoben",
+			"%n Dokumente nach {trash} verschoben"
+		],
+		"_deleted %n document_::_deleted %n documents_": [
+			"%n Dokument gelöscht",
+			"%n Dokumente gelöscht"
+		],
+		"_removed %n excluded document_::_removed %n excluded documents_": [
+			"%n ausgeschlossenes Dokument entfernt",
+			"%n ausgeschlossene Dokumente entfernt"
+		],
+		"_sent %n file to Paperless_::_sent %n files to Paperless_": [
+			"%n Datei an Paperless gesendet",
+			"%n Dateien an Paperless gesendet"
+		],
+		"_%n more_::_%n more_": [
+			"%n weitere",
+			"%n weitere"
+		],
+		"Paperless Sync %s": "Paperless Sync hat %s",
+		"Paperless Sync %1$s: %2$s": "Paperless Sync hat %1$s: %2$s",
+		"%1$s and %2$s": "%1$s und %2$s",
+		"{file} was imported into Paperless as {document}": "{file} wurde als {document} in Paperless importiert",
+		"{file} was imported into Paperless": "{file} wurde in Paperless importiert",
+		"Paperless could not import {file}": "Paperless konnte {file} nicht importieren",
+		"Paperless refused {file}; it stays in the inbox until it changes": "Paperless hat {file} abgelehnt; die Datei bleibt im Eingang, bis sie sich ändert",
 		"Keep Paperless as your authoritative archive and make finalized documents available through Nextcloud Files.": "Paperless bleibt das maßgebliche Archiv; fertig bearbeitete Dokumente werden über Nextcloud Dateien verfügbar.",
 		"Help": "Hilfe",
 		"Help on %s": "Hilfe zu %s",

@@ -43,6 +43,7 @@
 "area: runs":
   - changed-files:
       - any-glob-to-any-file:
+          - lib/Activity/**
           - lib/AppInfo/**
           - lib/Cron/**
           - lib/Controller/SyncController.php
@@ -55,6 +56,7 @@
           - lib/Service/SyncStateRepository*.php
           - lib/Model/PaperlessScan.php
           - lib/Model/SyncReport.php
+          - tests/Unit/Activity/**
           - tests/Unit/AppInfo/**
           - tests/Unit/Cron/**
           - tests/Unit/Controller/ControllerRoutesTest.php

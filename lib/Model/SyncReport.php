@@ -34,6 +34,14 @@ final class SyncReport implements \JsonSerializable {
 	private const LOWEST = 5;
 	/** The priority of a notice, which the report keeps past its limit and never gives up. */
 	private const NOTICE = 0;
+	/** The most files that the activity entry of a run names; it counts the others. */
+	public const ACTIVITY_FILE_LIMIT = 5;
+	/** A file of the inbox that Paperless imported. */
+	public const IMPORTED = 'imported';
+	/** A file of the inbox whose import failed in Paperless, now in the error folder. */
+	public const IMPORT_FAILED = 'failed';
+	/** A file of the inbox that Paperless refused, which waits in the inbox until it changes. */
+	public const IMPORT_REJECTED = 'rejected';
 
 	public int $activeDocuments = 0;
 	public int $trashedDocuments = 0;
@@ -60,6 +68,12 @@ final class SyncReport implements \JsonSerializable {
 	/** @var list<int> the priority of each line of $actions */
 	private array $priorities = [];
 	private int $notices = 0;
+	/** @var list<string> the first files that the run wrote or moved, which its activity entry names */
+	private array $changedFiles = [];
+	/** The files that the run wrote or moved, also those that its activity entry leaves out. */
+	private int $changedFileCount = 0;
+	/** @var list<array{outcome: self::IMPORT*, path: string, document: int|null, reason: string}> */
+	private array $importResults = [];
 
 	public function __construct(
 		public readonly bool $dryRun,
@@ -114,10 +128,51 @@ final class SyncReport implements \JsonSerializable {
 		$this->action('ERROR: ' . $message);
 	}
 
+	/**
+	 * A file that the run wrote or moved, for its entry in the activity stream, which names the first
+	 * files of a run and counts the others. A dry-run changes no file.
+	 */
+	public function changedFile(string $path): void {
+		if ($this->dryRun) {
+			return;
+		}
+		++$this->changedFileCount;
+		if (count($this->changedFiles) < self::ACTIVITY_FILE_LIMIT) {
+			$this->changedFiles[] = $path;
+		}
+	}
+
+	/**
+	 * The result of the import of a file of the inbox, for its own entry in the activity stream: the
+	 * path of the file, in the error folder after a failure, the ID of its new document in Paperless,
+	 * when Paperless names it, and the reason of a failure or a refusal.
+	 *
+	 * @param self::IMPORT* $outcome
+	 */
+	public function importResult(string $outcome, string $path, ?int $document = null, string $reason = ''): void {
+		if (!$this->dryRun) {
+			$this->importResults[] = ['outcome' => $outcome, 'path' => $path, 'document' => $document, 'reason' => $reason];
+		}
+	}
+
+	/** @return list<string> */
+	public function changedFiles(): array {
+		return $this->changedFiles;
+	}
+
+	public function changedFileCount(): int {
+		return $this->changedFileCount;
+	}
+
+	/** @return list<array{outcome: self::IMPORT*, path: string, document: int|null, reason: string}> */
+	public function importResults(): array {
+		return $this->importResults;
+	}
+
 	/** @return array<string, bool|int|list<string>> */
 	public function jsonSerialize(): array {
 		$data = get_object_vars($this);
-		unset($data['priorities'], $data['notices']);
+		unset($data['priorities'], $data['notices'], $data['changedFiles'], $data['changedFileCount'], $data['importResults']);
 
 		/** @var array<string, bool|int|list<string>> $data */
 		return $data;

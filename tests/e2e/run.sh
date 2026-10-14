@@ -239,6 +239,28 @@ dry_run_unsaved() {
 		"${BASE_URL}/apps/paperless_sync/sync/run"
 }
 
+# The entries of Paperless Sync in the Activity stream of the target user, newest first,
+# as the Activity app gives them to its clients. A stream without entries answers 304
+# without a body.
+activities() {
+	status="$(curl --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "$1" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/ocs/v2.php/apps/activity/api/v2/activity/paperless_sync?limit=100")"
+	case "${status}" in
+		200) ;;
+		304) printf '{"ocs": {"data": []}}' >"$1" ;;
+		*)
+			echo "The Activity app answered with HTTP ${status}:" >&2
+			cat "$1" >&2
+			exit 1
+			;;
+	esac
+}
+
 # The status of the last run, as the settings page shows it.
 sync_status() {
 	curl --fail-with-body --silent --show-error \
@@ -551,6 +573,9 @@ assert_json config "${TMP_DIR}/config.json"
 sync_run true "${TMP_DIR}/dry-run.json"
 assert_json dry-run "${TMP_DIR}/dry-run.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
+# A dry-run changes nothing, so the Activity stream of the target user stays empty.
+activities "${TMP_DIR}/activity-dry-run.json"
+assert_json activity-none "${TMP_DIR}/activity-dry-run.json"
 
 # The preview of the path template: where the newest documents go with the template of the
 # page, with the variables of Paperless's own file names, before anything is saved.
@@ -576,6 +601,9 @@ assert_dav_missing sync-target "${INITIAL_PATH}"
 sync_run false "${TMP_DIR}/export.json"
 assert_json export "${TMP_DIR}/export.json"
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+# One entry for the run, with the link of the file that it wrote.
+activities "${TMP_DIR}/activity-export.json"
+assert_json activity-export "${TMP_DIR}/activity-export.json"
 FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
 
 control /control/scenario/renamed >/dev/null
@@ -644,6 +672,9 @@ assert_json enabled "${TMP_DIR}/enabled.json"
 sync_run true "${TMP_DIR}/dry-run-before-job.json"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
 assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
+# A scheduled run, without a user session, has its entry as well, without an author.
+activities "${TMP_DIR}/activity-job.json"
+assert_json activity-job "${TMP_DIR}/activity-job.json"
 LAST_RUN="$(last_run)"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
 if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
@@ -757,6 +788,9 @@ assert_json import-rejected "${TMP_DIR}/import-rejected.json"
 sync_run false "${TMP_DIR}/import-waiting.json"
 assert_json import-waiting "${TMP_DIR}/import-waiting.json"
 assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
+# Every import that Paperless finished, failed or refused has an entry of its own.
+activities "${TMP_DIR}/activity-imports.json"
+assert_json activity-imports "${TMP_DIR}/activity-imports.json"
 
 sync_status "${TMP_DIR}/status.json"
 assert_json status "${TMP_DIR}/status.json"
@@ -947,7 +981,7 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

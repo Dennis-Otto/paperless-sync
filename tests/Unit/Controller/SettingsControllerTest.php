@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
@@ -39,6 +40,7 @@ use RuntimeException;
 final class SettingsControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
+	use RecordedActivities;
 
 	/** What the checklist says when Paperless refuses the token, with what to do, in German. */
 	private const TOKEN_REFUSED = 'Paperless hat das API-Token abgelehnt (HTTP 401). Kopiere das Token noch einmal aus Paperless, unter „Mein Profil“ im Menü seines Kontos, und prüfe, ob das Konto aktiv ist.';
@@ -597,6 +599,7 @@ final class SettingsControllerTest extends TestCase {
 			new StatusService($this->appConfig()),
 			$this->createMock(ILockingProvider::class),
 			$this->createMock(LoggerInterface::class),
+			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
 		);
 
 		return new SettingsController(

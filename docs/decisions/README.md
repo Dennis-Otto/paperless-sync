@@ -18,4 +18,5 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0010](0010-mirrored-files-keep-their-identity.md) | Mirrored files keep their identity: moved, and updated in place | accepted |
 | [0011](0011-check-every-permission-before-a-run.md) | Check every permission that a run needs before the settings are saved, and block only what no run survives | accepted |
 | [0012](0012-ask-for-version-9-of-the-paperless-api.md) | Ask for version 9 of the Paperless API in every request, and need Paperless-ngx 2.16 | accepted |
-| [0013](0013-try-unsaved-settings-with-the-saved-connection.md) | Try unsaved settings with the saved connection, and keep the paths the same in every run | accepted |
+| [0013](0013-the-activity-stream-tells-what-a-run-did.md) | The Activity stream tells the target user what a run did, one entry per run and per import | accepted |
+| [0014](0014-try-unsaved-settings-with-the-saved-connection.md) | Try unsaved settings with the saved connection, and keep the paths the same in every run | accepted |
