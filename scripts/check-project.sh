@@ -4,11 +4,22 @@
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
-# website, the versions in the README, the description of the app, the check of its
-# package, and the JavaScript of the settings and the translations, which have no build
-# step.
+# website, the versions in the README, the description of the app, the area labels of
+# pull requests, the check of its package, and the JavaScript of the settings and the
+# translations, which have no build step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Python 3.11 or newer, for the checks that need it: python3, or python on Windows,
+# where Python installs no python3.
+python=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 &&
+    "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+    python="$candidate"
+    break
+  fi
+done
 
 printf '\n== %s\n' "Browser of the end-to-end tests"
 # A version of playwright-core drives the browsers in the image of the same version.
@@ -150,10 +161,10 @@ echo "The website shows the icon of the app, img/app.svg."
 printf '\n== %s\n' "Hook of the website"
 # The hook .github/mkdocs_project.py writes the versions of appinfo/info.xml into the
 # pages of the website. Its tests need Python alone, no MkDocs.
-if command -v python3 >/dev/null 2>&1; then
-  python3 -B tests/website/test_mkdocs_project.py
+if [[ -n "$python" ]]; then
+  "$python" -B tests/website/test_mkdocs_project.py
 else
-  echo "Python 3 is not installed here; the CI tests the hook of the website."
+  echo "Python 3.11 or newer is not installed here; the CI tests the hook of the website."
 fi
 
 printf '\n== %s\n' "Versions in the README"
@@ -250,6 +261,85 @@ if [[ -z "$description" || "$website" != "$description" || "$composer" != "$desc
   exit 1
 fi
 echo "GitHub, the website and Composer describe the app in the same words."
+
+printf '\n== %s\n' "Area labels of pull requests"
+# The labeler bot of .github/workflows/area-labels.yml gives a pull request the area
+# labels of .github/labeler.yml by the files that it changes, and takes them away when
+# it no longer changes them. So every file of lib/, js/, css/, templates/ and
+# tests/Unit/ belongs to an area, every glob names a file that exists, and every area
+# of .github/labels.toml has a rule. The globs are read as the labeler reads them:
+# * and ? stay within a folder, ** spans folders. The argument names the file of the
+# rules, or - for rules on stdin.
+# shellcheck disable=SC2016
+area_labels='
+import os, pathlib, re, subprocess, sys, tomllib
+
+name = sys.argv[1]
+rules_text = sys.stdin.buffer.read() if name == "-" else pathlib.Path(name).read_bytes()
+name = "the copy of .github/labeler.yml" if name == "-" else name
+problems = []
+
+
+def regex(glob):
+    if re.search(r"[][{}()!+@]", glob):
+        problems.append(f"{name}: the glob {glob} uses more than *, ** and ?, which this check reads.")
+    parts = {"**/": "(?:.*/)?", "/**": "/.*", "**": ".*", "*": "[^/]*", "?": "[^/]"}
+    tokens = re.findall(r"\*\*/|/\*\*$|\*\*|\*|\?|[^*?/]+|/", glob)
+    return re.compile("".join(parts.get(token, re.escape(token)) for token in tokens))
+
+
+rules = {}
+label = None
+for number, line in enumerate(rules_text.decode("utf-8").splitlines(), 1):
+    if not line.strip() or line.lstrip().startswith("#"):
+        continue
+    if match := re.fullmatch(r"\"([^\"]+)\":\s*", line):
+        label = match[1]
+        rules[label] = []
+    elif label and re.fullmatch(r"\s+- (changed-files|any-glob-to-any-file):\s*", line):
+        continue
+    elif label and (match := re.fullmatch(r"\s+- ([^\s:#\"]+)\s*", line)):
+        rules[label].append((match[1], regex(match[1])))
+    else:
+        problems.append(f"{name}:{number}: this check reads only labels, changed-files, any-glob-to-any-file and globs, not: {line.strip()}")
+
+with open(".github/labels.toml", "rb") as labels:
+    areas = {entry["name"] for entry in tomllib.load(labels)["label"] if entry.get("group") == "area"}
+problems += [f"{name} gives the label \"{label}\", which is no area of .github/labels.toml." for label in sorted(rules.keys() - areas)]
+problems += [f"The area \"{label}\" of .github/labels.toml has no rule in {name}." for label in sorted(areas - rules.keys())]
+
+listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], capture_output=True, check=True)
+files = [path for path in listed.stdout.decode("utf-8").split("\0") if os.path.isfile(path)]
+globs = [glob for label in rules for glob in rules[label]]
+problems += [f"{name}: the glob {glob} matches no file; correct or remove it." for glob, pattern in globs if not any(pattern.fullmatch(path) for path in files)]
+sources = [path for path in files if re.match(r"(lib|js|css|templates|tests/Unit)/", path)]
+problems += [f"{path} belongs to no area; add it to the rule of its area in {name}." for path in sources if not any(pattern.fullmatch(path) for _, pattern in globs)]
+
+print("\n".join(problems) if problems else f"Each of the {len(sources)} file(s) of lib/, js/, css/, templates/ and tests/Unit/ belongs to an area of {name}, each of its {len(globs)} glob(s) names a file, and each of the {len(areas)} area(s) of .github/labels.toml has a rule.")
+sys.exit(1 if problems else 0)
+'
+if [[ -n "$python" ]]; then
+  "$python" -B -c "$area_labels" .github/labeler.yml
+  # And the check finds a file without an area, a glob without a file and an area
+  # without a rule, in copies of the rules with one of them broken.
+  broken() {
+    local expected="$1" output
+    if output="$("$python" -B -c "$area_labels" - 2>&1)" ||
+      [[ "$output" != *"$expected"* ]]; then
+      echo "The check of the area labels should report \"$expected\" for a broken copy of .github/labeler.yml, but says: $output"
+      exit 1
+    fi
+  }
+  grep -v -- '- templates/settings\.php$' .github/labeler.yml |
+    broken 'templates/settings.php belongs to no area'
+  { cat .github/labeler.yml && echo '          - lib/Service/Missing*.php'; } |
+    broken 'the glob lib/Service/Missing*.php matches no file'
+  sed 's/^"area: inbox":/"area: other":/' .github/labeler.yml |
+    broken 'The area "area: inbox" of .github/labels.toml has no rule'
+  echo "The check of the area labels reports a file without an area, a glob without a file and an area without a rule."
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the area labels of pull requests."
+fi
 
 printf '\n== %s\n' "Check of the package"
 # scripts/check-package.sh, which scripts/check.sh runs on the package of krankerl and

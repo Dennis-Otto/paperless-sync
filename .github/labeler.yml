@@ -1,28 +1,63 @@
 # The area labels of pull requests by the files they change, for the Area labels
-# workflow; each label is an area of .github/labels.toml.
+# workflow; each label is an area of .github/labels.toml. Every file of lib/, js/,
+# css/, templates/ and tests/Unit/ belongs to an area, and scripts/check-project.sh
+# keeps it so: * stays within a folder and ** spans folders, as the labeler reads
+# them. l10n/ has no area; the title check labels a pull request of translations.
 "area: settings":
   - changed-files:
       - any-glob-to-any-file:
           - lib/Controller/SettingsController.php
           - lib/Settings/**
           - lib/Service/ConfigService.php
+          - lib/Service/PaperlessLocalNetworkException.php
           - lib/Model/SyncConfig.php
+          - lib/Migration/Version000111Date20261013000000.php
           - js/settings.js
           - css/settings.css
           - templates/settings.php
           - tests/Unit/Controller/SettingsController*
+          - tests/Unit/Controller/ControllerRoutesTest.php
+          - tests/Unit/Settings/**
+          - tests/Unit/Service/ConfigServiceTest.php
+          - tests/Unit/Migration/Version000111*
 "area: archive":
   - changed-files:
       - any-glob-to-any-file:
           - lib/Service/PathTemplateService.php
           - lib/Service/NextcloudStorage*.php
-          - tests/Unit/PathTemplateServiceTest.php
+          - lib/Model/DocumentFingerprint.php
+          - lib/Migration/Version000100Date20260826000000.php
+          - tests/Unit/Service/PathTemplate*
+          - tests/Unit/Service/NextcloudStorage*
+          - tests/Unit/Model/DocumentFingerprintTest.php
+          - tests/Unit/Migration/Version000100*
+"area: inbox":
+  - changed-files:
+      - any-glob-to-any-file:
+          - lib/Service/PaperlessUploadException.php
+          - lib/Migration/Version000110Date20261008000000.php
+          - tests/Unit/Migration/Version000110*
 "area: runs":
   - changed-files:
       - any-glob-to-any-file:
+          - lib/AppInfo/**
           - lib/Cron/**
           - lib/Controller/SyncController.php
+          - lib/Service/SyncService.php
+          - lib/Service/PaperlessApiService.php
+          - lib/Service/PaperlessClientInterface.php
+          - lib/Service/PaperlessRequestException.php
           - lib/Service/StatusService.php
           - lib/Service/SyncStateRepository*.php
+          - lib/Model/PaperlessScan.php
           - lib/Model/SyncReport.php
+          - tests/Unit/AppInfo/**
+          - tests/Unit/Cron/**
+          - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Controller/SyncController*
+          - tests/Unit/Service/SyncServiceTest.php
+          - tests/Unit/Service/PaperlessApiServiceTest.php
+          - tests/Unit/Service/StatusServiceTest.php
+          - tests/Unit/Service/SyncStateRepositoryTest.php
+          - tests/Unit/Model/SyncReportTest.php
+          - tests/Unit/SensitiveParametersTest.php
