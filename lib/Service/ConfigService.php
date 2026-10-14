@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
-use InvalidArgumentException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
@@ -116,11 +115,11 @@ final class ConfigService {
 		}
 		$stored = $this->storedToken();
 		if ($stored === null) {
-			throw new InvalidArgumentException('A Paperless API token is required.');
+			throw new InvalidSettingException('A Paperless API token is required.');
 		}
 		// The whole URL, not only its host: one host may serve several apps behind a proxy.
 		if (rtrim(trim($url), '/') !== $stored['url']) {
-			throw new InvalidArgumentException('Enter the API token again to connect to another Paperless URL.');
+			throw new InvalidSettingException('Enter the API token again to connect to another Paperless URL.');
 		}
 
 		return $stored['token'];
@@ -172,7 +171,7 @@ final class ConfigService {
 	 *
 	 * @param array<string, mixed> $settings
 	 * @throws UnsavedSettingException when one of these settings differs from the saved one
-	 * @throws InvalidArgumentException when a setting is invalid
+	 * @throws InvalidSettingException when a setting is invalid
 	 */
 	public function validateForDryRun(array $settings): SyncConfig {
 		$saved = $this->readValues();
@@ -245,15 +244,15 @@ final class ConfigService {
 	public function normalizeUrl(string $url): string {
 		$normalized = rtrim(trim($url), '/');
 		if ($normalized === '' || filter_var($normalized, FILTER_VALIDATE_URL) === false) {
-			throw new InvalidArgumentException('Enter a valid Paperless URL.');
+			throw new InvalidSettingException('Enter a valid Paperless URL.', [], 'paperless_url');
 		}
 		$parts = parse_url($normalized);
 		$scheme = is_array($parts) && isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
 		if (!in_array($scheme, ['http', 'https'], true)) {
-			throw new InvalidArgumentException('The Paperless URL must use HTTP or HTTPS.');
+			throw new InvalidSettingException('The Paperless URL must use HTTP or HTTPS.', [], 'paperless_url');
 		}
 		if (is_array($parts) && (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment']))) {
-			throw new InvalidArgumentException('The Paperless URL must not contain credentials, a query, or a fragment.');
+			throw new InvalidSettingException('The Paperless URL must not contain credentials, a query, or a fragment.', [], 'paperless_url');
 		}
 
 		return $normalized;
@@ -315,25 +314,29 @@ final class ConfigService {
 		$values['paperless_local_network'] = filter_var($values['paperless_local_network'], FILTER_VALIDATE_BOOLEAN);
 		$values['target_user'] = trim((string)$values['target_user']);
 		if ($values['target_user'] === '') {
-			throw new InvalidArgumentException('A Nextcloud target user is required.');
+			throw new InvalidSettingException('A Nextcloud target user is required.', [], 'target_user');
 		}
 		$values['base_path'] = $this->pathTemplate->normalizeRelativePath((string)$values['base_path']);
 		foreach (['archive_folder', 'inbox_folder', 'error_folder', 'deleted_folder'] as $key) {
 			$values[$key] = $this->pathTemplate->normalizeFolderName((string)($values[$key] ?? ''));
 		}
 		if (count(array_unique([$values['archive_folder'], $values['inbox_folder'], $values['error_folder']])) !== 3) {
-			throw new InvalidArgumentException('Archive, inbox, and error folders must have different names.');
+			throw new InvalidSettingException('Archive, inbox, and error folders must have different names.');
 		}
 		$values['path_template'] = $this->pathTemplate->validateTemplate((string)$values['path_template']);
 		$values['excluded_tags'] = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\r\n]+/', (string)$values['excluded_tags']) ?: [])))));
-		$values['sync_interval_minutes'] = $this->range((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES, 'Synchronization interval');
-		$values['batch_size'] = $this->range((int)$values['batch_size'], 1, 1000, 'Batch size');
-		$values['missing_grace_runs'] = $this->range((int)$values['missing_grace_runs'], 1, 30, 'Missing-document confirmation runs');
+		// The numbers, by the labels of the settings page, which their messages name.
+		$values['sync_interval_minutes'] = self::within((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES)
+			?? throw new InvalidSettingException('"Interval in minutes" must be between %1$s and %2$s.', [(string)self::MINIMUM_INTERVAL_MINUTES, (string)self::MAXIMUM_INTERVAL_MINUTES], 'sync_interval_minutes');
+		$values['batch_size'] = self::within((int)$values['batch_size'], 1, 1000)
+			?? throw new InvalidSettingException('"Maximum changes per module and run" must be between %1$s and %2$s.', ['1', '1000'], 'batch_size');
+		$values['missing_grace_runs'] = self::within((int)$values['missing_grace_runs'], 1, 30)
+			?? throw new InvalidSettingException('"Required consecutive missing scans" must be between %1$s and %2$s.', ['1', '30'], 'missing_grace_runs');
 		if (!in_array($values['trash_mode'], ['keep', 'move'], true)) {
-			throw new InvalidArgumentException('Invalid Paperless trash policy.');
+			throw new InvalidSettingException('Choose one of the options of "Paperless trash behavior".', [], 'trash_mode');
 		}
 		if (!in_array($values['conflict_mode'], ['replace', 'skip'], true)) {
-			throw new InvalidArgumentException('Invalid file conflict policy.');
+			throw new InvalidSettingException('Choose one of the options of "File conflict policy".', [], 'conflict_mode');
 		}
 		foreach (['empty_correspondent', 'empty_document_type', 'empty_date', 'untitled'] as $key) {
 			$values[$key] = $this->pathTemplate->cleanComponent($values[$key] ?? '', 'Unknown');
@@ -342,12 +345,9 @@ final class ConfigService {
 		return $values;
 	}
 
-	private function range(int $value, int $minimum, int $maximum, string $label): int {
-		if ($value < $minimum || $value > $maximum) {
-			throw new InvalidArgumentException("{$label} must be between {$minimum} and {$maximum}.");
-		}
-
-		return $value;
+	/** The value when it is from $minimum to $maximum, or else null. */
+	private static function within(int $value, int $minimum, int $maximum): ?int {
+		return $value >= $minimum && $value <= $maximum ? $value : null;
 	}
 
 	private function storageKey(string $key): string {

@@ -343,11 +343,21 @@ try {
 	expect((await message.textContent()) === 'The Paperless URL must use HTTP or HTTPS.', `An invalid URL must be refused: ${await message.textContent()}`)
 	const box = await message.boundingBox()
 	expect(box !== null && box.y >= 0 && box.y + box.height <= 900, `The message must be in view, not at ${JSON.stringify(box)}.`)
-	expect((await message.getAttribute('role')) === 'alert' && await focused(message), 'An error must be an alert and take the focus.')
+	expect((await message.getAttribute('role')) === 'alert', 'An error must be an alert.')
+	expect(await focused(url), 'The focus must move to the setting that the error names.')
 	await url.fill(savedUrl)
+	// An error that names no setting takes the focus itself.
+	const archiveFolder = page.locator('[data-setting="archive_folder"]')
+	const savedArchiveFolder = await archiveFolder.inputValue()
+	await archiveFolder.fill('Archiv/2026')
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === 'Folder names must contain exactly one path component.', `A nested folder name must be refused: ${await message.textContent()}`)
+	expect(await focused(message), 'An error that names no setting must take the focus.')
+	await archiveFolder.fill(savedArchiveFolder)
 	await token.fill('')
 	expect(await unsaved.isHidden(), 'Undoing the changes leaves nothing unsaved.')
-	console.log('Settings: an error appears next to the buttons, in view, and takes the focus.')
+	console.log('Settings: an error appears next to the buttons, in view, and moves the focus to the setting that it names, or takes it.')
 
 	// A proxy in front of Nextcloud stops waiting for a long run and answers with a page of
 	// its own, while the run continues, as the status shows.
@@ -492,6 +502,20 @@ try {
 		expect((await save.textContent()) === 'Speichern', `The save button must be German: ${await save.textContent()}`)
 		expect(!(await required()), 'Dismissing the question keeps the token.')
 		console.log('Settings: the questions of the page are in the language of the administrator.')
+
+		// So is what the server refuses, and the setting that it names gets the focus. The
+		// browser checks the numbers itself, so a URL that only the server refuses.
+		const urlBefore = await url.inputValue()
+		await url.fill('ftp://paperless-mock:8080')
+		await token.fill(TOKEN)
+		await save.click()
+		await settle()
+		const refusal = await message.textContent()
+		expect(refusal === 'Die Paperless-Adresse muss HTTP oder HTTPS verwenden.', `The refusal must be German: ${refusal}`)
+		expect(await focused(url), 'The focus must move to the setting that the refusal names.')
+		await url.fill(urlBefore)
+		await token.fill('')
+		console.log('Settings: what the server refuses is in the language of the administrator, and the setting that it names gets the focus.')
 	} finally {
 		await setLanguage('en')
 	}

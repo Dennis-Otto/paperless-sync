@@ -9,8 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Controller;
 
-use InvalidArgumentException;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
@@ -54,20 +54,28 @@ final class SyncController extends Controller {
 		} catch (UnsavedSettingException $exception) {
 			// The setting to save first, which the page moves the focus to.
 			return new JSONResponse(['message' => $exception->translated($this->l10n), 'setting' => $exception->setting], Http::STATUS_BAD_REQUEST);
-		} catch (InvalidArgumentException $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+		} catch (InvalidSettingException $exception) {
+			$answer = ['message' => $exception->translated($this->l10n)];
+			if ($exception->setting !== '') {
+				$answer['setting'] = $exception->setting;
+			}
+
+			return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
 		}
 		try {
 			return new JSONResponse($this->syncService->run($dryRun, $config));
 		} catch (LockedException) {
-			return new JSONResponse(['message' => 'Another synchronization run is already active.'], Http::STATUS_CONFLICT);
+			return new JSONResponse(['message' => $this->l10n->t('Another synchronization run is already active.')], Http::STATUS_CONFLICT);
 		} catch (PaperlessLocalNetworkException $exception) {
 			return new JSONResponse(
 				['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING],
 				Http::STATUS_INTERNAL_SERVER_ERROR,
 			);
 		} catch (\Throwable $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
+			// A run checks the target user and the base folder again, which may have changed since the save.
+			$message = $exception instanceof InvalidSettingException ? $exception->translated($this->l10n) : $exception->getMessage();
+
+			return new JSONResponse(['message' => $message], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 	}
 

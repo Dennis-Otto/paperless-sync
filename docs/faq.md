@@ -35,7 +35,7 @@ It depends on what deletes them:
 
 | What happens | Where the copy goes |
 | --- | --- |
-| The document goes to the Paperless trash | Into the deleted folder, below the date of the trash, such as `_Gelöscht/2026-08-27/Example GmbH/Invoice/2026/…`, or it stays in the archive with the trash behavior *Keep archive file in place* |
+| The document goes to the Paperless trash | Into the deleted folder, below the date of the trash in the time zone of the target user, such as `_Gelöscht/2026-08-27/Example GmbH/Invoice/2026/…`, or it stays in the archive with the trash behavior *Keep archive file in place* |
 | It is restored in Paperless | Back into the archive |
 | It is deleted for good in Paperless | Deleted in Nextcloud after the configured number of complete scans, only when permanent deletion is on; otherwise it stays in the deleted folder |
 | It gets an excluded tag, or the inbox tag again | Deleted in Nextcloud in the next run |

@@ -368,3 +368,43 @@ for script in "${scripts[@]}"; do
 done
 echo "${#scripts[@]} JavaScript file(s) parse."
 node scripts/check-l10n.mjs
+
+# And the check finds what it must in broken copies of the catalog: a text that the code
+# translates but the catalog lacks, one that no code translates, a German text without the
+# placeholder of its English one, a text twice, and a copy for the browser that differs; --fix
+# then drops the unused text and writes the copy for the browser anew.
+l10n_copy="$(mktemp -d)"
+trap 'rm -rf "$l10n_copy"' EXIT
+# Runs the JavaScript of the argument on the translations, t, of the copy of l10n/de.json.
+edit_catalog() {
+  node -e 'const fs = require("fs"); const [file, change] = process.argv.slice(1);
+    const catalog = JSON.parse(fs.readFileSync(file, "utf8")); new Function("t", change)(catalog.translations);
+    fs.writeFileSync(file, JSON.stringify(catalog, null, "\t") + "\n")' "$l10n_copy/de.json" "$1"
+}
+broken_catalog() {
+  local expected="$1" output
+  if output="$(node scripts/check-l10n.mjs "$l10n_copy" 2>&1)" || [[ "$output" != *"$expected"* ]]; then
+    echo "scripts/check-l10n.mjs should report \"$expected\" for a broken copy of l10n/, but says: $output"
+    exit 1
+  fi
+}
+cp l10n/de.json l10n/de.js "$l10n_copy/"
+edit_catalog 'delete t["Paperless Sync"]'
+broken_catalog 'translates a text that l10n/de.json lacks: "Paperless Sync"'
+cp l10n/de.json l10n/de.js "$l10n_copy/"
+edit_catalog 't["A text that no code translates"] = "Ein Text, den kein Code übersetzt"'
+broken_catalog 'translates a text that no code translates: "A text that no code translates"'
+broken_catalog 'l10n/de.js, which the browser loads, and l10n/de.json, which PHP loads, differ.'
+node scripts/check-l10n.mjs --fix "$l10n_copy" >/dev/null
+node scripts/check-l10n.mjs "$l10n_copy" >/dev/null
+if ! cmp -s l10n/de.json "$l10n_copy/de.json" || ! cmp -s l10n/de.js "$l10n_copy/de.js"; then
+  echo "scripts/check-l10n.mjs --fix should drop the unused text and write l10n/de.js as it was."
+  exit 1
+fi
+edit_catalog 't["Nextcloud user %s does not exist."] = "Den Nextcloud-Benutzer gibt es nicht."'
+broken_catalog 'has the placeholders none, but "Nextcloud user %s does not exist." has argument 1.'
+cp l10n/de.json l10n/de.js "$l10n_copy/"
+sed -n '3p' l10n/de.json >"$l10n_copy/line"
+sed -i "3r $l10n_copy/line" "$l10n_copy/de.json"
+broken_catalog 'l10n/de.json has a text twice'
+echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated text and a wrong placeholder, and --fix writes l10n/de.js anew."

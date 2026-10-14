@@ -27,6 +27,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
@@ -46,6 +47,7 @@ final class SyncServiceTest extends TestCase {
 	private const EXPORTED_PATH = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf';
 
 	private TestClock $clock;
+	private TestTimeZones $timeZones;
 	private TestPaperlessClient $paperless;
 	private TestStorage $storage;
 	private TestStateRepository $state;
@@ -58,6 +60,7 @@ final class SyncServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->clock = new TestClock();
+		$this->timeZones = new TestTimeZones();
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$this->state = new TestStateRepository();
@@ -77,6 +80,7 @@ final class SyncServiceTest extends TestCase {
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($this->storage, $this->logger),
+			$this->timeZones,
 		);
 	}
 
@@ -960,6 +964,7 @@ final class SyncServiceTest extends TestCase {
 			$this->logger,
 			$this->clock,
 			$this->activityPublisher($storage, $this->logger),
+			new TestTimeZones(),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();
@@ -2935,6 +2940,41 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 
 		self::assertSame([$this->deletedToday() => '%PDF-content'], $this->storage->files);
+	}
+
+	/**
+	 * The time zones of the target user and of Nextcloud, and the day of a deletion at 22:30 UTC, at
+	 * half past midnight in Berlin.
+	 *
+	 * @return array<string, array{array<string, string>, string, string}>
+	 */
+	public static function timeZonesOfADeletion(): array {
+		return [
+			'the target user in Berlin' => [['paperless' => 'Europe/Berlin'], 'UTC', '2026-08-27'],
+			'Nextcloud in Berlin' => [[], 'Europe/Berlin', '2026-08-27'],
+			'another user in Berlin' => [['admin' => 'Europe/Berlin'], 'UTC', '2026-08-26'],
+			'the target user in New York' => [['paperless' => 'America/New_York'], 'Europe/Berlin', '2026-08-26'],
+		];
+	}
+
+	/**
+	 * The folder of a trashed document is the day of its deletion in the time zone of the target
+	 * user, whose files they are, or else in that of Nextcloud: a document trashed in Berlin shortly
+	 * after midnight lands in the folder of that day, not in the one of the day before, as in UTC.
+	 *
+	 * @param array<string, string> $users
+	 */
+	#[DataProvider('timeZonesOfADeletion')]
+	public function testTrashFolderIsTheDayOfTheDeletionWhereTheTargetUserLives(array $users, string $default, string $day): void {
+		$this->exportDocument();
+		$this->timeZones->users = $users;
+		$this->timeZones->default = $default;
+		$this->paperless->trash = [$this->paperless->documents[0] + ['deleted_at' => '2026-08-26T22:30:00+00:00']];
+		$this->paperless->documents = [];
+
+		$this->service->run();
+
+		self::assertSame([self::ARCHIVE . "/_Gelöscht/{$day}/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf" => '%PDF-content'], $this->storage->files);
 	}
 
 	public function testMissingDocumentWaitsForTheConfiguredRuns(): void {

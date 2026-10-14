@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
@@ -25,6 +26,7 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
+use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
@@ -124,7 +126,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->save(['paperless_url' => 'ftp://paperless.example.test'] + self::validSettings(), 'secret-token');
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		self::assertSame(['message' => 'The Paperless URL must use HTTP or HTTPS.'], $response->getData());
+		self::assertSame(['message' => 'Die Paperless-Adresse muss HTTP oder HTTPS verwenden.', 'setting' => 'paperless_url'], $response->getData());
 		self::assertSame([], $this->preflights);
 		self::assertSame([], $this->settings);
 	}
@@ -230,7 +232,7 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame([
-			'message' => 'Could not validate the Paperless and Nextcloud configuration: Unavailable. ' . self::TURN_OFF_THE_SCHEDULE,
+			'message' => 'Die Konfiguration von Paperless und Nextcloud konnte nicht geprüft werden: Unavailable. ' . self::TURN_OFF_THE_SCHEDULE,
 			'setting' => 'enabled',
 		], $response->getData());
 	}
@@ -248,7 +250,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->save(self::validSettings() + ['enabled' => true]);
 
 		self::assertSame(
-			'Could not validate the Paperless and Nextcloud configuration: cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/. ' . self::TURN_OFF_THE_SCHEDULE,
+			'Die Konfiguration von Paperless und Nextcloud konnte nicht geprüft werden: cURL error 7: Failed to connect to paperless.example.test port 443 for https://paperless.example.test/api/documents/. ' . self::TURN_OFF_THE_SCHEDULE,
 			$response->getData()['message'],
 		);
 	}
@@ -270,7 +272,7 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertCount(1, $this->preflights);
-		self::assertSame(['message' => 'Could not validate the Paperless and Nextcloud configuration: Unavailable.'], $response->getData());
+		self::assertSame(['message' => 'Die Konfiguration von Paperless und Nextcloud konnte nicht geprüft werden: Unavailable.'], $response->getData());
 	}
 
 	/** A token that was entered is tested, also with the schedule off, so a wrong one is never stored. */
@@ -297,7 +299,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->save(['paperless_url' => 'https://attacker.example.test'] + self::validSettings());
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		self::assertSame(['message' => 'Enter the API token again to connect to another Paperless URL.'], $response->getData());
+		self::assertSame(['message' => 'Gib das API-Token erneut ein, um dich mit einer anderen Paperless-Adresse zu verbinden.'], $response->getData());
 		self::assertSame([], $this->preflights);
 		self::assertSame($stored, $this->settings);
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
@@ -332,18 +334,44 @@ final class SettingsControllerTest extends TestCase {
 		self::assertNull($this->credential);
 	}
 
-	/** A base folder in which the target user can't create files makes every run fail as well. */
+	/**
+	 * A base folder in which the target user can't create files makes every run fail as well. The
+	 * line says why in the language of the administrator, not half in English.
+	 */
 	public function testAFolderThatCannotTakeFilesIsNotSaved(): void {
-		$this->storage->method('test')->willThrowException(new RuntimeException('The configured Nextcloud base folder is not a writable folder.'));
+		$this->storage->method('test')->willThrowException(new InvalidSettingException('The configured Nextcloud base folder is not a writable folder.', [], 'base_path'));
 
 		$response = $this->controller->save(self::validSettings(), 'secret-token');
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame(
-			'Nextcloud kann die Dateien dort nicht speichern: The configured Nextcloud base folder is not a writable folder. Prüfe die ID des Zielbenutzers und ob der Basisordner ein Ordner ist, in dem dieser Benutzer Dateien anlegen darf.',
+			'Nextcloud kann die Dateien dort nicht speichern: Der eingestellte Nextcloud-Basisordner ist kein beschreibbarer Ordner. Prüfe die ID des Zielbenutzers und ob der Basisordner ein Ordner ist, in dem dieser Benutzer Dateien anlegen darf.',
 			self::answer($response)['message'],
 		);
 		self::assertSame([], $this->settings);
+	}
+
+	/** A target user that Nextcloud doesn't know is named in German in the line of the folder. */
+	public function testTheChecklistNamesAnUnknownTargetUserInGerman(): void {
+		$this->storage->method('test')->willThrowException(new InvalidSettingException('Nextcloud user %s does not exist.', ['ghost'], 'target_user'));
+
+		$answer = self::answer($this->controller->test(self::validSettings(), 'secret-token'));
+
+		self::assertSame('Nextcloud kann die Dateien dort nicht speichern: Den Nextcloud-Benutzer ghost gibt es nicht.', array_column($answer['checks'], 'message', 'id')['folder']);
+	}
+
+	/**
+	 * Another invalid argument, such as from a document of Paperless without a numeric ID in the
+	 * preview, keeps its message, which no translation knows.
+	 */
+	public function testAnUntranslatedInvalidArgumentKeepsItsMessage(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('newestDocuments')->willThrowException(new \InvalidArgumentException('Paperless returned a document without a numeric ID.'));
+
+		$response = $this->controller->preview(['path_template' => PathTemplateService::DEFAULT_TEMPLATE]);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Paperless returned a document without a numeric ID.'], self::answer($response));
 	}
 
 	/**
@@ -453,7 +481,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->test(['paperless_url' => 'https://attacker.example.test'] + self::validSettings());
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		self::assertSame(['message' => 'Enter the API token again to connect to another Paperless URL.'], $response->getData());
+		self::assertSame(['message' => 'Gib das API-Token erneut ein, um dich mit einer anderen Paperless-Adresse zu verbinden.'], $response->getData());
 		self::assertSame([], $this->preflights);
 
 		$this->controller->test(self::validSettings());
@@ -547,12 +575,12 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame(['template' => PathTemplateService::DEFAULT_TEMPLATE, 'connected' => false, 'paths' => []], self::answer($this->controller->preview()), 'Without a template on the page, the preview shows the saved one.');
 	}
 
-	/** @return array<string, array{mixed, string}> */
+	/** @return array<string, array{mixed, string}> a template and what the page says about it, in German */
 	public static function invalidPreviewTemplates(): array {
 		return [
-			'an unknown variable' => ['{{ titel }} [P{{ id }}]', 'Unknown archive path variable: {{ titel }}.'],
-			'no id' => ['{{ title }}', 'The archive path template must contain {{ id }}.'],
-			'no text' => [['{{ id }}'], 'The archive path template must not be empty.'],
+			'an unknown variable' => ['{{ titel }} [P{{ id }}]', 'Unbekannte Variable in der Archiv-Pfadvorlage: {{ titel }}.'],
+			'no id' => ['{{ title }}', 'Die Archiv-Pfadvorlage muss {{ id }} enthalten.'],
+			'no text' => [['{{ id }}'], 'Die Archiv-Pfadvorlage darf nicht leer sein.'],
 		];
 	}
 
@@ -561,7 +589,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->preview(['path_template' => $template]);
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
-		self::assertSame(['message' => $message], self::answer($response));
+		self::assertSame(['message' => $message, 'setting' => 'path_template'], self::answer($response));
 	}
 
 	public function testThePreviewSaysWhyPaperlessCouldNotBeRead(): void {
@@ -603,6 +631,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$clock,
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
+			new TestTimeZones(),
 		);
 
 		return new SettingsController(

@@ -20,6 +20,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
+use OCP\IDateTimeZone;
 use OCP\Lock\ILockingProvider;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
@@ -50,6 +51,7 @@ final class SyncService {
 		private LoggerInterface $logger,
 		private ITimeFactory $timeFactory,
 		private ActivityPublisher $activity,
+		private IDateTimeZone $timeZones,
 	) {
 	}
 
@@ -1158,9 +1160,18 @@ final class SyncService {
 		return is_scalar($value) ? (string)$value : '';
 	}
 
+	/**
+	 * Where a copy goes when its document went to the trash or vanished: below the deleted folder, in
+	 * the folder of the day, in the time zone of the target user, from the personal settings or else
+	 * the default of Nextcloud. In UTC, a document deleted in Berlin shortly after midnight would
+	 * land in the folder of the day before.
+	 */
 	private function deletedPath(SyncConfig $config, string $oldPath, string $archiveRoot, int $timestamp): string {
 		$relative = $this->relativeTo($oldPath, $archiveRoot);
-		return $this->join($archiveRoot, $config->deletedFolder, gmdate('Y-m-d', $timestamp > 0 ? $timestamp : $this->now()), $relative);
+		$timestamp = $timestamp > 0 ? $timestamp : $this->now();
+		$day = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->timeZones->getTimeZone($timestamp, $config->targetUser))->format('Y-m-d');
+
+		return $this->join($archiveRoot, $config->deletedFolder, $day, $relative);
 	}
 
 	private function relativeTo(string $path, string $root): string {

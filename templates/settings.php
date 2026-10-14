@@ -210,7 +210,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 			</div>
 			<label class="paperless-sync-field paperless-sync-field--wide">
 				<span><?php p($l->t('Additional excluded Paperless tags')); ?></span>
-				<input data-setting="excluded_tags" type="text" value="<?php p($config->excludedTags); ?>" placeholder="Draft, Private">
+				<input data-setting="excluded_tags" type="text" value="<?php p($config->excludedTags); ?>" placeholder="<?php p($l->t('Draft, Private')); ?>">
 			</label>
 			<p class="settings-hint"><?php p($l->t('Separate tag names with commas.')); ?></p>
 		</section>

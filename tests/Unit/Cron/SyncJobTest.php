@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\BackgroundJob\IJobList;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
@@ -64,6 +65,7 @@ final class SyncJobTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 			$this->clock,
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			new TestTimeZones(),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
@@ -73,7 +74,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	}
 
 	public function testUnknownUserFailsTheTest(): void {
-		$this->expectException(RuntimeException::class);
+		$this->expectException(InvalidSettingException::class);
 		$this->expectExceptionMessage('Nextcloud user ghost does not exist.');
 		$this->service->test('ghost', 'Dokumente/Paperless');
 	}
@@ -81,7 +82,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	public function testBaseFolderThatIsAFileFailsTheTest(): void {
 		$this->nodes[self::HOME . '/Dokumente'] = 'a file';
 
-		$this->expectException(RuntimeException::class);
+		$this->expectException(InvalidSettingException::class);
 		$this->expectExceptionMessage('The configured Nextcloud base folder is not a writable folder.');
 		$this->service->test(self::USER, 'Dokumente');
 	}
@@ -90,7 +91,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->nodes[self::HOME . '/Dokumente'] = null;
 		$this->readOnly[self::HOME . '/Dokumente'] = true;
 
-		$this->expectException(RuntimeException::class);
+		$this->expectException(InvalidSettingException::class);
 		$this->expectExceptionMessage('The configured Nextcloud base folder is not a writable folder.');
 		$this->service->test(self::USER, 'Dokumente');
 	}
@@ -98,7 +99,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	public function testMissingBaseFolderFailsTheTestInAReadOnlyUserFolder(): void {
 		$this->readOnly[self::HOME] = true;
 
-		$this->expectException(RuntimeException::class);
+		$this->expectException(InvalidSettingException::class);
 		$this->expectExceptionMessage('The configured Nextcloud user folder is not writable.');
 		$this->service->test(self::USER, 'Dokumente');
 	}

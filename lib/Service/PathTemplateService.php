@@ -81,24 +81,24 @@ final class PathTemplateService {
 	public function validateTemplate(string $template): string {
 		$normalized = trim(str_replace('\\', '/', $template), " /\t\n\r\0\x0B");
 		if ($normalized === '') {
-			throw new InvalidArgumentException('The archive path template must not be empty.');
+			throw new InvalidSettingException('The archive path template must not be empty.', [], 'path_template');
 		}
 		if (preg_match('/{{\s*id\s*}}/', $normalized) !== 1) {
-			throw new InvalidArgumentException('The archive path template must contain {{ id }}.');
+			throw new InvalidSettingException('The archive path template must contain {{ id }}.', [], 'path_template');
 		}
 
 		preg_match_all(self::PLACEHOLDER, $normalized, $matches, PREG_SET_ORDER);
 		foreach ($matches as $match) {
 			$field = $match[2] ?? null;
 			if ($match[1] === self::CUSTOM_FIELDS && trim((string)$field) === '') {
-				throw new InvalidArgumentException('Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.');
+				throw new InvalidSettingException('Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.', [], 'path_template');
 			}
 			if (!($field === null ? in_array($match[1], self::VARIABLES, true) : $match[1] === self::CUSTOM_FIELDS)) {
-				throw new InvalidArgumentException('Unknown archive path variable: {{ ' . $match[1] . ($field === null ? '' : '.' . $field) . ' }}.');
+				throw new InvalidSettingException('Unknown archive path variable: %s.', ['{{ ' . $match[1] . ($field === null ? '' : '.' . $field) . ' }}'], 'path_template');
 			}
 		}
 		if (preg_match('/{{|}}/', preg_replace(self::PLACEHOLDER, '', $normalized) ?? '') === 1) {
-			throw new InvalidArgumentException('The archive path template contains an invalid placeholder.');
+			throw new InvalidSettingException('The archive path template contains an invalid placeholder.', [], 'path_template');
 		}
 
 		// One spelling of every placeholder, such as {{ id }} for {{id}}.
@@ -132,12 +132,12 @@ final class PathTemplateService {
 	 * would move all of them.
 	 *
 	 * @param array<string, CustomField> $customFields the custom fields of Paperless, by their IDs
-	 * @throws InvalidArgumentException
+	 * @throws InvalidSettingException
 	 */
 	public function requireCustomFields(string $template, array $customFields): void {
 		$missing = array_values(array_diff($this->customFieldNames($template), array_column($customFields, 'name')));
 		if ($missing !== []) {
-			throw new InvalidArgumentException('Paperless has no custom field named "' . implode('", "', $missing) . '", which the archive path template uses.');
+			throw new InvalidSettingException('Paperless has no custom field named %s, which the archive path template uses.', ['"' . implode('", "', $missing) . '"'], 'path_template');
 		}
 	}
 
@@ -147,12 +147,12 @@ final class PathTemplateService {
 			if ($allowEmpty) {
 				return '';
 			}
-			throw new InvalidArgumentException('A relative folder path is required.');
+			throw new InvalidSettingException('A relative folder path is required.');
 		}
 		$parts = explode('/', $normalized);
 		foreach ($parts as $part) {
 			if ($part === '' || $part === '.' || $part === '..') {
-				throw new InvalidArgumentException('Folder paths must be relative and must not contain empty, . or .. components.');
+				throw new InvalidSettingException('Folder paths must be relative and must not contain empty, . or .. components.');
 			}
 		}
 
@@ -162,7 +162,7 @@ final class PathTemplateService {
 	public function normalizeFolderName(string $name): string {
 		$normalized = $this->normalizeRelativePath($name);
 		if (str_contains($normalized, '/')) {
-			throw new InvalidArgumentException('Folder names must contain exactly one path component.');
+			throw new InvalidSettingException('Folder names must contain exactly one path component.');
 		}
 
 		return $this->cleanComponent($normalized, 'Folder');

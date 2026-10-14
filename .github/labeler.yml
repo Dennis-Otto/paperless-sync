@@ -9,6 +9,7 @@
           - lib/Controller/SettingsController.php
           - lib/Settings/**
           - lib/Service/ConfigService.php
+          - lib/Service/InvalidSettingException.php
           - lib/Service/PaperlessLocalNetworkException.php
           - lib/Service/UnsavedSettingException.php
           - lib/Model/SyncConfig.php
