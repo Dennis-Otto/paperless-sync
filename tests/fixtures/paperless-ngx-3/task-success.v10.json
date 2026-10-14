@@ -1,0 +1,49 @@
+{
+  "body": {
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "acknowledged": false,
+        "date_created": "2026-10-14T11:56:04.055736Z",
+        "date_done": "2026-10-14T11:56:05.562207Z",
+        "date_started": "2026-10-14T11:56:04.065946Z",
+        "duration_seconds": 1.496261,
+        "id": 1,
+        "input_data": {
+          "filename": "invoice.pdf",
+          "mime_type": "application/pdf",
+          "overrides": {
+            "filename": "invoice.pdf",
+            "owner_id": 2,
+            "remote_ocr": false,
+            "skip_asn_if_exists": false
+          }
+        },
+        "owner": 2,
+        "related_document_ids": [
+          1
+        ],
+        "result_data": {
+          "document_id": 1
+        },
+        "status": "success",
+        "status_display": "Success",
+        "task_id": "5469925f-a164-444c-a1df-9cd499b4fefc",
+        "task_type": "consume_file",
+        "task_type_display": "Consume File",
+        "trigger_source": "api_upload",
+        "trigger_source_display": "API Upload",
+        "wait_time_seconds": 0.01021
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/tasks/?task_id=5469925f-a164-444c-a1df-9cd499b4fefc&page_size=10",
+  "status": 200
+}

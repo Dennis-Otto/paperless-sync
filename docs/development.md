@@ -33,7 +33,14 @@ bash tests/e2e/run.sh
 E2E_DATABASE=mysql E2E_OBJECTSTORE=s3 bash tests/e2e/run.sh
 ```
 
-CI runs `run-all.sh` on every push to `main`, every night, and in every pull request that can affect the app; a pull request that changes only the documentation, other workflows or the version of a release passes the check at once. PostgreSQL, MariaDB and S3 run in a job of their own, a required check as well, on every push to `main`, every night, and in a pull request that changes the migrations, the state, the files in Nextcloud, the uploads to Paperless or the tests. See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
+CI runs `run-all.sh` on every push to `main`, every night, and in every pull request that can affect the app; a pull request that changes only the documentation, other workflows or the version of a release passes the check at once. PostgreSQL, MariaDB and S3 run in a job of their own, a required check as well, on every push to `main`, every night, and in a pull request that changes the migrations, the state, the files in Nextcloud, the uploads to Paperless or the tests. The contract tests start a real Paperless-ngx instead of the mock, the last release of 2.x or the current release of 3.x, check every answer that the app reads, run the app against it, and record the answers as the fixtures of the unit tests in `tests/fixtures/`; CI runs them every Monday and in every pull request that changes how the app talks to Paperless:
+
+```bash
+bash tests/e2e/run-contract.sh 3
+CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2
+```
+
+See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
 
 ## Pictures
 

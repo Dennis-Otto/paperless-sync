@@ -1,0 +1,31 @@
+{
+  "body": {
+    "all": [
+      1
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "document_count": 1,
+        "id": 1,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Contracts",
+        "owner": 2,
+        "path": "{{ correspondent }}/{{ title }}",
+        "slug": "contracts",
+        "user_can_change": true
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/storage_paths/?page=1&page_size=1000",
+  "status": 200
+}

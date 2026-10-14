@@ -1,0 +1,37 @@
+{
+  "body": {
+    "all": [
+      1
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "data_type": "select",
+        "document_count": 1,
+        "extra_data": {
+          "select_options": [
+            {
+              "id": "QfmUvBu3lNqMlhNa",
+              "label": "High"
+            },
+            {
+              "id": "wICyQmBvxyWuKbj5",
+              "label": "Low"
+            }
+          ]
+        },
+        "id": 1,
+        "name": "Priority"
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/custom_fields/?page=1&page_size=1000",
+  "status": 200
+}

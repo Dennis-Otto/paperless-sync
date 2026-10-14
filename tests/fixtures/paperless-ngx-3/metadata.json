@@ -1,0 +1,97 @@
+{
+  "body": {
+    "archive_checksum": "99a1da59989bb31d0c10dc914bb7b109ead8375e4540309ee6daddab56bf651f",
+    "archive_media_filename": "0000001.pdf",
+    "archive_metadata": [
+      {
+        "key": "Producer",
+        "namespace": "http://ns.adobe.com/pdf/1.3/",
+        "prefix": "pdf",
+        "value": "pikepdf 10.13.0.post1"
+      },
+      {
+        "key": "creator",
+        "namespace": "http://purl.org/dc/elements/1.1/",
+        "prefix": "dc",
+        "value": "None"
+      },
+      {
+        "key": "ModifyDate",
+        "namespace": "http://ns.adobe.com/xap/1.0/",
+        "prefix": "xmp",
+        "value": "2026-10-14T11:56:04+00:00"
+      },
+      {
+        "key": "CreateDate",
+        "namespace": "http://ns.adobe.com/xap/1.0/",
+        "prefix": "xmp",
+        "value": "2026-10-14T11:56:04Z"
+      },
+      {
+        "key": "MetadataDate",
+        "namespace": "http://ns.adobe.com/xap/1.0/",
+        "prefix": "xmp",
+        "value": "2026-10-14T11:56:04.716801+00:00"
+      },
+      {
+        "key": "CreatorTool",
+        "namespace": "http://ns.adobe.com/xap/1.0/",
+        "prefix": "xmp",
+        "value": "OCRmyPDF 17.12.1 / OCRmyPDF fpdf2 + Tesseract OCR 5.5.0"
+      },
+      {
+        "key": "DocumentID",
+        "namespace": "http://ns.adobe.com/xap/1.0/mm/",
+        "prefix": "xmpMM",
+        "value": "uuid:c858112d-ffe2-11fc-0000-189a561f7c09"
+      },
+      {
+        "key": "RenditionClass",
+        "namespace": "http://ns.adobe.com/xap/1.0/mm/",
+        "prefix": "xmpMM",
+        "value": "default"
+      },
+      {
+        "key": "VersionID",
+        "namespace": "http://ns.adobe.com/xap/1.0/mm/",
+        "prefix": "xmpMM",
+        "value": "1"
+      },
+      {
+        "key": "format",
+        "namespace": "http://purl.org/dc/elements/1.1/",
+        "prefix": "dc",
+        "value": "application/pdf"
+      },
+      {
+        "key": "part",
+        "namespace": "http://www.aiim.org/pdfa/ns/id/",
+        "prefix": "pdfaid",
+        "value": "2"
+      },
+      {
+        "key": "conformance",
+        "namespace": "http://www.aiim.org/pdfa/ns/id/",
+        "prefix": "pdfaid",
+        "value": "B"
+      }
+    ],
+    "archive_size": 52805,
+    "barcodes": [],
+    "has_archive_version": true,
+    "lang": "en",
+    "media_filename": "0000001.pdf",
+    "original_checksum": "c9381fc9eb21790309fa8768d6e50047ad0018c586d915b7f57079624052bcea",
+    "original_filename": "invoice.pdf",
+    "original_metadata": [],
+    "original_mime_type": "application/pdf",
+    "original_size": 638
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/1/metadata/",
+  "status": 200
+}

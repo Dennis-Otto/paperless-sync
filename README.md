@@ -52,6 +52,11 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - **A Paperless account for the app**, with an API token, that isn't a superuser. It needs to view and download the documents to mirror, to view their correspondents, document types, storage paths and tags, and to add documents for the inbox; owning the documents lets it mirror the Paperless trash right away. [Paperless connection](#paperless-connection) lists the exact permissions, and **Test connection** checks them.
 - **Room in the files of the target user**, the Nextcloud user who owns the archive: the archive counts against the quota of that user.
 
+| Tested with | Versions | How |
+| --- | --- | --- |
+| Nextcloud | <span data-app="nextcloud">33–35</span>, the current release of each | the end-to-end tests in Docker, every night and in every change of the app, on SQLite, PostgreSQL, MariaDB and S3 object storage |
+| Paperless-ngx | 2.20, the last release of 2.x, and the current release of 3.x | the [contract tests](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx) against a real Paperless in Docker, every week and in every change of how the app talks to Paperless |
+
 <!-- --8<-- [end:requirements] -->
 <!-- --8<-- [start:quick-start-section] -->
 
@@ -457,7 +462,7 @@ Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says how a change 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15277/badge)](https://www.bestpractices.dev/projects/15277)
 [![REUSE](https://api.reuse.software/badge/github.com/Dennis-Otto/paperless-sync)](https://api.reuse.software/info/github.com/Dennis-Otto/paperless-sync)
 
-A change reaches `main` only when the unit tests, which run every line of the app, pass, together with Psalm, CodeQL, the secret scan, the dependency review, the license check of every file and, when the change can affect the app, the end-to-end tests in Docker against every supported Nextcloud version. Every release is signed, with an SBOM and signed build provenance, and checked in the App Store afterwards; [Automation](docs/automation.md) shows every workflow behind it. The [security design](docs/security.md) says what the app protects and how; report a vulnerability [privately](https://github.com/Dennis-Otto/paperless-sync/security/advisories/new).
+A change reaches `main` only when the unit tests, which run every line of the app, pass, together with Psalm, CodeQL, the secret scan, the dependency review, the license check of every file and, when the change can affect the app, the end-to-end tests in Docker against every supported Nextcloud version. Every week, contract tests run the app against a real Paperless-ngx 2.x and 3.x, whose recorded answers the unit tests read. Every release is signed, with an SBOM and signed build provenance, and checked in the App Store afterwards; [Automation](docs/automation.md) shows every workflow behind it. The [security design](docs/security.md) says what the app protects and how; report a vulnerability [privately](https://github.com/Dennis-Otto/paperless-sync/security/advisories/new).
 
 ## License
 

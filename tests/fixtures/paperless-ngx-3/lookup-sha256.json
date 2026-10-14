@@ -1,0 +1,22 @@
+{
+  "body": {
+    "all": [
+      1
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 1
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/?checksum__iexact=c9381fc9eb21790309fa8768d6e50047ad0018c586d915b7f57079624052bcea&fields=id&page_size=1",
+  "status": 200
+}

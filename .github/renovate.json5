@@ -13,5 +13,22 @@
       matchPackageNames: ["mcr.microsoft.com/playwright", "playwright-core"],
       groupName: "Playwright",
     },
+    {
+      // tests/e2e/compose.paperless.yaml runs the contract tests against two lines of
+      // Paperless-ngx: the last release of 2.x, which stays within 2.x, and the current
+      // release of 3.x, which moves on to every new release.
+      matchPackageNames: ["ghcr.io/paperless-ngx/paperless-ngx"],
+      matchCurrentValue: "/^2[.]/",
+      allowedVersions: "/^2[.]/",
+    },
+    {
+      // The contract tests are no required check, so GitHub would merge a new image of
+      // Paperless-ngx even when they fail. Renovate merges it itself instead, only once
+      // every check is green, the contract tests included; its own group keeps a red
+      // contract from holding back the other images.
+      matchPackageNames: ["ghcr.io/paperless-ngx/paperless-ngx"],
+      groupName: "Paperless-ngx",
+      platformAutomerge: false,
+    },
   ],
 }

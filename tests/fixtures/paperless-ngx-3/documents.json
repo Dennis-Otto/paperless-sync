@@ -1,0 +1,86 @@
+{
+  "body": {
+    "all": [
+      1,
+      2,
+      3
+    ],
+    "count": 3,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "added": "2026-10-14T11:56:05.465170Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-26 Example GmbH Monthly invoice.pdf",
+        "correspondent": 1,
+        "created": "2026-08-26",
+        "custom_fields": [
+          {
+            "field": 1,
+            "value": "QfmUvBu3lNqMlhNa"
+          }
+        ],
+        "document_type": 1,
+        "id": 1,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-14T11:56:13.522396Z",
+        "original_file_name": "invoice.pdf",
+        "owner": 2,
+        "page_count": 1,
+        "storage_path": null,
+        "tags": [
+          2
+        ],
+        "title": "Monthly invoice"
+      },
+      {
+        "added": "2026-10-14T11:56:07.479601Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-27 Example GmbH Annual statement.pdf",
+        "correspondent": 1,
+        "created": "2026-08-27",
+        "custom_fields": [],
+        "document_type": 2,
+        "id": 2,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-14T11:56:13.692216Z",
+        "original_file_name": "statement.pdf",
+        "owner": 2,
+        "page_count": 1,
+        "storage_path": 1,
+        "tags": [
+          2
+        ],
+        "title": "Annual statement"
+      },
+      {
+        "added": "2026-10-14T11:56:09.559564Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-28 Example Insurance Unread letter.pdf",
+        "correspondent": 2,
+        "created": "2026-08-28",
+        "custom_fields": [],
+        "document_type": 3,
+        "id": 3,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-14T11:56:13.811186Z",
+        "original_file_name": "unread.pdf",
+        "owner": 2,
+        "page_count": 1,
+        "storage_path": null,
+        "tags": [
+          1
+        ],
+        "title": "Unread letter"
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields&truncate_content=true&page=1&page_size=1000",
+  "status": 200
+}

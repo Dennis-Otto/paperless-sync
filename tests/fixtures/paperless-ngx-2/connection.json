@@ -1,0 +1,16 @@
+{
+  "body": {
+    "all": [],
+    "count": 0,
+    "next": null,
+    "previous": null,
+    "results": []
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/documents/?page=1&page_size=1",
+  "status": 200
+}

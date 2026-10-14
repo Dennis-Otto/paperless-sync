@@ -1,0 +1,63 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# A real Paperless-ngx next to Nextcloud and the mock, for the contract tests of
+# run-contract.sh: it adds this file to compose.yaml and starts one line of Paperless
+# by its profile, paperless-2 for the last release of 2.x or paperless-3 for the
+# current release of 3.x, each in a Compose project of its own. Renovate keeps both
+# images current by their digests, 2.x within 2.x (.github/renovate.json5).
+#
+# Paperless reads the PDFs of the tests as they are: they have text, so OCR skips them,
+# and it still keeps an archived version of each, whose checksum the app compares.
+# The administrator and the key are those of the tests alone; contract.py gets the token
+# of the API with them.
+
+x-paperless: &paperless
+  environment: &paperless-environment
+    PAPERLESS_REDIS: redis://redis:6379
+    PAPERLESS_ADMIN_USER: contract-admin
+    PAPERLESS_ADMIN_PASSWORD: contract-only-password
+    PAPERLESS_SECRET_KEY: contract-only-secret-key-of-the-tests
+    # The text of a PDF is enough; an archived version is kept all the same (2.x: skip
+    # with OCR_SKIP_ARCHIVE_FILE=never, 3.x: auto with ARCHIVE_FILE_GENERATION=always).
+    PAPERLESS_OCR_MODE: skip
+    PAPERLESS_OCR_SKIP_ARCHIVE_FILE: never
+    PAPERLESS_ARCHIVE_FILE_GENERATION: always
+    PAPERLESS_TASK_WORKERS: "1"
+    PAPERLESS_THREADS_PER_WORKER: "1"
+    PAPERLESS_WEBSERVER_WORKERS: "1"
+    PAPERLESS_ENABLE_NLTK: "false"
+    PAPERLESS_TIME_ZONE: UTC
+  depends_on:
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8000/"]
+    interval: 3s
+    timeout: 3s
+    retries: 100
+
+services:
+  # contract.py runs in the container of the mock, which reads the fixtures to compare the
+  # shapes of the answers with them.
+  paperless-mock:
+    volumes:
+      - ../fixtures:/fixtures:ro
+
+  redis:
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  paperless-2:
+    <<: *paperless
+    image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f
+    profiles: [paperless-2]
+
+  paperless-3:
+    <<: *paperless
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.1@sha256:cb91bfb468e63025a9d10c01b54c33665113668eee61b490db96de19b860b9c4
+    profiles: [paperless-3]
