@@ -142,6 +142,149 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('Paperless Sync is not completely configured.', $this->settings['status_last_error']);
 	}
 
+	/**
+	 * A dry-run shows what the settings of the page would do before they are saved: with another
+	 * path template here, and without saving it, the state of a document or a file.
+	 */
+	public function testADryRunUsesSettingsThatAreNotSaved(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
+		$unsaved = $this->configService->validateForDryRun(['path_template' => '{{ created_year }}/{{ title }} [P{{ id }}]', 'inbox_enabled' => false]);
+
+		$report = $this->service->run(true, $unsaved);
+
+		self::assertTrue($report->dryRun);
+		self::assertTrue($report->unsavedSettings);
+		self::assertSame(['EXPORT P123: ' . self::ARCHIVE . '/2026/Strom August [P123].pdf'], $report->actions, 'The inbox is off in the settings of the dry-run.');
+		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->settings['path_template'], 'The settings stay unsaved.');
+		self::assertTrue($this->settings['inbox_enabled']);
+		self::assertSame([], $this->state->exports);
+		self::assertSame(['Dokumente/Paperless/Eingang/scan.pdf'], array_keys($this->storage->files));
+		self::assertSame([['https://paperless.example.test', 'test-token', false]], $this->paperless->connections, 'A dry-run reaches the saved Paperless with the saved token.');
+		$kept = json_decode((string)$this->settings['status_last_report'], true, 512, JSON_THROW_ON_ERROR);
+		self::assertTrue($kept['unsavedSettings'], 'The kept report says that it shows unsaved settings.');
+		self::assertFalse($this->service->run(true)->unsavedSettings);
+	}
+
+	public function testOnlyADryRunUsesSettingsThatAreNotSaved(): void {
+		$this->locking->expects(self::never())->method('acquireLock');
+
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessage('Only a dry-run can use settings that are not saved.');
+		$this->service->run(false, $this->configService->get());
+	}
+
+	/**
+	 * The users and the custom fields of Paperless are read only for a template that needs them,
+	 * so that a token without the permission to view them works with every other template.
+	 */
+	public function testReadsUsersAndCustomFieldsOnlyForATemplateThatUsesThem(): void {
+		$this->paperless->documents = [['owner' => 3, 'tags' => [9], 'custom_fields' => [['field' => 1, 'value' => 'INV-7']]] + $this->document()];
+		$this->paperless->users = ['3' => 'dennis'];
+		$this->paperless->customFields = ['1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []]];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Strom'], 'inbox' => []];
+
+		$this->service->run(true);
+		self::assertSame([], $this->paperless->listsRead);
+
+		$this->configService->save(['path_template' => '{{ owner_username }}/{{ tag_list }}/{{ custom_fields.Invoice number }} [P{{ id }}]']);
+		$report = $this->service->run(true);
+
+		self::assertSame(['users', 'custom fields'], $this->paperless->listsRead);
+		self::assertSame(['EXPORT P123: ' . self::ARCHIVE . '/dennis/Strom/INV-7 [P123].pdf'], $report->actions);
+	}
+
+	/** @return array<string, array{string, string, string}> */
+	public static function refusedLists(): array {
+		return [
+			'users' => [
+				'{{ owner_username }} [P{{ id }}]',
+				'usersException',
+				'Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: HTTP 403.',
+			],
+			'custom fields' => [
+				'{{ custom_fields.Invoice number }} [P{{ id }}]',
+				'customFieldsException',
+				'Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: HTTP 403.',
+			],
+		];
+	}
+
+	/** A list that Paperless refuses fails the run before a file moves, with the permission that is missing. */
+	#[DataProvider('refusedLists')]
+	public function testAListThatPaperlessRefusesFailsTheRunWithThePermissionItNeeds(string $template, string $failure, string $message): void {
+		$this->paperless->documents = [$this->document()];
+		$this->configService->save(['path_template' => $template]);
+		$this->paperless->{$failure} = new RuntimeException('HTTP 403.');
+
+		try {
+			$this->service->run();
+			self::fail('A list that Paperless refuses fails the run.');
+		} catch (RuntimeException $exception) {
+			self::assertSame($message, $exception->getMessage());
+		}
+		self::assertSame([], $this->state->exports);
+	}
+
+	public function testACustomFieldThatPaperlessDoesNotHaveFailsTheRunBeforeAFileMoves(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->service->run();
+		$this->configService->save(['path_template' => '{{ custom_fields.Invoice numbr }} [P{{ id }}]']);
+
+		try {
+			$this->service->run();
+			self::fail('A custom field with a typo would empty the paths of every document.');
+		} catch (\InvalidArgumentException $exception) {
+			self::assertSame('Paperless has no custom field named "Invoice numbr", which the archive path template uses.', $exception->getMessage());
+		}
+		self::assertSame([self::EXPORTED_PATH], array_keys($this->storage->files), 'The file stays where it is.');
+	}
+
+	/**
+	 * The preview of the path template: the paths of the newest documents with the settings of
+	 * the page, skipped as a run skips them, and nothing written.
+	 */
+	public function testPreviewsThePathsOfTheNewestDocuments(): void {
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->paperless->tagInfo = ['names' => ['1' => 'Inbox', '2' => 'Privat'], 'inbox' => ['1']];
+		$documents = [];
+		foreach (range(1, 7) as $day) {
+			$documents[] = ['id' => 200 + $day, 'title' => "Brief {$day}", 'added' => sprintf('2026-09-%02dT08:00:00+02:00', $day)] + $this->document();
+		}
+		$documents[6]['tags'] = [1];
+		$documents[5]['tags'] = [2];
+		$documents[4]['id'] = 'abc';
+		$this->paperless->documents = $documents;
+		$config = $this->configService->validate(['path_template' => '{{ correspondent }}/{{ added_month }}/{{ title }} [P{{ id }}]', 'excluded_tags' => 'privat']);
+
+		$paths = $this->service->previewPaths($config, 5);
+
+		self::assertSame([
+			['id' => 207, 'title' => 'Brief 7', 'path' => 'Energie GmbH/09/Brief 7 [P207].pdf', 'skipped' => true],
+			['id' => 206, 'title' => 'Brief 6', 'path' => 'Energie GmbH/09/Brief 6 [P206].pdf', 'skipped' => true],
+			['id' => 204, 'title' => 'Brief 4', 'path' => 'Energie GmbH/09/Brief 4 [P204].pdf', 'skipped' => false],
+			['id' => 203, 'title' => 'Brief 3', 'path' => 'Energie GmbH/09/Brief 3 [P203].pdf', 'skipped' => false],
+		], $paths, 'A document without a valid ID has no path, and one of the inbox or with an excluded tag is skipped.');
+		self::assertSame([], $this->paperless->connections, 'The preview tests no connection, which a run does.');
+		self::assertSame([], $this->state->exports);
+		self::assertSame([], $this->storage->files);
+		self::assertArrayNotHasKey('status_last_started', $this->settings, 'The preview is no run.');
+	}
+
+	public function testThePreviewOfADocumentWithoutATitleShowsItsPath(): void {
+		$this->paperless->documents = [['title' => null] + $this->document()];
+
+		self::assertSame(
+			[['id' => 123, 'title' => '', 'path' => '_Ohne Korrespondent/_Ohne Dokumenttyp/2026/2026-08-26 - Ohne Titel [P123].pdf', 'skipped' => false]],
+			$this->service->previewPaths($this->configService->get(), 5),
+		);
+	}
+
 	public function testFailedRunKeepsTheReportOfWhatItDidInTheStatus(): void {
 		$this->storage->files['Dokumente/Paperless/Eingang/scan.pdf'] = '%PDF-scan';
 		$this->paperless->documents = [['id' => 'abc', 'title' => 'Broken']];

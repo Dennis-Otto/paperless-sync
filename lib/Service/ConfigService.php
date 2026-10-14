@@ -143,6 +143,33 @@ final class ConfigService {
 		return $this->fromValues($normalized, $token !== '');
 	}
 
+	/**
+	 * Settings for a dry-run that uses them without saving them, such as those of the settings page
+	 * before a save, which validate() checks. Their connection to Paperless and their target user
+	 * are the saved ones, which a save tests and confirms with the password of an administrator: a
+	 * dry-run doesn't ask for it, so it may neither send the stored token to another address, nor
+	 * allow one of the local network, nor read the files of another user.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @throws UnsavedSettingException when one of these settings differs from the saved one
+	 * @throws InvalidArgumentException when a setting is invalid
+	 */
+	public function validateForDryRun(array $settings): SyncConfig {
+		$saved = $this->readValues();
+		$same = [
+			'paperless_url' => static fn (mixed $value): string => rtrim(trim(is_scalar($value) ? (string)$value : ''), '/'),
+			'paperless_local_network' => static fn (mixed $value): bool => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+			'target_user' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
+		];
+		foreach ($same as $key => $normalize) {
+			if (array_key_exists($key, $settings) && $normalize($settings[$key]) !== $normalize($saved[$key])) {
+				throw new UnsavedSettingException($key);
+			}
+		}
+
+		return $this->validate($settings);
+	}
+
 	/** @param array<string, mixed> $settings */
 	public function save(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$config = $this->validate($settings, $tokenCandidate);

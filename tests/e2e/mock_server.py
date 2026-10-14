@@ -168,7 +168,19 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "original_file_name": "scan.pdf",
         "archived_file_name": "archive.pdf",
         "mime_type": "application/pdf",
+        # The fields of the variables of Paperless's own file names, which the default path
+        # template doesn't use.
+        "owner": 3,
+        "archive_serial_number": 42,
+        "page_count": 2,
+        "custom_fields": [{"field": 1, "value": "INV-2026-08"}],
     }
+
+
+# The users and the custom fields of Paperless, for {{ owner_username }} and
+# {{ custom_fields.<name> }}.
+USERS = [{"id": 3, "username": "e2e-owner"}]
+CUSTOM_FIELDS = [{"id": 1, "name": "Invoice number", "data_type": "string", "extra_data": {}}]
 
 
 def original_content(document_id):
@@ -298,6 +310,10 @@ class Handler(BaseHTTPRequestHandler):
             self._page([])
         elif parsed.path == "/api/tags/":
             self._page(showcase.TAGS if self._showcase() else [{"id": 9, "name": "Inbox", "is_inbox_tag": True}])
+        elif parsed.path == "/api/users/":
+            self._page(USERS)
+        elif parsed.path == "/api/custom_fields/":
+            self._page(CUSTOM_FIELDS)
         elif parsed.path == "/api/tasks/":
             task_id = parse_qs(parsed.query).get("task_id", [""])[0]
             with LOCK:

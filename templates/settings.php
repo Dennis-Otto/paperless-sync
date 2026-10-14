@@ -6,11 +6,12 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, resetUrl: string, runUrl: string, statusUrl: string} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\PathTemplateService;
 use OCP\Util;
 
 script('paperless_sync', 'settings');
@@ -46,7 +47,8 @@ $help = static function (string $anchor, string $section) use ($l): void {
 	data-save-url="<?php p($_['saveUrl']); ?>"
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
-	data-status-url="<?php p($_['statusUrl']); ?>">
+	data-status-url="<?php p($_['statusUrl']); ?>"
+	data-preview-url="<?php p($_['previewUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -170,11 +172,24 @@ $help = static function (string $anchor, string $section) use ($l): void {
 						} ?>><?php p($l->t('Skip and report conflict')); ?></option>
 					</select>
 				</label>
-				<label class="paperless-sync-field paperless-sync-field--wide">
-					<span><?php p($l->t('Archive path template')); ?></span>
-					<input data-setting="path_template" type="text" value="<?php p($config->pathTemplate); ?>" aria-describedby="paperless-sync-path-template-hint" required>
-				</label>
-				<p id="paperless-sync-path-template-hint" class="settings-hint paperless-sync-field--wide"><?php p($l->t('Write variables as {{ name }}; {{ id }} is required. The variables are id, title, correspondent, document_type, storage_path, created, created_year, created_month, added, added_year, original_filename and extension.')); ?> <?php p($l->t('Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.')); ?></p>
+				<!-- The path template, the buttons of its variables, and the paths of the newest documents with it, before a save. -->
+				<div id="paperless-sync-template" class="paperless-sync-template paperless-sync-field--wide">
+					<label class="paperless-sync-field">
+						<span><?php p($l->t('Archive path template')); ?></span>
+						<input id="paperless-sync-path-template" class="paperless-sync-code" data-setting="path_template" type="text" value="<?php p($config->pathTemplate); ?>" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="paperless-sync-path-template-hint paperless-sync-path-preview-status" required>
+					</label>
+					<div class="paperless-sync-variables" role="group" aria-label="<?php p($l->t('Insert a variable at the cursor')); ?>">
+						<?php foreach (PathTemplateService::VARIABLES as $variable) { ?>
+							<button type="button" class="paperless-sync-code" data-variable="<?php p($variable); ?>" aria-label="<?php p($l->t('Insert %s', ['{{ ' . $variable . ' }}'])); ?>"><?php p($variable); ?></button>
+						<?php } ?>
+						<button type="button" class="paperless-sync-code" data-variable="custom_fields.<?php p($l->t('Name')); ?>" data-select="<?php p($l->t('Name')); ?>" aria-label="<?php p($l->t('Insert a custom field, then type its name')); ?>">custom_fields.…</button>
+					</div>
+					<p id="paperless-sync-path-template-hint" class="settings-hint"><?php p($l->t('Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.')); ?> <?php p($l->t('Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.')); ?></p>
+					<div id="paperless-sync-path-preview" class="paperless-sync-path-preview">
+						<p id="paperless-sync-path-preview-status" class="paperless-sync-path-preview-status" aria-live="polite"><?php p($config->tokenConfigured ? $l->t('The paths of the newest documents of Paperless appear here.') : $l->t('Save the connection to Paperless, and the paths of its newest documents appear here.')); ?></p>
+						<ul id="paperless-sync-path-preview-list" class="paperless-sync-code" aria-label="<?php p($l->t('Paths of the newest documents in the archive folder')); ?>" hidden></ul>
+					</div>
+				</div>
 			</div>
 			<div class="paperless-sync-switches paperless-sync-switches--inline">
 				<label><input data-setting="prefer_archive" type="checkbox" <?php if ($config->preferArchive) {
@@ -258,7 +273,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>
 			<button id="paperless-sync-run" type="button"><?php p($l->t('Synchronize now')); ?></button>
 			<button id="paperless-sync-reset" type="button"><?php p($l->t('Disconnect')); ?></button>
-			<p id="paperless-sync-unsaved" class="paperless-sync-unsaved" hidden><?php p($l->t('Unsaved changes: "Run dry-run" uses the saved settings, and "Synchronize now" waits until you save.')); ?></p>
+			<p id="paperless-sync-unsaved" class="paperless-sync-unsaved" hidden><?php p($l->t('Unsaved changes: "Run dry-run" tries them without saving them, and "Synchronize now" waits until you save.')); ?></p>
 			<p id="paperless-sync-message" class="paperless-sync-message" role="status" aria-live="polite" tabindex="-1"></p>
 		</div>
 	</form>

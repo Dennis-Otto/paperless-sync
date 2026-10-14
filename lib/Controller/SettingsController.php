@@ -14,6 +14,8 @@ use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -23,6 +25,15 @@ use OCP\IL10N;
 use OCP\IRequest;
 
 final class SettingsController extends Controller {
+	/** The newest documents of Paperless whose paths the preview of the path template shows. */
+	public const PREVIEW_DOCUMENTS = 5;
+
+	/** The settings of the page that decide the path of a document or whether a run skips it; the preview takes the others as saved. */
+	private const PREVIEW_SETTINGS = [
+		'path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags',
+		'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled',
+	];
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		string $appName,
@@ -31,8 +42,47 @@ final class SettingsController extends Controller {
 		private PaperlessClientInterface $paperless,
 		private NextcloudStorageInterface $storage,
 		private IL10N $l10n,
+		private SyncService $syncService,
+		private PathTemplateService $pathTemplate,
 	) {
 		parent::__construct($appName, $request);
+	}
+
+	/**
+	 * The paths that the newest documents of Paperless would have with the path template of the
+	 * page and its fallback names, before they are saved, for the preview under the template. It
+	 * reads Paperless with the saved connection and changes nothing, so it needs no password.
+	 *
+	 * The answer is the template as a save would store it, whether Paperless is connected, and the
+	 * paths, relative to the archive folder; an invalid template is a message, as on save.
+	 *
+	 * @param array<string, mixed> $settings
+	 */
+	#[FrontpageRoute(verb: 'POST', url: '/settings/preview')]
+	public function preview(array $settings = []): JSONResponse {
+		$saved = $this->configService->get();
+		/** @psalm-suppress MixedAssignment */
+		$template = $settings['path_template'] ?? $saved->pathTemplate;
+		try {
+			$normalized = $this->pathTemplate->validateTemplate(is_string($template) ? $template : '');
+			// Without a saved connection, the template is checked, and there is nothing to show.
+			if (!$saved->tokenConfigured) {
+				return new JSONResponse(['template' => $normalized, 'connected' => false, 'paths' => []]);
+			}
+			$config = $this->configService->validate(array_intersect_key($settings, array_flip(self::PREVIEW_SETTINGS)));
+
+			return new JSONResponse([
+				'template' => $config->pathTemplate,
+				'connected' => true,
+				'paths' => $this->syncService->previewPaths($config, self::PREVIEW_DOCUMENTS),
+			]);
+		} catch (InvalidArgumentException $exception) {
+			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+		} catch (PaperlessLocalNetworkException $exception) {
+			return new JSONResponse(['message' => $exception->translated($this->l10n)], Http::STATUS_BAD_GATEWAY);
+		} catch (\Throwable $exception) {
+			return new JSONResponse(['message' => $this->l10n->t('Paperless could not be read for the preview: %s', [$exception->getMessage()])], Http::STATUS_BAD_GATEWAY);
+		}
 	}
 
 	/**

@@ -45,6 +45,30 @@ interface PaperlessClientInterface {
 	public function tags(): array;
 
 	/**
+	 * The names of the users of Paperless by their IDs, for {{ owner_username }}; Paperless lists
+	 * them only for a token whose user may view users.
+	 *
+	 * @return array<string, string>
+	 */
+	public function users(): array;
+
+	/**
+	 * The custom fields of Paperless by their IDs, for {{ custom_fields.<name> }}: the name, the
+	 * data type, and the labels of the choices of a select field by their IDs.
+	 *
+	 * @return array<string, array{name: string, type: string, options: array<string, string>}>
+	 */
+	public function customFields(): array;
+
+	/**
+	 * The documents that were added to Paperless last, the newest first, for the preview of the
+	 * path template.
+	 *
+	 * @return list<array<string, mixed>>
+	 */
+	public function newestDocuments(int $count): array;
+
+	/**
 	 * Downloads the original or the archived version of a document to a temporary file, computes its
 	 * checksums in one pass and hands the file to $consume as a readable stream at its start, which
 	 * $consume may close; the temporary file is gone afterwards, also when $consume fails.

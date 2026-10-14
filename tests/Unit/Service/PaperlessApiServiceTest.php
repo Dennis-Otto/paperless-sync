@@ -249,6 +249,57 @@ final class PaperlessApiServiceTest extends TestCase {
 		], $this->service->tags());
 	}
 
+	public function testUsersByTheirUsernames(): void {
+		$this->responses[] = [200, ['count' => 3, 'results' => [
+			['id' => 3, 'username' => 'dennis', 'first_name' => 'Dennis'],
+			['id' => 4, 'username' => 'paperless-sync'],
+			['id' => 5, 'username' => null],
+		]]];
+
+		self::assertSame(['3' => 'dennis', '4' => 'paperless-sync'], $this->service->users());
+		self::assertSame(self::URL . '/api/users/', $this->requests[0]['url']);
+	}
+
+	/**
+	 * Each choice of a select field has an ID, which a document holds, and a label; a choice
+	 * of another shape has neither and is left out.
+	 */
+	public function testCustomFieldsWithTheirTypesAndTheChoicesOfSelectFields(): void {
+		$this->responses[] = [200, ['count' => 5, 'results' => [
+			['id' => 1, 'name' => 'Invoice number', 'data_type' => 'string', 'extra_data' => ['select_options' => null]],
+			['id' => 2, 'name' => 'Status', 'data_type' => 'select', 'extra_data' => ['select_options' => [
+				['id' => 'oP1', 'label' => 'Open'],
+				['id' => 'pA2', 'label' => 'Paid'],
+			]]],
+			['id' => 3, 'name' => 'Priority', 'data_type' => 'select', 'extra_data' => ['select_options' => [
+				['id' => 'aB3', 'label' => 'High'],
+				['id' => 'cD4', 'label' => null],
+				['label' => 'Medium'],
+				'Low',
+			]]],
+			['id' => 4, 'name' => 'Paid', 'data_type' => true],
+			['id' => 5, 'data_type' => 'string'],
+		]]];
+
+		self::assertSame([
+			'1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []],
+			'2' => ['name' => 'Status', 'type' => 'select', 'options' => ['oP1' => 'Open', 'pA2' => 'Paid']],
+			'3' => ['name' => 'Priority', 'type' => 'select', 'options' => ['aB3' => 'High']],
+			'4' => ['name' => 'Paid', 'type' => '', 'options' => []],
+		], $this->service->customFields());
+		self::assertSame(self::URL . '/api/custom_fields/', $this->requests[0]['url']);
+	}
+
+	public function testNewestDocumentsAreOnePageOrderedByWhenTheyWereAdded(): void {
+		// A Paperless that ignores page_size, as a proxy might, still yields only the documents asked for.
+		$this->responses[] = [200, ['count' => 7, 'results' => self::entries(1, 7)]];
+
+		self::assertSame(self::entries(1, 5), $this->service->newestDocuments(5));
+		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
+		self::assertSame(['page' => 1, 'page_size' => 5, 'ordering' => '-added'], $this->requests[0]['options']['query']);
+		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
+	}
+
 	/** @return array<string, array{string, string}> */
 	public static function smallLists(): array {
 		return [
@@ -256,6 +307,8 @@ final class PaperlessApiServiceTest extends TestCase {
 			'correspondents' => ['correspondents', '/api/correspondents/'],
 			'document types' => ['documentTypes', '/api/document_types/'],
 			'storage paths' => ['storagePaths', '/api/storage_paths/'],
+			'users' => ['users', '/api/users/'],
+			'custom fields' => ['customFields', '/api/custom_fields/'],
 		];
 	}
 

@@ -120,18 +120,25 @@ async function expandFolderTree(page, folders) {
 	await settle(page)
 }
 
-// A picture of a part of the page, with a margin of what is around it.
+// A picture of a part of the page, with a margin of what is around it. A part that is
+// taller than the window gets a window as tall as it, so that the header of Nextcloud
+// covers none of it.
 async function shot(page, locator, margin = 16) {
+	const height = (await locator.boundingBox()).height + 4 * margin + 120
+	if (height > page.viewportSize().height) {
+		await page.setViewportSize({ width: VIEWPORT.width, height: Math.ceil(height) })
+	}
 	await locator.evaluate((element) => element.scrollIntoView({ block: 'center' }))
 	const box = await locator.boundingBox()
+	const viewport = page.viewportSize()
 	const x = Math.max(0, box.x - margin)
 	const y = Math.max(0, box.y - margin)
 	return page.screenshot({
 		clip: {
 			x,
 			y,
-			width: Math.min(VIEWPORT.width - x, box.width + 2 * margin),
-			height: Math.min(VIEWPORT.height - y, box.height + 2 * margin),
+			width: Math.min(viewport.width - x, box.width + 2 * margin),
+			height: Math.min(viewport.height - y, box.height + 2 * margin),
 		},
 	})
 }
@@ -301,6 +308,22 @@ try {
 		for (const [index, card] of CARDS.entries()) {
 			save(`docs/images/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
+		await context.close()
+	}
+
+	// The preview under the path template, a moment after a new template was typed: where
+	// the newest documents would go, before a save.
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, SETTINGS)
+		const template = page.locator('#paperless-sync-path-template')
+		await template.waitFor()
+		await template.fill('{{ correspondent }}/{{ created_year }}/{{ created_month_name }}/{{ created_day }} {{ title }} [P{{ id }}]{{ extension }}')
+		// The start of the template in view, as after typing it and going back to its start.
+		await template.press('Home')
+		await page.locator('#paperless-sync-path-preview-list li', { hasText: /^[^/]+\/\d{4}\/[A-Z][a-z]+\// }).first().waitFor()
+		await settle(page)
+		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
+		save(`docs/images/path-preview-${theme}.png`, await shot(page, page.locator('#paperless-sync-template')))
 		await context.close()
 	}
 

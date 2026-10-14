@@ -152,6 +152,10 @@
 		const errors = element('errors')
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
+		const pathTemplate = element('path-template')
+		const preview = element('path-preview')
+		const previewStatus = element('path-preview-status')
+		const previewList = element('path-preview-list')
 		const buttons = [save, dryRun, run, reset, refresh]
 		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
 		const pollInterval = 5000
@@ -170,6 +174,18 @@
 		// before the server answers; when the status can't be refreshed after it, the status
 		// shows this state again, not a run that never ends.
 		let serverState = lastState.dataset.state || 'never-run'
+		// The settings that decide the path of a document, or whether a run skips it, which the
+		// preview of the path template sends, as SettingsController::preview() takes them. A change
+		// of one of them shows the paths anew, once the typing pauses for previewDelay.
+		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
+		const previewDelay = 400
+		let previewTimer = 0
+		// The number of the last request of the preview: an answer to an earlier one, which may
+		// arrive after it, is not shown.
+		let previewRequest = 0
+		// Where the cursor was in the path template when it lost the focus, such as to the button
+		// of a variable; null until it had the focus, and a variable then goes to its end.
+		let templateSelection = null
 
 		// The settings that the form shows, or a copy of it, as the page sends them.
 		function settings(scope = root) {
@@ -258,9 +274,9 @@
 			}
 		}
 
-		// A dry-run and a run use the saved settings. A dry-run may show what they do before the
-		// changes are saved; "Synchronize now" waits for the save, so that it never applies
-		// settings that the page doesn't show.
+		// A dry-run uses the settings of the form, so that it shows what the changes do before
+		// they are saved; "Synchronize now" uses the saved settings and waits for the save, so
+		// that it never applies settings that the page doesn't show.
 		function updateButtons() {
 			const dirty = isDirty()
 			unsaved.hidden = !dirty
@@ -454,7 +470,9 @@
 				reportSummary.append(item)
 			})
 			const ended = result.completedAt ? formatTime(result.completedAt) : ''
-			if (result.dryRun) {
+			if (result.dryRun && result.unsavedSettings === true) {
+				setText(reportMeta, ended ? translate('Dry-run of unsaved settings, finished {time}', { time: ended }) : translate('Dry-run of unsaved settings, stopped before its end'))
+			} else if (result.dryRun) {
 				setText(reportMeta, ended ? translate('Dry-run, finished {time}', { time: ended }) : translate('Dry-run, stopped before its end'))
 			} else {
 				setText(reportMeta, ended ? translate('Run, finished {time}', { time: ended }) : translate('Run, stopped before its end'))
@@ -472,7 +490,9 @@
 		// How a run by hand ended, with the count of the errors that its report lists.
 		function showResult(result, isDryRun) {
 			const failures = Number(result.errors) || 0
-			if (failures === 0) {
+			if (failures === 0 && result.unsavedSettings === true) {
+				showMessage(translate('Dry-run of the unsaved settings completed. They are not saved yet, and no files were changed.'), 'success')
+			} else if (failures === 0) {
 				showMessage(isDryRun ? translate('Dry-run completed. No files were changed.') : translate('Synchronization completed.'), 'success')
 			} else if (isDryRun) {
 				showMessage(translatePlural('Dry-run completed with %n error. No files were changed; see the report.', 'Dry-run completed with %n errors. No files were changed; see the report.', failures), 'error')
@@ -486,8 +506,13 @@
 			showState(isDryRun ? 'dry-run-running' : 'running')
 			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), 'progress')
 			let gateway = 0
+			// A dry-run tries the changes of the form without saving them (SyncController::run()).
+			const body = { dryRun: isDryRun }
+			if (isDryRun && JSON.stringify(settings()) !== savedSettings) {
+				body.settings = settings()
+			}
 			try {
-				const result = await request(root.dataset.runUrl, 'POST', { dryRun: isDryRun })
+				const result = await request(root.dataset.runUrl, 'POST', body)
 				showReport(result, true)
 				showResult(result, isDryRun)
 			} catch (error) {
@@ -549,6 +574,103 @@
 			}
 		}
 
+		// Shows the paths of the newest documents of Paperless as the server rendered them with the
+		// template of the form, or why there are none.
+		function showPreview(answer) {
+			pathTemplate.removeAttribute('aria-invalid')
+			previewStatus.classList.remove('paperless-sync-path-preview-status--error')
+			const paths = Array.isArray(answer.paths) ? answer.paths : []
+			if (answer.connected !== true) {
+				setText(previewStatus, translate('Save the connection to Paperless, and the paths of its newest documents appear here.'))
+			} else if (paths.length === 0) {
+				setText(previewStatus, translate('Paperless has no documents yet, so there is no path to show.'))
+			} else {
+				setText(previewStatus, translatePlural('Where the newest document goes, in the archive folder:', 'Where the %n newest documents go, in the archive folder:', paths.length))
+			}
+			previewList.replaceChildren(...paths.map(function(entry) {
+				const item = document.createElement('li')
+				item.textContent = String(entry.path || '')
+				if (entry.skipped === true) {
+					const note = document.createElement('span')
+					note.className = 'paperless-sync-path-preview-skipped'
+					note.textContent = ' — ' + translate('a run skips it: in the inbox or with an excluded tag')
+					item.append(note)
+				}
+				return item
+			}))
+			previewList.hidden = paths.length === 0
+		}
+
+		// Says why there is no preview: an invalid template, which a save would refuse too, or a
+		// Paperless that can't be read.
+		function showPreviewError(error) {
+			if (error.status === 400) {
+				pathTemplate.setAttribute('aria-invalid', 'true')
+			} else {
+				pathTemplate.removeAttribute('aria-invalid')
+			}
+			previewStatus.classList.add('paperless-sync-path-preview-status--error')
+			setText(previewStatus, error.message || translate('The preview could not be loaded.'))
+			previewList.hidden = true
+		}
+
+		// Asks the server for the paths with the settings of the form, without saving them; only
+		// the answer to the last request is shown.
+		async function updatePreview() {
+			window.clearTimeout(previewTimer)
+			const current = ++previewRequest
+			preview.setAttribute('aria-busy', 'true')
+			try {
+				const answer = await request(root.dataset.previewUrl, 'POST', { settings: settings() })
+				if (current === previewRequest) {
+					showPreview(answer)
+				}
+			} catch (error) {
+				if (current === previewRequest) {
+					showPreviewError(error)
+				}
+			} finally {
+				if (current === previewRequest) {
+					preview.removeAttribute('aria-busy')
+				}
+			}
+		}
+
+		function schedulePreview() {
+			window.clearTimeout(previewTimer)
+			previewTimer = window.setTimeout(updatePreview, previewDelay)
+		}
+
+		// Puts {{ variable }} into the path template where its cursor was, or in place of the text
+		// that was selected, and selects the part to type over, such as the name of a custom field.
+		function insertVariable(variable, placeholder) {
+			const text = '{{ ' + variable + ' }}'
+			const focused = document.activeElement === pathTemplate
+			const end = pathTemplate.value.length
+			const [start, stop] = focused ? [pathTemplate.selectionStart ?? end, pathTemplate.selectionEnd ?? end] : templateSelection || [end, end]
+			pathTemplate.focus()
+			pathTemplate.setRangeText(text, Math.min(start, end), Math.min(stop, end), 'end')
+			if (placeholder) {
+				const from = Math.min(start, end) + text.length - ' }}'.length - placeholder.length
+				pathTemplate.setSelectionRange(from, from + placeholder.length)
+			}
+			pathTemplate.dispatchEvent(new Event('input', { bubbles: true }))
+		}
+
+		pathTemplate.addEventListener('blur', function() {
+			templateSelection = [pathTemplate.selectionStart, pathTemplate.selectionEnd]
+		})
+		root.querySelectorAll('[data-variable]').forEach(function(button) {
+			button.addEventListener('click', function() {
+				insertVariable(button.dataset.variable, button.dataset.select)
+			})
+		})
+		form.addEventListener('input', function(event) {
+			if (previewSettings.includes(event.target.dataset.setting)) {
+				schedulePreview()
+			}
+		})
+
 		form.addEventListener('submit', async function(event) {
 			event.preventDefault()
 			setBusy(true)
@@ -567,8 +689,10 @@
 				setBusy(false)
 			}
 			if (saved) {
-				// The schedule may have changed, and with it the next scheduled run.
+				// The schedule may have changed, and with it the next scheduled run, and the
+				// preview may now reach Paperless.
 				await refreshQuietly()
+				updatePreview()
 			}
 		})
 
@@ -612,8 +736,9 @@
 				setBusy(false)
 			}
 			if (disconnected) {
-				// Without the schedule, there is no next scheduled run.
+				// Without the schedule, there is no next scheduled run, and without the token no preview.
 				await refreshQuietly()
+				updatePreview()
 			}
 		})
 
@@ -641,5 +766,6 @@
 		if (status !== null) {
 			updateStatus(status)
 		}
+		updatePreview()
 	})
 })()
