@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Features
+
+- The **Activity** stream of the target user shows what Paperless Sync did, also in a scheduled run: one entry for each run that changed something, such as *Paperless Sync added or updated 6 documents and moved 1 document to _Gelöscht: a.pdf, b.pdf, c.pdf, d.pdf, e.pdf and 2 more*, with links to the first five files, and one entry for each file of the inbox that Paperless imported, with a link to its new document in Paperless, failed to import, with the reason and a link to the file in the error folder, or refused. The filter **Paperless Sync** of the Activity app shows them alone, and the activity settings can send them by mail or as a notification. Before, a run by hand left no entry, and a scheduled run left only entries of a *remote account* that didn't name Paperless. A dry-run and a run without changes add no entry.
+
+## [0.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.10...v0.2.0) (2026-10-14)
+
 ### Security
 
 - A run that can't reach Paperless, because Paperless is down or its name or certificate fails, no longer writes the Paperless API token into the Nextcloud log. Before, the log received the token in plain text with the trace of the error, with every failed run by hand or by the schedule, and so did everyone who reads the log or receives a copy of it. **Every earlier version is affected: create a new API token in Paperless, enter it in the settings, and delete the old Nextcloud logs and their copies, such as in backups or log collectors.**
@@ -15,7 +21,6 @@ All notable changes to this project are documented in this file.
 
 - The settings page shows how the last run ended at every visit, also a scheduled run that nobody watched: its state, in red when it failed or had errors, when it finished, the last successful run, the next scheduled run, the errors of the run in a box of their own, and its report. While a run is active, the page follows it until it ends.
 - The Nextcloud log has a warning, with the ID and the path of the document, when an error of a document first occurs or changes. An error that comes back in every run is logged once.
-- The **Activity** stream of the target user shows what Paperless Sync did, also in a scheduled run: one entry for each run that changed something, such as *Paperless Sync added or updated 6 documents and moved 1 document to _Gelöscht: a.pdf, b.pdf, c.pdf, d.pdf, e.pdf and 2 more*, with links to the first five files, and one entry for each file of the inbox that Paperless imported, with a link to its new document in Paperless, failed to import, with the reason and a link to the file in the error folder, or refused. The filter **Paperless Sync** of the Activity app shows them alone, and the activity settings can send them by mail or as a notification. Before, a run by hand left no entry, and a scheduled run left only entries of a *remote account* that didn't name Paperless. A dry-run and a run without changes add no entry.
 
 ### Bug fixes
 
