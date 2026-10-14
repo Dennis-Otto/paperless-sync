@@ -147,6 +147,36 @@ elif mode == "dry-run":
     expect("errors", 0)
     if not any(str(action).startswith("EXPORT P123:") for action in payload.get("actions", [])):
         raise AssertionError(f"Dry-run export action missing: {payload!r}")
+elif mode == "preview":
+    expect("connected", True)
+    expect(
+        "template",
+        "{{ owner_username }}/{{ created_month_name }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }} ({{ page_count }} pages) [P{{ id }}]",
+    )
+    expect(
+        "paths",
+        [
+            {
+                "id": 123,
+                "title": "Monthly invoice",
+                "path": "e2e-owner/August/42 Monthly invoice INV-2026-08 (2 pages) [P123].pdf",
+                "skipped": False,
+            }
+        ],
+    )
+elif mode == "dry-run-unsaved":
+    expect("dryRun", True)
+    expect("unsavedSettings", True)
+    expect("importsSubmitted", 0)
+    expect("errors", 0)
+    expect_action("EXPORT P123: Documents/Paperless/Archive/2026/Monthly invoice [P123].pdf")
+elif mode == "dry-run-other-user":
+    expect(
+        "message",
+        "A dry-run of unsaved settings uses the saved connection to Paperless and the saved target user. "
+        "Save the settings to try another one.",
+    )
+    expect("setting", "target_user")
 elif mode == "export":
     expect("dryRun", False)
     expect("exported", 1)
@@ -314,15 +344,20 @@ elif mode == "mock-after-move":
     if payload.get("metadataRequests", 0) < 1:
         raise AssertionError(f"Metadata-only move did not request a checksum: {payload!r}")
     expect("invalidAuth", 0)
-    # Every run asked for the documents by their IDs and for the fields that it reads, without
-    # the text of the documents.
+    # Every run asked for the documents by their IDs, the live path preview for the newest ones,
+    # and both for the fields that the app reads, without the text of the documents.
     scans = payload.get("documentScans", [])
-    if len(scans) < 4:
-        raise AssertionError(f"Expected a scan of the documents in every run: {scans!r}")
+    if sum(scan.get("ordering") == "id" for scan in scans) < 4:
+        raise AssertionError(f"Expected a scan of the documents by their IDs in every run: {scans!r}")
     for scan in scans:
         fields = scan.get("fields", "").split(",")
-        if scan.get("ordering") != "id" or "title" not in fields or "content" in fields or "notes" in fields:
-            raise AssertionError(f"A run asked for more of the documents than it reads: {scan!r}")
+        if (
+            scan.get("ordering") not in ("id", "-added")
+            or "title" not in fields
+            or "content" in fields
+            or "notes" in fields
+        ):
+            raise AssertionError(f"A scan asked for more of the documents than the app reads: {scan!r}")
 elif mode == "names":
     # Every name within the bytes of Nextcloud, with the marker and the extension whole;
     # the paths go to standard output, for run.sh to read through WebDAV.

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use InvalidArgumentException;
 use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
@@ -52,13 +53,23 @@ final class SyncService {
 	) {
 	}
 
-	public function run(bool $dryRun = false): SyncReport {
+	/**
+	 * A run with the saved settings, or a dry-run with $settings, such as those of the settings page
+	 * before they are saved, which ConfigService::validate() checked: a dry-run changes nothing, so
+	 * it may show what settings would do before anything uses them.
+	 *
+	 * @throws InvalidArgumentException when a run that is no dry-run comes with settings
+	 */
+	public function run(bool $dryRun = false, ?SyncConfig $settings = null): SyncReport {
+		if ($settings !== null && !$dryRun) {
+			throw new InvalidArgumentException('Only a dry-run can use settings that are not saved.');
+		}
 		$this->lockingProvider->acquireLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
-		$report = new SyncReport($dryRun, $this->now());
+		$report = new SyncReport($dryRun, $this->now(), unsavedSettings: $settings !== null);
 		$this->status->started($dryRun);
 		$config = null;
 		try {
-			$config = $this->configService->get();
+			$config = $settings ?? $this->configService->get();
 			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
 				throw new RuntimeException('Paperless Sync is not completely configured.');
 			}
@@ -103,6 +114,7 @@ final class SyncService {
 		$documentTypes = $this->paperless->documentTypes();
 		$storagePaths = $this->paperless->storagePaths();
 		$tags = $this->paperless->tags();
+		[$users, $customFields] = $this->templateLists($config);
 		$report->activeDocuments = count($documents);
 		$report->trashedDocuments = count($trash);
 
@@ -164,8 +176,11 @@ final class SyncService {
 			}
 
 			$target = '';
+			// The checksum and the fingerprint that a run learned of a changed document, written with
+			// the next save of its state, so a document that finishes unchanged costs one write.
+			$checksumValues = [];
 			try {
-				$relative = $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths);
+				$relative = $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields);
 				$target = $this->join($archiveRoot, $relative);
 				$hasArchive = is_string($document['archived_file_name'] ?? null) && $document['archived_file_name'] !== '';
 				$useOriginal = !$config->preferArchive || !$hasArchive;
@@ -191,19 +206,15 @@ final class SyncService {
 						}
 						// Paperless reads the checksum from the files of the document, so the state keeps it
 						// with its revision, for a document that waits for a later run or whose change fails.
-						$values = [];
 						$checksum = $this->knownChecksum($entry, $sourceRevision);
 						if ($checksum === null) {
 							$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
-							$values = ['remote_checksum' => $checksum, 'remote_revision' => $sourceRevision];
+							$checksumValues = ['remote_checksum' => $checksum, 'remote_revision' => $sourceRevision];
 						}
 						$fingerprint = $this->completedFingerprint($config, $oldPath, $fingerprint, $checksum);
 						// The completed fingerprint names the content of the mirrored file, whatever the run does
 						// next, so a move that waits for the next run doesn't read the file once more.
-						$values['fingerprint'] = $fingerprint;
-						if (!$report->dryRun) {
-							$states->save($documentId, $values);
-						}
+						$checksumValues['fingerprint'] = $fingerprint;
 						$sameContent = DocumentFingerprint::matches($fingerprint, $checksum);
 					}
 				}
@@ -217,7 +228,7 @@ final class SyncService {
 					++$report->unchanged;
 					// Only what changed is written, so a document that stayed as it was costs no write.
 					if (!$report->dryRun) {
-						$states->save($documentId, [
+						$states->save($documentId, $checksumValues + [
 							'fingerprint' => $fingerprint,
 							'source_revision' => $sourceRevision,
 							'state' => 'active',
@@ -230,6 +241,7 @@ final class SyncService {
 				}
 				if ($batchFull) {
 					++$report->skipped;
+					$this->saveChecksum($states, $report, $documentId, $checksumValues);
 					continue;
 				}
 				++$attempts;
@@ -266,6 +278,8 @@ final class SyncService {
 					continue;
 				}
 
+				$this->saveChecksum($states, $report, $documentId, $checksumValues);
+				$checksumValues = [];
 				if ($canMove) {
 					$this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode);
 					// The state follows the file at once, so that the next run finds it at its new
@@ -322,7 +336,7 @@ final class SyncService {
 				$error = $this->exceptionMessage($exception);
 				$report->error("P{$documentId}: {$error}");
 				if (!$report->dryRun) {
-					$states->save($documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
+					$states->save($documentId, $checksumValues + ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 				}
 				// The warning about the archive names the error that stops the writes.
 				if ($this->stopsWrites($config, $report, $archiveRoot, $exception, $error)) {
@@ -509,6 +523,73 @@ final class SyncService {
 	}
 
 	/**
+	 * The paths that the newest documents of Paperless would have in the archive with $config, such
+	 * as the settings of the page before they are saved, relative to the archive folder, for the
+	 * preview of the path template; skipped is whether a run leaves the document out, as one of
+	 * the inbox or with an excluded tag. It reads Paperless and nothing else, and changes nothing.
+	 *
+	 * @return list<array{id: int, title: string, path: string, skipped: bool}>
+	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template
+	 */
+	public function previewPaths(SyncConfig $config, int $count): array {
+		$documents = $this->paperless->newestDocuments($count);
+		$correspondents = $this->paperless->correspondents();
+		$documentTypes = $this->paperless->documentTypes();
+		$storagePaths = $this->paperless->storagePaths();
+		$tags = $this->paperless->tags();
+		[$users, $customFields] = $this->templateLists($config);
+		/** @var list<string> $excludedNames */
+		$excludedNames = array_values(array_map('mb_strtolower', array_filter(array_map('trim', explode(',', $config->excludedTags)))));
+		$paths = [];
+		foreach ($documents as $document) {
+			// A document without a valid ID has no path; a run reports it as an error.
+			$documentId = is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
+			if ($documentId < 1) {
+				continue;
+			}
+			$paths[] = [
+				'id' => $documentId,
+				'title' => is_string($document['title'] ?? null) ? (string)$document['title'] : '',
+				'path' => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
+				'skipped' => $this->isExcluded($config, $document, $tags, $excludedNames),
+			];
+		}
+
+		return $paths;
+	}
+
+	/**
+	 * The lists of Paperless that only some templates need, so that a run reads them only then: the
+	 * users for {{ owner_username }} and the custom fields for {{ custom_fields.<name> }}. A list
+	 * that Paperless refuses fails the run, with the permission that its token may lack, as does a
+	 * custom field that Paperless doesn't have, before a path changes: the paths of every document
+	 * would change without them.
+	 *
+	 * @return array{array<string, string>, array<string, array{name: string, type: string, options: array<string, string>}>}
+	 */
+	private function templateLists(SyncConfig $config): array {
+		$users = [];
+		$customFields = [];
+		try {
+			if ($this->pathTemplate->usesOwner($config->pathTemplate)) {
+				$users = $this->paperless->users();
+			}
+		} catch (RuntimeException $exception) {
+			throw new RuntimeException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: ' . $exception->getMessage(), 0, $exception);
+		}
+		try {
+			if ($this->pathTemplate->customFieldNames($config->pathTemplate) !== []) {
+				$customFields = $this->paperless->customFields();
+			}
+		} catch (RuntimeException $exception) {
+			throw new RuntimeException('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: ' . $exception->getMessage(), 0, $exception);
+		}
+		$this->pathTemplate->requireCustomFields($config->pathTemplate, $customFields);
+
+		return [$users, $customFields];
+	}
+
+	/**
 	 * The documents in the order of the run, each with its ID and its state: the most recently added
 	 * first, so that a new document does not wait behind a backlog. A document whose last change
 	 * failed follows the others, the one that failed longest ago first, so that documents that keep
@@ -619,6 +700,18 @@ final class SyncService {
 		$mirrored = $this->mirroredFingerprint($config, $path);
 
 		return $mirrored !== null && DocumentFingerprint::matches($fingerprint, $mirrored->sha256);
+	}
+
+	/**
+	 * Writes the checksum and the fingerprint that the run learned of a document that doesn't finish
+	 * as unchanged, before its file changes, so that they outlast a change that fails.
+	 *
+	 * @param array<string, int|string|null> $values
+	 */
+	private function saveChecksum(ExportStates $states, SyncReport $report, int $documentId, array $values): void {
+		if ($values !== [] && !$report->dryRun) {
+			$states->save($documentId, $values);
+		}
 	}
 
 	/**

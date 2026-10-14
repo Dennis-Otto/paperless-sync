@@ -197,6 +197,94 @@
 	font-weight: 400;
 }
 
+/* The path template, its variables and its paths, in a font whose characters all have one width,
+   so that braces, spaces and slashes are easy to tell apart. */
+.paperless-sync-code {
+	font-family: var(--font-face-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+}
+
+.paperless-sync-field input.paperless-sync-code[aria-invalid='true'] {
+	border-color: var(--color-error);
+}
+
+.paperless-sync-template {
+	display: grid;
+	gap: 10px;
+}
+
+.paperless-sync-template .settings-hint {
+	margin: 0;
+}
+
+/* The variables of the template, which put themselves in at the cursor. */
+.paperless-sync-variables {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.paperless-sync-variables button {
+	min-height: 28px;
+	margin: 0;
+	padding: 2px 10px;
+	border: 1px solid var(--color-border-dark, var(--color-border));
+	border-radius: var(--border-radius-pill, 14px);
+	background: var(--color-background-hover);
+	color: var(--color-main-text);
+	font-size: 13px;
+	font-weight: 400;
+}
+
+.paperless-sync-variables button:hover {
+	background: var(--color-primary-element-light, var(--color-background-dark));
+}
+
+.paperless-sync-variables button:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
+}
+
+/* The paths of the newest documents with the template of the form, under the template. */
+.paperless-sync-path-preview {
+	padding: 12px 14px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-background-dark);
+}
+
+.paperless-sync-path-preview[aria-busy='true'] {
+	opacity: 0.7;
+}
+
+.paperless-sync-path-preview-status {
+	margin: 0;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-path-preview-status--error {
+	color: var(--color-error-text);
+}
+
+.paperless-sync-path-preview ul {
+	display: grid;
+	gap: 4px;
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+
+/* Without this, display: grid would keep the paths of an earlier template under an error. */
+.paperless-sync-path-preview ul[hidden] {
+	display: none;
+}
+
+.paperless-sync-path-preview-skipped {
+	font-family: var(--font-face);
+	color: var(--color-text-maxcontrast);
+}
+
 .paperless-sync-switches {
 	display: grid;
 	gap: 12px;

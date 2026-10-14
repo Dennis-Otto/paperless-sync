@@ -18,22 +18,30 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
+use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 use ReflectionMethod;
 use RuntimeException;
 
 final class SettingsControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
+	use RecordedActivities;
 
 	/** What the checklist says when Paperless refuses the token, with what to do, in German. */
 	private const TOKEN_REFUSED = 'Paperless hat das API-Token abgelehnt (HTTP 401). Kopiere das Token noch einmal aus Paperless, unter „Mein Profil“ im Menü seines Kontos, und prüfe, ob das Konto aktiv ist.';
@@ -68,14 +76,7 @@ final class SettingsControllerTest extends TestCase {
 			return $this->checks;
 		});
 		$this->storage = $this->createMock(NextcloudStorageInterface::class);
-		$this->controller = new SettingsController(
-			AppConstants::APP_ID,
-			$this->createMock(IRequest::class),
-			$this->configService(),
-			$this->paperless,
-			$this->storage,
-			$this->germanL10n(),
-		);
+		$this->controller = $this->controller($this->configService());
 	}
 
 	public function testSavesSettingsThatWorkWithPaperlessAndNextcloud(): void {
@@ -262,14 +263,7 @@ final class SettingsControllerTest extends TestCase {
 		$credentials = $this->createMock(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
 		$credentials->method('store')->willThrowException(new RuntimeException('Unavailable.'));
-		$controller = new SettingsController(
-			AppConstants::APP_ID,
-			$this->createMock(IRequest::class),
-			new ConfigService($this->appConfig(), $credentials, new PathTemplateService()),
-			$this->paperless,
-			$this->storage,
-			$this->germanL10n(),
-		);
+		$controller = $this->controller(new ConfigService($this->appConfig(), $credentials, new PathTemplateService()));
 		$this->storage->expects(self::once())->method('test');
 
 		$response = $controller->save(self::validSettings() + ['enabled' => true]);
@@ -505,6 +499,122 @@ final class SettingsControllerTest extends TestCase {
 		self::assertTrue($config->permanentDelete);
 		self::assertSame(20, $config->batchSize);
 		self::assertNull($this->credential);
+	}
+
+	/**
+	 * Editing the template shows where the newest documents of Paperless would go, before a save:
+	 * with the template and the fallback names of the page, and the saved connection.
+	 */
+	public function testThePreviewShowsThePathsOfTheNewestDocumentsWithTheTemplateOfThePage(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->expects(self::once())->method('newestDocuments')->with(SettingsController::PREVIEW_DOCUMENTS)->willReturn([
+			['id' => 12, 'title' => 'Strom', 'correspondent' => 4, 'created' => '2026-03-02', 'original_file_name' => 'scan.pdf', 'tags' => [1]],
+			['id' => 11, 'title' => '', 'created' => '2026-02-01', 'original_file_name' => 'scan.pdf'],
+		]);
+		$this->paperless->method('correspondents')->willReturn(['4' => 'Energie GmbH']);
+		$this->paperless->method('tags')->willReturn(['names' => ['1' => 'Inbox'], 'inbox' => ['1']]);
+		// The preview reads with the saved connection, whatever the page says about it.
+		$this->paperless->expects(self::never())->method('testConnection');
+
+		$response = $this->controller->preview([
+			'path_template' => '{{correspondent}}/{{ created_month_name }}/{{ title }} [P{{ id }}]',
+			'untitled' => 'Ohne Namen',
+			'skip_inbox' => false,
+			'paperless_url' => 'https://other.example.test',
+			'target_user' => 'someone-else',
+		]);
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame([
+			'template' => '{{ correspondent }}/{{ created_month_name }}/{{ title }} [P{{ id }}]',
+			'connected' => true,
+			'paths' => [
+				['id' => 12, 'title' => 'Strom', 'path' => 'Energie GmbH/March/Strom [P12].pdf', 'skipped' => false],
+				['id' => 11, 'title' => '', 'path' => '_Ohne Korrespondent/February/Ohne Namen [P11].pdf', 'skipped' => false],
+			],
+		], self::answer($response));
+		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->configService()->get()->pathTemplate, 'The preview saves nothing.');
+		self::assertSame('paperless', $this->configService()->get()->targetUser);
+	}
+
+	public function testWithoutAConnectionThePreviewChecksTheTemplateAlone(): void {
+		$this->paperless->expects(self::never())->method('newestDocuments');
+
+		$response = $this->controller->preview(['path_template' => '{{title}} [P{{id}}]']);
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(['template' => '{{ title }} [P{{ id }}]', 'connected' => false, 'paths' => []], self::answer($response));
+		self::assertSame(['template' => PathTemplateService::DEFAULT_TEMPLATE, 'connected' => false, 'paths' => []], self::answer($this->controller->preview()), 'Without a template on the page, the preview shows the saved one.');
+	}
+
+	/** @return array<string, array{mixed, string}> */
+	public static function invalidPreviewTemplates(): array {
+		return [
+			'an unknown variable' => ['{{ titel }} [P{{ id }}]', 'Unknown archive path variable: {{ titel }}.'],
+			'no id' => ['{{ title }}', 'The archive path template must contain {{ id }}.'],
+			'no text' => [['{{ id }}'], 'The archive path template must not be empty.'],
+		];
+	}
+
+	#[DataProvider('invalidPreviewTemplates')]
+	public function testThePreviewOfAnInvalidTemplateSaysWhyAsASaveWould(mixed $template, string $message): void {
+		$response = $this->controller->preview(['path_template' => $template]);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => $message], self::answer($response));
+	}
+
+	public function testThePreviewSaysWhyPaperlessCouldNotBeRead(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('newestDocuments')->willThrowException(new RuntimeException('Connection refused.'));
+
+		$response = $this->controller->preview(['path_template' => PathTemplateService::DEFAULT_TEMPLATE]);
+
+		self::assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		self::assertSame(['message' => 'Paperless konnte für die Vorschau nicht gelesen werden: Connection refused.'], self::answer($response));
+	}
+
+	public function testThePreviewSaysHowToReachAPaperlessInTheLocalNetwork(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('newestDocuments')->willThrowException(new PaperlessLocalNetworkException('paperless'));
+
+		$response = $this->controller->preview();
+
+		self::assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		self::assertStringContainsString('„Paperless läuft in meinem lokalen Netzwerk“', (string)self::answer($response)['message']);
+	}
+
+	/** The preview reads Paperless with the saved connection and saves nothing, so it needs no password. */
+	public function testThePreviewNeedsNoPassword(): void {
+		self::assertCount(0, (new ReflectionMethod(SettingsController::class, 'preview'))->getAttributes(PasswordConfirmationRequired::class));
+	}
+
+	private function controller(ConfigService $configService): SettingsController {
+		$paths = new PathTemplateService();
+		$clock = new TestClock();
+		$sync = new SyncService(
+			$configService,
+			$this->paperless,
+			$this->storage,
+			new TestStateRepository(),
+			$paths,
+			new StatusService($this->appConfig(), $clock),
+			$this->createMock(ILockingProvider::class),
+			$this->createMock(LoggerInterface::class),
+			$clock,
+			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
+		);
+
+		return new SettingsController(
+			AppConstants::APP_ID,
+			$this->createMock(IRequest::class),
+			$configService,
+			$this->paperless,
+			$this->storage,
+			$this->germanL10n(),
+			$sync,
+			$paths,
+		);
 	}
 
 	/** @return array<string, mixed> the data of an answer, decoded as the page receives it */

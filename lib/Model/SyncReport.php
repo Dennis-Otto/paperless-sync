@@ -79,6 +79,8 @@ final class SyncReport implements \JsonSerializable {
 		public readonly bool $dryRun,
 		public readonly int $startedAt = 0,
 		public int $completedAt = 0,
+		/** Whether a dry-run used settings that were not saved, those of the settings page before a save. */
+		public readonly bool $unsavedSettings = false,
 	) {
 	}
 

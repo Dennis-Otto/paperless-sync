@@ -9,10 +9,12 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Controller;
 
+use InvalidArgumentException;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\UnsavedSettingException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -34,10 +36,29 @@ final class SyncController extends Controller {
 		parent::__construct($appName, $request);
 	}
 
+	/**
+	 * A run, or a dry-run, by default. A dry-run may come with the settings of the page, which it
+	 * uses without saving them, so that the page shows what they do before a save; they keep the
+	 * saved connection to Paperless and the saved target user (ConfigService::validateForDryRun()).
+	 * A run uses the saved settings only.
+	 *
+	 * @param array<string, mixed>|null $settings
+	 */
 	#[FrontpageRoute(verb: 'POST', url: '/sync/run')]
-	public function run(bool $dryRun = true): JSONResponse {
+	public function run(bool $dryRun = true, ?array $settings = null): JSONResponse {
+		if ($settings !== null && !$dryRun) {
+			return new JSONResponse(['message' => $this->l10n->t('Save the settings first: only a dry-run can use settings that are not saved.')], Http::STATUS_BAD_REQUEST);
+		}
 		try {
-			return new JSONResponse($this->syncService->run($dryRun));
+			$config = $settings === null ? null : $this->configService->validateForDryRun($settings);
+		} catch (UnsavedSettingException $exception) {
+			// The setting to save first, which the page moves the focus to.
+			return new JSONResponse(['message' => $exception->translated($this->l10n), 'setting' => $exception->setting], Http::STATUS_BAD_REQUEST);
+		} catch (InvalidArgumentException $exception) {
+			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+		try {
+			return new JSONResponse($this->syncService->run($dryRun, $config));
 		} catch (LockedException) {
 			return new JSONResponse(['message' => 'Another synchronization run is already active.'], Http::STATUS_CONFLICT);
 		} catch (PaperlessLocalNetworkException $exception) {

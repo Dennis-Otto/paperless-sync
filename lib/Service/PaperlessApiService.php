@@ -47,7 +47,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 */
 	public const DOCUMENT_FIELDS = [
 		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'created', 'added', 'modified',
-		'tags', 'original_file_name', 'archived_file_name', 'mime_type',
+		'tags', 'original_file_name', 'archived_file_name', 'mime_type', 'owner', 'archive_serial_number',
+		'page_count', 'custom_fields',
 	];
 	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
 	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
@@ -202,6 +203,55 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		return ['names' => $names, 'inbox' => $inbox];
+	}
+
+	public function users(): array {
+		return $this->namedMap('/api/users/', 'username');
+	}
+
+	/** @psalm-suppress MixedAssignment */
+	public function customFields(): array {
+		$fields = [];
+		foreach ($this->getAll('/api/custom_fields/') as $id => $field) {
+			$name = $field['name'] ?? null;
+			if (!is_string($name)) {
+				continue;
+			}
+			$type = $field['data_type'] ?? null;
+			$extra = $field['extra_data'] ?? null;
+			$choices = is_array($extra) ? ($extra['select_options'] ?? null) : null;
+			$options = [];
+			foreach (is_array($choices) ? $choices : [] as $choice) {
+				// Each choice of a select field has an ID, which a document holds, and a label.
+				$choiceId = is_array($choice) ? ($choice['id'] ?? null) : null;
+				$label = is_array($choice) ? ($choice['label'] ?? null) : null;
+				if (is_scalar($choiceId) && is_string($label)) {
+					$options[(string)$choiceId] = $label;
+				}
+			}
+			$fields[(string)$id] = ['name' => $name, 'type' => is_string($type) ? $type : '', 'options' => $options];
+		}
+
+		return $fields;
+	}
+
+	public function newestDocuments(int $count): array {
+		$config = $this->configService->get();
+		$page = $this->requestPage(
+			$config->paperlessUrl,
+			$this->configService->getToken(),
+			$config->paperlessLocalNetwork,
+			'/api/documents/',
+			[
+				'page' => 1,
+				'page_size' => $count,
+				'ordering' => '-added',
+				'fields' => implode(',', self::DOCUMENT_FIELDS),
+				'truncate_content' => 'true',
+			],
+		);
+
+		return array_slice($page['results'], 0, $count);
 	}
 
 	public function downloadDocument(int $documentId, bool $original, callable $consume): DocumentFingerprint {
@@ -536,14 +586,16 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
+	 * The name of every entry of a list by its ID, from the field $field of the entry.
+	 *
 	 * @return array<string, string>
 	 * @psalm-suppress MixedAssignment
 	 */
-	private function namedMap(string $path): array {
+	private function namedMap(string $path, string $field = 'name'): array {
 		/** @var array<string, string> $map */
 		$map = [];
 		foreach ($this->getAll($path) as $id => $item) {
-			$name = $item['name'] ?? null;
+			$name = $item[$field] ?? null;
 			if (is_string($name)) {
 				$map[(string)$id] = $name;
 			}

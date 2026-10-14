@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCP\IConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
@@ -366,6 +367,212 @@ final class PathTemplateServiceTest extends TestCase {
 	#[DataProvider('windowsDeviceNames')]
 	public function testKeepsWindowsDeviceNamesUsable(string $name, string $cleaned): void {
 		self::assertSame($cleaned, $this->service->cleanComponent($name, 'Fallback'));
+	}
+
+	/** The variables that Paperless-ngx offers for its own file names, as people know them from its storage paths. */
+	public function testRendersTheVariablesOfTheFileNamesOfPaperless(): void {
+		$template = '{{ owner_username }}/{{ created_year_short }}-{{ created_day }}/{{ added_month }}.{{ added_day }} {{ asn }} {{ title }} ({{ page_count }} pages, {{ tag_list }}, {{ custom_fields.Invoice number }}) [P{{ id }}]{{ extension }}';
+		$document = $this->document([
+			'id' => 7,
+			'owner' => 3,
+			'archive_serial_number' => 1042,
+			'page_count' => 2,
+			'created' => '2026-08-26T00:00:00+02:00',
+			'added' => '2026-09-01T12:30:00+02:00',
+			'tags' => [12, ['id' => 10], 99],
+			'custom_fields' => [['field' => 1, 'value' => 'INV-2026/08']],
+		]);
+
+		self::assertSame(
+			'dennis/26-26/09.01 1042 Rechnung (2 pages, Strom,steuer, INV-2026_08) [P7].pdf',
+			$this->service->render(
+				$this->config($template),
+				$document,
+				[],
+				[],
+				[],
+				['10' => 'steuer', '12' => 'Strom', '13' => 'Privat'],
+				['3' => 'dennis'],
+				['1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []]],
+			),
+			'The tags are sorted, as Paperless sorts them; a value cannot add a folder.',
+		);
+	}
+
+	public function testValuesThatADocumentLacksStayEmpty(): void {
+		$template = '{{ owner_username }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }}{{ tag_list }}{{ page_count }} [P{{ id }}]';
+
+		self::assertSame(
+			'Folder/Rechnung [P1].pdf',
+			$this->service->render(
+				$this->config($template),
+				$this->document(['owner' => 9, 'archive_serial_number' => null, 'page_count' => '2 pages', 'tags' => 'none', 'custom_fields' => ['none', ['field' => 1, 'value' => null]]]),
+				[],
+				[],
+				[],
+				[],
+				[],
+				['1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []]],
+			),
+			'A folder that only an empty value would name takes the fallback Folder.',
+		);
+		self::assertSame(
+			'Folder/Rechnung [P1].pdf',
+			$this->service->render($this->config($template), $this->document(), [], [], [], [], [], ['1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []]]),
+			'A document without custom fields, owner or tags has none of their values.',
+		);
+	}
+
+	public function testDatesOfTheNewVariablesFallBackLikeTheOthers(): void {
+		self::assertSame(
+			'_Ohne Datum/_Ohne Datum-_Ohne Datum-_Ohne Datum/_Ohne Datum-_Ohne Datum [P1].pdf',
+			$this->service->render(
+				$this->config('{{ created_month_name }}/{{ created_year_short }}-{{ created_day }}-{{ added_month }}/{{ added_day }}-{{ added_year }} [P{{ id }}]'),
+				$this->document(['created' => null, 'added' => 'yesterday']),
+				[],
+				[],
+				[],
+			),
+		);
+	}
+
+	/** @return array<string, array{mixed, string, array<string, string>, string}> */
+	public static function customFieldValues(): array {
+		return [
+			'text' => ['INV-1', 'string', [], 'INV-1'],
+			'number' => [42, 'integer', [], '42'],
+			'decimal' => [12.5, 'float', [], '12.5'],
+			'money' => ['EUR12.30', 'monetary', [], 'EUR12.30'],
+			'date' => ['2026-08-26', 'date', [], '2026-08-26'],
+			'yes' => [true, 'boolean', [], 'true'],
+			'no' => [false, 'boolean', [], 'false'],
+			'document links' => [[12, 13, ['id' => 14]], 'documentlink', [], '12,13'],
+			'choice by its ID' => ['aB3', 'select', ['aB3' => 'High'], 'High'],
+			'choice that the field no longer has' => ['gone', 'select', ['aB3' => 'High'], ''],
+			'choice that is no value' => [['aB3'], 'select', ['aB3' => 'High'], ''],
+			'no value' => [null, 'string', [], ''],
+		];
+	}
+
+	/** @param array<string, string> $options */
+	#[DataProvider('customFieldValues')]
+	public function testRendersTheValueOfACustomFieldByItsType(mixed $value, string $type, array $options, string $expected): void {
+		$document = $this->document(['custom_fields' => [
+			['field' => 2, 'value' => 'another field'],
+			['field' => 5, 'value' => $value],
+		]]);
+		$fields = [
+			'2' => ['name' => 'Other', 'type' => 'string', 'options' => []],
+			'5' => ['name' => 'Field', 'type' => $type, 'options' => $options],
+		];
+
+		self::assertSame(
+			trim($expected . ' [P1]') . '.pdf',
+			$this->service->render($this->config('{{ custom_fields.Field }} [P{{ id }}]'), $document, [], [], [], [], [], $fields),
+		);
+	}
+
+	public function testShortensALongCustomFieldLikeTheTitle(): void {
+		$path = $this->service->render(
+			$this->config('{{ custom_fields.Note }} [P{{ id }}]{{ extension }}'),
+			$this->document(['custom_fields' => [['field' => 1, 'value' => str_repeat('Ж', 150)]]]),
+			[],
+			[],
+			[],
+			[],
+			[],
+			['1' => ['name' => 'Note', 'type' => 'string', 'options' => []]],
+		);
+
+		self::assertLessThanOrEqual(217, strlen($path));
+		self::assertStringEndsWith(' [P1].pdf', $path);
+		self::assertStringStartsWith('ЖЖЖ', $path);
+	}
+
+	public function testATemplateWithACustomFieldThatPaperlessDoesNotHaveIsRefused(): void {
+		$template = '{{ custom_fields.Invoice number }}/{{ custom_fields.Customer }}/{{ custom_fields.Invoice number }} [P{{ id }}]';
+
+		self::assertSame(['Invoice number', 'Customer'], $this->service->customFieldNames($template));
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('Paperless has no custom field named "Invoice number", "Customer", which the archive path template uses.');
+		$this->service->render($this->config($template), $this->document(), [], [], [], [], [], ['1' => ['name' => 'Invoice', 'type' => 'string', 'options' => []]]);
+	}
+
+	public function testTellsWhichListsOfPaperlessATemplateNeeds(): void {
+		self::assertFalse($this->service->usesOwner(PathTemplateService::DEFAULT_TEMPLATE));
+		self::assertSame([], $this->service->customFieldNames(PathTemplateService::DEFAULT_TEMPLATE));
+		self::assertTrue($this->service->usesOwner('{{ owner_username }}/[P{{ id }}]'));
+		$this->service->requireCustomFields(PathTemplateService::DEFAULT_TEMPLATE, []);
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function customFieldSpellings(): array {
+		return [
+			'without spaces' => ['{{custom_fields.Invoice number}} [P{{id}}]', '{{ custom_fields.Invoice number }} [P{{ id }}]'],
+			'with spaces around the name' => ['{{ custom_fields. Rechnungsnummer  }} [P{{ id }}]', '{{ custom_fields.Rechnungsnummer }} [P{{ id }}]'],
+			'with any character but braces and slashes' => ['{{ custom_fields.Größe (m²) & Co.: #1 }}/[P{{ id }}]', '{{ custom_fields.Größe (m²) & Co.: #1 }}/[P{{ id }}]'],
+		];
+	}
+
+	#[DataProvider('customFieldSpellings')]
+	public function testAcceptsCustomFieldsAndWritesThemInOneSpelling(string $template, string $canonical): void {
+		self::assertSame($canonical, $this->service->validateTemplate($template));
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function invalidCustomFields(): array {
+		return [
+			'without a name' => ['{{ custom_fields }}/[P{{ id }}]', 'Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.'],
+			'with an empty name' => ['{{ custom_fields. }}/[P{{ id }}]', 'Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.'],
+			'another variable with a name' => ['{{ title.short }}/[P{{ id }}]', 'Unknown archive path variable: {{ title.short }}.'],
+			'a name with a slash' => ['{{ custom_fields.Net/Gross }}/[P{{ id }}]', 'The archive path template contains an invalid placeholder.'],
+		];
+	}
+
+	#[DataProvider('invalidCustomFields')]
+	public function testRefusesCustomFieldsWithoutAUsableName(string $template, string $message): void {
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage($message);
+		$this->service->validateTemplate($template);
+	}
+
+	public function testNamesTheMonthInEnglishWithoutTheLanguageOfNextcloud(): void {
+		self::assertSame(
+			'March/December [P1].pdf',
+			$this->service->render($this->config('{{ created_month_name }}/{{ title }} [P{{ id }}]'), $this->document(['created' => '2026-03-26', 'title' => 'December']), [], [], []),
+		);
+	}
+
+	/** @return array<string, array{mixed, string, string}> */
+	public static function languages(): array {
+		return [
+			'the default language' => [false, 'de', 'März'],
+			'the forced language before the default one' => ['fr', 'de', 'mars'],
+			'the default language when the forced one is no name' => [true, 'de_DE', 'März'],
+			'English without either' => [false, '', 'March'],
+			'the standalone form of the name' => [false, 'ru', 'март'],
+		];
+	}
+
+	/**
+	 * The month is named in the language of Nextcloud for everyone, never in the one of the user
+	 * who starts a run, so that the paths stay the same between the runs of two administrators.
+	 */
+	#[RequiresPhpExtension('intl')]
+	#[DataProvider('languages')]
+	public function testNamesTheMonthInTheLanguageOfNextcloud(mixed $forced, string $default, string $month): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValue')->with('force_language', false)->willReturn($forced);
+		$config->method('getSystemValueString')->with('default_language', '')->willReturn($default);
+		$service = new PathTemplateService($config);
+		$template = $this->config('{{ created_month_name }}/[P{{ id }}]');
+
+		self::assertSame("{$month}/[P1].pdf", $service->render($template, $this->document(['created' => '2026-03-02']), [], [], []));
+		self::assertSame("{$month}/[P2].pdf", $service->render($template, $this->document(['id' => 2, 'created' => '2025-03-30']), [], [], []), 'The name of a month is looked up once.');
+	}
+
+	public function testAMonthThatNoCalendarHasKeepsItsNumber(): void {
+		self::assertSame('13/[P1].pdf', $this->service->render($this->config('{{ created_month_name }}/[P{{ id }}]'), $this->document(['created' => '2026-13-01']), [], [], []));
 	}
 
 	/** @param array<string, mixed> $overrides @return array<string, mixed> */
