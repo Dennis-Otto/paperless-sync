@@ -624,8 +624,25 @@ sync_run false "${TMP_DIR}/import-failed.json"
 assert_json import-failed "${TMP_DIR}/import-failed.json"
 assert_dav_missing sync-target 'Documents/Paperless/Inbox/broken.pdf'
 assert_dav_file sync-target "${ERROR_PATH}" 'Synthetic inbox PDF broken.'
-assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'Synthetic unsupported mime type'
+assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'broken.pdf: Synthetic unsupported mime type'
 assert_dav_missing e2e-other "${ERROR_PATH}"
+
+# A duplicate and a task that Paperless revoked end their imports too, with what Paperless
+# said, here in the shapes of Paperless-ngx 2.20, whose status then names its version.
+dav_upload sync-target 'Documents/Paperless/Inbox/copy.pdf' '%PDF-1.4 Synthetic inbox PDF copy.'
+dav_upload sync-target 'Documents/Paperless/Inbox/cancelled.pdf' '%PDF-1.4 Synthetic inbox PDF cancelled.'
+sync_run false "${TMP_DIR}/ended-submitted.json"
+assert_json import-submitted "${TMP_DIR}/ended-submitted.json" 2
+control /control/task-of/copy.pdf/duplicate >/dev/null
+control /control/task-of/cancelled.pdf/revoked >/dev/null
+control /control/paperless/2.20.15 >/dev/null
+sync_run false "${TMP_DIR}/import-ended.json"
+assert_json import-failed "${TMP_DIR}/import-ended.json" 2
+assert_dav_file sync-target 'Documents/Paperless/Errors/copy.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
+assert_dav_file sync-target 'Documents/Paperless/Errors/cancelled.pdf.error.txt' 'Paperless cancelled the task before it finished (REVOKED)'
+sync_status "${TMP_DIR}/status-paperless-2.json"
+assert_json paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
+control /control/paperless/3.3.0 >/dev/null
 
 # Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
 # the runs after it don't upload it again until it changes.
@@ -736,6 +753,24 @@ fi
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
 
+# A Paperless-ngx before 2.16 doesn't serve version 9 of its API, which every request of the app
+# asks for, so a run says which Paperless it needs instead of reading answers of another shape.
+control /control/paperless/2.15.3 >/dev/null
+OLD_PAPERLESS_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=true' \
+	--output "${TMP_DIR}/old-paperless.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+control /control/paperless/3.3.0 >/dev/null
+if [[ "${OLD_PAPERLESS_STATUS}" != "500" ]] || ! grep --fixed-strings 'Paperless Sync needs Paperless-ngx 2.16 or newer' "${TMP_DIR}/old-paperless.json" >/dev/null; then
+	echo "A run against Paperless-ngx 2.15 did not name the Paperless it needs: HTTP ${OLD_PAPERLESS_STATUS}, $(cat "${TMP_DIR}/old-paperless.json")" >&2
+	exit 1
+fi
+
 # A run that can't reach Paperless, the most common failure, logs its error without the token,
 # although Nextcloud writes the arguments of every frame of the trace of an exception. It comes
 # last, because assert_log.py above fails on the error that it logs.
@@ -807,7 +842,7 @@ fi
 set_paperless_url 'http://paperless-mock:8080'
 sync_run true "${TMP_DIR}/back.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/refusal, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

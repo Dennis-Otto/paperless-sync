@@ -148,6 +148,7 @@
 		const lastEnded = element('last-ended')
 		const lastSuccess = element('last-success')
 		const nextRun = element('next-run')
+		const paperlessVersion = element('paperless-version')
 		const errors = element('errors')
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
@@ -338,6 +339,18 @@
 			return translate('≈ {time}', { time: formatTime(timestamp) })
 		}
 
+		// The Paperless that the last run reached: its version, as it names itself, and the version
+		// of its API that the app uses; a line below the times, hidden before the first run.
+		function showPaperless(status) {
+			paperlessVersion.hidden = !status.paperlessApiVersion
+			if (paperlessVersion.hidden) {
+				return
+			}
+			setText(paperlessVersion, status.paperlessVersion
+				? translate('The last run reached Paperless-ngx {version} through version {api} of its API.', { version: status.paperlessVersion, api: status.paperlessApiVersion })
+				: translate('The last run reached Paperless-ngx, which named no version, through version {api} of its API.', { api: status.paperlessApiVersion }))
+		}
+
 		// The state of the last run as StatusService stores it, and its label; templates/settings.php has the same.
 		const stateLabels = {
 			'never-run': translate('Never run'),
@@ -394,6 +407,7 @@
 			setText(lastEnded, formatTime(status.lastEnded))
 			setText(lastSuccess, formatTime(status.lastSuccess))
 			setText(nextRun, formatNextRun(status.nextRun))
+			showPaperless(status)
 			showErrors(status, lastReport)
 			if (Object.keys(lastReport).length > 0) {
 				showReport(lastReport, false)

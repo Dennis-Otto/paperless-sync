@@ -94,14 +94,20 @@ elif mode == "deleted":
     expect("permanentlyDeleted", 1)
     expect("errors", 0)
 elif mode == "import-submitted":
-    expect("importsSubmitted", 1)
+    expect("importsSubmitted", int(argument or 1))
     expect("errors", 0)
 elif mode == "import-success":
     expect("importsSucceeded", 1)
     expect("errors", 0)
+    # The ID of the document that Paperless created, from the result of its task.
+    expect_action("IMPORT SUCCESS: Documents/Paperless/Inbox/Insurance/policy.pdf -> P501")
 elif mode == "import-failed":
-    expect("importsFailed", 1)
+    expect("importsFailed", int(argument or 1))
     expect("errors", 0)
+elif mode == "paperless":
+    # The Paperless that the last run reached, and the version of its API that the app uses.
+    expect("paperlessVersion", argument)
+    expect("paperlessApiVersion", "9")
 elif mode == "import-rejected":
     expect("importsFailed", 1)
     expect("importsSubmitted", 0)
@@ -191,6 +197,8 @@ elif mode == "vanished-kept":
 elif mode == "status":
     expect("state", "completed")
     expect("error", "")
+    expect("paperlessVersion", "3.3.0")
+    expect("paperlessApiVersion", "9")
     # The schedule is off in these tests.
     expect("nextRun", None)
     if not isinstance(payload.get("summary"), dict):
@@ -231,10 +239,13 @@ elif mode == "mock-final":
     expect("downloads", 5)
     expect("invalidAuth", 0)
     uploads = payload.get("uploads", [])
-    if [item.get("filename") for item in uploads] != ["policy.pdf", "broken.pdf"]:
+    if sorted(item.get("filename") for item in uploads) != ["broken.pdf", "cancelled.pdf", "copy.pdf", "policy.pdf"]:
         raise AssertionError(f"Unexpected upload filenames: {uploads!r}")
     if not all(item.get("containsFixture") is True for item in uploads):
         raise AssertionError(f"Uploaded fixtures were not transferred intact: {uploads!r}")
     expect("refusedUploads", ["notes.bin"])
+    # Every request of the app asks for version 9 of the API of Paperless.
+    if set(payload.get("apiVersions", {})) != {"9"}:
+        raise AssertionError(f"Requests asked for other API versions of Paperless than 9: {payload.get('apiVersions')!r}")
 else:
     raise AssertionError(f"Unknown assertion mode: {mode}")
