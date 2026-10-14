@@ -1,0 +1,25 @@
+{
+  "body": [
+    {
+      "acknowledged": false,
+      "date_created": "2026-10-14T11:55:57.787186Z",
+      "date_done": "2026-10-14T11:55:59.362876Z",
+      "id": 1,
+      "owner": 3,
+      "related_document": "1",
+      "result": "Success. New document id 1 created",
+      "status": "SUCCESS",
+      "task_file_name": "invoice.pdf",
+      "task_id": "776094f9-fe3e-4b09-8750-0c95e994e312",
+      "task_name": "consume_file",
+      "type": "auto_task"
+    }
+  ],
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/tasks/?task_id=776094f9-fe3e-4b09-8750-0c95e994e312&page_size=10",
+  "status": 200
+}

@@ -20,3 +20,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0012](0012-ask-for-version-9-of-the-paperless-api.md) | Ask for version 9 of the Paperless API in every request, and need Paperless-ngx 2.16 | accepted |
 | [0013](0013-the-activity-stream-tells-what-a-run-did.md) | The Activity stream tells the target user what a run did, one entry per run and per import | accepted |
 | [0014](0014-try-unsaved-settings-with-the-saved-connection.md) | Try unsaved settings with the saved connection, and keep the paths the same in every run | accepted |
+| [0015](0015-check-the-mock-against-a-real-paperless.md) | Check the mock and the answers of the unit tests against a real Paperless-ngx every week | accepted |

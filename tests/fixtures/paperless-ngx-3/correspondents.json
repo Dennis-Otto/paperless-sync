@@ -1,0 +1,42 @@
+{
+  "body": {
+    "all": [
+      1,
+      2
+    ],
+    "count": 2,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "document_count": 2,
+        "id": 1,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Example GmbH",
+        "owner": 2,
+        "slug": "example-gmbh",
+        "user_can_change": true
+      },
+      {
+        "document_count": 1,
+        "id": 2,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Example Insurance",
+        "owner": 2,
+        "slug": "example-insurance",
+        "user_can_change": true
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/correspondents/?page=1&page_size=1000",
+  "status": 200
+}

@@ -1,0 +1,14 @@
+{
+  "body": {
+    "document": [
+      "File type application/octet-stream not supported"
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "POST /api/documents/post_document/",
+  "status": 400
+}

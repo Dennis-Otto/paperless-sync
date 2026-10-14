@@ -26,3 +26,19 @@
 # problem = """..."""
 # why = """..."""
 # fix = """..."""
+
+[check."Paperless-ngx *"]
+title = "The contract tests against a real Paperless-ngx"
+problem = """The app talked to a real Paperless-ngx, the last release of 2.x or the current
+release of 3.x, and an answer of Paperless differed from what the app reads, a run of the
+app against it failed, or a field of an answer that the unit tests read in
+`tests/fixtures/` is gone or has another type. The log names the answer and the field."""
+why = """The unit tests and the end-to-end tests use a mock of Paperless, written from what
+the app expects. Only these tests show that a real Paperless answers that way, so that a
+release of Paperless can't break the app unnoticed."""
+fix = """Run the line that failed on your machine with Docker. When the app or the mock
+expects an answer that Paperless no longer gives, adapt them; when Paperless answers in a
+new shape that the app reads correctly, record the answers anew for the unit tests with
+`CONTRACT_RECORD=1` and commit the changed fixtures."""
+commands = ["bash tests/e2e/run-contract.sh 3", "CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3"]
+docs = "tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx"

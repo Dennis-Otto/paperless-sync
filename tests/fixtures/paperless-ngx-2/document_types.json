@@ -1,0 +1,54 @@
+{
+  "body": {
+    "all": [
+      1,
+      3,
+      2
+    ],
+    "count": 3,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "document_count": 1,
+        "id": 1,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Invoice",
+        "owner": 3,
+        "slug": "invoice",
+        "user_can_change": true
+      },
+      {
+        "document_count": 1,
+        "id": 3,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Letter",
+        "owner": 3,
+        "slug": "letter",
+        "user_can_change": true
+      },
+      {
+        "document_count": 1,
+        "id": 2,
+        "is_insensitive": true,
+        "match": "",
+        "matching_algorithm": 0,
+        "name": "Statement",
+        "owner": 3,
+        "slug": "statement",
+        "user_can_change": true
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/document_types/?page=1&page_size=1000",
+  "status": 200
+}
