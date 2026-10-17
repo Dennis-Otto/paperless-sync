@@ -23,6 +23,8 @@ from typing import Any
 from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
+# The pages of the website and their pictures.
+DOCS = ROOT / "docs"
 EN_DASH = "\N{EN DASH}"
 
 
@@ -250,6 +252,97 @@ def test_every_kind_of_alert_has_the_admonition_of_its_color() -> None:
             f'<div class="admonition {admonition}">\n'
             f'<p class="admonition-title">{kind.title()}</p>\n<p>Text.</p>\n</div>'
         )
+
+
+def test_an_alert_of_a_german_page_has_a_german_title() -> None:
+    # A German page, such as guide.de.md, takes its alerts from README.de.md; an English
+    # page that the German website shows for want of a German one keeps English titles.
+    known(nextcloud="33+", php="8.2+")
+    for kind, title in (
+        ("NOTE", "Hinweis"),
+        ("TIP", "Tipp"),
+        ("IMPORTANT", "Wichtig"),
+        ("WARNING", "Warnung"),
+        ("CAUTION", "Vorsicht"),
+    ):
+        html = f"<blockquote>\n<p>[!{kind}] Text.</p>\n</blockquote>"
+        assert f'<p class="admonition-title">{title}</p>' in hook.on_page_content(
+            html, page=page("guide.de.md")
+        )
+        assert f'<p class="admonition-title">{kind.title()}</p>' in hook.on_page_content(
+            html, page=page("alternatives.md")
+        )
+
+
+def test_the_warning_about_edits_reaches_the_german_guide_as_an_alert() -> None:
+    guide = (ROOT / "docs" / "guide.de.md").read_text(encoding="utf-8")
+    included = re.findall(r'--8<-- "README\.de\.md:([\w-]+)"', guide)
+    assert "configuration-checklist" in included
+    readme = (ROOT / "README.de.md").read_text(encoding="utf-8")
+    sections = [
+        readme[readme.index(f"<!-- --8<-- [start:{name}] -->") : readme.index(f"<!-- --8<-- [end:{name}] -->")]
+        for name in included
+    ]
+    assert any("> [!WARNING]\n> Die Dateien des Archivs sind ein Spiegel" in section for section in sections)
+
+
+def built(source: str, url: str) -> SimpleNamespace:
+    """A page of a build, with the address of its HTML, such as de/guide.html."""
+    return SimpleNamespace(file=SimpleNamespace(src_uri=source), url=url)
+
+
+def test_a_picture_of_a_german_page_leads_to_the_shared_images() -> None:
+    # The German website is in de/, but its pages take the pictures of docs/images, and
+    # MkDocs leaves the paths of a <picture> as the Markdown writes them.
+    html = (
+        '<picture>\n  <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">\n'
+        '  <img alt="The report" src="images/report-light.png">\n</picture>'
+    )
+    assert hook.pictures(html, built("guide.de.md", "de/guide.html"), DOCS) == (
+        '<picture>\n  <source media="(prefers-color-scheme: dark)" srcset="../images/report-dark.png">\n'
+        '  <img alt="The report" src="../images/report-light.png">\n</picture>'
+    )
+
+
+def test_a_picture_of_a_readme_snippet_leads_to_the_images_of_the_website() -> None:
+    # A snippet of the README writes its paths from the root of the repository.
+    html = '<img alt="The tags" src="docs/images/settings-tags-light.png">'
+    assert hook.pictures(html, built("guide.md", "guide.html"), DOCS) == (
+        '<img alt="The tags" src="images/settings-tags-light.png">'
+    )
+    assert hook.pictures(html, built("guide.de.md", "de/guide.html"), DOCS) == (
+        '<img alt="The tags" src="../images/settings-tags-light.png">'
+    )
+
+
+def test_a_picture_that_mkdocs_placed_or_that_leads_elsewhere_stays_as_it_is() -> None:
+    # MkDocs writes the path of a picture of Markdown from the address of the page, which
+    # leaves the folder of the docs when it is read from the source of a German page.
+    for html in (
+        '<img alt="Dry-run" src="../images/dry-run.gif">',
+        '<img alt="Badge" src="https://img.shields.io/badge/a-b-blue">',
+        '<img alt="Missing" src="images/no-such-picture.png">',
+        '<img alt="Root" src="/images/app.svg">',
+        '<source srcset="images/report-dark.png 2x, images/report-light.png 1x">',
+    ):
+        assert hook.pictures(html, built("guide.de.md", "de/guide.html"), DOCS) == html
+
+
+def test_a_picture_of_an_english_page_in_a_folder_stays_as_it_is() -> None:
+    html = '<img alt="The icon" src="../images/app.svg">'
+    assert hook.pictures(html, built("decisions/README.md", "decisions/README.html"), DOCS) == html
+    assert hook.pictures(html, built("decisions/README.md", "de/decisions/README.html"), DOCS) == (
+        '<img alt="The icon" src="../../images/app.svg">'
+    )
+
+
+def test_the_build_leads_the_pictures_of_a_page_to_their_files() -> None:
+    known(nextcloud="33+", php="8.2+")
+    html = '<img alt="" src="images/app.svg">'
+    config = SimpleNamespace(docs_dir=str(DOCS))
+    assert hook.on_page_content(html, page=built("index.de.md", "de/index.html"), config=config) == (
+        '<img alt="" src="../images/app.svg">'
+    )
 
 
 def test_a_plain_quote_and_an_unknown_marker_stay_as_they_are() -> None:

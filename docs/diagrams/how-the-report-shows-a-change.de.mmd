@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie der Bericht eine Änderung zeigt
+    accDescr: Für jede Änderung schreibt ein Lauf eine Zeile auf Englisch und daneben einen Eintrag mit der Art der Änderung, der ID des Dokuments, der Datei und einem Detail, etwa dem Grund von Paperless. Die Kommandozeile und Bericht kopieren nehmen die Zeilen. Die Einstellungsseite zeigt die Einträge in der Sprache des Administrators, die Fehler zuerst, dann die Hinweise, dann die Änderungen in der Reihenfolge des Laufs; jeden mit einem farbigen Abzeichen, einem Filter für jede Art und einem Link zum Ordner der Datei in Dateien, wenn der Administrator der Zielbenutzer ist und die Datei dort liegt.
+
+    change(["`⚙️ Eine Änderung eines Laufs<br>*Export, Verschiebung, Löschung,<br>Import, Fehler oder Hinweis*`"])
+    line["`📝 Zeile auf Englisch<br>*EXPORT P12: Archiv/…*`"]
+    entry["`🧩 Eintrag<br>*Art, Dokument, Datei,<br>Detail und Zahlen*`"]
+    english["`📟 occ und Bericht kopieren<br>*die Zeilen, für einen Fehlerbericht*`"]
+    page["`🖥️ Einstellungsseite<br>*in der Sprache des<br>Administrators, Fehler zuerst*`"]
+    badges["`🏷️ Abzeichen und Filter<br>*eine Farbe und ein Filter<br>für jede Art*`"]
+    link["`📂 Link zum Ordner in Dateien<br>*für den Zielbenutzer,<br>wenn die Datei dort liegt*`"]
+
+    change --> line --> english
+    change --> entry --> page
+    page --> badges
+    page --> link
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class change,entry,page,badges,link nextcloud
+    class line,english warning

@@ -1,0 +1,12 @@
+stateDiagram-v2
+    direction TB
+    accTitle: Was mit der Kopie eines Dokuments geschieht
+    accDescr: Ein exportiertes Dokument liegt im Archiv. In Paperless in den Papierkorb verschoben, oder ohne den Papierkorb aus Paperless verschwunden, N vollständige Scans lang, wandert seine Kopie nach _Gelöscht; in Paperless wiederhergestellt, wandert sie zurück ins Archiv. In Paperless endgültig gelöscht, wird die Kopie in _Gelöscht nach N vollständigen Scans in Nextcloud gelöscht, wenn endgültiges Löschen an ist. Eine Kopie im Archiv, deren Dokument N vollständige Scans lang ohne den Papierkorb aus Paperless verschwunden ist, wird direkt gelöscht, wenn endgültiges und direktes Löschen an sind.
+    state "Im Archiv" as archive
+    state "In _Gelöscht" as deleted
+    state "In Nextcloud gelöscht" as gone
+    [*] --> archive: exportiert
+    archive --> deleted: in Paperless in den<br>Papierkorb verschoben,<br>oder ohne Papierkorb<br>verschwunden, N<br>vollständige Scans lang
+    deleted --> archive: in Paperless<br>wiederhergestellt
+    deleted --> gone: in Paperless endgültig<br>gelöscht, nach N<br>vollständigen Scans, mit<br>endgültigem Löschen an
+    archive --> gone: ohne Papierkorb verschwunden,<br>N vollständige Scans lang,<br>mit endgültigem und<br>direktem Löschen an

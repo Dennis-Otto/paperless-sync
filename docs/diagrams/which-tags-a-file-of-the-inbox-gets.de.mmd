@@ -1,0 +1,36 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Welche Tags eine Datei des Eingangs bekommt
+    accDescr: Eine Datei im Ordner Eingang/Steuern/2026 bekommt die Tags für jeden Import, etwa Gescannt, und mit Unterordner werden zu Tags einen für jeden Ordner unterhalb des Eingangs, der sie enthält, Steuern und 2026. Jeder Name findet den Tag von Paperless mit diesem Namen, gleich in welcher Schreibweise. Mit Fehlende Tags anlegen wird ein Name ohne Tag zu einem neuen Tag von Paperless, der sich keinem anderen Dokument zuweist; ohne die Einstellung geht die Datei ohne diesen Tag, und der Bericht des Laufs und das Nextcloud-Protokoll nennen ihn. Die Datei geht mit den IDs ihrer Tags zu Paperless, und Paperless fügt seine eigenen Posteingangs-Tags hinzu und benennt das neue Dokument nach der Datei.
+
+    file["📄 beleg.pdf in<br>📁 Eingang/Steuern/2026"]
+    names["Ihre Namen: Gescannt,<br>für jeden Import, und<br>Steuern und 2026, ihre<br>Unterordner"]
+    match{"Ein Tag von<br>Paperless mit<br>dem Namen, in<br>beliebiger<br>Schreibweise?"}
+    create{"Fehlende Tags<br>anlegen?"}
+    new["Ein neuer Tag,<br>der sich keinem<br>anderen Dokument<br>zuweist"]
+    without["Ohne ihn: Bericht<br>und Protokoll<br>nennen ihn"]
+    upload["Hochladen mit den<br>IDs ihrer Tags"]
+    document["📄 Ein neues Dokument<br>beleg, mit diesen Tags<br>und den Posteingangs-Tags<br>von Paperless"]
+
+    file --> names
+    names -- "jeder Name" --> match
+    match -- "ja" --> upload
+    match -- "nein" --> create
+    create -- "an" --> new
+    new --> upload
+    create -- "aus" --> without
+    without --> upload
+    upload --> document
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class file,names nextcloud
+    class match,create,upload check
+    class new,document paperless
+    class without changed

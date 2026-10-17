@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Was der Aktivitätenstrom zeigt
+    accDescr: Ein Lauf, geplant oder von Hand, der etwas geändert hat, fügt für den Zielbenutzer einen Eintrag hinzu, mit den Zahlen seiner Änderungen und Links zu seinen ersten fünf Dateien und zum Archivordner. Jede Datei des Eingangs, die Paperless importiert hat, fügt einen Eintrag mit einem Link zu ihrem neuen Dokument in Paperless hinzu, jede Datei, die Paperless nicht importieren konnte, einen mit dem Grund und einem Link zur Datei im Fehlerordner, und jede Datei, die Paperless abgelehnt hat, einen mit dem Grund, da die Datei im Eingang bleibt. Ein Testlauf und ein Lauf ohne Änderungen fügen keinen hinzu.
+
+    run(["`⚙️ Lauf<br>*geplant oder von Hand*`"])
+    changes["`🔔 Ein Eintrag für den Lauf<br>*3 Dokumente hinzugefügt oder<br>aktualisiert, 1 Dokument verschoben:<br>a.pdf, b.pdf …*`"]
+    inbox["`📂 Dateien des Eingangs<br>*deren Aufgaben oder Uploads<br>Paperless beantwortet hat*`"]
+    none["`∅ Kein Eintrag<br>*für einen Testlauf oder<br>einen Lauf ohne Änderungen*`"]
+    imported["`📥 Ein Eintrag je Import<br>*scan.pdf wurde als P123<br>in Paperless importiert*`"]
+    failed["`⚠️ Ein Eintrag je<br>fehlgeschlagenem Import<br>*der Grund von Paperless,<br>die Datei im Fehlerordner*`"]
+    refused["`⛔ Ein Eintrag je Ablehnung<br>*der Grund von Paperless,<br>die Datei bleibt im Eingang*`"]
+
+    run -- "Dateien geändert" --> changes
+    run --> inbox
+    run -. "nichts geändert" .-> none
+    inbox -- "importiert" --> imported
+    inbox -- "fehlgeschlagen" --> failed
+    inbox -- "abgelehnt" --> refused
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class run,changes,inbox nextcloud
+    class imported paperless
+    class failed warning
+    class refused refused

@@ -1,0 +1,24 @@
+flowchart TB
+    accTitle: Wie ein Lauf neue Metadaten von neuem Inhalt unterscheidet
+    accDescr: Ein Dokument, das noch nie exportiert wurde, wird heruntergeladen. Bei einem exportierten Dokument vergleicht ein Lauf die Revision von Paperless mit der gespeicherten. Bei einer neuen Revision nimmt er die Prüfsumme der Datei, die er für diese Revision behalten hat, oder fragt Paperless danach, MD5 bis Paperless-ngx 2.x und SHA-256 seit 3.0, und behält sie mit der Revision, sodass ein Dokument, das auf einen späteren Lauf wartet, nur einmal fragt; er sucht die Prüfsumme unter der SHA-256 und der MD5, die er beim Herunterladen gespeichert hat. Ist die Revision gleich oder die Prüfsumme darunter, ist der Inhalt gleich: Die Datei bleibt, wo sie ist, oder wandert an ihren neuen Pfad. Hat eine frühere Version der App nur die SHA-256 gespeichert und meldet Paperless eine MD5, berechnet der Lauf beide Prüfsummen der gespiegelten Datei: Ist ihre SHA-256 die gespeicherte und ihre MD5 die von Paperless, ist der Inhalt ebenfalls gleich. Sonst lädt der Lauf das Dokument in eine temporäre Datei, berechnet beide Prüfsummen in einem Durchgang, schreibt es in Stücken nach Nextcloud, in die Datei des Dokuments, wenn es eine hat, die ihre ID behält und zuerst an ihren neuen Pfad wandert, und speichert die Prüfsummen. Die Fragen sind indigo, die Anfragen an Paperless-ngx grün und die Ergebnisse in Nextcloud blau.
+
+    document["Ein Dokument, das<br>Paperless auflistet"] --> exported{"Schon einmal<br>exportiert?"}
+    exported -->|nein| download["Herunterladen in eine<br>temporäre Datei, SHA-256<br>und MD5 in einem Durchgang"]
+    exported -->|ja| revision{"Dieselbe Revision<br>wie gespeichert?"}
+    revision -->|ja| same["Gleicher Inhalt"]
+    revision -->|nein| checksum["Prüfsumme der Revision,<br>behalten oder von Paperless:<br>MD5 bis 2.x,<br>SHA-256 seit 3.0"]
+    checksum --> known{"Unter den gespeicherten<br>SHA-256 und MD5?"}
+    known -->|ja| same
+    known -->|nein| earlier{"Nur die SHA-256 einer<br>früheren Version? Ist sie<br>die der gespiegelten Datei<br>und deren MD5 die von Paperless?"}
+    earlier -->|ja| same
+    earlier -->|nein| download
+    same --> path{"Gleicher Pfad?"}
+    path -->|ja| unchanged["UNCHANGED"]
+    path -->|nein| move["MOVE: dieselbe Datei<br>an ihrem neuen Pfad"]
+    download --> export["EXPORT: in Stücken<br>in dieselbe Datei geschrieben<br>oder in eine neue; beide<br>Prüfsummen gespeichert"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class exported,revision,known,earlier,path check
+    class checksum,download paperless
+    class unchanged,move,export nextcloud

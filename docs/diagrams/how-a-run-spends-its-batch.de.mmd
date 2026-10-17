@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: Wie ein Lauf seinen Batch verbraucht
+    accDescr: Ein Dokument, das zu exportieren oder zu verschieben ist, wird übersprungen, wenn der Batch voll ist oder Nextcloud keine Dateien speichern kann. Sonst nimmt es einen Platz im Batch ein. Mit der Konfliktregel Überspringen wird eine Datei im Weg, die nicht die eigene Kopie der App ist, ohne Herunterladen als Konflikt gemeldet. Sonst wird das Dokument heruntergeladen und geschrieben oder verschoben. Ein Fehler wird gemeldet, und das Dokument wartet im nächsten Lauf hinter den anderen; ein volles Kontingent, ein schreibgeschützter oder ein nicht verfügbarer Speicher beendet außerdem die Exporte des Laufs.
+
+    document["Ein neues, geändertes oder<br>umbenanntes Dokument"] --> full{"Batch voll, oder<br>Exporte gestoppt?"}
+    full -->|ja| skipped["Übersprungen: wartet<br>auf den nächsten Lauf"]
+    full -->|nein| place["Nimmt einen Platz<br>im Batch ein"]
+    place --> conflict{"Konflikte übersprungen und<br>eine Datei im Weg, die nicht<br>die Kopie der App ist?"}
+    conflict -->|ja| reported["ERROR: der Konflikt,<br>ohne Herunterladen"]
+    conflict -->|nein| write["Heruntergeladen und<br>geschrieben, oder verschoben"]
+    write -->|erledigt| done["EXPORT oder MOVE"]
+    write -->|scheitert| failed["ERROR: wartet im nächsten<br>Lauf hinter den anderen"]
+    failed -->|"volles Kontingent, schreib-<br>geschützter oder nicht<br>verfügbarer Speicher"| stopped["EXPORT STOPPED:<br>die anderen warten<br>auf den nächsten Lauf"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class full,place,conflict,write check
+    class skipped,reported,failed,stopped waits
+    class done result

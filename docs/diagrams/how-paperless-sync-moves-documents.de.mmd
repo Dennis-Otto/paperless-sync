@@ -1,0 +1,33 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie Paperless Sync Dokumente bewegt
+    accDescr: Paperless Sync liest die fertigen Dokumente und den Papierkorb von Paperless-ngx über seine REST-API. Es schreibt, benennt und verschiebt ihre Dateien im Ordner Archiv von Nextcloud, nach Korrespondent, Typ und Jahr, und spiegelt den Papierkorb nach Archiv/_Gelöscht. In der Gegenrichtung holt es die Dateien des Ordners Eingang ab und lädt sie als neue Dokumente zu Paperless-ngx hoch; ein fehlgeschlagener Import kommt in den Ordner Fehler. Paperless-ngx ist grün, die Ordner von Nextcloud sind blau.
+
+    documents["Paperless-ngx<br>fertige Dokumente"]
+    trash["Paperless-ngx<br>Papierkorb"]
+    export(["Paperless Sync"])
+    archive["📁 Archiv<br>Korrespondent /<br>Typ / Jahr"]
+    deleted["📁 Archiv/<br>_Gelöscht"]
+    inbox["📁 Eingang"]
+    import(["Paperless Sync"])
+    consume["Paperless-ngx<br>neue Dokumente"]
+    errors["📁 Fehler"]
+
+    documents -- "lesen über<br>die REST-API" --> export
+    trash -- "lesen" --> export
+    export -- "schreiben, umbenennen,<br>verschieben" --> archive
+    export -- "Papierkorb<br>spiegeln" --> deleted
+    %% An invisible link puts the import below the export, so that the diagram stays narrow.
+    archive ~~~ inbox
+    inbox -- "abholen" --> import
+    import -- "hochladen über<br>die REST-API" --> consume
+    import -- "fehlgeschlagene<br>Importe" --> errors
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class documents,trash,consume paperless
+    class archive,deleted,inbox,errors nextcloud
