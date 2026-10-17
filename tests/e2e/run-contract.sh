@@ -168,6 +168,8 @@ nextcloud_request --request POST \
 	--data-urlencode 'settings[trash_mode]=move' \
 	--data-urlencode 'settings[missing_grace_runs]=2' \
 	--data-urlencode 'settings[delete_inbox_after_success]=1' \
+	--data-urlencode 'settings[inbox_tags]=contract, Nextcloud' \
+	--data-urlencode 'settings[inbox_create_tags]=1' \
 	--data-urlencode 'settings[conflict_mode]=replace' \
 	--data-urlencode "token=$(contract token)" \
 	--output "${TMP_DIR}/config.json" \
@@ -205,7 +207,8 @@ assert_content invoice "${RESTORED}"
 echo "The export, the move and the trash pass after ${SECONDS} s."
 
 # The inbox: a PDF that Paperless takes, and one that it can't read. The first run uploads
-# both, the second reads their tasks once Paperless has ended them.
+# both, with the tag Contract, which contract.py made, and the tag Nextcloud, which the run
+# creates; the second reads their tasks once Paperless has ended them.
 contract pdf receipt.pdf | dav_put 'Documents/Paperless/Inbox/receipt.pdf'
 printf '%%PDF-1.4 Synthetic broken contract test file.\n' | dav_put 'Documents/Paperless/Inbox/broken.pdf'
 sync_run import-submitted

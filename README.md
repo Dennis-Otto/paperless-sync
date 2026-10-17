@@ -89,6 +89,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Inbox
 
 - Files in an inbox folder of Nextcloud, and in its subfolders if you like, go to Paperless as new documents
+- Each file can bring its tags: one for each of its subfolders, as the consume folder of Paperless does with `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS`, and tags for every import; the app creates the tags that Paperless lacks if you let it
 - The app follows the Paperless task of each file: after a success, it removes the file or keeps it, as you choose; after a failure, it moves the file to the error folder, next to the reason
 - When Paperless can't take a file now, the upload waits and tries again, from 15 minutes up to a day
 
@@ -190,6 +191,7 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | Archive export | **View** for Correspondents, Document Types, Storage Paths and Tags | builds the paths and skips the excluded tags |
 | Deleted folder | ownership of the documents, as below | sees them in the trash of Paperless right away |
 | Nextcloud inbox | **Add** for Documents, and **View** for Paperless Tasks | uploads the files of the inbox, and learns whether Paperless imported them |
+| [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
 
 The Paperless trash shows an account only the documents that it owns and those without an owner: a permission granted on a document of someone else doesn't count there. A superuser sees the whole trash, but its token controls all of Paperless, every document and every user, so don't use one for this app. Make the account of the app the owner of the documents instead, and keep the access of the people who own them now:
@@ -212,7 +214,7 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 <!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks three permissions. -->
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-checklist-dark.png">
-  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags and the upload from the inbox failed, each with the permissions to grant in Paperless" src="docs/images/settings-checklist-light.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags, the upload from the inbox and the tags of the inbox failed, each with the permissions to grant in Paperless" src="docs/images/settings-checklist-light.png">
 </picture>
 
 <!-- --8<-- [start:configuration-checklist] -->
@@ -223,9 +225,10 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 | Documents | the account may view documents, and how many it sees; none at all gets a note | not saved |
 | Trash, Correspondents, Document types, Storage paths, Tags | with the archive export on: the account may view each list; the trash gets a note when the account sees documents that it doesn't own, or is a superuser | saved with the failure |
 | Upload from the inbox | with the inbox on: the account has the permissions **Add** for Documents and **View** for Paperless Tasks | saved with the failure |
+| Tags of the inbox | with tags for the files of the inbox: the account has the permission **View** for Tags, and **Add** for Tags with *Create missing tags* | saved with the failure |
 | Nextcloud folder | the target user may create files in the base folder | not saved |
 
-Without **View** for UI Settings, Paperless doesn't tell the app the permissions of the account and its ID, so the lines of the trash and of the upload get a note that names this permission instead of a result. Each line has its state as a word, *Passed*, *Note* or *Failed*, next to its sign. A failure names the cause, such as a token that Paperless refuses, a certificate that Nextcloud doesn't trust, an address in your network, or a URL without a Paperless API, such as the login page of a proxy, and what to do. A change of the URL, the token, the target user, the base folder, the local network or the modules takes the checklist away, until the next test.
+Without **View** for UI Settings, Paperless doesn't tell the app the permissions of the account and its ID, so the lines of the trash, of the upload and of the tags of the inbox get a note that names this permission instead of a result. Each line has its state as a word, *Passed*, *Note* or *Failed*, next to its sign. A failure names the cause, such as a token that Paperless refuses, a certificate that Nextcloud doesn't trust, an address in your network, or a URL without a Paperless API, such as the login page of a proxy, and what to do. A change of the URL, the token, the target user, the base folder, the local network, the modules or the tags of the inbox takes the checklist away, until the next test.
 
 #### Paperless in your local network
 
@@ -368,6 +371,22 @@ When Paperless has not finished the task of a file a day after the upload, the r
 Paperless may refuse a file right away: one of a type it doesn't take, an empty one, or one too large for a proxy in front of it, such as the 100 MB of the free plan of Cloudflare. The report of that run lists the file once as `IMPORT REJECTED`, with the reason that Paperless gave, and the Nextcloud log records it as a warning. The runs after it leave the file in the inbox and skip it until it changes; save it anew, rename or replace it to submit it again.
 
 When Paperless can't be reached, or fails with a server error such as `502 Bad Gateway`, the run uploads no further files and tries this one again later: after 15 minutes, then after twice as long each time, at most once a day. The other files follow in the next runs.
+
+#### Tags of the inbox
+
+A file can bring its tags to Paperless, as the consume folder of Paperless does with `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS`. With *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026*, and *Tags for every import*, such as `Scanned, Nextcloud`, go with every file. Both are off until you turn them on. A name finds the tag of Paperless with that name, whatever its case, so the folder `taxes` finds the tag *Taxes*:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-tags-a-file-of-the-inbox-gets.dark.svg">
+  <img src="docs/images/diagrams/which-tags-a-file-of-the-inbox-gets.svg" alt="Which tags a file of the inbox gets: A file in the folder Inbox/Taxes/2026 gets the tags for every import, such as Scanned, and with Subfolders become tags one for each folder below the inbox that holds it, Taxes and 2026. Each name finds the tag of Paperless with that name, whatever its case. With Create missing tags, a name without a tag becomes a new tag of Paperless that assigns itself to no other document; without it, the file goes without that tag, and the report of the run and the Nextcloud log name it. The file goes to Paperless with the IDs of its tags, and Paperless adds its own inbox tags and names the new document after the file.">
+</picture>
+
+- **A name that Paperless has no tag of** doesn't stop the file: it goes without that tag, and the report of the run says so once, such as `TAGS UNKNOWN: Paperless has no tag named 2026, …`, with a warning in the Nextcloud log. Create the tag in Paperless, and the next files get it.
+- **With *Create missing tags*,** the run creates such a tag first, with the matching algorithm *None*, so that Paperless assigns it to no other document on its own, and the report has a line `NEW TAG: 2026`. The account of the app needs the permission **Add** for Tags; a file whose tag Paperless doesn't create waits in the inbox and is uploaded again later, as after a failed upload. A dry-run names the tags that a run would create, and creates none.
+- **The report names the tags of each file,** such as `IMPORT: Documents/Paperless/Inbox/Taxes/2026/receipt.pdf (tags: Taxes, 2026)`, and Paperless adds its own inbox tags, as to every new document.
+- **The title** of the new document is the name of the file without its extension: Paperless takes it from the file, as for every upload.
+
+Everyone who may write to the inbox folder can name its folders, so with *Create missing tags* they can add tags to Paperless as well. Turn it on for an inbox that only people you trust write to, and use the tags for every import for the rest.
 
 ### Deletion safety
 

@@ -607,10 +607,92 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('POST', $request['method']);
 		self::assertSame(self::URL . '/api/documents/post_document/', $request['url']);
 		self::assertSame(['name' => 'document', 'filename' => 'police.pdf', 'content' => '%PDF-inbox', 'size' => 10], $sent);
+		self::assertCount(1, $request['options']['multipart'], 'Without tags, the file is the only part.');
 		self::assertSame('application/json; version=9', $request['options']['headers']['Accept']);
 		self::assertSame(180, $request['options']['timeout']);
 		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
 		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'), 'The copy of the file must be removed.');
+	}
+
+	/** Paperless takes the tags of a new document as one field tags for each, after the file. */
+	public function testUploadSendsEachTagAsAPartOfItsOwn(): void {
+		$sent = [];
+		$this->responses[] = function (array $options) use (&$sent): array {
+			$sent = $this->uploadedFile($options);
+			return [200, '"task"'];
+		};
+
+		self::assertSame('task', $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf', [12, 7]));
+
+		$parts = $this->requests[0]['options']['multipart'];
+		self::assertSame('%PDF-inbox', $sent['content']);
+		self::assertSame(['name' => 'tags', 'contents' => '12'], $parts[1]);
+		self::assertSame(['name' => 'tags', 'contents' => '7'], $parts[2]);
+		self::assertCount(3, $parts);
+	}
+
+	/** A new tag that Paperless assigns to no other document on its own: its matching algorithm is None. */
+	public function testCreatesATagWithoutAMatch(): void {
+		$this->responses[] = [201, ['id' => 41, 'name' => 'Steuer', 'matching_algorithm' => 0]];
+
+		self::assertSame(41, $this->service->createTag('Steuer'));
+
+		$request = $this->requests[0];
+		self::assertSame('POST', $request['method']);
+		self::assertSame(self::URL . '/api/tags/', $request['url']);
+		self::assertSame(['name' => 'Steuer', 'matching_algorithm' => 0], $request['options']['json']);
+		self::assertSame('application/json; version=9', $request['options']['headers']['Accept']);
+		self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
+		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
+		self::assertSame(60, $request['options']['timeout']);
+		self::assertArrayNotHasKey('nextcloud', $request['options'], 'The local network stays closed unless the setting opens it.');
+	}
+
+	public function testCreatesATagAlsoInAPaperlessOfTheLocalNetwork(): void {
+		$this->configService()->save(['paperless_local_network' => true] + self::validSettings(), 'secret-token');
+		$this->responses[] = [201, ['id' => '42']];
+
+		self::assertSame(42, $this->service->createTag('2026'));
+
+		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
+	}
+
+	/** @return array<string, array{int, mixed, string}> the answer of Paperless and the message of the failure */
+	public static function failedTagCreations(): array {
+		return [
+			'an account without Add for Tags' => [403, ['detail' => 'You do not have permission to perform this action.'], 'Paperless could not create the tag Steuer: HTTP 403: You do not have permission to perform this action.'],
+			'a name that is too long' => [400, ['name' => ['Ensure this field has no more than 128 characters.']], 'Paperless could not create the tag Steuer: HTTP 400: name: Ensure this field has no more than 128 characters.'],
+			'an answer without a reason' => [502, '', 'Paperless could not create the tag Steuer: HTTP 502.'],
+		];
+	}
+
+	#[DataProvider('failedTagCreations')]
+	public function testATagThatPaperlessDoesNotCreateIsReportedWithItsReason(int $status, mixed $body, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage($message);
+
+		$this->service->createTag('Steuer');
+	}
+
+	/** @return array<string, array{mixed}> answers to the creation of a tag that name no tag */
+	public static function answersWithoutATag(): array {
+		return [
+			'no ID' => [['name' => 'Steuer']],
+			'an ID of zero' => [['id' => 0]],
+			'a text' => ['"created"'],
+		];
+	}
+
+	#[DataProvider('answersWithoutATag')]
+	public function testATagWithoutAnIdIsRejected(mixed $body): void {
+		$this->responses[] = [201, $body];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage('Paperless did not return the ID of the new tag Steuer.');
+
+		$this->service->createTag('Steuer');
 	}
 
 	public function testFileWithoutASizeIsSentWithOne(): void {
@@ -788,6 +870,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'checksum' => ['documentChecksum'],
 			'document by its checksums' => ['findDocument'],
 			'upload' => ['uploadDocument'],
+			'creation of a tag' => ['createTag'],
 			'task' => ['taskStatus'],
 		];
 	}
@@ -1640,6 +1723,63 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertCount($foreign === null ? 7 : 8, $this->requests);
 	}
 
+	/**
+	 * The settings of the tags of the inbox, the answer of /api/ui_settings/, and the line of the tags.
+	 *
+	 * @return array<string, array{array<string, mixed>, array{0: int, 1: mixed}, ConnectionCheck}>
+	 */
+	public static function inboxTagAccounts(): array {
+		$view = ConnectionCheck::passed('inbox_tags', 'The account may view the tags that the inbox gives its files.');
+		$create = ConnectionCheck::passed('inbox_tags', 'The account may view and create the tags that the inbox gives its files.');
+		$noView = static fn (string $hint): ConnectionCheck => ConnectionCheck::failed('inbox_tags', 'The account may not view tags, so the files of the inbox wait in the inbox.', [], $hint);
+		$unknown = static fn (string $message, string $hint): ConnectionCheck => ConnectionCheck::warning('inbox_tags', $message, [], $hint);
+		$uiSettings = 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The tags of the inbox need View for Tags, and Add for Tags to create the missing ones.';
+		$firstUpload = 'The first upload from the inbox shows it; the tags of the inbox need the permission View for Tags, and Add for Tags to create the missing ones.';
+		$folders = ['inbox_folder_tags' => true];
+		$creating = ['inbox_folder_tags' => true, 'inbox_create_tags' => true];
+		$forbidden = [403, ['detail' => 'You do not have permission to perform this action.']];
+
+		return [
+			'subfolders, with View for Tags' => [$folders, [200, self::account(false, ['documents.view_tag'])], $view],
+			'tags for every import, with View for Tags' => [['inbox_tags' => 'Scanned'], [200, self::account(false, ['view_tag'])], $view],
+			'creating them, with View and Add for Tags' => [$creating, [200, self::account(false, ['view_tag', 'add_tag'])], $create],
+			'creating them, as a superuser' => [$creating, [200, self::account(true, [])], $create],
+			'creating them, without Add for Tags' => [$creating, [200, self::account(false, ['view_tag'])], new ConnectionCheck(
+				'inbox_tags',
+				ConnectionCheck::FAILED,
+				'The account may not create tags, so a file that needs a tag that Paperless lacks waits in the inbox.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission Add for Tags, or turn off "Create missing tags".',
+				setting: 'inbox_create_tags',
+			)],
+			'without View for Tags' => [$folders, [200, self::account(false, ['add_tag'])], $noView('In Paperless, under Users & Groups, give the account the permission View for Tags.')],
+			'creating them, with Add for Tags alone' => [$creating, [200, self::account(false, ['add_tag'])], $noView('In Paperless, under Users & Groups, give the account the permission View for Tags.')],
+			'creating them, without either' => [$creating, [200, self::account(false, [])], $noView('In Paperless, under Users & Groups, give the account the permissions View and Add for Tags.')],
+			'without View for UI Settings' => [$folders, $forbidden, $unknown('Paperless did not say whether the account may view tags.', $uiSettings)],
+			'creating them, without View for UI Settings' => [$creating, $forbidden, $unknown('Paperless did not say whether the account may view and create tags.', $uiSettings)],
+			'a Paperless without the page' => [['inbox_tags' => 'Scanned'], [404, ['detail' => 'Not found.']], $unknown('Paperless did not say whether the account may view tags.', $firstUpload)],
+		];
+	}
+
+	/**
+	 * With tags for the files of the inbox, the checklist checks that the account may view them,
+	 * and create them when it should; a file that can't get its tags waits in the inbox.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @param array{0: int, 1: mixed} $account
+	 */
+	#[DataProvider('inboxTagAccounts')]
+	public function testTheTagsOfTheInboxHaveALineOfTheirOwn(array $settings, array $account, ConnectionCheck $line): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = $account;
+
+		$checks = $this->preflight(['export_enabled' => false] + $settings);
+
+		self::assertSame(['paperless', 'documents', 'upload', 'inbox_tags'], array_map(static fn (ConnectionCheck $check): string => $check->id, $checks));
+		self::assertEquals($line, $checks[3]);
+		self::assertCount(2, $this->requests, 'The permissions are those of the account, which the checklist read for the upload.');
+	}
+
 	/** A count of the documents of other owners that can't be read leaves the trash with its note. */
 	public function testACountOfOtherOwnersThatCannotBeReadKeepsTheNote(): void {
 		$this->responses[] = [200, self::page(1)];
@@ -2036,6 +2176,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'documentChecksum' => $this->service->documentChecksum(123, true),
 			'findDocument' => $this->service->findDocument(new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'))),
 			'uploadDocument' => $this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf'),
+			'createTag' => $this->service->createTag('Steuer'),
 			'taskStatus' => $this->service->taskStatus('task-1'),
 		};
 	}

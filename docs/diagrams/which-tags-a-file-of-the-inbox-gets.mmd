@@ -1,0 +1,36 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Which tags a file of the inbox gets
+    accDescr: A file in the folder Inbox/Taxes/2026 gets the tags for every import, such as Scanned, and with Subfolders become tags one for each folder below the inbox that holds it, Taxes and 2026. Each name finds the tag of Paperless with that name, whatever its case. With Create missing tags, a name without a tag becomes a new tag of Paperless that assigns itself to no other document; without it, the file goes without that tag, and the report of the run and the Nextcloud log name it. The file goes to Paperless with the IDs of its tags, and Paperless adds its own inbox tags and names the new document after the file.
+
+    file["📄 receipt.pdf in<br>📁 Inbox/Taxes/2026"]
+    names["Its names: Scanned,<br>for every import, and<br>Taxes and 2026, its<br>subfolders"]
+    match{"A tag of<br>Paperless with<br>the name, in<br>any case?"}
+    create{"Create<br>missing tags?"}
+    new["A new tag,<br>which assigns<br>itself to no<br>other document"]
+    without["Without it: the<br>report and the<br>log name it"]
+    upload["Upload with the<br>IDs of its tags"]
+    document["📄 A new document<br>receipt, with these tags<br>and the inbox tags of<br>Paperless"]
+
+    file --> names
+    names -- "each name" --> match
+    match -- "yes" --> upload
+    match -- "no" --> create
+    create -- "on" --> new
+    new --> upload
+    create -- "off" --> without
+    without --> upload
+    upload --> document
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class file,names nextcloud
+    class match,create,upload check
+    class new,document paperless
+    class without changed

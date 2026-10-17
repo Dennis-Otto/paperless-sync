@@ -826,6 +826,7 @@ final class SyncService {
 
 		$submitted = 0;
 		$paperlessFailed = false;
+		$inboxTags = new InboxTags($this->paperless, $config, $report);
 		foreach ($byPath as $path => $file) {
 			// Every upload takes its place in the batch, also one that fails. After a failure that may
 			// pass, Paperless is down or overloaded, and the other files wait for the next run.
@@ -834,15 +835,32 @@ final class SyncService {
 				continue;
 			}
 			++$submitted;
+			$tags = ['ids' => [], 'names' => []];
+			if ($inboxTags->enabled()) {
+				try {
+					$tags = $inboxTags->forFolder(self::folderBelow($inboxRoot, $path));
+				} catch (\Throwable $exception) {
+					// The file waits for its tags, as for a failed upload. Without the list of the tags, or
+					// without Paperless, every other file would fail the same way.
+					if ($report->dryRun) {
+						$report->error("Import {$path}: " . $this->exceptionMessage($exception));
+					} else {
+						$this->retryImportLater($config, $report, $path, $file['etag'], ($attempts[$path] ?? 0) + 1, $exception);
+					}
+					$paperlessFailed = $inboxTags->unavailable() || $exception instanceof PaperlessRequestException;
+					continue;
+				}
+			}
+			$line = "IMPORT: {$path}" . ($tags['names'] !== [] ? ' (tags: ' . implode(', ', $tags['names']) . ')' : '');
 			if ($report->dryRun) {
-				$report->action("IMPORT: {$path}");
+				$report->action($line);
 				++$report->importsSubmitted;
 				continue;
 			}
 			$stream = null;
 			try {
 				$stream = $this->storage->openRead($config->targetUser, $path);
-				$taskId = $this->paperless->uploadDocument($stream, $file['name']);
+				$taskId = $this->paperless->uploadDocument($stream, $file['name'], $tags['ids']);
 				$this->state->saveImport($config->targetUser, $path, [
 					'etag' => $file['etag'],
 					'task_id' => $taskId,
@@ -852,7 +870,7 @@ final class SyncService {
 					'retry_at' => 0,
 					'last_error' => null,
 				]);
-				$report->action("IMPORT: {$path}");
+				$report->action($line);
 				++$report->importsSubmitted;
 			} catch (PaperlessUploadException $exception) {
 				if ($exception->permanent) {
@@ -869,6 +887,36 @@ final class SyncService {
 				}
 			}
 		}
+		$this->reportUnknownTags($report, $inboxTags->unknown());
+	}
+
+	/**
+	 * The names of tags that Paperless lacks, once for the run: the files went to Paperless
+	 * without them, as "Create missing tags" is off.
+	 *
+	 * @param list<string> $names
+	 */
+	private function reportUnknownTags(SyncReport $report, array $names): void {
+		if ($names === []) {
+			return;
+		}
+		$list = implode(', ', $names);
+		$missing = count($names) === 1 ? "no tag named {$list}, so the files of the inbox go to Paperless without it" : "no tags named {$list}, so the files of the inbox go to Paperless without them";
+		$report->notice("TAGS UNKNOWN: Paperless has {$missing}. Create the tags in Paperless, or turn on \"Create missing tags\".");
+		if (!$report->dryRun) {
+			$this->logger->warning('Paperless has no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless, or turn on "Create missing tags" in the settings of Paperless Sync.', [
+				'names' => $list,
+			]);
+		}
+	}
+
+	/** The path of the folder of a file of the inbox below the inbox, such as Taxes/2026, or '' for the inbox itself. */
+	private static function folderBelow(string $inboxRoot, string $path): string {
+		// The inbox folder is never empty, so its files are below $inboxRoot/.
+		$relative = substr($path, strlen($inboxRoot) + 1);
+		$slash = strrpos($relative, '/');
+
+		return $slash === false ? '' : substr($relative, 0, $slash);
 	}
 
 	/**
