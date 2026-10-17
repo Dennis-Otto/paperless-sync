@@ -118,24 +118,25 @@ final class StatusServiceTest extends TestCase {
 
 	/**
 	 * PHP may stop a run before it can say how it ended, such as a web server that ends a long
-	 * request or a container that stops: a run that is older than a lock lasts, and whose lock is
-	 * gone, was interrupted.
+	 * request or a container that stops: a run whose lock is gone and that gave no sign of life
+	 * for a while was interrupted.
 	 */
-	public function testRunThatLostItsLockAfterTheLockTimeWasInterrupted(): void {
+	public function testRunThatLostItsLockAndItsSignsOfLifeWasInterrupted(): void {
 		$this->service->completed(new SyncReport(false, 1000, 1060));
 		foreach (['running', 'dry-run-running'] as $state) {
 			$this->settings['status_last_state'] = $state;
-			$this->settings['status_last_started'] = $this->clock->time - 3601;
+			$this->settings['status_last_started'] = $this->clock->time - StatusService::HEARTBEAT_GRACE - 1;
 
 			$status = $this->service->get();
 
 			self::assertSame('interrupted', $status['state'], $state);
+			self::assertFalse($this->service->active());
 			self::assertSame($state, $this->settings['status_last_state'], 'Only what the status says changes, not what it keeps.');
 			self::assertSame(1060, $status['lastEnded']);
 		}
 	}
 
-	public function testRunThatHoldsItsLockIsActiveAlsoAfterTheLockTime(): void {
+	public function testRunThatHoldsItsLockIsActiveAlsoWithoutSignsOfLife(): void {
 		$this->settings['status_last_state'] = 'running';
 		$this->settings['status_last_started'] = $this->clock->time - 7200;
 		$this->locked = true;
@@ -144,25 +145,55 @@ final class StatusServiceTest extends TestCase {
 	}
 
 	/**
-	 * Without locking (filelocking.enabled false), a run never holds a lock; it counts as active as
-	 * long as a lock would last.
+	 * Nextcloud lets the lock of a run expire after filelocking.ttl, an hour by default, also while
+	 * the run is still active, such as the first import of a large archive; and an instance
+	 * without locking never has one. Its signs of life keep it active, so that no other run starts
+	 * beside it.
 	 */
-	public function testRecentRunWithoutALockIsActive(): void {
-		$this->settings['status_last_state'] = 'running';
-		$this->settings['status_last_started'] = $this->clock->time - 3500;
+	public function testRunThatOutlastedItsLockStaysActiveWhileItGivesSignsOfLife(): void {
+		$this->service->started(false);
+		$this->clock->advance(7200);
+		$this->service->heartbeat();
+		$this->clock->advance(StatusService::HEARTBEAT_GRACE);
 
+		self::assertTrue($this->service->alive());
+		self::assertTrue($this->service->active());
 		self::assertSame('running', $this->service->get()['state']);
+
+		$this->clock->advance(1);
+		self::assertFalse($this->service->active(), 'A run that gave no sign of life for a while has ended.');
+		self::assertSame('interrupted', $this->service->get()['state']);
 	}
 
-	public function testLockTimeComesFromTheConfigurationOfNextcloud(): void {
-		$this->systemSettings['filelocking.ttl'] = 600;
-		$this->settings['status_last_state'] = 'running';
-		$this->settings['status_last_started'] = $this->clock->time - 700;
+	public function testRecentRunWithoutALockIsActive(): void {
+		$this->service->started(true);
+		$this->clock->advance(StatusService::HEARTBEAT_GRACE);
 
-		self::assertSame('interrupted', $this->service->get()['state']);
+		self::assertTrue($this->service->active());
+		self::assertSame('dry-run-running', $this->service->get()['state']);
+	}
 
-		$this->systemSettings['filelocking.ttl'] = 7200;
-		self::assertSame('running', $this->service->get()['state']);
+	/** A run writes a sign of life once a minute at most, not for every document. */
+	public function testSignsOfLifeAreWrittenOnceAMinuteAtMost(): void {
+		$this->service->started(false);
+		$started = $this->clock->time;
+
+		$this->clock->advance(StatusService::HEARTBEAT_INTERVAL - 1);
+		$this->service->heartbeat();
+		self::assertSame($started, $this->settings['status_last_heartbeat']);
+
+		$this->clock->advance(1);
+		$this->service->heartbeat();
+		self::assertSame($started + StatusService::HEARTBEAT_INTERVAL, $this->settings['status_last_heartbeat']);
+	}
+
+	public function testOnlyARunningRunIsAlive(): void {
+		$this->settings['status_last_started'] = $this->clock->time;
+		foreach (['never-run', 'queued', 'completed', 'failed', 'interrupted'] as $state) {
+			$this->settings['status_last_state'] = $state;
+
+			self::assertFalse($this->service->alive(), $state);
+		}
 	}
 
 	public function testOnlyARunCanBeInterrupted(): void {

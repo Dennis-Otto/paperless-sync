@@ -46,6 +46,8 @@ final class ManualSyncJobTest extends TestCase {
 	/** @var LoggerInterface&MockObject */
 	private LoggerInterface $logger;
 	private TestPaperlessClient $paperless;
+	/** @var IJobList&MockObject the job list that the job queues itself on again */
+	private IJobList $jobList;
 	private ManualSyncJob $job;
 
 	protected function setUp(): void {
@@ -70,7 +72,8 @@ final class ManualSyncJobTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
 		);
-		$this->job = new ManualSyncJob($this->createMock(ITimeFactory::class), $sync, $this->logger);
+		$this->jobList = $this->createMock(IJobList::class);
+		$this->job = new ManualSyncJob($this->createMock(ITimeFactory::class), $sync, $this->jobList, $this->logger);
 		$this->job->setId('42');
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
 	}
@@ -114,11 +117,24 @@ final class ManualSyncJobTest extends TestCase {
 		self::assertSame('', $this->activities[0]->getAuthor());
 	}
 
-	/** A run that started after the button was pressed, such as a scheduled one, makes the same changes. */
-	public function testRunWhileAnotherIsActiveIsSkipped(): void {
+	/**
+	 * Another run holds the lock, which may be a dry-run or forgetting copies that don't make the
+	 * changes of this run: the run waits for the next background jobs, with the same administrator.
+	 */
+	public function testRunWhileAnotherIsActiveWaitsForTheNextBackgroundJobs(): void {
 		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+		$this->job->setArgument(['author' => 'admin']);
+		$this->jobList->expects(self::once())->method('add')->with(ManualSyncJob::class, ['author' => 'admin']);
 		$this->logger->expects(self::never())->method('error');
-		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization by hand skipped: another run is active.');
+		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization by hand postponed: another run is active.');
+
+		$this->job->start($this->createMock(IJobList::class));
+
+		self::assertSame([], $this->paperless->connections);
+	}
+
+	public function testCompletedRunIsNotQueuedAgain(): void {
+		$this->jobList->expects(self::never())->method('add');
 
 		$this->job->start($this->createMock(IJobList::class));
 	}

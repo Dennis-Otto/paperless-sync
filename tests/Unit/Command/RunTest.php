@@ -74,7 +74,7 @@ final class RunTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
 		);
-		$this->run = new Run($sync, $this->configService);
+		$this->run = new Run($sync);
 		$this->command = new CommandTester($this->run);
 	}
 
@@ -170,20 +170,20 @@ final class RunTest extends TestCase {
 
 		self::assertSame(Run::OK, $this->execute(['--unlimited' => true, '--output' => 'json']));
 		self::assertSame(3, $this->report()['exported']);
-		self::assertSame('', $this->command->getErrorOutput(), 'With scheduled runs off, no run overlaps.');
+		self::assertSame('', $this->command->getErrorOutput());
 		self::assertSame(1, $this->configService->get()->batchSize);
 	}
 
-	/** Nextcloud lets the lock of a run expire after an hour, and a scheduled run could start beside it. */
-	public function testRunWithoutALimitWarnsWhileScheduledRunsAreOn(): void {
+	/**
+	 * Scheduled runs may stay on during a long run without a limit: its signs of life keep them
+	 * from starting beside it, also after Nextcloud let its lock expire.
+	 */
+	public function testRunWithoutALimitNeedsNoPauseOfScheduledRuns(): void {
 		$this->configService->save(['enabled' => true]);
 		$this->documents(1);
 
 		self::assertSame(Run::OK, $this->execute(['--unlimited' => true]));
-		self::assertStringStartsWith('Scheduled synchronization is on.', $this->command->getErrorOutput());
-
-		$this->execute(['--unlimited' => true, '--dry-run' => true]);
-		self::assertSame('', $this->command->getErrorOutput(), 'A dry-run makes no changes that could overlap.');
+		self::assertSame('', $this->command->getErrorOutput());
 	}
 
 	/** @return iterable<string, array{array<string, bool|string>, string}> */

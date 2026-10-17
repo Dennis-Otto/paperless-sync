@@ -22,6 +22,7 @@ use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
 use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use RuntimeException;
@@ -65,7 +66,7 @@ final class SyncService {
 	 * started a run by hand in a background job, whom its entries in the Activity stream name.
 	 *
 	 * @throws InvalidArgumentException when a run that is no dry-run comes with settings, or for a batch size below 1
-	 * @throws \OCP\Lock\LockedException while another run is active
+	 * @throws LockedException while another run is active
 	 */
 	public function run(bool $dryRun = false, ?SyncConfig $settings = null, ?int $batchSize = null, string $author = ''): SyncReport {
 		if ($settings !== null && !$dryRun) {
@@ -74,7 +75,7 @@ final class SyncService {
 		if ($batchSize !== null && $batchSize < 1) {
 			throw new InvalidArgumentException('The batch size must be at least 1.');
 		}
-		$this->lockingProvider->acquireLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
+		$this->lock();
 		$report = new SyncReport($dryRun, $this->now(), unsavedSettings: $settings !== null);
 		$this->status->started($dryRun);
 		$config = null;
@@ -130,11 +131,11 @@ final class SyncService {
 	 *
 	 * @param list<int>|null $documentIds null for every document
 	 * @return list<int> the IDs of the documents whose copies the next runs write again
-	 * @throws \OCP\Lock\LockedException while a run is active
+	 * @throws LockedException while a run is active
 	 * @throws InvalidSettingException without a target user
 	 */
 	public function forget(?array $documentIds = null): array {
-		$this->lockingProvider->acquireLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
+		$this->lock();
 		try {
 			$config = $this->configService->get();
 			if ($config->targetUser === '') {
@@ -159,6 +160,21 @@ final class SyncService {
 			return $forgotten;
 		} finally {
 			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/**
+	 * Takes the lock of the runs. Nextcloud lets a lock expire after filelocking.ttl, an hour by
+	 * default, also while its run is still active, such as the first import of a large archive:
+	 * the signs of life of that run keep another from starting beside it.
+	 *
+	 * @throws LockedException while another run is active
+	 */
+	private function lock(): void {
+		$this->lockingProvider->acquireLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
+		if ($this->status->alive()) {
+			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+			throw new LockedException(AppConstants::LOCK_PATH);
 		}
 	}
 
@@ -196,6 +212,7 @@ final class SyncService {
 		$sharedPaths = $this->sharedPaths($states);
 
 		foreach ($this->exportQueue($states, $documents) as [$document, $documentId, $entry]) {
+			$this->status->heartbeat();
 			$seen[$documentId] = true;
 			if ($this->isExcluded($config, $document, $tags, $excludedNames)) {
 				++$report->skipped;
@@ -407,6 +424,7 @@ final class SyncService {
 		}
 
 		foreach ($trash as $document) {
+			$this->status->heartbeat();
 			$documentId = $this->documentId($document);
 			$seen[$documentId] = true;
 			$entry = $states->find($documentId);
@@ -468,6 +486,7 @@ final class SyncService {
 		// The exported documents that the run counts as missing without having seen them in the trash.
 		$missingActive = 0;
 		foreach ($states->all() as $documentId => $entry) {
+			$this->status->heartbeat();
 			if (isset($seen[$documentId])) {
 				// Paperless listed the document, so its count of missing scans starts anew, also when
 				// its export failed or waits for the next run.
@@ -880,6 +899,7 @@ final class SyncService {
 		$submitted = 0;
 		$paperlessFailed = false;
 		foreach ($byPath as $path => $file) {
+			$this->status->heartbeat();
 			// Every upload takes its place in the batch, also one that fails. After a failure that may
 			// pass, Paperless is down or overloaded, and the other files wait for the next run.
 			if ($submitted >= $config->batchSize || $paperlessFailed) {

@@ -14,7 +14,6 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
-use OCP\IConfig;
 use OCP\Lock\ILockingProvider;
 
 /**
@@ -25,7 +24,8 @@ use OCP\Lock\ILockingProvider;
  *
  * Its state is one of never-run, queued (a run by hand waits for its background job), running,
  * dry-run-running, completed, dry-run-completed, completed-with-errors, failed, and interrupted: a
- * run that ended without saying how, because PHP stopped it, which the status tells from its lock.
+ * run that ended without saying how, because PHP stopped it, which the status tells from its lock
+ * and from the signs of life of the run.
  *
  * It also counts the runs in a row that did not succeed, from which the notifications, the setup
  * checks and the status API tell a mirror that keeps failing from one that failed once.
@@ -39,8 +39,15 @@ final class StatusService {
 	public const REPORT_ACTIONS = 200;
 	/** The most characters of an error and of a line of the kept report. */
 	private const LINE_LENGTH = 1000;
-	/** How long Nextcloud keeps a lock by default, in seconds: filelocking.ttl of config.php. */
-	private const LOCK_TTL = 3600;
+	/**
+	 * How long an active run may go without a sign of life, in seconds, before the status takes it
+	 * for a run that PHP stopped. Nextcloud lets the lock of a run expire after filelocking.ttl, an
+	 * hour by default, also while the run is still active, such as the first import of a large
+	 * archive; the signs of life tell such a run from one that ended.
+	 */
+	public const HEARTBEAT_GRACE = 900;
+	/** How often a run writes its sign of life at most, in seconds. */
+	public const HEARTBEAT_INTERVAL = 60;
 	/**
 	 * A mirror is stale when its last successful run is older than this many intervals of the
 	 * settings, but at least STALE_MINIMUM seconds, so that a cron job that comes a few minutes
@@ -51,6 +58,8 @@ final class StatusService {
 
 	/** The start of the last run, also of a dry-run. */
 	private const LAST_STARTED = 'status_last_started';
+	/** The last sign of life of the active run, which it writes while it works. */
+	private const LAST_HEARTBEAT = 'status_last_heartbeat';
 	/** The end of the last run that completed, also with errors. */
 	private const LAST_COMPLETED = 'status_last_completed';
 	/** The end of the last run, however it ended. */
@@ -81,7 +90,7 @@ final class StatusService {
 	private const KEYS = [
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
 		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
-		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES,
+		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES, self::LAST_HEARTBEAT,
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -89,9 +98,11 @@ final class StatusService {
 		private IAppConfig $appConfig,
 		private ITimeFactory $timeFactory,
 		private ILockingProvider $lockingProvider,
-		private IConfig $config,
 	) {
 	}
+
+	/** When this process wrote the last sign of life of its run, so that it writes one a minute at most. */
+	private int $heartbeat = 0;
 
 	/**
 	 * A run by hand waits for its background job, which Nextcloud starts with its next background
@@ -101,9 +112,33 @@ final class StatusService {
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'queued', lazy: true);
 	}
 
-	/** Whether a run is active: it holds the lock until it ends. */
+	/**
+	 * Whether a run is active: it holds the lock, or it gave a sign of life a short while ago. A
+	 * run may outlast its lock, which Nextcloud lets expire after filelocking.ttl, and an instance
+	 * without locking (filelocking.enabled false) never has one.
+	 */
 	public function active(): bool {
-		return $this->lockingProvider->isLocked(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+		return $this->lockingProvider->isLocked(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE) || $this->alive();
+	}
+
+	/**
+	 * Whether the last run says it is running and gave a sign of life a short while ago, as a run
+	 * that outlasted its lock does: no other run may start beside it.
+	 */
+	public function alive(): bool {
+		$state = $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run', lazy: true);
+
+		return str_ends_with($state, 'running') && $this->timeFactory->getTime() - $this->lastSignOfLife() <= self::HEARTBEAT_GRACE;
+	}
+
+	/** The active run is still working: it writes a sign of life, once a minute at most. */
+	public function heartbeat(): void {
+		$now = $this->timeFactory->getTime();
+		if ($now - $this->heartbeat < self::HEARTBEAT_INTERVAL) {
+			return;
+		}
+		$this->heartbeat = $now;
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_HEARTBEAT, $now, lazy: true);
 	}
 
 	/**
@@ -125,6 +160,8 @@ final class StatusService {
 		$now = $this->timeFactory->getTime();
 		$this->carryOverTheLastRun();
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_STARTED, $now, lazy: true);
+		$this->heartbeat = $now;
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_HEARTBEAT, $now, lazy: true);
 		if (!$dryRun) {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_STARTED, $now, lazy: true);
 		}
@@ -188,7 +225,7 @@ final class StatusService {
 		$lastCompleted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true);
 		$lastStarted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true);
 		$state = $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run', lazy: true);
-		if (str_ends_with($state, 'running') && $this->interrupted($lastStarted)) {
+		if (str_ends_with($state, 'running') && !$this->active()) {
 			$state = 'interrupted';
 		}
 
@@ -306,17 +343,12 @@ final class StatusService {
 		return $last > 0 ? $last + $config->syncIntervalMinutes * 60 : 0;
 	}
 
-	/**
-	 * Whether a run that started then has ended without saying how, because PHP stopped it, such as
-	 * a web server that ended the request or a container that was stopped: it is older than
-	 * Nextcloud keeps a lock, and its lock is gone. The lock alone would tell, but an instance
-	 * without locking (filelocking.enabled false) never has one, and the age keeps an active run
-	 * from counting as interrupted there.
-	 */
-	private function interrupted(int $lastStarted): bool {
-		$lockTtl = $this->config->getSystemValueInt('filelocking.ttl', self::LOCK_TTL);
-
-		return $this->timeFactory->getTime() - $lastStarted > $lockTtl && !$this->active();
+	/** The start of the last run or its last sign of life, whichever came later. */
+	private function lastSignOfLife(): int {
+		return max(
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true),
+			$this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_HEARTBEAT, 0, lazy: true),
+		);
 	}
 
 	/**

@@ -28,8 +28,6 @@ use PHPUnit\Framework\MockObject\MockObject;
 trait InMemoryConfiguration {
 	/** @var array<string, bool|int|string> */
 	private array $settings = [];
-	/** @var array<string, int> the values of config.php */
-	private array $systemSettings = [];
 	/** @var array<string, true> the keys stored as lazy, which Nextcloud reads only when asked for lazy keys */
 	private array $lazyKeys = [];
 	/** @var array<string, true> the keys read as lazy, which makes Nextcloud load every lazy value */
@@ -49,7 +47,7 @@ trait InMemoryConfiguration {
 
 	/** The status of the runs; a run holds its lock when $locking says so, and never without it. */
 	private function statusService(ITimeFactory $clock, ?ILockingProvider $locking = null): StatusService {
-		return new StatusService($this->appConfig(), $clock, $locking ?? $this->createStub(ILockingProvider::class), $this->systemConfig());
+		return new StatusService($this->appConfig(), $clock, $locking ?? $this->createStub(ILockingProvider::class));
 	}
 
 	/**
@@ -155,9 +153,8 @@ trait InMemoryConfiguration {
 	}
 
 	/**
-	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language,
-	 * $defaultLanguage as default_language, which is missing when empty, and the numbers of
-	 * $systemSettings, such as filelocking.ttl.
+	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language
+	 * and $defaultLanguage as default_language, which is missing when empty.
 	 *
 	 * @return IConfig&MockObject
 	 */
@@ -169,7 +166,6 @@ trait InMemoryConfiguration {
 			'default_language' => $this->defaultLanguage === '' ? $default : $this->defaultLanguage,
 			default => $default,
 		});
-		$config->method('getSystemValueInt')->willReturnCallback(fn (string $key, int $default = 0): int => $this->systemSettings[$key] ?? $default);
 
 		return $config;
 	}

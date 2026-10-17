@@ -181,6 +181,45 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	/**
+	 * Nextcloud lets the lock of a run expire after filelocking.ttl, an hour by default, also while
+	 * the run is still active, such as the first import of a large archive: its signs of life keep
+	 * a second run from starting beside it and writing the same copies.
+	 */
+	public function testARunThatOutlastedItsLockKeepsAnotherFromStarting(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_started'] = $this->clock->time - 7200;
+		$this->settings['status_last_heartbeat'] = $this->clock->time - 30;
+		$this->locking->expects(self::exactly(2))->method('acquireLock');
+		$this->locking->expects(self::exactly(2))->method('releaseLock')->with('paperless_sync::synchronization', ILockingProvider::LOCK_EXCLUSIVE);
+
+		foreach ([fn (): mixed => $this->service->run(), fn (): mixed => $this->service->forget()] as $start) {
+			try {
+				$start();
+				self::fail('A second run must not start beside an active one.');
+			} catch (LockedException) {
+			}
+		}
+
+		self::assertSame([], $this->paperless->connections);
+		self::assertSame([], $this->state->exports);
+		self::assertSame('running', $this->settings['status_last_state'], 'The status keeps following the active run.');
+	}
+
+	/** A run whose signs of life stopped a while ago was interrupted, and the next run starts. */
+	public function testARunStartsAfterAnInterruptedOne(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_heartbeat'] = $this->clock->time - StatusService::HEARTBEAT_GRACE - 1;
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported);
+		self::assertSame('completed', $this->settings['status_last_state']);
+		self::assertSame($this->clock->time, $this->settings['status_last_heartbeat'], 'A run gives a sign of life when it starts.');
+	}
+
+	/**
 	 * A dry-run shows what the settings of the page would do before they are saved: with another
 	 * path template here, and without saving it, the state of a document or a file.
 	 */

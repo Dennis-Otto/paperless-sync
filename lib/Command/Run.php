@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Command;
 
-use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\Lock\LockedException;
 use Symfony\Component\Console\Input\InputInterface;
@@ -25,7 +24,6 @@ final class Run extends Base {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private SyncService $syncService,
-		private ConfigService $configService,
 	) {
 		parent::__construct();
 	}
@@ -36,9 +34,9 @@ final class Run extends Base {
 			->setHelp(<<<'HELP'
 				A run makes at most as many changes as the batch size of the settings, as a scheduled
 				run does; --batch-size or --unlimited change that for this run, such as for the first
-				import of a large archive. A run without a limit can take hours: turn scheduled
-				synchronization off while it runs, because Nextcloud lets the lock of a run expire
-				after an hour (filelocking.ttl in config.php).
+				import of a large archive. A run without a limit can take hours; while it works, it
+				gives a sign of life every minute, which keeps scheduled runs and those of
+				"Synchronize now" from starting beside it, also after Nextcloud let its lock expire.
 
 				Exit codes: 0 the run completed, 1 it completed with errors of single documents or
 				files, 2 it failed or did not start, 3 another run is active.
@@ -58,9 +56,6 @@ final class Run extends Base {
 		$batchSize = $this->batchSize($input, $output);
 		if ($batchSize === 0) {
 			return self::FAILED;
-		}
-		if ($batchSize === PHP_INT_MAX && !$dryRun && $this->configService->get()->enabled) {
-			$this->error($output, 'Scheduled synchronization is on. A run without a limit that takes longer than an hour may overlap with a scheduled run; turn scheduled synchronization off for a long first import.');
 		}
 		try {
 			$report = $this->syncService->run($dryRun, batchSize: $batchSize);

@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Cron;
 
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
 use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
@@ -26,6 +27,7 @@ final class ManualSyncJob extends QueuedJob {
 	public function __construct(
 		ITimeFactory $time,
 		private SyncService $syncService,
+		private IJobList $jobList,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -40,9 +42,11 @@ final class ManualSyncJob extends QueuedJob {
 		try {
 			$this->syncService->run(false, author: $author);
 		} catch (LockedException) {
-			// A run that started after the button was pressed, such as a scheduled one, holds the
-			// lock: it makes the same changes, and the status follows it.
-			$this->logger->info('Paperless synchronization by hand skipped: another run is active.');
+			// Another run holds the lock, such as a scheduled run, but also a dry-run or forgetting
+			// copies, which don't make the changes of this run: it waits for the next background
+			// jobs, again and again until it gets the lock. After a run, it finds little to change.
+			$this->jobList->add(self::class, $argument);
+			$this->logger->info('Paperless synchronization by hand postponed: another run is active.');
 		} catch (\Throwable $exception) {
 			// Only the message: the synchronization has logged the failure with its trace already.
 			$this->logger->error('Paperless synchronization by hand failed: {error}', ['error' => $exception->getMessage()]);
