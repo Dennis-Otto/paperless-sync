@@ -1,0 +1,21 @@
+flowchart TB
+    accTitle: How a change in Paperless reaches Nextcloud within seconds
+    accDescr: A workflow of Paperless with the triggers Document Added and Document Updated calls the webhook of the app with the ID of the document and the secret. A call without the secret is refused with 401, and Nextcloud delays the next calls from that address. With the secret, the app reads that document from Paperless with its own token and exports, moves or removes its copy by the rules of a run, while Paperless waits for the answer. While another run is active, or when the settings say so, the document waits for the next background jobs instead. Trashed and deleted documents stay with the scheduled runs.
+
+    workflow["A workflow of Paperless:<br>Document Added or Document Updated"] --> post["POST to the webhook<br>{#quot;document#quot;: 123}<br>Authorization: Bearer secret"]
+    post --> secret{"The secret<br>of the webhook?"}
+    secret -->|no| refused["401, and Nextcloud delays<br>the next calls of that address"]
+    secret -->|yes| switches{"Scheduled synchronization<br>and export on?"}
+    switches -->|no| off["409: nothing changes"]
+    switches -->|yes| busy{"Another run active, or<br>the settings leave it to<br>the background jobs?"}
+    busy -->|yes| queued["202: the document waits for<br>the next background jobs"]
+    busy -->|no| read["The app reads that document<br>from Paperless with its own token"]
+    queued -->|"with the next<br>background jobs"| read
+    read --> copy["Export, move or removal of its copy,<br>by the rules of a run, a batch of one"]
+    copy --> done["The copy has changed:<br>during the call, it answers 200"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class workflow,post yours
+    class secret,switches,busy,read,copy check
+    class refused,off,queued,done result

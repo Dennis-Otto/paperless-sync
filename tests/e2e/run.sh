@@ -320,6 +320,55 @@ status_api() {
 		"${BASE_URL}/ocs/v2.php/apps/paperless_sync/api/v1/status"
 }
 
+# A call of the webhook as a workflow of Paperless makes it: from the container of the mock,
+# which plays Paperless, to Nextcloud by its name in the network, with the header
+# Authorization of $2, none when it is empty, and the JSON body $3. Writes the answer to the
+# file $1 and prints the HTTP status.
+webhook() {
+	{ "${COMPOSE[@]}" exec -T paperless-mock python -c '
+import sys, urllib.error, urllib.request
+headers = {"Content-Type": "application/json"}
+if sys.argv[1]:
+    headers["Authorization"] = sys.argv[1]
+request = urllib.request.Request(
+    "http://nextcloud/index.php/apps/paperless_sync/api/v1/webhook",
+    data=sys.argv[2].encode(),
+    headers=headers,
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=120) as response:
+        status, body = response.status, response.read()
+except urllib.error.HTTPError as error:
+    status, body = error.code, error.read()
+sys.stdout.write(body.decode())
+sys.stderr.write(str(status))' "$2" "$3" >"$1"; } 2>&1
+}
+
+# A call of the webhook that must answer with the HTTP status $1 and the result $2 for P123.
+assert_webhook() {
+	expected="$1"
+	result="$2"
+	authorization="$3"
+	body="$4"
+	status="$(webhook "${TMP_DIR}/webhook.json" "${authorization}" "${body}")"
+	if [[ "${status}" != "${expected}" ]]; then
+		echo "The webhook answered HTTP ${status} instead of ${expected}: $(cat "${TMP_DIR}/webhook.json")" >&2
+		exit 1
+	fi
+	if [[ -n "${result}" ]]; then
+		assert_json webhook-result "${TMP_DIR}/webhook.json" "${result}"
+	fi
+}
+
+# The calls with a wrong secret that Nextcloud's brute-force protection counted for the address
+# of the mock, which plays Paperless.
+webhook_attempts() {
+	address="$("${COMPOSE[@]}" exec -T paperless-mock python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')"
+	occ security:bruteforce:attempts --output=json "${address}" paperless_sync_webhook \
+		| json_value attempts
+}
+
 dav_status() {
 	user="$1"
 	method="$2"
@@ -696,6 +745,77 @@ assert_file_id "${RENAMED_PATH}"
 control /control/checksum/sha256 >/dev/null
 mock_state > "${TMP_DIR}/mock-after-move.json"
 assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
+
+# The webhook of a workflow of Paperless: a call names a document that Paperless added or
+# changed, and its copy changes during the call, with no background job in between. Calls
+# without the secret are refused and counted by Nextcloud's brute-force protection, and a call
+# is no run of the status, from which the schedule counts.
+RUN_BEFORE_WEBHOOK="$(last_run)"
+assert_webhook 401 '' 'Bearer no-secret-yet' '{"document": 123}'
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--output "${TMP_DIR}/webhook-secret.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/webhook"
+assert_json webhook-secret "${TMP_DIR}/webhook-secret.json"
+WEBHOOK_SECRET="$(json_value secret < "${TMP_DIR}/webhook-secret.json")"
+assert_webhook 401 '' '' '{"document": 123}'
+assert_webhook 401 '' 'Bearer wrong-secret' '{"document": 123}'
+if [[ "$(webhook_attempts)" -lt 3 ]]; then
+	echo "Nextcloud's brute-force protection did not count the calls without the secret." >&2
+	exit 1
+fi
+# Scheduled synchronization is still off, as before the first dry-run was reviewed: a call
+# changes nothing, until it is on.
+control /control/scenario/active >/dev/null
+assert_webhook 409 off "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+save_settings "${TMP_DIR}/webhook-enabled-settings.json" enabled=1
+assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+assert_dav_missing sync-target "${RENAMED_PATH}"
+assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+assert_file_id "${INITIAL_PATH}"
+if [[ "$(webhook_attempts)" != "0" ]]; then
+	echo "A call with the secret did not end the delay of the address of Paperless." >&2
+	exit 1
+fi
+# Paperless-ngx 2.x has no {{ doc_id }}: its {{ doc_url }} names the document by its address, and
+# the parameters of a workflow send the number as text.
+control /control/scenario/renamed >/dev/null
+assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": "http://paperless.example.test/documents/123/"}'
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+assert_webhook 200 unchanged "Bearer ${WEBHOOK_SECRET}" '{"document": "123"}'
+assert_webhook 200 missing "Bearer ${WEBHOOK_SECRET}" '{"document": 999}'
+assert_webhook 400 '' "Bearer ${WEBHOOK_SECRET}" '{"title": "Monthly invoice"}'
+# With "Mirror the document during the call" off, the document waits for the background job.
+save_settings "${TMP_DIR}/webhook-queued-settings.json" webhook_immediate=0
+control /control/scenario/active >/dev/null
+assert_webhook 202 queued "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+occ background-job:worker --once 'OCA\PaperlessSync\Cron\DocumentSyncJob' >/dev/null
+assert_dav_missing sync-target "${RENAMED_PATH}"
+assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+save_settings "${TMP_DIR}/webhook-immediate-settings.json" webhook_immediate=1
+control /control/scenario/renamed >/dev/null
+assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+assert_file_id "${RENAMED_PATH}"
+save_settings "${TMP_DIR}/webhook-done-settings.json" enabled=0
+if [[ "$(last_run)" != "${RUN_BEFORE_WEBHOOK}" ]]; then
+	echo "A call of the webhook changed the status of the last run: ${RUN_BEFORE_WEBHOOK} became $(last_run)." >&2
+	exit 1
+fi
+# The settings page shows the last call, and never the secret again.
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--output "${TMP_DIR}/webhook-state.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/webhook"
+assert_json webhook-state "${TMP_DIR}/webhook-state.json" "${WEBHOOK_SECRET}"
+mock_state > "${TMP_DIR}/mock-after-webhook.json"
+assert_json mock-after-webhook "${TMP_DIR}/mock-after-webhook.json"
 
 # A new content of the document updates its file in place, in a run by hand: the file keeps its
 # ID, and a share of it shows the new content.
@@ -1129,7 +1249,7 @@ notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

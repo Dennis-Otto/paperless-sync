@@ -20,6 +20,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Optionally removes files after they are permanently deleted from Paperless
 - Removes empty archive folders after moves and deletions
 - Runs through native Nextcloud background jobs with resumable state
+- Mirrors a new or changed document within seconds when a workflow of Paperless calls its webhook, protected by a secret
 - Notifies the administrators when the mirror keeps failing, with setup checks under Administration and a status API for monitors such as Uptime Kuma or Home Assistant
 
 ### Safe by default
@@ -52,6 +53,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Kann Dateien nach dem endgültigen Löschen in Paperless ebenfalls endgültig entfernen
 - Entfernt leere Archivordner nach Verschiebungen und Löschungen
 - Verwendet native Nextcloud-Hintergrundjobs und einen wiederaufnehmbaren Synchronisationszustand
+- Spiegelt ein neues oder geändertes Dokument in Sekunden, wenn ein Arbeitsablauf von Paperless seinen durch ein Geheimnis geschützten Webhook aufruft
 - Benachrichtigt die Administratoren, wenn der Spiegel wiederholt fehlschlägt, mit Einrichtungsprüfungen in der Verwaltung und einer Status-API für Überwachungsdienste wie Uptime Kuma oder Home Assistant
 
 ### Standardmäßig sicher

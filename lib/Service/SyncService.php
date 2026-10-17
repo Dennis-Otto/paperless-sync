@@ -121,6 +121,73 @@ final class SyncService {
 	}
 
 	/**
+	 * The run of one document, which the webhook of a Paperless workflow asks for when the document
+	 * was added or changed: it exports, moves or removes the copy of that document by the rules of
+	 * a run, with a batch of one, so that the change reaches Nextcloud within seconds instead of
+	 * with the next scheduled run. It reads that document alone, and leaves the trash, the missing
+	 * documents and the inbox to the scheduled runs, which see the whole of Paperless.
+	 *
+	 * It holds the lock of the runs but is no run of the status: the settings page keeps the last
+	 * run, and the schedule counts from it, so that calls of the webhook never hold back the
+	 * scheduled run that finds the trashed and deleted documents. Nor does it write signs of life,
+	 * which would make an interrupted run look active. The Activity stream of the target user shows
+	 * its changes, as it does those of a run.
+	 *
+	 * @throws LockedException while another run is active
+	 * @throws InvalidSettingException while the app is not completely configured, or scheduled synchronization or the export is off
+	 */
+	public function syncDocument(int $documentId): SyncReport {
+		$this->lock();
+		$report = new SyncReport(false, $this->now());
+		$config = null;
+		try {
+			$config = $this->configService->get();
+			$this->requireDocumentRuns($config);
+			$this->storage->test($config->targetUser, $config->basePath);
+			$this->storage->prepare($config);
+			// Paperless shows no document in its trash, deleted or of another owner: the scheduled
+			// runs move or delete its copy, after the missing scans that the settings require, and
+			// the report without a change says so (WebhookService::result()).
+			$document = $this->paperless->document($documentId);
+			if ($document !== null) {
+				$this->syncExports($config->withBatchSize(1), $report, $document);
+			}
+			$report->completedAt = $this->now();
+			$this->logger->info('Paperless synchronization of document {document} completed', ['document' => $documentId] + $report->summary());
+
+			return $report;
+		} catch (\Throwable $exception) {
+			$this->logger->error('Paperless synchronization of document {document} failed', ['document' => $documentId, 'exception' => $exception]);
+			throw $exception;
+		} finally {
+			if ($config !== null) {
+				$this->activity->publish($config, $report);
+			}
+			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/**
+	 * The runs of one document need what a scheduled run needs, and they follow its switches: while
+	 * an administrator keeps scheduled synchronization off, such as before the first dry-run was
+	 * reviewed or while Paperless is down, or turns the export off, a call of the webhook changes
+	 * nothing either.
+	 *
+	 * @throws InvalidSettingException with the setting that stops the runs of one document
+	 */
+	public function requireDocumentRuns(SyncConfig $config): void {
+		if (!$config->complete()) {
+			throw new InvalidSettingException('Paperless Sync is not completely configured.');
+		}
+		if (!$config->enabled) {
+			throw new InvalidSettingException('Scheduled synchronization is off, so changes from Paperless wait until it is on again.', [], 'enabled');
+		}
+		if (!$config->exportEnabled) {
+			throw new InvalidSettingException('The archive export is off, so changes from Paperless reach no copy.', [], 'export_enabled');
+		}
+	}
+
+	/**
 	 * Forgets the content of the copies of documents, of all or of those with the IDs, so that the
 	 * next runs download them again and write each in place of its copy. The copies keep their
 	 * paths and stay the app's own: none is left behind, none counts as a file of the user, and the
@@ -178,9 +245,17 @@ final class SyncService {
 		}
 	}
 
-	private function syncExports(SyncConfig $config, SyncReport $report): void {
-		$documentScan = $this->paperless->documents();
-		$trashScan = $this->paperless->trash();
+	/**
+	 * The export of a run: the active documents, then the trash, then the documents that Paperless
+	 * no longer lists. With $document, the run of that document alone takes its way through the
+	 * export, and only that.
+	 *
+	 * @param array<string, mixed>|null $document
+	 */
+	private function syncExports(SyncConfig $config, SyncReport $report, ?array $document = null): void {
+		$single = $document !== null;
+		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $this->paperless->documents();
+		$trashScan = $single ? new PaperlessScan([], true, 0) : $this->paperless->trash();
 		$documents = $documentScan->documents;
 		$trash = $trashScan->documents;
 		$documentsComplete = $this->checkScan($report, 'documents', $documentScan);
@@ -212,7 +287,9 @@ final class SyncService {
 		$sharedPaths = $this->sharedPaths($states);
 
 		foreach ($this->exportQueue($states, $documents) as [$document, $documentId, $entry]) {
-			$this->status->heartbeat();
+			if (!$single) {
+				$this->status->heartbeat();
+			}
 			$seen[$documentId] = true;
 			if ($this->isExcluded($config, $document, $tags, $excludedNames)) {
 				++$report->skipped;
@@ -421,6 +498,11 @@ final class SyncService {
 					$this->logDocumentError($documentId, $target !== '' ? $target : (string)($entry['path'] ?? ''), $error, $entry);
 				}
 			}
+		}
+
+		// The run of one document knows neither the trash nor which documents are gone.
+		if ($single) {
+			return;
 		}
 
 		foreach ($trash as $document) {

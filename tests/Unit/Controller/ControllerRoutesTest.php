@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Controller\StatusApiController;
 use OCA\PaperlessSync\Controller\SyncController;
+use OCA\PaperlessSync\Controller\WebhookController;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -34,6 +35,10 @@ final class ControllerRoutesTest extends TestCase {
 			'settings preview' => [SettingsController::class, 'preview', 'POST', '/settings/preview'],
 			'sync run' => [SyncController::class, 'run', 'POST', '/sync/run'],
 			'sync status' => [SyncController::class, 'status', 'GET', '/sync/status'],
+			'webhook' => [WebhookController::class, 'receive', 'POST', '/api/v1/webhook'],
+			'webhook state' => [WebhookController::class, 'state', 'GET', '/settings/webhook'],
+			'webhook secret' => [WebhookController::class, 'create', 'POST', '/settings/webhook'],
+			'webhook off' => [WebhookController::class, 'remove', 'DELETE', '/settings/webhook'],
 		];
 	}
 

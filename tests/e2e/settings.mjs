@@ -133,7 +133,7 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 6 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		helpLinks.length === 7 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
 		`Every section must link to its part of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
@@ -564,6 +564,29 @@ try {
 	expect((await message.textContent()) === SAVED, `Connecting again failed: ${await message.textContent()}`)
 	expect(!(await schedule.isChecked()), 'The schedule stays off, as run.sh saved it.')
 	console.log('Settings: connecting again needs the token and the local network.')
+
+	// The webhook of Paperless, whose secret run.sh created: a new secret replaces it, after a
+	// question, and the page shows it this once, selected for copying; a reload has it no more.
+	const webhookCreate = page.locator('#paperless-sync-webhook-create')
+	const webhookSecret = page.locator('#paperless-sync-webhook-secret')
+	expect((await webhookCreate.textContent()) === 'Create a new secret', `run.sh created the secret of the webhook: ${await webhookCreate.textContent()}`)
+	expect(await page.locator('#paperless-sync-webhook-remove').isVisible(), 'A webhook with a secret can be turned off.')
+	expect(await webhookSecret.isHidden(), 'The page shows no secret before one is created.')
+	let webhookQuestion = ''
+	page.once('dialog', (dialog) => {
+		webhookQuestion = dialog.message()
+		dialog.accept()
+	})
+	await webhookCreate.click()
+	await settle()
+	expect(webhookQuestion.startsWith('Create a new secret? The secret before stops working at once'), `A new secret must say what it does: ${webhookQuestion}`)
+	expect((await message.textContent()) === 'Secret created. Copy it now: it is shown only this once.', `Creating the secret failed: ${await message.textContent()}`)
+	const secret = await webhookSecret.inputValue()
+	expect(/^[A-Za-z0-9]{48}$/.test(secret) && await focused(webhookSecret), 'The new secret shows once, with the focus on it for copying.')
+	await page.reload()
+	expect(await webhookSecret.isHidden() && !(await page.content()).includes(secret), 'After a reload, the page has the secret no more.')
+	expect((await page.locator('#paperless-sync-webhook-state').textContent()) === 'The webhook accepts calls with its secret.', 'The webhook keeps its new secret.')
+	console.log('Settings: a new secret of the webhook replaces the old one, shows once, and a reload has it no more.')
 
 	// The questions of the page are in the language of the administrator.
 	await setLanguage('de')

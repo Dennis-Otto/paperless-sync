@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, health: list<array{severity: string, description: string}>} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -19,6 +19,8 @@ style('paperless_sync', 'settings');
 
 $config = $_['config'];
 $status = $_['status'];
+// The webhook of the workflows of Paperless, without its secret, which only its creation shows.
+$webhook = $_['webhook'];
 // The warnings and errors of the setup checks of Administration → Overview, as they were when the
 // page loaded, which it shows on top.
 $health = $_['health'];
@@ -57,7 +59,8 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-run-url="<?php p($_['runUrl']); ?>"
 	data-status-url="<?php p($_['statusUrl']); ?>"
 	data-preview-url="<?php p($_['previewUrl']); ?>"
-	data-files-url="<?php p($_['filesUrl']); ?>">
+	data-files-url="<?php p($_['filesUrl']); ?>"
+	data-webhook-url="<?php p($_['webhookStateUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -292,6 +295,54 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Remove empty folders after moves and deletions')); ?></span></label>
 			</div>
+		</section>
+
+		<section class="paperless-sync-card" aria-labelledby="paperless-sync-webhook-title">
+			<div class="paperless-sync-card-heading">
+				<div><span class="paperless-sync-step">6</span><h3 id="paperless-sync-webhook-title"><?php p($l->t('Changes within seconds')); ?></h3></div>
+				<p><?php p($l->t('A workflow of Paperless calls this webhook when it adds or changes a document, and the copy of the document changes within seconds instead of with the next scheduled run. Trashed and deleted documents wait for the scheduled runs.')); ?> <?php $help('changes-within-seconds', $l->t('Changes within seconds')); ?></p>
+			</div>
+			<div class="paperless-sync-grid">
+				<div class="paperless-sync-field paperless-sync-field--wide">
+					<label for="paperless-sync-webhook-address"><?php p($l->t('Webhook URL')); ?></label>
+					<div class="paperless-sync-copy">
+						<input id="paperless-sync-webhook-address" class="paperless-sync-code" type="text" value="<?php p($webhook['url']); ?>" readonly spellcheck="false">
+						<button id="paperless-sync-webhook-copy-address" type="button" data-copy="paperless-sync-webhook-address"><?php p($l->t('Copy')); ?></button>
+					</div>
+				</div>
+				<div id="paperless-sync-webhook-secret-field" class="paperless-sync-field paperless-sync-field--wide" hidden>
+					<label for="paperless-sync-webhook-secret"><?php p($l->t('Secret')); ?></label>
+					<div class="paperless-sync-copy">
+						<input id="paperless-sync-webhook-secret" class="paperless-sync-code" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="paperless-sync-webhook-secret-hint">
+						<button id="paperless-sync-webhook-copy-secret" type="button" data-copy="paperless-sync-webhook-secret"><?php p($l->t('Copy')); ?></button>
+					</div>
+					<p id="paperless-sync-webhook-secret-hint" class="settings-hint"><?php p($l->t('Copy the secret now: it is shown only this once. In Paperless, it goes into the header Authorization of the webhook, as Bearer followed by a space and the secret.')); ?></p>
+				</div>
+			</div>
+			<div class="paperless-sync-webhook-actions">
+				<button id="paperless-sync-webhook-create" type="button"><?php p($webhook['configured'] ? $l->t('Create a new secret') : $l->t('Create secret')); ?></button>
+				<button id="paperless-sync-webhook-remove" type="button" <?php if (!$webhook['configured']) {
+					print_unescaped('hidden');
+				} ?>><?php p($l->t('Turn the webhook off')); ?></button>
+				<p id="paperless-sync-webhook-state" class="settings-hint" aria-live="polite"><?php p($webhook['configured'] ? $l->t('The webhook accepts calls with its secret.') : $l->t('The webhook is off: it refuses every call until you create its secret.')); ?></p>
+			</div>
+			<p id="paperless-sync-webhook-last-call" class="settings-hint" hidden></p>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="webhook_immediate" type="checkbox" aria-describedby="paperless-sync-webhook-immediate-hint" <?php if ($config->webhookImmediate) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Mirror the document during the call')); ?></span></label>
+			</div>
+			<p id="paperless-sync-webhook-immediate-hint" class="settings-hint"><?php p($l->t('Off, the document waits for the next background jobs, which system cron starts every 5 minutes. On, it waits only while another run is active.')); ?></p>
+			<details class="paperless-sync-webhook-guide">
+				<summary><?php p($l->t('Set up the workflow in Paperless')); ?></summary>
+				<ol>
+					<li><?php p($l->t('In Paperless, open Workflows and add a workflow, with the triggers Document Added and Document Updated.')); ?></li>
+					<li><?php p($l->t('Add the action Webhook, with the webhook URL above as its Webhook url.')); ?></li>
+					<li><?php p($l->t('Turn on "Use parameters for webhook body" and "Send webhook payload as JSON", and add the parameter document with the value {{ doc_id }}. Paperless-ngx 2.x has no {{ doc_id }}: use {{ doc_url }} there.')); ?></li>
+					<li><?php p($l->t('Under Webhook headers, add Authorization with the value Bearer, a space and the secret, and save the workflow.')); ?></li>
+					<li><?php p($l->t('Change the title of a document in Paperless: its copy moves within seconds, and the last call appears here.')); ?></li>
+				</ol>
+			</details>
 		</section>
 
 		<details class="paperless-sync-card paperless-sync-advanced">

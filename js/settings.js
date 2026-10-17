@@ -183,7 +183,13 @@
 		const preview = element('path-preview')
 		const previewStatus = element('path-preview-status')
 		const previewList = element('path-preview-list')
-		const buttons = [save, test, dryRun, run, reset, refresh]
+		const webhookCreate = element('webhook-create')
+		const webhookRemove = element('webhook-remove')
+		const webhookState = element('webhook-state')
+		const webhookLastCall = element('webhook-last-call')
+		const webhookSecretField = element('webhook-secret-field')
+		const webhookSecret = element('webhook-secret')
+		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
 		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
 		// While a run is queued or active, the page asks for its status: after a change of the state
@@ -1185,6 +1191,104 @@
 			}
 		})
 
+		// What came of the last call of the webhook, by the result that WebhookService::result()
+		// names; translate() takes each text literally, so that scripts/check-l10n.mjs finds it.
+		function lastCallText(call) {
+			const parameters = { time: formatTime(call.at), document: call.document, error: call.message }
+			switch (call.result) {
+			case 'exported':
+				return translate('Last call, {time}: P{document} exported.', parameters)
+			case 'moved':
+				return translate('Last call, {time}: P{document} moved.', parameters)
+			case 'removed':
+				return translate('Last call, {time}: the copy of P{document} removed, as the settings exclude the document.', parameters)
+			case 'unchanged':
+				return translate('Last call, {time}: the copy of P{document} was current already.', parameters)
+			case 'excluded':
+				return translate('Last call, {time}: the settings exclude P{document}, such as a document in the inbox of Paperless.', parameters)
+			case 'missing':
+				return translate('Last call, {time}: Paperless shows no active document P{document}. A scheduled run handles a document in the trash or deleted.', parameters)
+			case 'queued':
+				return translate('Last call, {time}: P{document} waits for the next background jobs.', parameters)
+			case 'off':
+				return translate('Last call, {time}: nothing changed for P{document}, as scheduled synchronization or the export is off.', parameters)
+			case 'failed':
+				return translate('Last call, {time}: P{document} failed: {error}', parameters)
+			default:
+				return ''
+			}
+		}
+
+		// The webhook as the server sent it, without its secret: whether it has one, and its last call.
+		function showWebhook(webhook) {
+			setText(webhookCreate, webhook.configured ? translate('Create a new secret') : translate('Create secret'))
+			webhookRemove.hidden = !webhook.configured
+			setText(webhookState, webhook.configured
+				? translate('The webhook accepts calls with its secret.')
+				: translate('The webhook is off: it refuses every call until you create its secret.'))
+			const text = webhook.lastCall ? lastCallText(webhook.lastCall) : ''
+			webhookLastCall.hidden = text === ''
+			setText(webhookLastCall, text)
+		}
+
+		async function refreshWebhook() {
+			showWebhook(await request(root.dataset.webhookUrl, 'GET'))
+		}
+
+		// A new secret replaces the one before at once; the page shows it this once, selected for copying.
+		webhookCreate.addEventListener('click', async function() {
+			if (!webhookRemove.hidden && !window.confirm(translate('Create a new secret? The secret before stops working at once, so the workflow of Paperless needs the new one.'))) {
+				return
+			}
+			setBusy(true)
+			try {
+				const answer = await request(root.dataset.webhookUrl, 'POST')
+				showWebhook(answer)
+				webhookSecret.value = answer.secret
+				webhookSecretField.hidden = false
+				webhookSecret.focus()
+				webhookSecret.select()
+				showMessage(translate('Secret created. Copy it now: it is shown only this once.'), 'success')
+			} catch (error) {
+				showError(error, translate('Could not create the secret.'))
+			} finally {
+				setBusy(false)
+			}
+		})
+
+		webhookRemove.addEventListener('click', async function() {
+			if (!window.confirm(translate('Turn the webhook off? Its secret stops working, and the calls of Paperless are refused until you create a new one. The scheduled runs go on.'))) {
+				return
+			}
+			setBusy(true)
+			try {
+				showWebhook(await request(root.dataset.webhookUrl, 'DELETE'))
+				webhookSecret.value = ''
+				webhookSecretField.hidden = true
+				showMessage(translate('The webhook is off.'), 'success')
+			} catch (error) {
+				showError(error, translate('Could not turn the webhook off.'))
+			} finally {
+				setBusy(false)
+			}
+		})
+
+		// Copies the webhook URL or the secret; without the clipboard of the browser, which needs
+		// HTTPS, the text stays selected for copying by hand.
+		root.querySelectorAll('[data-copy]').forEach(function(button) {
+			button.addEventListener('click', async function() {
+				const input = document.getElementById(button.dataset.copy)
+				input.focus()
+				input.select()
+				try {
+					await window.navigator.clipboard.writeText(input.value)
+					showMessage(translate('Copied.'), 'success')
+				} catch (error) {
+					showMessage(translate('Selected: copy it with Ctrl+C, or ⌘+C on a Mac.'), 'progress')
+				}
+			})
+		})
+
 		form.addEventListener('submit', async function(event) {
 			event.preventDefault()
 			setBusy(true)
@@ -1263,7 +1367,7 @@
 		refresh.addEventListener('click', async function() {
 			setBusy(true)
 			try {
-				await refreshStatus()
+				await Promise.all([refreshStatus(), refreshWebhook()])
 				showMessage(translate('Status refreshed.'), 'success')
 			} catch (error) {
 				showError(error, translate('Could not refresh status.'))
@@ -1324,6 +1428,10 @@
 		const status = initialState('status')
 		if (status !== null) {
 			updateStatus(status)
+		}
+		const webhook = initialState('webhook')
+		if (webhook !== null) {
+			showWebhook(webhook)
 		}
 		updatePreview()
 	})

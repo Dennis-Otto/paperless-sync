@@ -22,8 +22,8 @@ use SensitiveParameter;
 /**
  * Nextcloud's log writes an exception with the arguments of every frame of its trace. PHP leaves
  * an argument out only when its parameter is marked #[\SensitiveParameter], and an attribute is not
- * inherited: every method that takes the API token marks it itself, the interface and the class
- * that implements it alike.
+ * inherited: every method that takes the API token or the secret of the webhook marks it itself,
+ * the interface and the class that implements it alike.
  */
 final class SensitiveParametersTest extends TestCase {
 	private const LIB = __DIR__ . '/../../lib';
@@ -38,8 +38,9 @@ final class SensitiveParametersTest extends TestCase {
 				}
 				foreach ($method->getParameters() as $parameter) {
 					$type = $parameter->getType();
-					// A string named after the token, such as $token or $tokenCandidate; $tokenConfigured is a bool.
-					if ($type instanceof ReflectionNamedType && $type->getName() === 'string' && stripos($parameter->getName(), 'token') !== false) {
+					// A string named after the token, such as $token or $tokenCandidate, or after the secret
+					// of the webhook, which comes in the header Authorization; $tokenConfigured is a bool.
+					if ($type instanceof ReflectionNamedType && $type->getName() === 'string' && preg_match('/token|secret|authorization/i', $parameter->getName()) === 1) {
 						$parameters[self::label($method, $parameter->getName())] = [$class, $method->getName(), $parameter->getName()];
 					}
 				}
@@ -86,6 +87,7 @@ final class SensitiveParametersTest extends TestCase {
 			'SettingsController::checks($token)',
 			'SettingsController::save($token)',
 			'SettingsController::test($token)',
+			'WebhookService::verify($authorization)',
 		], array_keys(self::parametersWithTheToken()));
 	}
 

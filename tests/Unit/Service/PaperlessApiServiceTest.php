@@ -567,6 +567,46 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertStringContainsString('Failed to open stream', $warnings[0]);
 	}
 
+	/** The run of one document reads it with the fields of the scan of a run, so that it takes the same path. */
+	public function testOneDocumentIsReadWithTheFieldsOfARun(): void {
+		$document = ['id' => 123, 'title' => 'Strom August', 'tags' => [2], 'custom_fields' => []];
+		$this->responses[] = [200, $document];
+
+		self::assertSame($document, $this->service->document(123));
+		self::assertSame(self::URL . '/api/documents/123/', $this->requests[0]['url']);
+		self::assertSame(['fields' => implode(',', PaperlessApiService::DOCUMENT_FIELDS), 'truncate_content' => 'true'], $this->requests[0]['options']['query']);
+		self::assertFalse($this->requests[0]['options']['http_errors']);
+		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
+	}
+
+	/** Paperless answers 404 for a document in its trash, a deleted one and one that the account may not view. */
+	public function testADocumentThatPaperlessDoesNotShowIsNone(): void {
+		$this->responses[] = [404, ['detail' => 'No Document matches the given query.']];
+
+		self::assertNull($this->service->document(123));
+	}
+
+	/** @return array<string, array{int, mixed, string}> */
+	public static function invalidDocumentAnswers(): array {
+		return [
+			'an error of Paperless' => [500, ['detail' => 'Server error'], 'Paperless could not query document 123: HTTP 500.'],
+			'a token that Paperless refuses' => [401, ['detail' => 'Invalid token.'], 'Paperless could not query document 123: HTTP 401.'],
+			'another document' => [200, ['id' => 124, 'title' => 'Wasser'], 'Paperless returned no document 123.'],
+			'a list' => [200, [['id' => 123]], 'Paperless returned no document 123.'],
+			'text' => [200, '"document"', 'Paperless returned no document 123.'],
+			'no ID' => [200, ['title' => 'Strom August'], 'Paperless returned no document 123.'],
+		];
+	}
+
+	#[DataProvider('invalidDocumentAnswers')]
+	public function testAnInvalidAnswerForOneDocumentFailsTheRun(int $status, mixed $body, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage($message);
+		$this->service->document(123);
+	}
+
 	public function testChecksumOfTheOriginalAndTheArchiveVersion(): void {
 		$metadata = ['original_checksum' => 'aaa', 'archive_checksum' => 'bbb'];
 		$this->responses = [[200, $metadata], [200, $metadata]];
@@ -865,6 +905,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'connection test' => ['testConnection'],
 			'documents' => ['documents'],
 			'trash' => ['trash'],
+			'one document' => ['document'],
 			'tags' => ['tags'],
 			'download' => ['downloadDocument'],
 			'checksum' => ['documentChecksum'],
@@ -2171,6 +2212,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'testConnection' => $this->service->testConnection(self::URL, 'secret-token', $localNetwork),
 			'documents' => $this->service->documents(),
 			'trash' => $this->service->trash(),
+			'document' => $this->service->document(123),
 			'tags' => $this->service->tags(),
 			'downloadDocument' => $this->service->downloadDocument(123, true, self::discard()),
 			'documentChecksum' => $this->service->documentChecksum(123, true),

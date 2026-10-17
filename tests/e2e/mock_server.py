@@ -107,6 +107,8 @@ def reset_state():
                 "metadataRequests": 0,
                 # The ordering and the fields that each scan of the documents asked for.
                 "documentScans": [],
+                # The ID and the fields of every document that a run read alone, as the webhook asks.
+                "documentReads": [],
                 "invalidAuth": 0,
                 "uploads": [],
                 "refusedUploads": [],
@@ -445,6 +447,20 @@ class Handler(BaseHTTPRequestHandler):
                 with LOCK:
                     STATE["metadataRequests"] += 1
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
+        elif match := re.fullmatch(r"/api/documents/(\d+)/", parsed.path):
+            # One document, as the run of one document reads it for the webhook of a workflow;
+            # Paperless answers 404 for a document in its trash or deleted.
+            document_id = int(match.group(1))
+            fields = query.get("fields", [""])[0]
+            with LOCK:
+                STATE["documentReads"].append({"id": document_id, "fields": fields})
+            document = next((item for item in documents if item.get("id") == document_id), None)
+            if document is None:
+                self._json(404, {"detail": "No Document matches the given query."})
+            else:
+                if fields:
+                    document = {key: value for key, value in document.items() if key in fields.split(",")}
+                self._json(200, document)
         else:
             self._json(404, {"detail": "Not found"})
 
