@@ -11,7 +11,6 @@ namespace OCA\PaperlessSync\Tests\Unit\Settings;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
-use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
@@ -82,7 +81,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame([], $this->adminSettings()->getForm()->getParams()['health'], 'A mirror that waits for its first run is no warning.');
 
 		unset($this->settings['backgroundjobs_mode']);
-		(new StatusService($this->appConfig(), new TestClock()))->failed(new RuntimeException('Paperless is down.'));
+		$this->statusService(new TestClock())->failed(new RuntimeException('Paperless is down.'));
 		$health = $this->adminSettings()->getForm()->getParams()['health'];
 
 		self::assertSame([
@@ -198,7 +197,7 @@ final class AdminSettingsTest extends TestCase {
 			$this->initialState[$key] = $data;
 		});
 
-		$status = new StatusService($this->appConfig(), new TestClock());
+		$status = $this->statusService(new TestClock());
 		$formatter = $this->createMock(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturn('vor 2 Stunden');
 

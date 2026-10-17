@@ -105,10 +105,11 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Operations
 
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
-- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run; a dry-run tries changes of the settings before you save them
+- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English and German: the settings, their messages and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
 - [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
+- [`occ` commands](#command-line) for scripts, cron jobs and monitoring: a run or a dry-run with a batch size of its own or none, the status, and copies written again, with JSON output and exit codes
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
 <!-- --8<-- [end:features] -->
@@ -262,7 +263,7 @@ After a save, the form shows the settings as Nextcloud stored them: the URL with
 
 **Disconnect** deletes the stored API token and turns off scheduled synchronization and **Paperless runs in my local network**. The other settings, the synchronized files and their state stay as they are; to connect again, enter the token, turn the local network on again if Paperless runs there, and save.
 
-Results and errors appear in the bar of the buttons, which stays at the bottom of the window. When a proxy or the web server answers for a long run by hand, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the run, the page says that the run continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how the run ended.
+Results and errors appear in the bar of the buttons, which stays at the bottom of the window. **Synchronize now** doesn't wait for the run: it queues the run as a background job of Nextcloud and answers at once, the status says *Queued* until the next background jobs start it, within five minutes with the system cron, and the bar says how the run ended once the status shows its end. A run can so take as long as it needs, and no proxy in front of Nextcloud cuts it off. **Run dry-run** answers with its report; when a proxy or the web server answers for a long dry-run instead, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the dry-run, the page says that it continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how it ended.
 
 ### Folder ownership
 
@@ -393,7 +394,7 @@ Everyone who may write to the inbox folder can name its folders, so with *Create
 
 Moving Paperless documents to its trash can be mirrored into the configured `_Deleted` folder, below the date on which the document went to the trash, in the time zone of the target user from the personal settings of Nextcloud, or else in that of Nextcloud, such as `_Deleted/2026-08-27/Example GmbH/Invoice/2026/…`; when the trash behavior keeps archive files in place, the copy stays where it is. Deleting the copy of a document that Paperless deleted is disabled by default. When enabled, a document must be absent from both the active Paperless API and its trash for the configured number of consecutive complete scans.
 
-A copy that a scheduled run deletes goes to the trash bin of the target user, *Deleted files* in Files, as do the folders that it empties: Nextcloud keeps them there for the retention of its trash bin, and the target user can restore them. A run started with *Synchronize now* deletes them for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks. The same holds for the copy that an excluded tag removes, for an inbox file after its import and for a file in the way of a copy that moves, which the [conflict policy](#conflict-policy) *Replace synchronized file* deletes. A copy whose document gets a new content stays the same file instead, and its previous content becomes a version of it, not a file in the trash bin. Without the app *Deleted files* of Nextcloud, every deletion is for good.
+A copy that a run deletes goes to the trash bin of the target user, *Deleted files* in Files, as do the folders that it empties: Nextcloud keeps them there for the retention of its trash bin, and the target user can restore them. That holds for a scheduled run, for a run of *Synchronize now*, which runs as a background job as well, and for a run of `occ paperless_sync:run`. A background job that Nextcloud runs after the job of another app that set up the files of another user deletes them for good, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks. The same holds for the copy that an excluded tag removes, for an inbox file after its import and for a file in the way of a copy that moves, which the [conflict policy](#conflict-policy) *Replace synchronized file* deletes. A copy whose document gets a new content stays the same file instead, and its previous content becomes a version of it, not a file in the trash bin. Without the app *Deleted files* of Nextcloud, every deletion is for good.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-happens-to-the-copy-of-a-document.dark.svg">
@@ -428,14 +429,16 @@ The run takes the most recently added documents first, so a new document doesn't
 
 The app uses Nextcloud's native cron scheduler. System cron must run reliably. The configured interval, from 5 minutes to a day, is enforced by the app; each run limits its changes in Nextcloud, and its uploads to Paperless, to the configured [batch size](#batch-size) each. Nextcloud starts the job of the app every five minutes at most, so the interval can't be shorter; an interval below five minutes that an earlier version saved acts as five minutes.
 
-The interval counts from the start or the end of the last run, whichever is later, and only a run counts that synchronizes: a scheduled one or one started with *Synchronize now*. A dry-run changes nothing, so it doesn't move the next run; only while it is still running, the next run waits for it, as both need the lock of the synchronization.
+The interval counts from the start or the end of the last run, whichever is later, and only a run counts that synchronizes: a scheduled one, one of *Synchronize now* or one of `occ paperless_sync:run`. A dry-run changes nothing, so it doesn't move the next run; only while it is still running, the next run waits for it, as both need the lock of the synchronization.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/when-the-background-job-starts-a-run.dark.svg">
   <img src="docs/images/diagrams/when-the-background-job-starts-a-run.svg" alt="When the background job starts a run: Nextcloud's cron starts the background job of the app every five minutes at most. With scheduled synchronization off, it does nothing. Otherwise it takes the start or the end of the last run that synchronized, a scheduled run or one by hand, whichever is later, and a dry-run only while it is still running. When the interval has passed since then, the job starts a run; otherwise it waits for the next background job.">
 </picture>
 
-A large archive takes many runs at first: about the number of documents divided by the batch size, times the interval. With the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes the first synchronization faster; every later run changes only what changed in Paperless.
+*Synchronize now* queues a second job, `OCA\PaperlessSync\Cron\ManualSyncJob`, once, which the next background jobs run. To start it at once, run a worker of Nextcloud for it, such as in a service of systemd or a container of its own: `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'`. For a single run, `occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'` runs the queued job and returns. While another run holds the lock, such as a dry-run, the job waits for the next background jobs.
+
+A large archive takes many runs at first: about the number of documents divided by the batch size, times the interval. With the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes the first synchronization faster; every later run changes only what changed in Paperless. Or import it in one go on the [command line](#command-line), with `occ paperless_sync:run --unlimited`.
 
 <!-- --8<-- [end:configuration-checklist] -->
 
@@ -449,7 +452,7 @@ Every run leaves its outcome in five places, also a scheduled run that nobody wa
   <img src="docs/images/diagrams/where-the-outcome-of-a-run-goes.svg" alt="Where the outcome of a run goes: A run, scheduled, by hand or a dry-run, writes its report. The status of the app keeps the state, the times and the report of the last run, which the settings page shows at every visit, the errors first. The error of a document goes to the Nextcloud log as a warning when it first occurs or changes. A run that changed something, and every import that Paperless finished, failed or refused, adds an entry to the Activity stream of the target user, with links to the files, but a dry-run adds none. A mirror that keeps failing, and every import that failed or was refused, sends a notification, but a dry-run sends none.">
 </picture>
 
-The top of the settings page shows how the last run ended, when it finished, the last run without errors, roughly the next scheduled run, as Nextcloud's background jobs start it a few minutes after the interval, and below them the Paperless that the last run reached: its version, as Paperless names it, and the version of its API that the app uses, such as *The last run reached Paperless-ngx 3.3.0 through version 9 of its API.* A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. While a run is active, the page asks for its status every five seconds.
+The top of the settings page shows how the last run ended, when it finished, the last run without errors, roughly the next scheduled run, as Nextcloud's background jobs start it a few minutes after the interval, and below them the Paperless that the last run reached: its version, as Paperless names it, and the version of its API that the app uses, such as *The last run reached Paperless-ngx 3.3.0 through version 9 of its API.* A run that failed, or ended with errors of single documents, shows them in a box below, the error that stopped the run first, and the report of the last run follows the buttons. Both stay after a reload, for a scheduled run too. A run of *Synchronize now* is *Queued* until the background jobs start it. A run that ended without saying how, because PHP stopped it, such as on a restart of the server, is *Interrupted* once Nextcloud's lock of the run is gone and the run gave no sign of life for 15 minutes: an active run writes one every minute; the next run continues where it stopped. While a run is queued or active, the page asks for its status, after each change of the state every second at first, then every five seconds, and after five minutes every thirty seconds.
 <!-- --8<-- [end:status] -->
 
 <picture>
@@ -529,6 +532,43 @@ rest:
 
 The notification of a failing mirror goes to the group `admin`. Another group, such as one for the people who look after the archive, gets it in its place with `occ config:app:set paperless_sync notification_group --value=archive-admins`; a group that doesn't exist leaves it to the administrators, with a warning in the log.
 <!-- --8<-- [end:notifications] -->
+
+## Command line
+
+<!-- --8<-- [start:command-line] -->
+Nextcloud's `occ` runs the app from the shell, for scripts, cron jobs of your own and monitoring, such as in a Docker or All-in-One installation: `docker exec --user www-data nextcloud php occ …`, or `docker exec --user www-data nextcloud-aio-nextcloud php occ …` for All-in-One.
+
+| Command | What it does |
+| --- | --- |
+| `occ paperless_sync:run` | A run now, in the shell, as long as it takes, with its report. It makes at most as many changes as the batch size of the settings, as a scheduled run does. |
+| `occ paperless_sync:run --dry-run` | The changes that a run would make, without making them. |
+| `occ paperless_sync:run --batch-size=1000` | A run with a batch size of its own; `--unlimited` makes every change that is due, such as for the first import of a large archive. |
+| `occ paperless_sync:status` | The status of the last run, as the settings page shows it, with its report. `--exit-code` tells by the exit code how it ended, for a check of a monitoring. |
+| `occ paperless_sync:forget 123 P124` | The next runs download these documents again and write each in place of its copy, such as after a copy was damaged; `--all` for every copy, such as after an incident of the storage. A copy keeps its path, its file ID, its shares and its versions, and an edit in Nextcloud gets the content of Paperless again. |
+
+`--output=json` prints the report of a run, or the status, as the JSON that the settings page reads, on one line, and `--output=json_pretty` indented; messages about failures go to standard error. A run on the command line counts in the status and the log as any other run, and holds the same lock, so it never runs beside a scheduled run or one of *Synchronize now*.
+
+| Exit code | `paperless_sync:run` | `paperless_sync:status --exit-code` | `paperless_sync:forget` |
+| --- | --- | --- | --- |
+| 0 | The run completed. | The last run completed, or none has ended yet. | Every document was forgotten. |
+| 1 | It completed with errors of single documents or files; its report lists them. | It completed with errors. | Some of the documents have no copy. |
+| 2 | It failed or didn't start: an option that isn't valid, an incomplete configuration, or Paperless out of reach. | It failed or was interrupted. | It failed. |
+| 3 | Another run is active. | — | A run is active. |
+
+The first import of a large archive in one go: a run without a limit can take hours. Nextcloud lets the lock of a run expire after an hour (`filelocking.ttl` in `config.php`), but the run gives a sign of life every minute, which keeps scheduled runs and those of *Synchronize now* from starting beside it.
+
+```sh
+occ paperless_sync:run --dry-run --unlimited   # how many changes are due
+occ paperless_sync:run --unlimited             # make them all
+```
+
+How a run by hand starts, on the page and on the command line:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-by-hand-starts.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-by-hand-starts.svg" alt="How a run by hand starts: Run dry-run on the settings page runs in the request, changes nothing, makes at most one batch of changes and answers with its report. Synchronize now queues a background job and answers at once; Nextcloud's background jobs run it, within five minutes with the system cron or at once with a worker for the job, as they run the scheduled job. occ paperless_sync:run runs in the shell as long as it takes and prints its report with an exit code. Every run takes the same lock and records the status, which the settings page follows.">
+</picture>
+<!-- --8<-- [end:command-line] -->
 
 ## FAQ and troubleshooting
 

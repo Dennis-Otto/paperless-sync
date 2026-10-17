@@ -183,6 +183,24 @@ elif mode == "export":
     expect("errors", 0)
     if not any(str(action).startswith("EXPORT P123:") for action in payload.get("actions", [])):
         raise AssertionError(f"The run lists no export: {payload!r}")
+elif mode.startswith("exit-"):
+    # occ paperless_sync:run exits with 1 when the run had errors of single documents, else with 0.
+    code = int(mode.removeprefix("exit-"))
+    if (code == 1) != (payload.get("errors", 0) > 0) or payload.get("dryRun") is not False:
+        raise AssertionError(f"occ paperless_sync:run exited with {code} after this report: {payload!r}")
+elif mode == "queued":
+    # "Synchronize now" answers before the run starts, with the status that the page follows.
+    expect("queued", True)
+    if payload.get("status", {}).get("state") != "queued":
+        raise AssertionError(f"The answer of a queued run brings no queued status: {payload!r}")
+elif mode == "status-export":
+    # The run that the background job made, as the status of the settings page shows it.
+    expect("state", "completed")
+    report = payload.get("report", {})
+    if report.get("dryRun") is not False or report.get("exported") != 1:
+        raise AssertionError(f"The status keeps no report of the export of the background job: {payload!r}")
+    if not any(str(action).startswith("EXPORT P123:") for action in report.get("actions", [])):
+        raise AssertionError(f"The status lists no export: {payload!r}")
 elif mode == "export-stopped":
     expect("exported", 0)
     expect("errors", 1)

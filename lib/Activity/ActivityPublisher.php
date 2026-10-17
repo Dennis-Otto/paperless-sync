@@ -45,15 +45,19 @@ final class ActivityPublisher {
 	 * The entries of a run. A dry-run and a run that changed nothing add none, and an entry that
 	 * Nextcloud refuses, such as for a full database, is logged without failing the run, whose
 	 * changes are done.
+	 *
+	 * @param string $author the user who started the run by hand, whom the entries name, such as the
+	 *                       administrator of "Synchronize now", whose background job has no session
+	 *                       that Nextcloud could take the name from; empty for a scheduled run
 	 */
-	public function publish(SyncConfig $config, SyncReport $report): void {
+	public function publish(SyncConfig $config, SyncReport $report, string $author = ''): void {
 		if ($report->dryRun) {
 			return;
 		}
 		try {
-			$this->publishRun($config, $report);
+			$this->publishRun($config, $report, $author);
 			foreach ($report->importResults() as $result) {
-				$this->publishImport($config, $result);
+				$this->publishImport($config, $result, $author);
 			}
 		} catch (\Throwable $exception) {
 			$this->logger->warning('Paperless Sync could not add the changes of its run to the activity stream: {error}', [
@@ -63,7 +67,7 @@ final class ActivityPublisher {
 		}
 	}
 
-	private function publishRun(SyncConfig $config, SyncReport $report): void {
+	private function publishRun(SyncConfig $config, SyncReport $report, string $author): void {
 		$counts = [
 			'exported' => $report->exported,
 			'moved' => $report->moved,
@@ -97,30 +101,34 @@ final class ActivityPublisher {
 			? $this->join($config->basePath, $config->inboxFolder)
 			: $archive;
 		$parameters['folder'] = $this->reference($config, $folder);
-		$this->send($config, self::SUBJECT_RUN, $parameters, $parameters['folder']);
+		$this->send($config, self::SUBJECT_RUN, $parameters, $parameters['folder'], $author);
 	}
 
 	/** @param array{outcome: SyncReport::IMPORT*, path: string, document: int|null, reason: string} $result */
-	private function publishImport(SyncConfig $config, array $result): void {
+	private function publishImport(SyncConfig $config, array $result, string $author): void {
 		$file = $this->reference($config, $result['path']);
 		if ($result['outcome'] === SyncReport::IMPORTED) {
-			$this->send($config, self::SUBJECT_IMPORTED, ['file' => $file, 'document' => $result['document']], $file);
+			$this->send($config, self::SUBJECT_IMPORTED, ['file' => $file, 'document' => $result['document']], $file, $author);
 			return;
 		}
 		$subject = $result['outcome'] === SyncReport::IMPORT_FAILED ? self::SUBJECT_IMPORT_FAILED : self::SUBJECT_IMPORT_REJECTED;
-		$this->send($config, $subject, ['file' => $file, 'reason' => mb_substr($result['reason'], 0, self::REASON_LIMIT)], $file);
+		$this->send($config, $subject, ['file' => $file, 'reason' => mb_substr($result['reason'], 0, self::REASON_LIMIT)], $file, $author);
 	}
 
 	/**
 	 * @param array<string, mixed> $parameters
 	 * @param array{id: int, path: string} $object the file or folder of the entry, whose sidebar in Files shows it; ID 0 for one that is gone
 	 */
-	private function send(SyncConfig $config, string $subject, array $parameters, array $object): void {
+	private function send(SyncConfig $config, string $subject, array $parameters, array $object, string $author): void {
 		$event = $this->activityManager->generateEvent();
 		$event->setApp(AppConstants::APP_ID)
 			->setType(self::TYPE)
 			->setAffectedUser($config->targetUser)
 			->setSubject($subject, $parameters);
+		// Without an author, Nextcloud names the user of the session, if there is one.
+		if ($author !== '') {
+			$event->setAuthor($author);
+		}
 		if ($object['id'] > 0) {
 			$event->setObject('files', $object['id'], $object['path']);
 		}

@@ -182,11 +182,21 @@
 		const buttons = [save, test, dryRun, run, reset, refresh]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
 		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
-		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
+		// While a run is queued or active, the page asks for its status: after a change of the state
+		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
+		// once, then every five seconds, and after five minutes in the same state every thirty
+		// seconds, as long as the run takes.
+		const quickPolls = 3
+		const quickPollInterval = 1000
 		const pollInterval = 5000
+		const slowPollInterval = 30000
 		const pollLimit = 60
 		let pollTimer = 0
 		let polls = 0
+		let watchedState = ''
+		// "Synchronize now" queued a run in a background job; the page says how it ended, once the
+		// status shows its end.
+		let awaitedRun = false
 		let busy = false
 		// The settings that the server stored, as settings() reads them from the form, to tell
 		// unsaved changes.
@@ -473,18 +483,25 @@
 		// The state of the last run as StatusService stores it, and its label; templates/settings.php has the same.
 		const stateLabels = {
 			'never-run': translate('Never run'),
+			queued: translate('Queued'),
 			running: translate('Running'),
 			'dry-run-running': translate('Dry-run running'),
 			completed: translate('Completed'),
 			'dry-run-completed': translate('Dry-run completed'),
 			'completed-with-errors': translate('Completed with errors'),
 			failed: translate('Failed'),
+			interrupted: translate('Interrupted'),
+		}
+
+		// A run waits for its background job or runs.
+		function active(state) {
+			return state === 'queued' || state.endsWith('running')
 		}
 
 		function showState(state) {
 			setText(lastState, stateLabels[state] || state)
 			lastState.dataset.state = state
-			running.hidden = !state.endsWith('running')
+			running.hidden = !active(state)
 		}
 
 		// The error of a run that failed and the errors of single documents, with the count of
@@ -531,18 +548,25 @@
 			if (Object.keys(lastReport).length > 0) {
 				showReport(lastReport, false)
 			}
+			// The run that "Synchronize now" queued has ended: it failed, was interrupted or left the
+			// report of a run, not of a dry-run that started while it waited.
+			if (awaitedRun && !active(state) && (state === 'failed' || state === 'interrupted' || lastReport.dryRun === false)) {
+				awaitedRun = false
+				announce(status, lastReport)
+			}
 			watch(state)
 		}
 
-		// Asks for the status again while a run is active, such as a scheduled one, until it ends.
+		// Asks for the status again while a run is queued or active, such as a scheduled one, until
+		// it ends, and while the run that "Synchronize now" queued has not ended.
 		function watch(state) {
 			window.clearTimeout(pollTimer)
 			pollTimer = 0
-			if (!state.endsWith('running')) {
+			if (state !== watchedState) {
+				watchedState = state
 				polls = 0
-				return
 			}
-			if (polls >= pollLimit) {
+			if (!active(state) && !awaitedRun) {
 				return
 			}
 			pollTimer = window.setTimeout(async function() {
@@ -552,7 +576,26 @@
 				} catch (error) {
 					watch(state)
 				}
-			}, pollInterval)
+			}, pollDelay())
+		}
+
+		function pollDelay() {
+			if (polls < quickPolls) {
+				return quickPollInterval
+			}
+			return polls < pollLimit ? pollInterval : slowPollInterval
+		}
+
+		// How the run that "Synchronize now" queued ended, as its status shows it.
+		function announce(status, lastReport) {
+			if (status.state === 'interrupted') {
+				showError(requestError(translate('The synchronization was interrupted before its end. The next run continues where it stopped.'), 0), '')
+			} else if (status.state === 'failed') {
+				showError(requestError(status.error || translate('Synchronization failed.'), 0), '')
+			} else {
+				showResult(lastReport, false)
+				report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+			}
 		}
 
 		function showReport(result, reveal) {
@@ -604,20 +647,30 @@
 			}
 		}
 
+		// A dry-run answers with its report. A run waits in a background job of Nextcloud, because it
+		// may take longer than the web server waits for an answer; the status follows it.
 		async function runSync(isDryRun) {
 			setBusy(true)
-			showState(isDryRun ? 'dry-run-running' : 'running')
-			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Synchronizing Paperless and Nextcloud…'), 'progress')
+			showState(isDryRun ? 'dry-run-running' : 'queued')
+			showMessage(isDryRun ? translate('Calculating synchronization changes…') : translate('Queuing the synchronization…'), 'progress')
 			let gateway = 0
 			// A dry-run tries the changes of the form without saving them (SyncController::run()).
 			const body = { dryRun: isDryRun }
 			if (isDryRun && JSON.stringify(settings()) !== savedSettings) {
 				body.settings = settings()
 			}
+			// The status that the answer of a queued run brings along.
+			let status = null
 			try {
 				const result = await request(root.dataset.runUrl, 'POST', body)
-				showReport(result, true)
-				showResult(result, isDryRun)
+				if (result.queued === true) {
+					awaitedRun = true
+					showMessage(translate('The synchronization starts with the next background jobs of Nextcloud, within a few minutes. The status above follows it, and this message says how it ends.'), 'progress')
+					status = result.status && typeof result.status === 'object' ? result.status : null
+				} else {
+					showReport(result, true)
+					showResult(result, isDryRun)
+				}
 			} catch (error) {
 				if (error.status === 502 || error.status === 504) {
 					gateway = error.status
@@ -631,9 +684,11 @@
 				await explainGateway(gateway)
 				return
 			}
-			// The status shows how the run ended, also when it failed, or follows it while it
-			// continues. Without an answer, it shows the last state that the server sent.
-			if (!(await refreshQuietly())) {
+			// The status shows how the run ended, also when it failed, or follows it while it waits
+			// and continues. Without an answer, it shows the last state that the server sent.
+			if (status !== null) {
+				updateStatus(status)
+			} else if (!(await refreshQuietly())) {
 				showState(serverState)
 			}
 		}

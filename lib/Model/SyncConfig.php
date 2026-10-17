@@ -51,6 +51,19 @@ final class SyncConfig implements \JsonSerializable {
 	) {
 	}
 
+	/** Whether a run can start: with the address of Paperless, its token and the target user. */
+	public function complete(): bool {
+		return $this->paperlessUrl !== '' && $this->tokenConfigured && $this->targetUser !== '';
+	}
+
+	/** The same settings with another batch size, for a run by hand that makes more or fewer changes. */
+	public function withBatchSize(int $batchSize): self {
+		$values = get_object_vars($this);
+		$values['batchSize'] = $batchSize;
+
+		return new self(...$values);
+	}
+
 	/** @return array<string, bool|int|string> */
 	public function jsonSerialize(): array {
 		return get_object_vars($this);

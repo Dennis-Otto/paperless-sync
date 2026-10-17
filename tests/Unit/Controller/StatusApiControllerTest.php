@@ -33,7 +33,7 @@ final class StatusApiControllerTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->clock = new TestClock();
-		$this->status = new StatusService($this->appConfig(), $this->clock);
+		$this->status = $this->statusService($this->clock);
 		$this->configService()->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->controller = new StatusApiController(AppConstants::APP_ID, $this->createMock(IRequest::class), $this->status, $this->configService());
 	}

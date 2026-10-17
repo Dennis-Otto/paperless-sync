@@ -11,15 +11,19 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\StatusService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
+use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\MockObject\MockObject;
 
 /**
- * Nextcloud's app configuration and credentials store, kept in the properties of the test.
+ * Nextcloud's app configuration, system configuration and credentials store, kept in the
+ * properties of the test.
  */
 trait InMemoryConfiguration {
 	/** @var array<string, bool|int|string> */
@@ -39,6 +43,11 @@ trait InMemoryConfiguration {
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
 		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig());
+	}
+
+	/** The status of the runs; a run holds its lock when $locking says so, and never without it. */
+	private function statusService(ITimeFactory $clock, ?ILockingProvider $locking = null): StatusService {
+		return new StatusService($this->appConfig(), $clock, $locking ?? $this->createStub(ILockingProvider::class));
 	}
 
 	/**
@@ -144,8 +153,8 @@ trait InMemoryConfiguration {
 	}
 
 	/**
-	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language and
-	 * $defaultLanguage as default_language, which is missing when empty.
+	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language
+	 * and $defaultLanguage as default_language, which is missing when empty.
 	 *
 	 * @return IConfig&MockObject
 	 */

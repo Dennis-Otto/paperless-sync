@@ -50,6 +50,7 @@
       - any-glob-to-any-file:
           - lib/Activity/**
           - lib/AppInfo/**
+          - lib/Command/**
           - lib/Cron/**
           - lib/Controller/SyncController.php
           - lib/Controller/StatusApiController.php
@@ -69,6 +70,7 @@
           - lib/Model/SyncReport.php
           - tests/Unit/Activity/**
           - tests/Unit/AppInfo/**
+          - tests/Unit/Command/**
           - tests/Unit/Cron/**
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Controller/SyncController*

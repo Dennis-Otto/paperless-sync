@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
+use OCA\PaperlessSync\Tests\Doubles\TestActivityEvent;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -65,7 +66,7 @@ final class ActivityPublisherTest extends TestCase {
 		self::assertSame(AppConstants::APP_ID, $event->getApp());
 		self::assertSame(ActivityPublisher::TYPE, $event->getType());
 		self::assertSame('paperless', $event->getAffectedUser());
-		self::assertSame('', $event->getAuthor(), 'Nextcloud names the user who started a run by hand, and nobody for a scheduled one.');
+		self::assertSame('', $event->getAuthor(), 'Without an author, Nextcloud names the user of the session, and nobody in a scheduled run.');
 		self::assertSame(ActivityPublisher::SUBJECT_RUN, $event->getSubject());
 		$archive = $this->storage->findFileId('paperless', self::ARCHIVE);
 		self::assertSame([
@@ -150,6 +151,22 @@ final class ActivityPublisherTest extends TestCase {
 		foreach ($this->activities as $event) {
 			self::assertSame('paperless', $event->getAffectedUser());
 		}
+	}
+
+	/**
+	 * A run by hand runs in a background job, without the session of the administrator who started
+	 * it, so its entries name the administrator themselves.
+	 */
+	public function testEntriesOfARunByHandNameWhoStartedIt(): void {
+		$report = new SyncReport(false);
+		$report->exported = 1;
+		$report->importsSubmitted = 1;
+		$report->importResult(SyncReport::IMPORTED, self::INBOX . '/scan.pdf', 123);
+
+		$this->publisher->publish($this->config, $report, 'admin');
+
+		self::assertCount(2, $this->activities);
+		self::assertSame(['admin', 'admin'], array_map(static fn (TestActivityEvent $event): string => $event->getAuthor(), $this->activities));
 	}
 
 	public function testDryRunAndRunWithoutChangesAddNothing(): void {

@@ -68,6 +68,10 @@ for app in firstrunwizard nextcloud_announcements recommendations support; do
 done
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
+# "Synchronize now" queues its run as a background job. A worker of Nextcloud runs it at once, as
+# on a server whose administrator gives the app one (docs/guide.md, "Command line"), until the
+# containers stop.
+occ --detach nextcloud php occ background-job:worker --interval=1 'OCA\PaperlessSync\Cron\ManualSyncJob'
 
 # The configuration of the quick start, before the first dry-run: Paperless in the
 # same Compose project and synchronization still off, with the subfolders of the inbox

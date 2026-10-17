@@ -26,12 +26,14 @@ $health = $_['health'];
 $state = (string)($status['state'] ?? 'never-run');
 $stateLabels = [
 	'never-run' => $l->t('Never run'),
+	'queued' => $l->t('Queued'),
 	'running' => $l->t('Running'),
 	'dry-run-running' => $l->t('Dry-run running'),
 	'completed' => $l->t('Completed'),
 	'dry-run-completed' => $l->t('Dry-run completed'),
 	'completed-with-errors' => $l->t('Completed with errors'),
 	'failed' => $l->t('Failed'),
+	'interrupted' => $l->t('Interrupted'),
 ];
 // A link from a section to its part of the guide, which names the section for screen readers.
 $help = static function (string $anchor, string $section) use ($l): void {
@@ -42,6 +44,8 @@ $help = static function (string $anchor, string $section) use ($l): void {
 		Util::sanitizeHTML($l->t('Help')),
 	));
 };
+// A run waits for its background job or runs.
+$active = $state === 'queued' || str_ends_with($state, 'running');
 ?>
 
 <div
@@ -74,7 +78,7 @@ $help = static function (string $anchor, string $section) use ($l): void {
 			<div>
 				<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
 				<span class="paperless-sync-status-value">
-					<span id="paperless-sync-running" class="paperless-sync-spinner icon-loading-small" <?php if (!str_ends_with($state, 'running')) {
+					<span id="paperless-sync-running" class="paperless-sync-spinner icon-loading-small" <?php if (!$active) {
 						print_unescaped('hidden');
 					} ?>></span>
 					<strong id="paperless-sync-last-state" data-state="<?php p($state); ?>" aria-live="polite"><?php p($stateLabels[$state] ?? $state); ?></strong>

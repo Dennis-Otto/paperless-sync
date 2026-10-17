@@ -9,6 +9,10 @@ use OCA\PaperlessSync\Activity\Filter;
 use OCA\PaperlessSync\Activity\Provider;
 use OCA\PaperlessSync\Activity\Setting;
 use OCA\PaperlessSync\AppInfo\Application;
+use OCA\PaperlessSync\Command\Forget;
+use OCA\PaperlessSync\Command\Run;
+use OCA\PaperlessSync\Command\Status;
+use OCA\PaperlessSync\Cron\SyncJob;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
@@ -31,6 +35,7 @@ use OCP\SetupCheck\ISetupCheck;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use SimpleXMLElement;
+use Symfony\Component\Console\Command\Command;
 
 final class ApplicationTest extends TestCase {
 	private static function appInfo(): SimpleXMLElement {
@@ -53,6 +58,19 @@ final class ApplicationTest extends TestCase {
 			'OCA\\' . (string)self::appInfo()->namespace . '\\AppInfo\\Application',
 			Application::class,
 		);
+	}
+
+	/** Nextcloud registers the commands and the background jobs that the app info names. */
+	public function testTheCommandsAndJobsOfTheAppInfoExist(): void {
+		$info = self::appInfo();
+		$commands = array_map('strval', iterator_to_array($info->commands->command, false));
+		$jobs = array_map('strval', iterator_to_array($info->{'background-jobs'}->job, false));
+
+		self::assertSame([Run::class, Status::class, Forget::class], $commands);
+		foreach ($commands as $command) {
+			self::assertTrue(is_subclass_of($command, Command::class), $command);
+		}
+		self::assertSame([SyncJob::class], $jobs, 'A run by hand queues its job when it is asked for.');
 	}
 
 	public function testTheAppUsesTheContainerNextcloudRegisteredForIt(): void {
