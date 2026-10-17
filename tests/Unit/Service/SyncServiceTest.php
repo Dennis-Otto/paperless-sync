@@ -18,6 +18,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
@@ -2226,6 +2227,207 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 
 		self::assertSame('pending', $this->state->imports[$path]['status']);
+	}
+
+	/** As PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS in the consume folder of Paperless: each folder below the inbox is a tag. */
+	public function testFilesOfTheInboxGetATagForEachOfTheirSubfolders(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true]);
+		$this->paperless->tagInfo = ['names' => ['5' => 'Steuer', '6' => '2026', '9' => 'Posteingang'], 'inbox' => ['9']];
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . 'steuer/2026/beleg.pdf'] = '%PDF-beleg';
+		$this->storage->files[$inbox . 'brief.pdf'] = '%PDF-brief';
+
+		$report = $this->service->run();
+
+		self::assertSame(['beleg.pdf' => [5, 6], 'brief.pdf' => []], $this->paperless->uploadTags, 'The names match whatever their case, and a file in the inbox itself gets none.');
+		self::assertSame(["IMPORT: {$inbox}steuer/2026/beleg.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}brief.pdf"], $report->actions);
+		self::assertSame([2, 0], [$report->importsSubmitted, $report->errors]);
+		self::assertSame(1, $this->paperless->tagReads, 'A run reads the tags of Paperless once.');
+	}
+
+	public function testEveryImportGetsTheTagsForEveryImport(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_tags' => 'scanned, Steuer']);
+		// Two tags whose names differ in their case alone, such as of two owners: the oldest.
+		$this->paperless->tagInfo = ['names' => ['8' => 'Scanned', '3' => 'scanned', '5' => 'Steuer'], 'inbox' => []];
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . 'Versicherung/police.pdf'] = '%PDF-police';
+
+		$report = $this->service->run();
+
+		self::assertSame(['police.pdf' => [3, 5]], $this->paperless->uploadTags, 'Without "Subfolders become tags", a folder is no tag.');
+		self::assertSame(["IMPORT: {$inbox}Versicherung/police.pdf (tags: scanned, Steuer)"], $report->actions);
+	}
+
+	public function testATagOfASubfolderAndOfEveryImportIsSentOnce(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true, 'inbox_tags' => 'Steuer']);
+		$this->paperless->tagInfo = ['names' => ['5' => 'Steuer'], 'inbox' => []];
+		$this->storage->files['Dokumente/Paperless/Eingang/STEUER/beleg.pdf'] = '%PDF-beleg';
+
+		$this->service->run();
+
+		self::assertSame(['beleg.pdf' => [5]], $this->paperless->uploadTags);
+	}
+
+	/** @return array<string, array{array<string, string>, string, string, array<string, list<int>>}> the files, the line of the report, the names in the log and the tags of the uploads */
+	public static function unknownTags(): array {
+		return [
+			'one name' => [
+				['2026/b.pdf' => '%PDF-b'],
+				'TAGS UNKNOWN: Paperless shows the account no tag named 2026, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
+				'2026',
+				['b.pdf' => []],
+			],
+			'several names' => [
+				['Steuer/2026/a.pdf' => '%PDF-a', '2026/b.pdf' => '%PDF-b', 'Rechnungen/c.pdf' => '%PDF-c'],
+				'TAGS UNKNOWN: Paperless shows the account no tags named 2026, Rechnungen, so the files of the inbox go to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
+				'2026, Rechnungen',
+				['a.pdf' => [5], 'b.pdf' => [], 'c.pdf' => []],
+			],
+		];
+	}
+
+	/**
+	 * A name that Paperless has no tag of doesn't stop the import, and doesn't vanish either: the
+	 * report says it once for the run, and the log warns of it.
+	 *
+	 * @param array<string, string> $files
+	 * @param array<string, list<int>> $tags
+	 */
+	#[DataProvider('unknownTags')]
+	public function testANameWithoutATagIsReportedAndTheFileGoesWithoutIt(array $files, string $notice, string $names, array $tags): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true]);
+		$this->paperless->tagInfo = ['names' => ['5' => 'Steuer'], 'inbox' => []];
+		foreach ($files as $file => $content) {
+			$this->storage->files['Dokumente/Paperless/Eingang/' . $file] = $content;
+		}
+		$this->logger->expects(self::once())->method('warning')->with(
+			'Paperless shows the account of Paperless Sync no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags" in the settings of Paperless Sync.',
+			['names' => $names],
+		);
+
+		$report = $this->service->run();
+
+		self::assertSame(count($files), $report->importsSubmitted);
+		self::assertSame(0, $report->errors);
+		self::assertSame($notice, $report->actions[count($files)], 'The names come once, after the imports.');
+		self::assertSame($tags, $this->paperless->uploadTags);
+	}
+
+	public function testMissingTagsAreCreatedOnceWhenTheRunMay(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true, 'inbox_create_tags' => true]);
+		$this->paperless->tagInfo = ['names' => ['5' => 'Steuer'], 'inbox' => []];
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . 'Steuer/2026/a.pdf'] = '%PDF-a';
+		$this->storage->files[$inbox . '2026/b.pdf'] = '%PDF-b';
+		$this->logger->expects(self::never())->method('warning');
+
+		$report = $this->service->run();
+
+		self::assertSame(['2026'], $this->paperless->createdTags);
+		self::assertSame(['a.pdf' => [5, 100], 'b.pdf' => [100]], $this->paperless->uploadTags);
+		self::assertSame(['NEW TAG: 2026', "IMPORT: {$inbox}Steuer/2026/a.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}2026/b.pdf (tags: 2026)"], $report->actions);
+		self::assertSame(1, $this->paperless->tagReads);
+	}
+
+	/** A dry-run reads the tags of Paperless and says what a run would do with them, and creates none. */
+	public function testADryRunReportsTheTagsWithoutCreatingThem(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true, 'inbox_create_tags' => true]);
+		$this->paperless->tagInfo = ['names' => ['5' => 'Steuer'], 'inbox' => []];
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . 'Steuer/2026/a.pdf'] = '%PDF-a';
+		$this->storage->files[$inbox . '2026/b.pdf'] = '%PDF-b';
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['NEW TAG: 2026', "IMPORT: {$inbox}Steuer/2026/a.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}2026/b.pdf (tags: 2026)"], $report->actions);
+		self::assertSame(0, $this->paperless->tagCreations);
+		self::assertSame([], $this->paperless->uploadAttempts);
+	}
+
+	public function testADryRunReportsTheNamesWithoutATagWithoutAWarningInTheLog(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_tags' => 'Scanned']);
+		$this->storage->files['Dokumente/Paperless/Eingang/a.pdf'] = '%PDF-a';
+		$this->logger->expects(self::never())->method('warning');
+
+		$report = $this->service->run(true);
+
+		self::assertSame([
+			'IMPORT: Dokumente/Paperless/Eingang/a.pdf',
+			'TAGS UNKNOWN: Paperless shows the account no tag named Scanned, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
+		], $report->actions);
+	}
+
+	/**
+	 * A file whose tag Paperless doesn't create, such as for a token without the permission Add
+	 * for Tags, waits as after a failed upload, and so does every other file that needs the tag,
+	 * without another attempt in this run. Files without it go on, and once Paperless creates the
+	 * tag, the files go with it.
+	 */
+	public function testAFileWaitsForATagThatPaperlessDoesNotCreate(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true, 'inbox_create_tags' => true]);
+		$this->paperless->createTagException = new RuntimeException('Paperless could not create the tag 2026: HTTP 403: You do not have permission to perform this action.');
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . '2026/a.pdf'] = '%PDF-a';
+		$this->storage->files[$inbox . '2026/b.pdf'] = '%PDF-b';
+		$this->storage->files[$inbox . 'c.pdf'] = '%PDF-c';
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $this->paperless->tagCreations);
+		self::assertSame(['c.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([2, 1], [$report->errors, $report->importsSubmitted]);
+		self::assertSame("ERROR: Import {$inbox}2026/a.pdf: Paperless could not create the tag 2026: HTTP 403: You do not have permission to perform this action. (attempt 1, the next in 15 minutes)", $report->actions[0]);
+		self::assertSame(['retry', 1], [$this->state->imports[$inbox . '2026/a.pdf']['status'], $this->state->imports[$inbox . '2026/a.pdf']['attempts']]);
+		self::assertSame('retry', $this->state->imports[$inbox . '2026/b.pdf']['status']);
+
+		$this->paperless->createTagException = null;
+		$this->clock->advance(900);
+		$retried = $this->service->run();
+
+		self::assertSame(['c.pdf' => [], 'a.pdf' => [100], 'b.pdf' => [100]], $this->paperless->uploadTags);
+		self::assertSame(0, $retried->errors);
+	}
+
+	/** Without the list of the tags, every file that needs a tag would fail, so the others wait for the next run. */
+	public function testFilesWaitForTheTagsOfAPaperlessThatCannotListThem(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_folder_tags' => true]);
+		$this->paperless->tagsException = new RuntimeException('Paperless could not read /api/tags/: HTTP 403.');
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . 'brief.pdf'] = '%PDF-brief';
+		$this->storage->files[$inbox . 'A/a.pdf'] = '%PDF-a';
+		$this->storage->files[$inbox . 'B/b.pdf'] = '%PDF-b';
+
+		$report = $this->service->run();
+
+		self::assertSame(['brief.pdf'], $this->paperless->uploadAttempts, 'A file in the inbox itself needs no tag.');
+		self::assertSame(1, $this->paperless->tagReads);
+		self::assertSame([1, 1, 1], [$report->errors, $report->skipped, $report->importsSubmitted]);
+		self::assertSame('retry', $this->state->imports[$inbox . 'A/a.pdf']['status']);
+		self::assertArrayNotHasKey($inbox . 'B/b.pdf', $this->state->imports);
+	}
+
+	public function testAnUnreachablePaperlessHoldsBackTheOtherUploadsAlsoWhenItCreatesATag(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_tags' => 'Scanned', 'inbox_create_tags' => true]);
+		$this->paperless->createTagException = new PaperlessRequestException('cURL error 7: Failed to connect to paperless.example.test');
+		$this->storage->files['Dokumente/Paperless/Eingang/a.pdf'] = '%PDF-a';
+		$this->storage->files['Dokumente/Paperless/Eingang/b.pdf'] = '%PDF-b';
+
+		$report = $this->service->run();
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame([1, 1], [$report->errors, $report->skipped]);
+	}
+
+	/** A dry-run reports the failure of the tags of a file and keeps the state of the inbox. */
+	public function testADryRunReportsTagsThatCannotBeReadAndChangesNothing(): void {
+		$this->configService->save(['export_enabled' => false, 'inbox_tags' => 'Scanned']);
+		$this->paperless->tagsException = new RuntimeException('Paperless could not read /api/tags/: HTTP 403.');
+		$this->storage->files['Dokumente/Paperless/Eingang/a.pdf'] = '%PDF-a';
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['ERROR: Import Dokumente/Paperless/Eingang/a.pdf: Paperless could not read /api/tags/: HTTP 403.'], $report->actions);
+		self::assertSame([], $this->state->imports);
 	}
 
 	public function testImportsBeyondTheBatchSizeWaitForTheNextRun(): void {

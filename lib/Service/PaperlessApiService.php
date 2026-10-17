@@ -39,6 +39,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** The longest message of a task that the app keeps, such as the reason of a failed import. */
 	private const TASK_MESSAGE_LENGTH = 4000;
 	private const PAGE_SIZE = 1000;
+	/** The matching algorithm "None" of Paperless: a tag that Paperless assigns to no document on its own. */
+	private const MATCH_NONE = 0;
 	/**
 	 * The fields of a document that a run reads: those of the path template, the tags of the
 	 * exclusion, the revision and the files of the document. A run asks Paperless for these alone,
@@ -154,6 +156,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		if ($config->inboxEnabled) {
 			$checks[] = self::upload($account);
+			if ($config->inboxFolderTags || $config->inboxTags !== '') {
+				$checks[] = self::inboxTags($account, $config->inboxCreateTags);
+			}
 		}
 
 		return $checks;
@@ -326,8 +331,40 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $checksum;
 	}
 
+	public function createTag(string $name): int {
+		$config = $this->configService->get();
+		$response = $this->send(
+			'POST',
+			$this->url($config, '/api/tags/'),
+			$this->configService->getToken(),
+			$config->paperlessLocalNetwork,
+			[
+				// Without a match, Paperless assigns the tag to no other document on its own. Without
+				// an owner, as the tags of the consume folder of Paperless, every account that may view
+				// tags sees it; left out, the owner would be the account of the app.
+				'json' => ['name' => $name, 'matching_algorithm' => self::MATCH_NONE, 'owner' => null],
+				'connect_timeout' => 10,
+				'timeout' => 60,
+				// An error comes back as a response, so that the reason in its body can be read.
+				'http_errors' => false,
+			],
+		);
+		$status = $response->getStatusCode();
+		if ($status < 200 || $status >= 300) {
+			$reason = $this->errorReason($response->getBody());
+			throw new RuntimeException("Paperless could not create the tag {$name}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'));
+		}
+		$data = $this->decodeBody($response->getBody());
+		$id = is_array($data) ? self::id($data['id'] ?? null) : null;
+		if ($id === null) {
+			throw new UnexpectedValueException("Paperless did not return the ID of the new tag {$name}.");
+		}
+
+		return $id;
+	}
+
 	/** @psalm-suppress DocblockTypeContradiction */
-	public function uploadDocument($source, string $filename): string {
+	public function uploadDocument($source, string $filename, array $tags = []): string {
 		if (!is_resource($source)) {
 			throw new UnexpectedValueException('A readable upload stream is required.');
 		}
@@ -351,7 +388,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 			rewind($upload);
 
-			return $this->postDocument($upload, $filename);
+			return $this->postDocument($upload, $filename, $tags);
 		} finally {
 			/** @psalm-suppress RedundantCondition Nextcloud's HTTP client may close the stream. */
 			if (is_resource($upload)) {
@@ -363,8 +400,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 	}
 
-	/** @param resource $upload */
-	private function postDocument($upload, string $filename): string {
+	/**
+	 * @param resource $upload
+	 * @param list<int> $tags
+	 */
+	private function postDocument($upload, string $filename, array $tags): string {
 		$config = $this->configService->get();
 		try {
 			$response = $this->send(
@@ -373,11 +413,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				$this->configService->getToken(),
 				$config->paperlessLocalNetwork,
 				[
-					'multipart' => [[
-						'name' => 'document',
-						'contents' => $upload,
-						'filename' => $filename,
-					]],
+					// Paperless takes the tags of the new document as one field tags for each.
+					'multipart' => [
+						['name' => 'document', 'contents' => $upload, 'filename' => $filename],
+						...array_map(static fn (int $tag): array => ['name' => 'tags', 'contents' => (string)$tag], $tags),
+					],
 					'connect_timeout' => 10,
 					'timeout' => 180,
 					// An error comes back as a response, so that the reason in its body can be read.
@@ -447,10 +487,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$ids = $task['related_document_ids'] ?? null;
 		$documentId = null;
 		if ($status === 'SUCCESS') {
-			$documentId = self::documentId($data['document_id'] ?? null)
-				?? self::documentId($task['related_document'] ?? null)
-				?? self::documentId(is_array($ids) ? ($ids[0] ?? null) : null)
-				?? (preg_match('/New document id (\d+) created/', $message, $match) === 1 ? self::documentId($match[1]) : null);
+			$documentId = self::id($data['document_id'] ?? null)
+				?? self::id($task['related_document'] ?? null)
+				?? self::id(is_array($ids) ? ($ids[0] ?? null) : null)
+				?? (preg_match('/New document id (\d+) created/', $message, $match) === 1 ? self::id($match[1]) : null);
 		}
 
 		return [
@@ -471,7 +511,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				'/api/documents/',
 				['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1],
 			);
-			$documentId = self::documentId($page['results'][0]['id'] ?? null);
+			$documentId = self::id($page['results'][0]['id'] ?? null);
 			if ($documentId !== null) {
 				return $documentId;
 			}
@@ -493,7 +533,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				return $text;
 			}
 		}
-		$duplicate = self::documentId($data['duplicate_of'] ?? null);
+		$duplicate = self::id($data['duplicate_of'] ?? null);
 		if ($duplicate !== null) {
 			return "Not consuming: It is a duplicate of document #{$duplicate}" . (($data['duplicate_in_trash'] ?? false) === true ? ', which is in the trash of Paperless' : '');
 		}
@@ -506,8 +546,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return is_string($value) || is_int($value) || is_float($value) ? trim((string)$value) : '';
 	}
 
-	/** The ID of a document, as a number or as the text of one, or null for anything else. */
-	private static function documentId(mixed $value): ?int {
+	/** The ID of a document or a tag, as a number or as the text of one, or null for anything else. */
+	private static function id(mixed $value): ?int {
 		if (is_string($value) && preg_match('/^\d+$/', $value) === 1) {
 			$value = (int)$value;
 		}
@@ -884,6 +924,49 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				'The account may neither add documents nor view the tasks that import them.',
 				[],
 				'In Paperless, under Users & Groups, give the account the permissions Add for Documents and View for Paperless Tasks.',
+			),
+		};
+	}
+
+	/**
+	 * The line of the tags that the files of the inbox get: the account finds them with the
+	 * permission View for Tags, and creates those that Paperless lacks with Add for Tags. Without
+	 * them, the files that need a tag wait in the inbox.
+	 *
+	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
+	 */
+	private static function inboxTags(array|string $account, bool $create): ConnectionCheck {
+		if (!is_array($account)) {
+			return ConnectionCheck::warning(
+				ConnectionCheck::INBOX_TAGS,
+				$create ? 'Paperless did not say whether the account may view and create tags.' : 'Paperless did not say whether the account may view tags.',
+				[],
+				$account === self::ACCOUNT_FORBIDDEN
+					? 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The tags of the inbox need View for Tags, and Add for Tags to create the missing ones.'
+					: 'The first upload from the inbox shows it; the tags of the inbox need the permission View for Tags, and Add for Tags to create the missing ones.',
+			);
+		}
+		$view = $account['superuser'] || self::permitted('view_tag', $account['permissions']);
+		$add = $account['superuser'] || self::permitted('add_tag', $account['permissions']);
+
+		return match (true) {
+			$view && $add && $create => ConnectionCheck::passed(ConnectionCheck::INBOX_TAGS, 'The account may view and create the tags that the inbox gives its files.'),
+			$view && !$create => ConnectionCheck::passed(ConnectionCheck::INBOX_TAGS, 'The account may view the tags that the inbox gives its files.'),
+			$view => new ConnectionCheck(
+				ConnectionCheck::INBOX_TAGS,
+				ConnectionCheck::FAILED,
+				'The account may not create tags, so a file that needs a tag that Paperless lacks waits in the inbox.',
+				[],
+				'In Paperless, under Users & Groups, give the account the permission Add for Tags, or turn off "Create missing tags".',
+				setting: 'inbox_create_tags',
+			),
+			default => ConnectionCheck::failed(
+				ConnectionCheck::INBOX_TAGS,
+				'The account may not view tags, so the files of the inbox wait in the inbox.',
+				[],
+				$create && !$add
+					? 'In Paperless, under Users & Groups, give the account the permissions View and Add for Tags.'
+					: 'In Paperless, under Users & Groups, give the account the permission View for Tags.',
 			),
 		};
 	}

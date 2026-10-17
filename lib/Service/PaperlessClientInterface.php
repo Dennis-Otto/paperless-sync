@@ -102,10 +102,22 @@ interface PaperlessClientInterface {
 	public function findDocument(DocumentFingerprint $content): ?int;
 
 	/**
+	 * Creates a tag in Paperless that it assigns to no document on its own, and returns its ID.
+	 *
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless doesn't create the tag, such as for an account without the permission Add for Tags
+	 */
+	public function createTag(string $name): int;
+
+	/**
+	 * Uploads a file as a new document, with the tags of $tags besides the inbox tags of Paperless,
+	 * and returns the ID of the task of Paperless that imports it.
+	 *
 	 * @param resource $source
+	 * @param list<int> $tags the IDs of tags of Paperless
 	 * @throws PaperlessUploadException when Paperless doesn't take the file, or can't be reached
 	 */
-	public function uploadDocument($source, string $filename): string;
+	public function uploadDocument($source, string $filename, array $tags = []): string;
 
 	/**
 	 * The state of the task of an upload: its status in upper case, as Paperless names it, such as

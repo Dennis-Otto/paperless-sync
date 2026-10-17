@@ -771,18 +771,40 @@ sync_run false "${TMP_DIR}/deleted.json"
 assert_json deleted "${TMP_DIR}/deleted.json"
 assert_dav_missing sync-target "${TRASH_PATH}"
 
-MKCOL_STATUS="$(dav_status sync-target MKCOL 'Documents/Paperless/Inbox/Insurance')"
-if [[ "${MKCOL_STATUS}" != "201" && "${MKCOL_STATUS}" != "405" ]]; then
-	echo "Unexpected WebDAV MKCOL status: ${MKCOL_STATUS}" >&2
-	exit 1
-fi
-dav_upload sync-target 'Documents/Paperless/Inbox/Insurance/policy.pdf' '%PDF-1.4 Synthetic inbox PDF policy.'
+# The subfolders of a file of the inbox become its tags, with a tag for every import: the
+# mock has a tag insurance, in lower case, and none named Scanned or 2026, which the run
+# creates. Test connection checks the permissions of the tags first.
+for folder in 'Documents/Paperless/Inbox/Insurance' 'Documents/Paperless/Inbox/Insurance/2026'; do
+	MKCOL_STATUS="$(dav_status sync-target MKCOL "${folder}")"
+	if [[ "${MKCOL_STATUS}" != "201" && "${MKCOL_STATUS}" != "405" ]]; then
+		echo "Unexpected WebDAV MKCOL status: ${MKCOL_STATUS}" >&2
+		exit 1
+	fi
+done
+settings_data inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	"${settings[@]}" \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/inbox-tags-checklist.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/test"
+assert_json inbox-tags-checklist "${TMP_DIR}/inbox-tags-checklist.json"
+save_settings "${TMP_DIR}/inbox-tags-settings.json" inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
+assert_json inbox-tags-settings "${TMP_DIR}/inbox-tags-settings.json"
+dav_upload sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf' '%PDF-1.4 Synthetic inbox PDF policy.'
 sync_run false "${TMP_DIR}/import-submitted.json"
 assert_json import-submitted "${TMP_DIR}/import-submitted.json"
+assert_json import-tags "${TMP_DIR}/import-submitted.json"
+mock_state > "${TMP_DIR}/mock-tags.json"
+assert_json mock-tags "${TMP_DIR}/mock-tags.json"
+save_settings "${TMP_DIR}/inbox-tags-off-settings.json" inbox_folder_tags=0 inbox_create_tags=0 'inbox_tags='
 control /control/tasks/success >/dev/null
 sync_run false "${TMP_DIR}/import-success.json"
 assert_json import-success "${TMP_DIR}/import-success.json"
-assert_dav_missing sync-target 'Documents/Paperless/Inbox/Insurance/policy.pdf'
+assert_dav_missing sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf'
 
 dav_upload sync-target 'Documents/Paperless/Inbox/broken.pdf' '%PDF-1.4 Synthetic inbox PDF broken.'
 sync_run false "${TMP_DIR}/failed-submitted.json"
@@ -1064,7 +1086,7 @@ assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 status_api e2e-admin "${TMP_DIR}/status-api-recovered.json" >/dev/null
 assert_json status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

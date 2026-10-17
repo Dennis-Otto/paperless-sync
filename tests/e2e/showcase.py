@@ -37,6 +37,8 @@ DOCUMENT_TYPES = [
 TAGS = [
     {"id": 1, "name": "Inbox", "is_inbox_tag": True},
     {"id": 2, "name": "Private", "is_inbox_tag": False},
+    # The tag of the subfolder Receipts of the inbox, which the screenshots turn into tags.
+    {"id": 3, "name": "Receipts", "is_inbox_tag": False},
 ]
 
 # The ID, the title, the correspondent, the document type and the date of every

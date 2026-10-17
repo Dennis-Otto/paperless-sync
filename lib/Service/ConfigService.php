@@ -52,6 +52,9 @@ final class ConfigService {
 		'prune_empty_folders' => true,
 		'delete_inbox_after_success' => true,
 		'recursive_inbox' => true,
+		'inbox_folder_tags' => false,
+		'inbox_tags' => '',
+		'inbox_create_tags' => false,
 		'conflict_mode' => 'replace',
 	];
 
@@ -217,7 +220,8 @@ final class ConfigService {
 			'batch_size' => 'batchSize', 'trash_mode' => 'trashMode', 'permanent_delete' => 'permanentDelete',
 			'allow_direct_delete' => 'allowDirectDelete', 'missing_grace_runs' => 'missingGraceRuns',
 			'prune_empty_folders' => 'pruneEmptyFolders', 'delete_inbox_after_success' => 'deleteInboxAfterSuccess',
-			'recursive_inbox' => 'recursiveInbox', 'conflict_mode' => 'conflictMode',
+			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
+			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -412,6 +416,7 @@ final class ConfigService {
 		}
 		$values['path_template'] = $this->pathTemplate->validateTemplate((string)$values['path_template']);
 		$values['excluded_tags'] = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\r\n]+/', (string)$values['excluded_tags']) ?: [])))));
+		$values['inbox_tags'] = implode(', ', InboxTags::names((string)$values['inbox_tags']));
 		// The numbers, by the labels of the settings page, which their messages name.
 		$values['sync_interval_minutes'] = self::within((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES)
 			?? throw new InvalidSettingException('"Interval in minutes" must be between %1$s and %2$s.', [(string)self::MINIMUM_INTERVAL_MINUTES, (string)self::MAXIMUM_INTERVAL_MINUTES], 'sync_interval_minutes');
@@ -453,7 +458,8 @@ final class ConfigService {
 			(bool)$values['allow_direct_delete'], (int)$values['missing_grace_runs'], (bool)$values['prune_empty_folders'],
 			(bool)$values['delete_inbox_after_success'], (bool)$values['recursive_inbox'], (string)$values['conflict_mode'],
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
-			(string)$values['untitled'], (bool)$values['paperless_local_network'],
+			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
+			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'],
 		);
 	}
 }

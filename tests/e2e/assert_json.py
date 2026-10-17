@@ -231,7 +231,29 @@ elif mode == "import-success":
     expect("importsSucceeded", 1)
     expect("errors", 0)
     # The ID of the document that Paperless created, from the result of its task.
-    expect_action("IMPORT SUCCESS: Documents/Paperless/Inbox/Insurance/policy.pdf -> P501")
+    expect_action("IMPORT SUCCESS: Documents/Paperless/Inbox/Insurance/2026/policy.pdf -> P501")
+elif mode == "inbox-tags-checklist":
+    # Test connection checks the permissions of the tags of the inbox: View and Add for Tags.
+    expect_line("inbox_tags", "passed", "The account may view and create the tags that the inbox gives its files.")
+elif mode == "inbox-tags-settings":
+    if [payload.get("inboxFolderTags"), payload.get("inboxTags"), payload.get("inboxCreateTags")] != [True, "Scanned", True]:
+        raise AssertionError(f"inbox-tags-settings: the tags of the inbox were not saved: {payload!r}")
+elif mode == "import-tags":
+    # The tag for every import and the folder 2026 are new, Insurance finds insurance.
+    for action in (
+        "NEW TAG: Scanned",
+        "NEW TAG: 2026",
+        "IMPORT: Documents/Paperless/Inbox/Insurance/2026/policy.pdf (tags: Scanned, insurance, 2026)",
+    ):
+        expect_action(action)
+elif mode == "mock-tags":
+    created = [(tag.get("name"), tag.get("matching_algorithm")) for tag in payload.get("createdTags", [])]
+    # Without a match, Paperless assigns the new tags to no other document on its own.
+    if created != [("Scanned", 0), ("2026", 0)]:
+        raise AssertionError(f"mock-tags: unexpected new tags: {created!r}")
+    policy = [upload for upload in payload.get("uploads", []) if upload.get("filename") == "policy.pdf"]
+    if len(policy) != 1 or policy[0].get("tags") != [100, 11, 101]:
+        raise AssertionError(f"mock-tags: the upload of policy.pdf has other tags: {policy!r}")
 elif mode == "import-failed":
     expect("importsFailed", int(argument or 1))
     expect("errors", 0)

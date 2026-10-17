@@ -242,7 +242,18 @@ $help = static function (string $anchor, string $section) use ($l): void {
 				<label><input data-setting="delete_inbox_after_success" type="checkbox" <?php if ($config->deleteInboxAfterSuccess) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Remove source after successful import')); ?></span></label>
+				<label><input data-setting="inbox_folder_tags" type="checkbox" <?php if ($config->inboxFolderTags) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Subfolders become tags')); ?></span></label>
+				<label><input data-setting="inbox_create_tags" type="checkbox" <?php if ($config->inboxCreateTags) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Create missing tags')); ?></span></label>
 			</div>
+			<label class="paperless-sync-field paperless-sync-field--wide">
+				<span><?php p($l->t('Tags for every import')); ?></span>
+				<input data-setting="inbox_tags" type="text" value="<?php p($config->inboxTags); ?>" placeholder="<?php p($l->t('Scanned, Nextcloud')); ?>" aria-describedby="paperless-sync-inbox-tags-hint">
+			</label>
+			<p id="paperless-sync-inbox-tags-hint" class="settings-hint"><?php p($l->t('Separate tag names with commas. With "Subfolders become tags", a file in the subfolder Taxes/2026 of the inbox gets the tags Taxes and 2026, found by their names whatever their case. A run reports the names that Paperless has no tag of, or creates their tags when it may. Paperless names each document after its file.')); ?> <?php $help('tags-of-the-inbox', $l->t('Tags of the inbox')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card paperless-sync-card--danger">

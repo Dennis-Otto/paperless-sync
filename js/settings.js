@@ -181,7 +181,7 @@
 		const previewList = element('path-preview-list')
 		const buttons = [save, test, dryRun, run, reset, refresh]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
 		// While a run is active, the page asks for its status every five seconds, at most five minutes long.
 		const pollInterval = 5000
 		const pollLimit = 60
