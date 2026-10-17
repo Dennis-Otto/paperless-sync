@@ -86,10 +86,17 @@ nextcloud_request() {
 }
 
 # A run of the app, whose report contract.py checks; the paths of the files that the run
-# wrote, URL-encoded for WebDAV, go into the array PATHS.
+# wrote, URL-encoded for WebDAV, go into the array PATHS. "Synchronize now" of the settings
+# page only queues a background job, so the run goes through occ, which runs it at once and
+# answers with its report. Its exit code 1 means errors of single documents, which
+# contract.py judges; a higher one means a run that didn't end.
 sync_run() {
-	nextcloud_request --request POST --data-urlencode 'dryRun=false' --output "${TMP_DIR}/$1.json" \
-		"${BASE_URL}/apps/paperless_sync/sync/run"
+	local code=0
+	occ paperless_sync:run --output=json > "${TMP_DIR}/$1.json" || code=$?
+	if ((code > 1)); then
+		echo "occ paperless_sync:run ended with exit code ${code}: $(cat "${TMP_DIR}/$1.json")" >&2
+		exit 1
+	fi
 	contract report "$1" < "${TMP_DIR}/$1.json" > "${TMP_DIR}/$1.paths"
 	mapfile -t PATHS < "${TMP_DIR}/$1.paths"
 }
