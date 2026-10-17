@@ -137,12 +137,13 @@ final class SyncService {
 	 * @throws InvalidSettingException while the app is not completely configured, or scheduled synchronization or the export is off
 	 */
 	public function syncDocument(int $documentId): SyncReport {
+		// Runs that are off are no failure: a document that was queued before an administrator
+		// turned them off ends without an error in the log, and without taking the lock.
+		$config = $this->configService->get();
+		$this->requireDocumentRuns($config);
 		$this->lock();
 		$report = new SyncReport(false, $this->now());
-		$config = null;
 		try {
-			$config = $this->configService->get();
-			$this->requireDocumentRuns($config);
 			$this->storage->test($config->targetUser, $config->basePath);
 			$this->storage->prepare($config);
 			// Paperless shows no document in its trash, deleted or of another owner: the scheduled
@@ -160,9 +161,7 @@ final class SyncService {
 			$this->logger->error('Paperless synchronization of document {document} failed', ['document' => $documentId, 'exception' => $exception]);
 			throw $exception;
 		} finally {
-			if ($config !== null) {
-				$this->activity->publish($config, $report);
-			}
+			$this->activity->publish($config, $report);
 			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}

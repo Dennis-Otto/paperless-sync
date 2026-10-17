@@ -171,11 +171,23 @@ final class SyncJobTest extends TestCase {
 	 * copy of the trace in the log helps nobody.
 	 */
 	public function testFailedRunIsLogged(): void {
-		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+		$this->paperless->connectionException = new RuntimeException('Paperless answered 401: Invalid token.');
 		$this->logger->expects(self::once())->method('error')->with(
 			'Scheduled Paperless synchronization failed: {error}',
-			['error' => '"paperless_sync::synchronization" is locked'],
+			['error' => 'Paperless answered 401: Invalid token.'],
 		);
+
+		$this->start();
+	}
+
+	/**
+	 * Another run holds the lock, such as a call of the webhook of Paperless: the scheduled run waits
+	 * for the next background jobs, with a line of information rather than an error.
+	 */
+	public function testARunThatFindsTheLockTakenIsPostponed(): void {
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+		$this->logger->expects(self::never())->method('error');
+		$this->logger->expects(self::once())->method('info')->with('Scheduled Paperless synchronization postponed: another run is active.');
 
 		$this->start();
 	}

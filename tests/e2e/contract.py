@@ -418,6 +418,12 @@ def api(url, line):
         check(item["mime_type"] == "application/pdf", f"The document {item['id']} has {item['mime_type']!r}.")
         check(item["page_count"] == 1, f"The document {item['id']} has page_count={item['page_count']!r}.")
     invoice_fields = next(item for item in documents["results"] if item["id"] == ids["invoice"])["custom_fields"]
+    # One document by its ID, as a call of the webhook reads it: the same fields as in the list.
+    listed = next(item for item in documents["results"] if item["id"] == ids["invoice"])
+    single = paperless.get(f"/api/documents/{ids['invoice']}/?fields={FIELDS}&truncate_content=true", record="document")
+    expect_fields("The document read by its ID", single, DOCUMENT_FIELDS)
+    check(set(single) == set(DOCUMENT_FIELDS), f"Paperless ignored the fields of a run for one document: {sorted(single)!r}")
+    check(single == listed, f"The document read by its ID is {single!r}, but the list has {listed!r}.")
     check(invoice_fields == [{"field": priority["id"], "value": choices[0]["id"]}], f"The invoice has {invoice_fields!r}.")
     # The pages of a list that is longer than a page, which the app reads one by one.
     first = paperless.get(f"/api/documents/?{DOCUMENTS_QUERY}&page=1&page_size=2")
@@ -509,6 +515,10 @@ def api(url, line):
     expect_page("The trash", trash, 1)
     expect_fields("The document in the trash", trash["results"][0], {**DOCUMENT_FIELDS, "deleted_at": is_time})
     check(paperless.get("/api/documents/?page=1&page_size=1000")["count"] == 2, "The trash still lists as active.")
+    # A call of the webhook for a document in the trash finds none: the scheduled runs mirror it.
+    paperless.request(
+        "GET", f"/api/documents/{letter}/?fields={FIELDS}&truncate_content=true", expect=404, record="document-trashed"
+    )
     paperless.request("POST", "/api/trash/", {"action": "restore", "documents": [letter]})
     restored = paperless.get(f"/api/documents/{letter}/")
     check(restored["deleted_at"] is None, f"The restored document has {restored['deleted_at']!r}.")

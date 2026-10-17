@@ -579,6 +579,29 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
 	}
 
+	/** The answer of a real Paperless for one document: the fields of a run, as a scan reads them. */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessSendsOneDocumentWithTheFieldsOfARun(string $line): void {
+		$this->responses[] = self::recorded($line, 'document');
+
+		$document = $this->service->document((int)self::recording($line, 'document')['body']['id']);
+
+		self::assertNotNull($document);
+		$fields = PaperlessApiService::DOCUMENT_FIELDS;
+		sort($fields);
+		$received = array_keys($document);
+		sort($received);
+		self::assertSame($fields, $received);
+	}
+
+	/** A real Paperless answers 404 for a document in its trash, which a call then leaves to the runs. */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessShowsNoDocumentInItsTrash(string $line): void {
+		$this->responses[] = self::recorded($line, 'document-trashed');
+
+		self::assertNull($this->service->document(1));
+	}
+
 	/** Paperless answers 404 for a document in its trash, a deleted one and one that the account may not view. */
 	public function testADocumentThatPaperlessDoesNotShowIsNone(): void {
 		$this->responses[] = [404, ['detail' => 'No Document matches the given query.']];

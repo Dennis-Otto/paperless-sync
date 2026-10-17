@@ -484,10 +484,12 @@ The webhook takes `{"document": 123}` as JSON or as a form, and the number may b
 
 | Answer | When |
 | --- | --- |
-| `200` with `"result"`: `exported`, `moved`, `removed`, `unchanged`, `excluded` or `missing` | the copy of the document is current; `excluded` for a document that the settings leave out, such as one in the inbox of Paperless, `missing` for one that Paperless doesn't show to the account, in its trash or deleted |
+| `200` with `"result"`: `exported`, `moved`, `removed`, `unchanged` or `excluded` | the copy of the document is current; `excluded` for a document that the settings leave out, such as one in the inbox of Paperless |
+| `404` with `"result": "missing"` | Paperless doesn't show the document to the account: in its trash, deleted, or new and not committed yet; Paperless tries again after about 1, 2 and 4 seconds, which catches a new document, and the scheduled runs handle the trash |
 | `202` with `"result": "queued"` | the document waits for the next background jobs: another run holds the lock, or *Mirror the document during the call* is off |
 | `400` | the call names no document |
 | `401` | the secret is missing or wrong |
+| `429` | Nextcloud refuses the address of Paperless for up to 30 minutes after more than ten calls with a wrong secret, or after more than 120 calls a minute |
 | `409` with `"result": "off"` | scheduled synchronization or the export is off, or Paperless is not connected |
 | `500` with `"result": "failed"` | the copy failed, such as for a file in the way; Paperless tries a call that failed three more times |
 
@@ -495,7 +497,7 @@ With *Mirror the document during the call* on, the default, the copy changes whi
 
 The trash, deleted documents and the inbox stay with the scheduled runs, which see the whole of Paperless: a document that Paperless doesn't show waits for the missing scans that [deletion safety](#deletion-safety) asks for, so keep scheduled synchronization on. A call of the webhook is no run of the status: the settings page, the status API and the schedule keep the last run, so that calls never hold back the scheduled run that finds trashed documents. The Activity stream of the target user shows the changes of a call as those of a run.
 
-The webhook is the one address of the app that answers without a login of Nextcloud. A call without the secret gets `401`, and Nextcloud's brute-force protection delays the next calls of that address, up to 25 seconds, until it refuses them for a while; a call with the secret ends the delay. Every address may call 120 times a minute. **Create a new secret** replaces the secret at once, and **Turn the webhook off** deletes it. [Security](https://dennis-otto.github.io/paperless-sync/security.html#the-webhook-of-paperless) has the details.
+The webhook is the one address of the app that answers without a login of Nextcloud. A call without the secret gets `401`, and Nextcloud's brute-force protection delays the next calls of that address, up to 25 seconds, until it refuses them for up to 30 minutes after more than ten failures; while the calls are only slower, a call with the secret ends the delay, and `occ security:bruteforce:reset <address>` ends a refusal at once. Every address may call 120 times a minute. **Create a new secret** replaces the secret at once, and **Turn the webhook off** deletes it. [Security](https://dennis-otto.github.io/paperless-sync/security.html#the-webhook-of-paperless) has the details.
 
 <!-- --8<-- [end:configuration-checklist] -->
 

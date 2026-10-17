@@ -787,7 +787,7 @@ control /control/scenario/renamed >/dev/null
 assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": "http://paperless.example.test/documents/123/"}'
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
 assert_webhook 200 unchanged "Bearer ${WEBHOOK_SECRET}" '{"document": "123"}'
-assert_webhook 200 missing "Bearer ${WEBHOOK_SECRET}" '{"document": 999}'
+assert_webhook 404 missing "Bearer ${WEBHOOK_SECRET}" '{"document": 999}'
 assert_webhook 400 '' "Bearer ${WEBHOOK_SECRET}" '{"title": "Monthly invoice"}'
 # With "Mirror the document during the call" off, the document waits for the background job.
 save_settings "${TMP_DIR}/webhook-queued-settings.json" webhook_immediate=0

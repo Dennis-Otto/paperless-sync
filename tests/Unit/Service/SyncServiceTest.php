@@ -4459,7 +4459,9 @@ final class SyncServiceTest extends TestCase {
 	public function testTheRunOfOneDocumentFollowsTheSwitchesOfTheRuns(array $settings, string $message, string $setting): void {
 		$this->configService->save($settings + self::validSettings());
 		$this->paperless->documents = [$this->document()];
-		$this->locking->expects(self::once())->method('releaseLock');
+		// An expected state, no failure: no lock, and no error in the log.
+		$this->locking->expects(self::never())->method('acquireLock');
+		$this->logger->expects(self::never())->method('error');
 
 		try {
 			$this->service->syncDocument(123);

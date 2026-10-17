@@ -328,14 +328,18 @@ final class WebhookControllerTest extends TestCase {
 		self::assertSame('A file of the user', $this->storage->files[self::PATH]);
 	}
 
-	/** A document that Paperless doesn't show, such as one in its trash, waits for a scheduled run. */
+	/**
+	 * A document that Paperless doesn't show, such as one in its trash, waits for a scheduled run. It
+	 * may also be a new document that Paperless hasn't committed yet: the 404 makes Paperless try
+	 * again a few seconds later, where a 200 would end its tries.
+	 */
 	public function testACallForADocumentThatPaperlessDoesNotShowChangesNothing(): void {
 		$this->webhookService($this->clock)->create();
 		$this->authorization = 'Bearer ' . self::SECRET;
 
 		$response = $this->controller()->receive(999);
 
-		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
 		self::assertSame(['document' => 999, 'result' => 'missing'], $response->getData());
 		self::assertSame([], $this->storage->files);
 	}

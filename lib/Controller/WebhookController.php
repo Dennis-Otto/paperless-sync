@@ -68,7 +68,7 @@ final class WebhookController extends Controller {
 	 * which has no {{ doc_id }}.
 	 *
 	 * The run of that document starts at once, unless the settings leave it to the background jobs,
-	 * and answers 200 with what it did; it answers 202 when the document waits for the background
+	 * and answers 200 with what it did, or 404 when Paperless shows no such document; it answers 202 when the document waits for the background
 	 * jobs, also while another run holds the lock. Paperless waits five seconds for the answer; a
 	 * run that takes longer finishes all the same. The trash and the deleted documents stay with the
 	 * scheduled runs, which see the whole of Paperless.
@@ -121,7 +121,13 @@ final class WebhookController extends Controller {
 			$answer['message'] = $message;
 		}
 
-		return new JSONResponse($answer, $result === 'failed' ? Http::STATUS_INTERNAL_SERVER_ERROR : Http::STATUS_OK);
+		return new JSONResponse($answer, match ($result) {
+			'failed' => Http::STATUS_INTERNAL_SERVER_ERROR,
+			// Paperless may call before it has committed a new document, with more than one worker;
+			// a 404 makes it try again after about 1, 2 and 4 seconds, where a 200 would end it.
+			'missing' => Http::STATUS_NOT_FOUND,
+			default => Http::STATUS_OK,
+		});
 	}
 
 	/** The webhook as the settings page shows it, without the secret. */

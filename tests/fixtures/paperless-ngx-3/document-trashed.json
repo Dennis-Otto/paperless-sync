@@ -1,0 +1,12 @@
+{
+  "body": {
+    "detail": "No Document matches the given query."
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/3/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields&truncate_content=true",
+  "status": 404
+}
