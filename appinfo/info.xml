@@ -68,7 +68,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
 ]]></description>
-	<version>0.2.0</version>
+	<version>0.3.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -83,9 +83,9 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<discussion>https://github.com/Dennis-Otto/paperless-sync/discussions</discussion>
 	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.2.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.2.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.2.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
 		<php min-version="8.2"/>
