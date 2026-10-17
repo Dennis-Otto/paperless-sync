@@ -157,6 +157,27 @@ const PAGES = [
 			await page.locator('#paperless-sync-message.paperless-sync-message--error').waitFor()
 		},
 	},
+	{
+		// The pickers: a target user that Nextcloud doesn't know, a tag that Paperless doesn't
+		// have, and the open list of the tags of Paperless, with the option that the down arrow
+		// reached.
+		name: 'user and tag pickers',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			const user = page.locator('#paperless-sync-target-user')
+			await user.fill('nobody-here')
+			await user.press('Tab')
+			await page.locator('#paperless-sync-target-user-hint:not(:empty)').waitFor()
+			const tags = page.locator('#paperless-sync-excluded-tags-input')
+			await tags.fill('Drfat')
+			await tags.press('Enter')
+			await page.locator('#paperless-sync-excluded-tags-list .paperless-sync-chip--new').waitFor()
+			await tags.fill('a')
+			await tags.press('ArrowDown')
+			await page.locator('#paperless-sync-excluded-tags-options [aria-selected="true"]').waitFor()
+		},
+	},
 ]
 
 // Signs in through the login form, as a person does, and keeps the session for every

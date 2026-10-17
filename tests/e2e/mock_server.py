@@ -70,8 +70,16 @@ VIEW_PERMISSIONS = {
     "/api/ui_settings/": "view_uisettings",
 }
 # The tags of the household of the tests; insurance is in lower case, as the folders of the
-# inbox may name it in another case.
-TAGS = [{"id": 9, "name": "Inbox", "is_inbox_tag": True}, {"id": 11, "name": "insurance"}]
+# inbox may name it in another case. No document has Private or Draft, which the settings page
+# offers in its tag pickers, and it leaves out "Tax, 2026", a name with a comma, which a list of
+# names can't hold.
+TAGS = [
+    {"id": 9, "name": "Inbox", "is_inbox_tag": True},
+    {"id": 10, "name": "Private", "is_inbox_tag": False},
+    {"id": 11, "name": "insurance"},
+    {"id": 12, "name": "Draft", "is_inbox_tag": False},
+    {"id": 13, "name": "Tax, 2026", "is_inbox_tag": False},
+]
 # A form field tags of an upload, as Guzzle writes it: its headers, an empty line and the ID.
 TAG_FIELD = re.compile(rb'name="tags"\r\n(?:[^\r\n]+\r\n)*\r\n(\d+)\r\n')
 # The content of P123 after /control/content/revised, as after a new scan in Paperless.

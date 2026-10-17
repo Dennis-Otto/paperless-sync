@@ -21,6 +21,9 @@ use OCP\Settings\ISettings;
 use OCP\SetupCheck\SetupResult;
 
 final class AdminSettings implements ISettings {
+	/** The users of the provisioning API of Nextcloud, at version 2 of its OCS API. */
+	private const USERS_PATH = '/ocs/v2.php/cloud/users';
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private ConfigService $configService,
@@ -53,6 +56,11 @@ final class AdminSettings implements ISettings {
 			// The Files app, where the report opens the folder of a file for the target user.
 			'filesUrl' => $this->urlGenerator->linkToRoute('files.view.index'),
 			'health' => $this->health(),
+			'tagsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.tags'),
+			// The users of Nextcloud, which the page offers for the target user, from the provisioning
+			// API of Nextcloud, which is always on and answers administrators. A path from the root of
+			// the server, as the page has it, also behind a proxy that changes the scheme or the host.
+			'usersUrl' => $this->urlGenerator->getWebroot() . self::USERS_PATH,
 		]);
 	}
 

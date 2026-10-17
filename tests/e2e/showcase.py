@@ -34,11 +34,16 @@ DOCUMENT_TYPES = [
     {"id": 6, "name": "Payslip"},
 ]
 
+# The tags of the household; the settings offer them for the excluded tags.
 TAGS = [
     {"id": 1, "name": "Inbox", "is_inbox_tag": True},
     {"id": 2, "name": "Private", "is_inbox_tag": False},
     # The tag of the subfolder Receipts of the inbox, which the screenshots turn into tags.
     {"id": 3, "name": "Receipts", "is_inbox_tag": False},
+    # Tags that no document has, which the pickers of the settings offer.
+    {"id": 4, "name": "Draft", "is_inbox_tag": False},
+    {"id": 5, "name": "Tax return", "is_inbox_tag": False},
+    {"id": 6, "name": "Warranty", "is_inbox_tag": False},
 ]
 
 # The ID, the title, the correspondent, the document type and the date of every

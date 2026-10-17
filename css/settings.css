@@ -302,6 +302,180 @@
 	color: var(--color-text-maxcontrast);
 }
 
+/* A field that offers the users of Nextcloud or the tags of Paperless in a list below it, which
+   lies over what follows. */
+.paperless-sync-combobox {
+	position: relative;
+}
+
+.paperless-sync-field input[aria-invalid='true'] {
+	border-color: var(--color-warning);
+}
+
+/* A section with an open list lies over the sections after it and over the bar of the buttons. */
+.paperless-sync-card:has(.paperless-sync-options:not([hidden])) {
+	position: relative;
+	z-index: 3;
+}
+
+.paperless-sync-options {
+	position: absolute;
+	z-index: 10;
+	top: 100%;
+	inset-inline: 0;
+	box-sizing: border-box;
+	max-height: 240px;
+	overflow-y: auto;
+	margin: 4px 0 0;
+	padding: 4px;
+	list-style: none;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+	box-shadow: 0 4px 16px color-mix(in srgb, var(--color-box-shadow) 60%, transparent);
+	font-weight: 400;
+}
+
+.paperless-sync-options[hidden] {
+	display: none;
+}
+
+.paperless-sync-option {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 8px;
+	align-items: baseline;
+	padding: 8px 10px;
+	border-radius: var(--border-radius);
+	cursor: pointer;
+	overflow-wrap: anywhere;
+}
+
+.paperless-sync-option:hover {
+	background: var(--color-background-hover);
+}
+
+/* The option that the arrow keys reached, which Enter picks. */
+.paperless-sync-option[aria-selected='true'] {
+	outline: 2px solid var(--color-primary-element);
+	outline-offset: -2px;
+	background: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text);
+}
+
+.paperless-sync-option-note {
+	font-size: 13px;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-option[aria-selected='true'] .paperless-sync-option-note {
+	color: inherit;
+}
+
+/* What the field of a picker says about its value: a user that Nextcloud doesn't know, or why the
+   tags of Paperless are missing. It stays in the accessibility tree while it is empty, so that a
+   screen reader reads what comes into it, and takes no room then. The field outweighs the margin
+   that Nextcloud gives every paragraph of a section of the settings, as it does for the hint of
+   the field. */
+.paperless-sync-field .paperless-sync-field-hint,
+.paperless-sync-field .settings-hint {
+	margin: 0;
+	font-weight: 400;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-field .paperless-sync-field-hint:empty {
+	margin-top: -7px;
+}
+
+#paperless-sync-target-user-hint {
+	color: var(--color-warning-text, var(--color-main-text));
+}
+
+/* The names of a tag picker, each with a button that removes it. */
+.paperless-sync-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-weight: 400;
+}
+
+.paperless-sync-chips[hidden] {
+	display: none;
+}
+
+.paperless-sync-chip {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	max-width: 100%;
+	box-sizing: border-box;
+	padding: 2px 2px 2px 12px;
+	border: 1px solid color-mix(in srgb, var(--color-primary-element) 45%, var(--color-border));
+	border-radius: var(--border-radius-pill, 999px);
+	background: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text);
+	overflow-wrap: anywhere;
+}
+
+/* A name that Paperless has no tag of, which may be a typo; its note says so in words as well. */
+.paperless-sync-chip--new {
+	border-style: dashed;
+	border-color: var(--color-border-maxcontrast);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.paperless-sync-chip-note {
+	font-size: 12px;
+	color: var(--color-text-maxcontrast);
+}
+
+/* The class and the list outweigh the size, the margin and the border that Nextcloud gives every
+   button. */
+.paperless-sync-chips .paperless-sync-chip-remove {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	min-width: 0;
+	height: 24px;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 50%;
+	background: transparent;
+	color: inherit;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.paperless-sync-chips .paperless-sync-chip-remove:hover,
+.paperless-sync-chips .paperless-sync-chip-remove:focus-visible {
+	background: color-mix(in srgb, currentcolor 16%, transparent);
+}
+
+.paperless-sync-chips .paperless-sync-chip-remove:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 1px;
+}
+
+/* Read by screen readers alone: what a change of the tags did. */
+.paperless-sync-visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 .paperless-sync-switches {
 	display: grid;
 	gap: 12px;
