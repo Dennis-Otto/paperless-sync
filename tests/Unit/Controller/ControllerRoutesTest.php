@@ -32,6 +32,7 @@ final class ControllerRoutesTest extends TestCase {
 			'settings reset' => [SettingsController::class, 'reset', 'DELETE', '/settings'],
 			'settings test' => [SettingsController::class, 'test', 'POST', '/settings/test'],
 			'settings preview' => [SettingsController::class, 'preview', 'POST', '/settings/preview'],
+			'settings tags of Paperless' => [SettingsController::class, 'tags', 'GET', '/settings/paperless/tags'],
 			'sync run' => [SyncController::class, 'run', 'POST', '/sync/run'],
 			'sync status' => [SyncController::class, 'status', 'GET', '/sync/status'],
 		];

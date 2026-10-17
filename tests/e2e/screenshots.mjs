@@ -364,6 +364,39 @@ try {
 		await context.close()
 	}
 
+	// The excluded tags while a name is typed, in a page of its own, as the picture of the path
+	// template is.
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, SETTINGS)
+		await page.locator('#paperless-sync-settings').waitFor()
+		await settle(page)
+		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
+		// The excluded tags while a name is typed: a typo that Paperless has no tag of, and the
+		// tags of Paperless that hold the letters typed, in the list below the field.
+		// In the middle of the window, clear of the bar of Nextcloud at its top, with room for the list.
+		await page.locator('[data-tag-picker="excluded_tags"]').evaluate((element) => element.scrollIntoView({ block: 'center' }))
+		const tags = page.locator('#paperless-sync-excluded-tags-input')
+		await tags.fill('Drfat')
+		await tags.press('Enter')
+		await page.locator('#paperless-sync-excluded-tags-list .paperless-sync-chip--new').waitFor()
+		await tags.fill('Dr')
+		await page.locator('#paperless-sync-excluded-tags-options [role="option"]', { hasText: 'Draft' }).waitFor()
+		await tags.press('ArrowDown')
+		await settle(page)
+		const field = await page.locator('[data-tag-picker="excluded_tags"]').boundingBox()
+		const list = await page.locator('#paperless-sync-excluded-tags-options').boundingBox()
+		const top = Math.max(0, field.y - 16)
+		save(`docs/images/settings-tags-${theme}.png`, await page.screenshot({
+			clip: {
+				x: Math.max(0, field.x - 16),
+				y: top,
+				width: field.width + 32,
+				height: Math.min(VIEWPORT.height, Math.max(field.y + field.height, list.y + list.height) + 16) - top,
+			},
+		}))
+		await context.close()
+	}
+
 	// Through the archive to a document, which opens in the viewer of Nextcloud.
 	{
 		const { context, page } = await open(browser, owner, 'light', files(ARCHIVE))

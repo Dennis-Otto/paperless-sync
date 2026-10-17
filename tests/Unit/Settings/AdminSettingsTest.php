@@ -38,6 +38,7 @@ final class AdminSettingsTest extends TestCase {
 	protected function setUp(): void {
 		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRoute')->willReturnCallback(static fn (string $route): string => '/route/' . $route);
+		$this->urlGenerator->method('getWebroot')->willReturn('/cloud');
 		$this->urlGenerator->method('imagePath')->willReturnCallback(static fn (string $app, string $file): string => "/apps/{$app}/img/{$file}");
 	}
 
@@ -66,6 +67,8 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
 		self::assertSame('/route/paperless_sync.settings.preview', $parameters['previewUrl']);
 		self::assertSame('/route/files.view.index', $parameters['filesUrl']);
+		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);
+		self::assertSame('/cloud/ocs/v2.php/cloud/users', $parameters['usersUrl'], 'The users come from the provisioning API, below the root of the server.');
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
 	}
 
@@ -107,14 +110,15 @@ final class AdminSettingsTest extends TestCase {
 	 * js/settings.js fills every field of the form from the configuration that the server
 	 * stored: the field data-setting="paperless_url" from paperlessUrl. Every field has its
 	 * value there, and every value of the configuration but the state of the token has its field.
+	 * A tag picker has the field of the setting that the template names first in its call.
 	 */
 	public function testEveryFieldOfTheFormHasAValueOfTheConfiguration(): void {
 		$template = file_get_contents(__DIR__ . '/../../../templates/settings.php');
 		self::assertIsString($template);
-		preg_match_all('/data-setting="([a-z_]+)"/', $template, $matches);
+		preg_match_all('/data-setting="([a-z_]+)"|\$tagPicker\(\s*\'([a-z_]+)\'/', $template, $matches);
 		$fields = array_map(
 			static fn (string $setting): string => lcfirst(str_replace('_', '', ucwords($setting, '_'))),
-			$matches[1],
+			array_map(static fn (string $field, string $picker): string => $field . $picker, $matches[1], $matches[2]),
 		);
 		$values = array_keys($this->configService()->get()->jsonSerialize());
 

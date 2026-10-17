@@ -15,7 +15,9 @@
 // the server stored, says when it holds unsaved
 // changes, and shows every result and error next to the buttons, translated, also when
 // a proxy answers with a page of its own. The CSS of Nextcloud, which styles every button
-// and input, leaves Disconnect at the end of the bar and every checkbox next to its label. run.sh starts it in the image of Playwright,
+// and input, leaves Disconnect at the end of the bar and every checkbox next to its label.
+// The target user comes from the users of Nextcloud and the excluded tags from the tags of
+// Paperless, while a tag that Paperless doesn't have yet can still be typed. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
 // Paperless and the saved configuration of run.sh are there, and it leaves that
 // configuration as it found it.
@@ -145,6 +147,7 @@ try {
 	expect((await token.getAttribute('placeholder')) === 'Required again for a new URL', 'The token must say why it is required again.')
 	await url.fill(`${savedUrl}/`)
 	expect(!(await required()), 'The saved URL with a slash at its end is the same URL.')
+	await url.fill(savedUrl)
 	console.log('Settings: another URL asks for the token again, the saved one does not.')
 
 	// The save button says whether saving tests the connection, as the server decides it:
@@ -158,6 +161,105 @@ try {
 	await token.fill('')
 	expect((await save.textContent()) === 'Save', 'Without the token, saving tests nothing again.')
 	console.log('Settings: the save button says whether saving tests the connection.')
+
+	// The target user comes from the users of Nextcloud, and a user ID that Nextcloud doesn't
+	// know is marked before the save.
+	const targetUserField = page.locator('#paperless-sync-target-user')
+	const userOptions = page.locator('#paperless-sync-target-user-options [role="option"]')
+	const userHint = page.locator('#paperless-sync-target-user-hint')
+	const savedUser = await targetUserField.inputValue()
+	expect((await userHint.textContent()) === '' && (await targetUserField.getAttribute('aria-invalid')) === null, 'The saved target user exists.')
+	await targetUserField.fill('sync')
+	await userOptions.first().waitFor()
+	const offeredUsers = await userOptions.allTextContents()
+	expect(
+		JSON.stringify(offeredUsers) === JSON.stringify(['sync-target']) && (await targetUserField.getAttribute('aria-expanded')) === 'true',
+		`Typing must offer the users whose ID holds the text: ${JSON.stringify(offeredUsers)}`,
+	)
+	await targetUserField.press('ArrowDown')
+	const activeUser = await targetUserField.getAttribute('aria-activedescendant')
+	expect(activeUser !== null && (await page.locator(`[id="${activeUser}"]`).getAttribute('aria-selected')) === 'true', 'The down arrow must reach the first user.')
+	await targetUserField.press('Enter')
+	expect((await targetUserField.inputValue()) === 'sync-target', `Enter must pick the user: ${await targetUserField.inputValue()}`)
+	expect((await targetUserField.getAttribute('aria-expanded')) === 'false' && (await message.textContent()) === '', 'Picking a user closes the list and doesn\'t submit the form.')
+	await targetUserField.fill('nobody-here')
+	await targetUserField.press('Tab')
+	await page.locator('#paperless-sync-target-user-hint:not(:empty)').waitFor()
+	expect(
+		(await userHint.textContent()) === 'Nextcloud has no user with the ID nobody-here. Pick one from the list.' && (await targetUserField.getAttribute('aria-invalid')) === 'true',
+		`A user that Nextcloud doesn't know must be marked: ${await userHint.textContent()}`,
+	)
+	await targetUserField.fill(savedUser)
+	await targetUserField.press('Tab')
+	await page.locator('#paperless-sync-target-user-hint:empty').waitFor({ state: 'attached' })
+	expect((await targetUserField.getAttribute('aria-invalid')) === null && await unsaved.isHidden(), 'The saved user again is no change.')
+	console.log('Settings: the target user is picked from the users of Nextcloud, and an unknown user ID is marked before the save.')
+
+	// The excluded tags come from the tags of Paperless; a name that Paperless doesn't have is
+	// possible and marked, and the save sends what is typed but not yet added.
+	const excludedTags = () => page.locator('[data-setting="excluded_tags"]').inputValue()
+	const tagInput = page.locator('#paperless-sync-excluded-tags-input')
+	const tagOptions = page.locator('#paperless-sync-excluded-tags-options [role="option"]')
+	const chips = page.locator('#paperless-sync-excluded-tags-list li')
+	expect((await excludedTags()) === '', `run.sh saves no excluded tags: ${await excludedTags()}`)
+	await tagInput.click()
+	await tagOptions.first().waitFor()
+	// The tags of the mock, and those that the scenario of the inbox created, in the order of
+	// their letters, case aside.
+	const offeredTags = await tagOptions.allTextContents()
+	const inOrder = offeredTags.every((tag, index) => index === 0 || offeredTags[index - 1].localeCompare(tag, 'en', { sensitivity: 'base', numeric: true }) < 0)
+	expect(
+		['Draft', 'Inbox', 'Private'].every((tag) => offeredTags.includes(tag)) && !offeredTags.includes('Tax, 2026') && inOrder,
+		`The field must offer the tags of Paperless that the setting can hold, in order, without "Tax, 2026": ${JSON.stringify(offeredTags)}`,
+	)
+	await tagInput.fill('pri')
+	await page.locator('#paperless-sync-excluded-tags-options [role="option"]', { hasText: 'Private' }).click()
+	expect((await excludedTags()) === 'Private' && (await chips.allTextContents()).join('|') === 'Private×', `A click must add the tag: ${await excludedTags()}`)
+	expect(await unsaved.isVisible() && await focused(tagInput), 'A new tag is an unsaved change, and the focus stays in the field.')
+	await tagInput.fill('Drfat')
+	const addTyped = page.locator('#paperless-sync-excluded-tags-options [role="option"]', { hasText: 'Add "Drfat"' })
+	await addTyped.waitFor()
+	expect((await addTyped.textContent()).includes('not in Paperless'), 'Adding a name that Paperless doesn\'t have must say so.')
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED, `The save of the tags failed: ${await message.textContent()}`)
+	expect((await excludedTags()) === 'Private, Drfat', `The save must send the name that was typed too: ${await excludedTags()}`)
+	expect((await chips.nth(1).textContent()).includes('not in Paperless') && !(await chips.nth(0).textContent()).includes('not in Paperless'), 'A tag that Paperless doesn\'t have must be marked.')
+	expect(await unsaved.isHidden(), 'After the save, the tags are saved.')
+	await tagInput.fill('draft')
+	await tagInput.press('Enter')
+	expect((await excludedTags()) === 'Private, Drfat, Draft', `A typed name must take the spelling of Paperless: ${await excludedTags()}`)
+	expect((await tagInput.getAttribute('aria-expanded')) === 'false', 'Enter adds the name and closes the list.')
+	await tagInput.press('Backspace')
+	expect((await excludedTags()) === 'Private, Drfat' && await unsaved.isHidden(), 'Backspace in the empty field must remove the last tag.')
+	await tagInput.fill('private')
+	expect(await unsaved.isVisible(), 'A typed name is an unsaved change.')
+	await tagInput.press('Enter')
+	expect((await excludedTags()) === 'Private, Drfat' && await unsaved.isHidden(), 'A name that is already in the list changes nothing.')
+	await page.getByRole('button', { name: 'Remove Drfat' }).click()
+	await page.getByRole('button', { name: 'Remove Private' }).click()
+	expect((await excludedTags()) === '' && await chips.count() === 0 && await focused(tagInput), 'The buttons of the tags must remove them and leave the focus in the field.')
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED && (await excludedTags()) === '', `Removing the tags again failed: ${await message.textContent()}`)
+	console.log('Settings: the excluded tags are picked from the tags of Paperless, a tag that Paperless doesn\'t have yet can be typed and is marked, and the save sends what is typed.')
+
+	// The tags for every import come from the same tags of Paperless, picked with the keyboard.
+	const inboxTags = () => page.locator('[data-setting="inbox_tags"]').inputValue()
+	const inboxTagInput = page.locator('#paperless-sync-inbox-tags-input')
+	const inboxTagOptions = page.locator('#paperless-sync-inbox-tags-options [role="option"]')
+	expect((await inboxTags()) === '', `run.sh leaves no tags for every import: ${await inboxTags()}`)
+	await inboxTagInput.focus()
+	await inboxTagInput.press('ArrowDown')
+	await page.locator('#paperless-sync-inbox-tags-options [aria-selected="true"]').waitFor()
+	const offeredInboxTags = await inboxTagOptions.allTextContents()
+	expect(JSON.stringify(offeredInboxTags) === JSON.stringify(offeredTags), `The tags for every import must offer the same tags: ${JSON.stringify(offeredInboxTags)}`)
+	await inboxTagInput.press('Enter')
+	expect((await inboxTags()) === offeredTags[0] && await unsaved.isVisible(), `Enter must add the tag that the arrow reached: ${await inboxTags()}`)
+	expect((await page.locator('#paperless-sync-inbox-tags-announcement').textContent()) === `Added: ${offeredTags[0]}`, 'A screen reader must hear which tag was added.')
+	await inboxTagInput.press('Backspace')
+	expect((await inboxTags()) === '' && await unsaved.isHidden(), 'Backspace must remove the tag again.')
+	console.log('Settings: the tags for every import are picked from the tags of Paperless as well, also with the keyboard.')
 
 	const saves = []
 	await page.route(`**${SETTINGS}`, async (route) => {
