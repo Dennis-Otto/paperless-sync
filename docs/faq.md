@@ -24,7 +24,7 @@ A dedicated account with an API token, which can view and download the documents
 
 The files of the archive are a mirror of Paperless, and they are read-only by intent. An edit stays while its document stays the same in Paperless. When the document changes there, a run may write the file anew from Paperless, depending on the change, and the [conflict policy](guide.md#conflict-policy) decides about your edit:
 
-- **Replace synchronized file**, the default: the run writes the content of Paperless into the same file, so its shares and versions stay. Your edit remains as an earlier version, under *Versions* in the details of the file: in a scheduled run, and in a run started with *Synchronize now* only when the administrator who starts it is the target user; otherwise it is lost.
+- **Replace synchronized file**, the default: the run writes the content of Paperless into the same file, so its shares and versions stay. Your edit remains as an earlier version, under *Versions* in the details of the file, in every run: *Synchronize now* runs as a background job, as a scheduled run does.
 - **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated. A copy that nobody edited is no conflict, and the run updates it.
 
 A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless.
@@ -46,7 +46,7 @@ Every copy that the app deletes in Nextcloud, and every folder that it empties, 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.dark.svg">
-  <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.svg" alt="Where a copy goes that Paperless Sync deletes: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, a scheduled run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends. A run started with Synchronize now deletes it for good, which issue 119 tracks.">
+  <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.svg" alt="Where a copy goes that Paperless Sync deletes: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, the run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends, whether the schedule, Synchronize now or occ started the run.">
 </picture>
 
 Only the target user sees that trash bin, under *Deleted files* in *Files*. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
@@ -77,9 +77,15 @@ Yes. The app writes through the file API of Nextcloud, which hides where the fil
 
 About the number of documents divided by the batch size, times the interval: with the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes it faster; then every run downloads more at once. Each run takes the documents that Paperless added last first, so new documents don't wait behind the backlog, and its report counts the documents that wait for the next run as skipped. Every later run changes only what changed in Paperless.
 
+To import a large archive in one go, leave scheduled synchronization off and run `occ paperless_sync:run --unlimited` on the server: it makes every change that is due, as long as it takes, and the [command line](guide.md#command-line) explains the rest.
+
 ### How often does it run?
 
-At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* starts a run at once, and the interval then counts from it. A dry-run shows what a run would change without changing it, and doesn't move the next run.
+At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* queues a run that the next background jobs start, within five minutes, or at once with a worker for it ([background jobs](guide.md#background-jobs)), and the interval then counts from it; `occ paperless_sync:run` runs one at once in the shell. A dry-run shows what a run would change without changing it, and doesn't move the next run.
+
+### Is there a command line?
+
+Yes: `occ paperless_sync:run`, `occ paperless_sync:status` and `occ paperless_sync:forget`, with JSON output and exit codes for scripts and monitoring. The [command line](guide.md#command-line) describes them.
 
 ### Can I connect several Paperless instances?
 

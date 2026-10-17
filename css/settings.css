@@ -78,8 +78,9 @@
 	display: none;
 }
 
-/* A run that failed or had errors stands out in the color of errors; its label says so in words as well. */
+/* A run that failed, was interrupted or had errors stands out in the color of errors; its label says so in words as well. */
 #paperless-sync-last-state[data-state="failed"],
+#paperless-sync-last-state[data-state="interrupted"],
 #paperless-sync-last-state[data-state="completed-with-errors"] {
 	color: var(--color-error-text);
 }

@@ -408,33 +408,50 @@ try {
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: when neither the run nor the status answers, the status keeps the last state that the server sent.')
 
-	// A run with errors says how many, and a refresh of the status that fails afterwards
-	// leaves that message alone.
-	await page.route(`**${RUN}`, (route) => route.fulfill({
-		json: {
-			dryRun: false,
-			completedAt: Math.floor(Date.now() / 1000),
-			exported: 1,
-			errors: 2,
-			actions: ['ERROR P7: Synthetic failure.', 'ERROR P8: Synthetic failure.', 'EXPORT P9 Documents/Paperless/Archive/P9.pdf'],
+	// "Synchronize now" queues the run as a background job and answers at once. The page
+	// follows the status, also past an answer that fails, until the run ends, and then says
+	// how it ended, with the count of its errors.
+	const now = Math.floor(Date.now() / 1000)
+	const queuedStatus = { state: 'queued', lastStarted: 0, lastCompleted: 0, lastEnded: 0, lastSuccess: 0, summary: {}, error: '', report: {}, nextRun: null }
+	const statusAnswers = [
+		{ status: 503, contentType: 'text/html', body: '<html><body>Service Unavailable</body></html>' },
+		{ json: { ...queuedStatus, state: 'running', lastStarted: now } },
+		{
+			json: {
+				...queuedStatus,
+				state: 'completed-with-errors',
+				lastStarted: now,
+				lastCompleted: now + 1,
+				lastEnded: now + 1,
+				report: {
+					dryRun: false,
+					completedAt: now + 1,
+					exported: 1,
+					errors: 2,
+					omittedActions: 0,
+					errorMessages: ['P7: Synthetic failure.', 'P8: Synthetic failure.'],
+					actions: ['ERROR: P7: Synthetic failure.', 'ERROR: P8: Synthetic failure.', 'EXPORT P9: Documents/Paperless/Archive/P9.pdf'],
+				},
+			},
 		},
-	}))
-	await page.route(`**${STATUS}`, (route) => route.fulfill({ status: 503, contentType: 'text/html', body: '<html><body>Service Unavailable</body></html>' }))
-	const statusAnswer = page.waitForResponse((response) => response.url().endsWith(STATUS))
+	]
+	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 202, json: { queued: true, status: queuedStatus } }))
+	await page.route(`**${STATUS}`, (route) => route.fulfill(statusAnswers.length > 1 ? statusAnswers.shift() : statusAnswers[0]))
 	page.once('dialog', (dialog) => dialog.accept())
 	await run.click()
-	await settle()
-	await statusAnswer
-	// The page handles the answer of the status in its next task.
-	await page.evaluate(() => new Promise((resolve) => {
-		window.setTimeout(resolve, 200)
-	}))
-	const withErrors = await message.textContent()
+	const queued = await messageAfter('Queuing the synchronization…')
+	expect(
+		queued === 'The synchronization starts with the next background jobs of Nextcloud, within a few minutes. The status above follows it, and this message says how it ends.',
+		`A queued run must say that it waits for the background jobs: ${queued}`,
+	)
+	expect((await state.textContent()) === 'Queued', 'The status must show the queued run.')
+	expect(await spinner.isVisible(), 'The status must show that a run is coming.')
+	const withErrors = await messageAfter(queued)
 	expect(withErrors === 'Synchronization completed with 2 errors. See the report.', `A run with errors must count them: ${withErrors}`)
 	expect(await page.locator('#paperless-sync-report').isVisible(), 'The report of the run must be shown.')
-	expect((await state.textContent()) !== 'Running' && await spinner.isHidden(), 'Without the status, the run must not look as if it were still running.')
+	expect((await state.textContent()) !== 'Queued' && await spinner.isHidden(), 'The status must show that the run has ended.')
 	await page.unroute(`**${RUN}`)
-	console.log('Settings: a run with errors counts them, and a failed refresh of the status keeps that message.')
+	console.log('Settings: "Synchronize now" queues the run, follows it through the status past a failed answer, and counts its errors.')
 
 	// Errors without an answer of the app: no connection, and a session that ended.
 	await page.unroute(`**${STATUS}`)

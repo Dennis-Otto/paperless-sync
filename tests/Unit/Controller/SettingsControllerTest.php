@@ -19,7 +19,6 @@ use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
-use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
@@ -624,7 +623,7 @@ final class SettingsControllerTest extends TestCase {
 	private function controller(ConfigService $configService): SettingsController {
 		$paths = new PathTemplateService();
 		$clock = new TestClock();
-		$status = new StatusService($this->appConfig(), $clock);
+		$status = $this->statusService($clock);
 		$sync = new SyncService(
 			$configService,
 			$this->paperless,

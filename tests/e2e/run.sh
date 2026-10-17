@@ -185,9 +185,36 @@ assert_status_soon() {
 	assert_json "${mode}" "${output}" "${@:3}"
 }
 
+# The same for the status API, as the monitor of an administrator reads it, after a run of occ.
+assert_status_api_soon() {
+	mode="$1"
+	output="$2"
+	for _ in $(seq 1 20); do
+		if [[ "$(status_api e2e-admin "${output}")" == "200" ]] && assert_json "${mode}" "${output}" 2>/dev/null; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	assert_json "${mode}" "${output}"
+}
+
+# A dry-run as the settings page starts it, which answers with its report, or a run as an
+# administrator automates it with occ, which prints its report: "Synchronize now" queues its run
+# as a background job and answers before it ends. The exit code of occ says how the run ended,
+# 1 with errors of single documents, which some steps expect, so the report must agree with it.
 sync_run() {
 	dry_run="$1"
 	output="$2"
+	if [[ "${dry_run}" == "false" ]]; then
+		code=0
+		occ paperless_sync:run --output=json > "${output}" || code=$?
+		if ((code > 1)); then
+			echo "occ paperless_sync:run ended with exit code ${code}: $(cat "${output}")" >&2
+			exit 1
+		fi
+		assert_json "exit-${code}" "${output}"
+		return
+	fi
 	curl --fail-with-body --silent --show-error \
 		--user "e2e-admin:${PASSWORD}" \
 		--header 'Accept: application/json' \
@@ -594,6 +621,8 @@ assert_json config "${TMP_DIR}/config.json"
 
 sync_run true "${TMP_DIR}/dry-run.json"
 assert_json dry-run "${TMP_DIR}/dry-run.json"
+occ paperless_sync:run --dry-run --output=json > "${TMP_DIR}/dry-run-occ.json"
+assert_json dry-run "${TMP_DIR}/dry-run-occ.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 # A dry-run changes nothing, so the Activity stream of the target user stays empty.
 activities "${TMP_DIR}/activity-dry-run.json"
@@ -620,8 +649,25 @@ fi
 assert_json dry-run-other-user "${TMP_DIR}/dry-run-other-user.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 
-sync_run false "${TMP_DIR}/export.json"
-assert_json export "${TMP_DIR}/export.json"
+# "Synchronize now" queues the run as a background job and answers at once, with the status that
+# the page follows; the worker of Nextcloud runs the job here, as cron does on a server.
+QUEUED_STATUS="$(curl --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'dryRun=false' \
+	--output "${TMP_DIR}/queued.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/apps/paperless_sync/sync/run")"
+if [[ "${QUEUED_STATUS}" != "202" ]]; then
+	echo "\"Synchronize now\" answered HTTP ${QUEUED_STATUS} instead of 202: $(cat "${TMP_DIR}/queued.json")" >&2
+	exit 1
+fi
+assert_json queued "${TMP_DIR}/queued.json"
+assert_dav_missing sync-target "${INITIAL_PATH}"
+occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
+assert_status_soon status-export "${TMP_DIR}/export.json"
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
 # One entry for the run, with the link of the file that it wrote.
 activities "${TMP_DIR}/activity-export.json"
@@ -732,8 +778,7 @@ sync_run false "${TMP_DIR}/export-stopped.json"
 occ user:setting --delete sync-target files quota >/dev/null
 assert_json export-stopped "${TMP_DIR}/export-stopped.json"
 # The status keeps the error of the document for the settings page.
-sync_status "${TMP_DIR}/status-errors.json"
-assert_json status-errors "${TMP_DIR}/status-errors.json"
+assert_status_soon status-errors "${TMP_DIR}/status-errors.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
 
 sync_run false "${TMP_DIR}/re-export.json"
@@ -808,8 +853,7 @@ sync_run false "${TMP_DIR}/import-ended.json"
 assert_json import-failed "${TMP_DIR}/import-ended.json" 2
 assert_dav_file sync-target 'Documents/Paperless/Errors/copy.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
 assert_dav_file sync-target 'Documents/Paperless/Errors/cancelled.pdf.error.txt' 'Paperless cancelled the task before it finished (REVOKED)'
-sync_status "${TMP_DIR}/status-paperless-2.json"
-assert_json paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
+assert_status_soon paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
 control /control/paperless/3.3.0 >/dev/null
 
 # Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
@@ -827,8 +871,9 @@ assert_json activity-imports "${TMP_DIR}/activity-imports.json"
 notifications sync-target "${TMP_DIR}/notifications-imports.json"
 assert_json notifications-imports "${TMP_DIR}/notifications-imports.json"
 
-sync_status "${TMP_DIR}/status.json"
-assert_json status "${TMP_DIR}/status.json"
+assert_status_soon status "${TMP_DIR}/status.json"
+occ paperless_sync:status --output=json --exit-code > "${TMP_DIR}/status-occ.json"
+assert_json status "${TMP_DIR}/status-occ.json"
 
 mock_state > "${TMP_DIR}/mock-final.json"
 assert_json mock-final "${TMP_DIR}/mock-final.json"
@@ -959,13 +1004,24 @@ UNREACHABLE_STATUS="$(curl --silent --show-error \
 	--header 'Accept: application/json' \
 	--header 'OCS-APIRequest: true' \
 	--request POST \
-	--data-urlencode 'dryRun=false' \
+	--data-urlencode 'dryRun=true' \
 	--output "${TMP_DIR}/unreachable.json" \
 	--write-out '%{http_code}' \
 	"${BASE_URL}/apps/paperless_sync/sync/run")"
+# On the command line, the run says on standard error why it failed, and its exit code and the
+# status tell a script and a monitoring check that it failed.
+UNREACHABLE_CODE=0
+occ paperless_sync:run > "${TMP_DIR}/unreachable-occ.txt" 2>&1 || UNREACHABLE_CODE=$?
+UNREACHABLE_STATE_CODE=0
+occ paperless_sync:status --exit-code >/dev/null || UNREACHABLE_STATE_CODE=$?
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
 if [[ "${UNREACHABLE_STATUS}" != "500" ]]; then
-	echo "A run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
+	echo "A dry-run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
+	exit 1
+fi
+if [[ "${UNREACHABLE_CODE}" != "2" || "${UNREACHABLE_STATE_CODE}" != "2" ]] \
+	|| ! grep --fixed-strings 'The synchronization failed: ' "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
+	echo "occ paperless_sync:run without Paperless ended with exit code ${UNREACHABLE_CODE} and the status with ${UNREACHABLE_STATE_CODE} instead of 2: $(cat "${TMP_DIR}/unreachable-occ.txt")" >&2
 	exit 1
 fi
 if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
@@ -981,8 +1037,8 @@ if [[ "$(log_count SensitiveParameterValue)" == "0" ]]; then
 	exit 1
 fi
 TOKEN_IN_LOG="$(log_count e2e-only-token)"
-if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" >/dev/null; then
-	echo "A run without Paperless put the token into its answer or into ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
+if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
+	echo "A run without Paperless put the token into its answer, its output or ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
 	exit 1
 fi
 
@@ -1022,29 +1078,17 @@ sync_run true "${TMP_DIR}/back.json"
 # not to a user who is no administrator. The next run that succeeds removes the notification.
 "${COMPOSE[@]}" stop paperless-mock >/dev/null
 for attempt in 2 3; do
-	FAILING_STATUS="$(curl --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data-urlencode 'dryRun=false' \
-		--output "${TMP_DIR}/failing-${attempt}.json" \
-		--write-out '%{http_code}' \
-		"${BASE_URL}/apps/paperless_sync/sync/run")"
-	if [[ "${FAILING_STATUS}" != "500" ]]; then
-		echo "Run ${attempt} without Paperless answered HTTP ${FAILING_STATUS} instead of 500: $(cat "${TMP_DIR}/failing-${attempt}.json")" >&2
+	FAILING_CODE=0
+	occ paperless_sync:run > "${TMP_DIR}/failing-${attempt}.txt" 2>&1 || FAILING_CODE=$?
+	if [[ "${FAILING_CODE}" != "2" ]]; then
+		echo "Run ${attempt} without Paperless ended with exit code ${FAILING_CODE} instead of 2: $(cat "${TMP_DIR}/failing-${attempt}.txt")" >&2
 		exit 1
 	fi
 done
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
 notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
 assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
-FAILING_API_STATUS="$(status_api e2e-admin "${TMP_DIR}/status-api-failing.json")"
-if [[ "${FAILING_API_STATUS}" != "200" ]]; then
-	echo "The status API answered HTTP ${FAILING_API_STATUS} to an administrator: $(cat "${TMP_DIR}/status-api-failing.json")" >&2
-	exit 1
-fi
-assert_json status-api-failing "${TMP_DIR}/status-api-failing.json"
+assert_status_api_soon status-api-failing "${TMP_DIR}/status-api-failing.json"
 USER_API_STATUS="$(status_api sync-target "${TMP_DIR}/status-api-user.json")"
 if [[ "${USER_API_STATUS}" != "403" ]]; then
 	echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a user who is no administrator: $(cat "${TMP_DIR}/status-api-user.json")" >&2
@@ -1061,10 +1105,9 @@ sync_run false "${TMP_DIR}/recovered.json"
 assert_json recovered "${TMP_DIR}/recovered.json"
 notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
-status_api e2e-admin "${TMP_DIR}/status-api-recovered.json" >/dev/null
-assert_json status-api-recovered "${TMP_DIR}/status-api-recovered.json"
+assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, exclusion, trash, guarded deletion, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

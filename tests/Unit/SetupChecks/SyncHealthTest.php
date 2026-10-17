@@ -33,7 +33,7 @@ final class SyncHealthTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->clock = new TestClock();
-		$this->status = new StatusService($this->appConfig(), $this->clock);
+		$this->status = $this->statusService($this->clock);
 		$formatter = $this->createMock(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturnCallback(fn (int $timestamp): string => 'vor ' . intdiv($this->clock->time - $timestamp, 60) . ' Minuten');
 		$this->check = new SyncHealth($this->status, $this->configService(), $this->germanL10n(), $formatter);

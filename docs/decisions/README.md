@@ -23,3 +23,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0015](0015-check-the-mock-against-a-real-paperless.md) | Check the app and the answers of its unit tests against a real Paperless-ngx every week | accepted |
 | [0016](0016-translate-where-the-reader-is-known.md) | Translate a message where its reader is known, and check the German catalog against the code | accepted |
 | [0017](0017-folder-names-in-the-language-of-nextcloud.md) | Name new folders in the default language of Nextcloud, and keep the names of every installation in use | accepted |
+| [0018](0018-runs-by-hand-in-background-jobs.md) | Runs by hand run as background jobs, and occ runs them in the shell | accepted |

@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How a run by hand starts
+    accDescr: Run dry-run on the settings page runs in the request, changes nothing, makes at most one batch of changes and answers with its report. Synchronize now queues a background job and answers at once; Nextcloud's background jobs run it, within five minutes with the system cron or at once with a worker for the job, as they run the scheduled job. occ paperless_sync:run runs in the shell as long as it takes and prints its report with an exit code. Every run takes the same lock and records the status, which the settings page follows.
+
+    dry(["🔍 Run dry-run"])
+    now(["▶️ Synchronize now"])
+    schedule(["⏰ The schedule"])
+    occ(["⌨️ occ paperless_sync:run"])
+    request["`In the request<br>*changes nothing,<br>at most one batch*`"]
+    queued["`⏳ Queued<br>*the page gets<br>its answer at once*`"]
+    jobs["`Nextcloud's background jobs<br>*within 5 minutes with cron,<br>at once with a worker*`"]
+    shell["`In the shell<br>*as long as it takes*`"]
+    status["`🗂️ Status<br>*the page follows it*`"]
+    output["📋 Report and<br>exit code"]
+
+    dry --> request --> status
+    now --> queued --> jobs
+    schedule --> jobs --> status
+    occ --> shell --> status
+    shell --> output
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef shell fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    class request,jobs,status nextcloud
+    class queued waits
+    class shell,output shell

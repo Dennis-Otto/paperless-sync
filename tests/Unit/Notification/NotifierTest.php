@@ -35,7 +35,7 @@ final class NotifierTest extends TestCase {
 	private Notifier $notifier;
 
 	protected function setUp(): void {
-		$this->status = new StatusService($this->appConfig(), new TestClock());
+		$this->status = $this->statusService(new TestClock());
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => $language === 'de' ? $this->germanL10n() : $this->englishL10n());
 		$urls = $this->createMock(IURLGenerator::class);

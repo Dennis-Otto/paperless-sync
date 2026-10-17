@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Controller;
 
+use OCA\PaperlessSync\Cron\ManualSyncJob;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
@@ -19,8 +20,10 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\BackgroundJob\IJobList;
 use OCP\IL10N;
 use OCP\IRequest;
+use OCP\IUserSession;
 use OCP\Lock\LockedException;
 
 final class SyncController extends Controller {
@@ -32,15 +35,20 @@ final class SyncController extends Controller {
 		private StatusService $statusService,
 		private IL10N $l10n,
 		private ConfigService $configService,
+		private IJobList $jobList,
+		private IUserSession $userSession,
 	) {
 		parent::__construct($appName, $request);
 	}
 
 	/**
-	 * A run, or a dry-run, by default. A dry-run may come with the settings of the page, which it
-	 * uses without saving them, so that the page shows what they do before a save; they keep the
-	 * saved connection to Paperless and the saved target user (ConfigService::validateForDryRun()).
-	 * A run uses the saved settings only.
+	 * A dry-run, by default, answers with its report: it changes nothing and makes at most a batch of
+	 * changes, so it ends within a request. It may come with the settings of the page, which it uses
+	 * without saving them, so that the page shows what they do before a save; they keep the saved
+	 * connection to Paperless and the saved target user (ConfigService::validateForDryRun()).
+	 *
+	 * A run uses the saved settings only. It queues a background job and answers 202 at once: a run
+	 * may take longer than a proxy or the web server waits for an answer, and the status follows it.
 	 *
 	 * @param array<string, mixed>|null $settings
 	 */
@@ -48,6 +56,9 @@ final class SyncController extends Controller {
 	public function run(bool $dryRun = true, ?array $settings = null): JSONResponse {
 		if ($settings !== null && !$dryRun) {
 			return new JSONResponse(['message' => $this->l10n->t('Save the settings first: only a dry-run can use settings that are not saved.')], Http::STATUS_BAD_REQUEST);
+		}
+		if (!$dryRun) {
+			return $this->queue();
 		}
 		try {
 			$config = $settings === null ? null : $this->configService->validateForDryRun($settings);
@@ -63,9 +74,9 @@ final class SyncController extends Controller {
 			return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
 		}
 		try {
-			return new JSONResponse($this->syncService->run($dryRun, $config));
+			return new JSONResponse($this->syncService->run(true, $config));
 		} catch (LockedException) {
-			return new JSONResponse(['message' => $this->l10n->t('Another synchronization run is already active.')], Http::STATUS_CONFLICT);
+			return $this->locked();
 		} catch (PaperlessLocalNetworkException $exception) {
 			return new JSONResponse(
 				['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING],
@@ -82,5 +93,30 @@ final class SyncController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
 	public function status(): JSONResponse {
 		return new JSONResponse($this->statusService->overview($this->configService->get()));
+	}
+
+	/**
+	 * Queues the run by hand, after the checks that a run would fail at once, so that the page says
+	 * so at once. The status says "queued" before the job exists, so that a job that starts at once
+	 * says "running" after it, never before. The job names the administrator who queued it, whom
+	 * the Activity stream names as the author of the run, and Nextcloud queues it once for each.
+	 */
+	private function queue(): JSONResponse {
+		$config = $this->configService->get();
+		if (!$config->complete()) {
+			return new JSONResponse(['message' => $this->l10n->t('Paperless Sync is not completely configured.')], Http::STATUS_BAD_REQUEST);
+		}
+		if ($this->statusService->active()) {
+			return $this->locked();
+		}
+		$this->statusService->queued();
+		$user = $this->userSession->getUser();
+		$this->jobList->add(ManualSyncJob::class, $user === null ? null : ['author' => $user->getUID()]);
+
+		return new JSONResponse(['queued' => true, 'status' => $this->statusService->overview($config)], Http::STATUS_ACCEPTED);
+	}
+
+	private function locked(): JSONResponse {
+		return new JSONResponse(['message' => $this->l10n->t('Another synchronization run is already active.')], Http::STATUS_CONFLICT);
 	}
 }

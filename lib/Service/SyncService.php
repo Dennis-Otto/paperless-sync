@@ -27,7 +27,6 @@ use Psr\Log\LogLevel;
 use RuntimeException;
 
 final class SyncService {
-	private const LOCK_PATH = AppConstants::APP_ID . '::synchronization';
 	/** The wait after the first failed upload of a file whose failure may pass, in seconds; it doubles with each further one. */
 	private const RETRY_DELAY = 900;
 	/** The longest wait between two uploads of a file that keep failing, in seconds. */
@@ -61,20 +60,31 @@ final class SyncService {
 	 * before they are saved, which ConfigService::validate() checked: a dry-run changes nothing, so
 	 * it may show what settings would do before anything uses them.
 	 *
-	 * @throws InvalidArgumentException when a run that is no dry-run comes with settings
+	 * A run makes at most as many changes as the batch size of the settings, or as $batchSize, such
+	 * as a run on the command line that imports a large archive at once. $author is the user who
+	 * started a run by hand in a background job, whom its entries in the Activity stream name.
+	 *
+	 * @throws InvalidArgumentException when a run that is no dry-run comes with settings, or for a batch size below 1
+	 * @throws \OCP\Lock\LockedException while another run is active
 	 */
-	public function run(bool $dryRun = false, ?SyncConfig $settings = null): SyncReport {
+	public function run(bool $dryRun = false, ?SyncConfig $settings = null, ?int $batchSize = null, string $author = ''): SyncReport {
 		if ($settings !== null && !$dryRun) {
 			throw new InvalidArgumentException('Only a dry-run can use settings that are not saved.');
 		}
-		$this->lockingProvider->acquireLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
+		if ($batchSize !== null && $batchSize < 1) {
+			throw new InvalidArgumentException('The batch size must be at least 1.');
+		}
+		$this->lockingProvider->acquireLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
 		$report = new SyncReport($dryRun, $this->now(), unsavedSettings: $settings !== null);
 		$this->status->started($dryRun);
 		$config = null;
 		try {
 			$config = $settings ?? $this->configService->get();
-			if ($config->paperlessUrl === '' || !$config->tokenConfigured || $config->targetUser === '') {
+			if (!$config->complete()) {
 				throw new InvalidSettingException('Paperless Sync is not completely configured.');
+			}
+			if ($batchSize !== null) {
+				$config = $config->withBatchSize($batchSize);
 			}
 			$this->status->connected($this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork));
 			$this->storage->test($config->targetUser, $config->basePath);
@@ -100,12 +110,55 @@ final class SyncService {
 			// The activity stream of the target user shows what the run changed, also when it failed
 			// after its first changes.
 			if ($config !== null) {
-				$this->activity->publish($config, $report);
+				$this->activity->publish($config, $report, $author);
 			}
 			// The administrators hear of a mirror that keeps failing, and the target user of the
 			// imports that failed, once the status has kept how the run ended.
 			$this->notifications->publish($config, $report);
-			$this->lockingProvider->releaseLock(self::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/**
+	 * Forgets the content of the copies of documents, of all or of those with the IDs, so that the
+	 * next runs download them again and write each in place of its copy. The copies keep their
+	 * paths and stay the app's own: none is left behind, none counts as a file of the user, and the
+	 * versions of Nextcloud keep their content before. Only the copy of a document that Paperless
+	 * has, not in its trash and not missing, is forgotten: the copies in the deleted folder keep
+	 * the fingerprint that tells whether someone changed them before the app deletes them. It waits
+	 * for no run, but holds the lock, so that no run saves what it forgets at the same time.
+	 *
+	 * @param list<int>|null $documentIds null for every document
+	 * @return list<int> the IDs of the documents whose copies the next runs write again
+	 * @throws \OCP\Lock\LockedException while a run is active
+	 * @throws InvalidSettingException without a target user
+	 */
+	public function forget(?array $documentIds = null): array {
+		$this->lockingProvider->acquireLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE, AppConstants::APP_NAME);
+		try {
+			$config = $this->configService->get();
+			if ($config->targetUser === '') {
+				throw new InvalidSettingException('Paperless Sync is not completely configured.');
+			}
+			$entries = $documentIds === null
+				? $this->state->allExports($config->targetUser)
+				: array_values(array_filter(array_map(fn (int $documentId): ?array => $this->state->findExport($config->targetUser, $documentId), $documentIds)));
+			$forgotten = [];
+			foreach ($entries as $entry) {
+				$documentId = (int)($entry['document_id'] ?? 0);
+				// A document without a copy, such as one that was never exported, has nothing to forget.
+				if ((string)($entry['path'] ?? '') === '' || ($entry['state'] ?? 'active') !== 'active') {
+					continue;
+				}
+				// A pending fingerprint is that of a copy that the app was writing: the next run takes the
+				// copy as its own and writes it again, see isOwnCopy().
+				$this->state->saveExport($config->targetUser, $documentId, ['fingerprint' => DocumentFingerprint::PENDING], true);
+				$forgotten[] = $documentId;
+			}
+
+			return $forgotten;
+		} finally {
+			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 		}
 	}
 
