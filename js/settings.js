@@ -1345,11 +1345,18 @@
 		const ocs = { headers: { 'OCS-APIRequest': 'true' } }
 		// The user ID that the hint of the field speaks of, null before the first check.
 		let checkedUser = null
+		// Whether the hint of the field says that the last search failed, which says nothing about
+		// the user of the field and so doesn't mark it as invalid.
+		let searchFailed = false
 
 		async function searchUsers(text) {
 			try {
 				const query = new URLSearchParams({ search: text, limit: '10' })
 				const answer = await request(root.dataset.usersUrl + '/details?' + query, 'GET', undefined, ocs)
+				if (searchFailed) {
+					searchFailed = false
+					setText(targetUserHint, '')
+				}
 				const users = answer.ocs && answer.ocs.data && answer.ocs.data.users ? Object.values(answer.ocs.data.users) : []
 				return users.filter(function(user) {
 					return user !== null && typeof user === 'object' && typeof user.id === 'string'
@@ -1363,12 +1370,16 @@
 					return { value: user.id, label: name, note: notes.join(' · ') }
 				})
 			} catch (error) {
-				showUserProblem(translate('Could not search the users of Nextcloud: {error}', { error: error.message }))
+				if (targetUser.getAttribute('aria-invalid') !== 'true') {
+					searchFailed = true
+					setText(targetUserHint, translate('Could not search the users of Nextcloud: {error}', { error: error.message }))
+				}
 				return []
 			}
 		}
 
 		function showUserProblem(text) {
+			searchFailed = false
 			setText(targetUserHint, text)
 			if (text === '') {
 				targetUser.removeAttribute('aria-invalid')
@@ -1588,6 +1599,9 @@
 				input.value = ''
 				picker.close()
 				add(names)
+				// The field is empty again: without a change of the setting, which updates the form
+				// by its input event, the note of unsaved changes would stay for what was typed.
+				updateForm()
 			}
 
 			async function search(text) {

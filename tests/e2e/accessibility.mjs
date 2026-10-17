@@ -171,8 +171,13 @@ const PAGES = [
 			await page.locator('#paperless-sync-target-user-hint:not(:empty)').waitFor()
 			const tags = page.locator('#paperless-sync-excluded-tags-input')
 			await tags.fill('Drfat')
+			// The new tag changes a setting of the path preview, which reloads and is dimmed while
+			// it does; axe would sometimes measure the contrast of the dimmed text.
+			const previewed = page.waitForResponse((response) => response.url().includes('/settings/preview'))
 			await tags.press('Enter')
 			await page.locator('#paperless-sync-excluded-tags-list .paperless-sync-chip--new').waitFor()
+			await previewed
+			await page.locator('#paperless-sync-path-preview:not([aria-busy="true"])').waitFor()
 			await tags.fill('a')
 			await tags.press('ArrowDown')
 			await page.locator('#paperless-sync-excluded-tags-options [aria-selected="true"]').waitFor()
