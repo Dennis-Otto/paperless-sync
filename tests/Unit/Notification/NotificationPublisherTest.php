@@ -38,7 +38,7 @@ final class NotificationPublisherTest extends TestCase {
 	protected function setUp(): void {
 		$this->clock = new TestClock();
 		$this->storage = new TestStorage();
-		$this->status = new StatusService($this->appConfig(), $this->clock);
+		$this->status = $this->statusService($this->clock);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->publisher = $this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger);
 		$this->config = $this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');

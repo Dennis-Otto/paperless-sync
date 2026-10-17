@@ -11,11 +11,11 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SyncController;
+use OCA\PaperlessSync\Cron\ManualSyncJob;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
-use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
@@ -28,8 +28,11 @@ use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
+use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -45,6 +48,10 @@ final class SyncControllerTest extends TestCase {
 
 	/** @var ILockingProvider&MockObject */
 	private ILockingProvider $locking;
+	/** @var IJobList&MockObject */
+	private IJobList $jobList;
+	/** The administrator of the request, none without a session. */
+	private ?IUser $user = null;
 	private TestPaperlessClient $paperless;
 	private TestStorage $storage;
 	private SyncController $controller;
@@ -54,7 +61,8 @@ final class SyncControllerTest extends TestCase {
 		$configService->save(self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$clock = new TestClock();
-		$status = new StatusService($this->appConfig(), $clock);
+		$this->jobList = $this->createMock(IJobList::class);
+		$status = $this->statusService($clock, $this->locking);
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
 		$sync = new SyncService(
@@ -71,35 +79,90 @@ final class SyncControllerTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
 		);
-		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService);
+		$this->user = $this->createConfiguredStub(IUser::class, ['getUID' => 'admin']);
+		$session = $this->createStub(IUserSession::class);
+		$session->method('getUser')->willReturnCallback(fn (): ?IUser => $this->user);
+		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService, $this->jobList, $session);
 	}
 
-	public function testRunReturnsTheReport(): void {
+	public function testDryRunReturnsTheReport(): void {
+		$this->jobList->expects(self::never())->method('add');
+
 		$response = $this->controller->run();
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		$report = $response->getData();
 		self::assertInstanceOf(SyncReport::class, $report);
 		self::assertTrue($report->dryRun, 'A run from the settings page is a dry run unless asked otherwise.');
+		self::assertSame('dry-run-completed', $this->settings['status_last_state']);
+	}
 
-		$report = $this->controller->run(false)->getData();
-		self::assertInstanceOf(SyncReport::class, $report);
-		self::assertFalse($report->dryRun);
+	/**
+	 * A run doesn't wait in the request, which a proxy or the web server may end before the run: a
+	 * background job runs it, and the answer brings the status that the page follows.
+	 */
+	public function testRunIsQueuedAsABackgroundJob(): void {
+		$this->settings['status_last_state'] = 'completed';
+		$this->jobList->expects(self::once())->method('add')->willReturnCallback(function (string $job, mixed $argument = null): void {
+			self::assertSame(ManualSyncJob::class, $job);
+			self::assertSame(['author' => 'admin'], $argument, 'The Activity stream names who started the run, and a second click before it starts queues no second run.');
+			self::assertSame('queued', $this->settings['status_last_state'], 'The status says "queued" before a job may start.');
+		});
+
+		$response = $this->controller->run(false);
+
+		self::assertSame(Http::STATUS_ACCEPTED, $response->getStatus());
+		$data = $response->getData();
+		self::assertIsArray($data);
+		self::assertTrue($data['queued']);
+		self::assertSame('queued', $data['status']['state']);
+		self::assertArrayNotHasKey('status_last_started', $this->settings, 'The run itself has not started.');
+	}
+
+	/** Without a session, such as for a request with an app password, the run has no author. */
+	public function testRunWithoutASessionIsQueuedWithoutAnAuthor(): void {
+		$this->user = null;
+		$this->jobList->expects(self::once())->method('add')->with(ManualSyncJob::class, null);
+
+		self::assertSame(Http::STATUS_ACCEPTED, $this->controller->run(false)->getStatus());
 	}
 
 	public function testRunWhileAnotherRunIsActiveIsAConflict(): void {
-		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+		$this->locking->method('isLocked')->willReturn(true);
+		$this->jobList->expects(self::never())->method('add');
 
 		$response = $this->controller->run(false);
 
 		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
 		self::assertSame(['message' => 'Es läuft bereits eine andere Synchronisation.'], $response->getData());
+		self::assertArrayNotHasKey('status_last_state', $this->settings, 'The status stays that of the active run.');
 	}
 
-	public function testFailedRunReturnsItsError(): void {
+	public function testDryRunWhileAnotherRunIsActiveIsAConflict(): void {
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+
+		$response = $this->controller->run();
+
+		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		self::assertSame(['message' => 'Es läuft bereits eine andere Synchronisation.'], $response->getData());
+	}
+
+	/** A run that would fail at once is not queued: the page says why at once, in the language of the user. */
+	public function testIncompleteConfigurationQueuesNoRun(): void {
 		$this->settings = [];
+		$this->jobList->expects(self::never())->method('add');
 
 		$response = $this->controller->run(false);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Paperless Sync ist noch nicht vollständig eingerichtet.'], $response->getData());
+		self::assertArrayNotHasKey('status_last_state', $this->settings);
+	}
+
+	public function testFailedDryRunReturnsItsError(): void {
+		$this->settings = [];
+
+		$response = $this->controller->run();
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		self::assertSame(['message' => 'Paperless Sync ist noch nicht vollständig eingerichtet.'], $response->getData());
@@ -109,7 +172,7 @@ final class SyncControllerTest extends TestCase {
 	public function testAnUnexpectedErrorReturnsItsMessage(): void {
 		$this->storage->testException = new \RuntimeException('The disk is full.');
 
-		$response = $this->controller->run(false);
+		$response = $this->controller->run();
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		self::assertSame(['message' => 'The disk is full.'], $response->getData());
@@ -119,7 +182,7 @@ final class SyncControllerTest extends TestCase {
 	public function testARunWithoutItsTargetUserSaysSoInGerman(): void {
 		$this->storage->testException = new InvalidSettingException('Nextcloud user %s does not exist.', ['paperless'], 'target_user');
 
-		$response = $this->controller->run(false);
+		$response = $this->controller->run();
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		self::assertSame(['message' => 'Den Nextcloud-Benutzer paperless gibt es nicht.'], $response->getData());
@@ -137,7 +200,7 @@ final class SyncControllerTest extends TestCase {
 	public function testRunRefusedInTheLocalNetworkSaysWhatToDo(): void {
 		$this->paperless->connectionException = new PaperlessLocalNetworkException('paperless');
 
-		$response = $this->controller->run(false);
+		$response = $this->controller->run();
 
 		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
 		self::assertSame([
@@ -214,12 +277,12 @@ final class SyncControllerTest extends TestCase {
 	}
 
 	public function testStatusOfTheLastRun(): void {
-		$this->controller->run(false);
+		$this->controller->run();
 
 		$status = $this->controller->status()->getData();
 
 		self::assertIsArray($status);
-		self::assertSame('completed', $status['state']);
+		self::assertSame('dry-run-completed', $status['state']);
 		self::assertSame(0, $status['summary']['errors']);
 		self::assertSame([], $status['report']['errorMessages']);
 		self::assertNull($status['nextRun'], 'Scheduled runs are off until the settings turn them on.');

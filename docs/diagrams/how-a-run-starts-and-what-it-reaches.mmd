@@ -5,13 +5,14 @@ config:
 ---
 flowchart TB
     accTitle: How a run starts and what it reaches
-    accDescr: An administrator configures the app, starts a dry run or a run on the settings page, whose controllers start the synchronization. Nextcloud's cron starts the background job, which starts the synchronization as well. The synchronization builds the path of every document with the path templates, reads Paperless-ngx through the Paperless client, which calls its REST API with the token, and writes the files of the target user through the storage. Everything but the administrator and Paperless-ngx runs inside the Nextcloud server.
+    accDescr: An administrator configures the app and starts a dry run on the settings page, whose controllers start the synchronization, or a run, which the controllers queue as a background job. Nextcloud's cron starts the scheduled background job and the queued one, which start the synchronization as well. On the server, the administrator starts runs with the occ commands. The synchronization builds the path of every document with the path templates, reads Paperless-ngx through the Paperless client, which calls its REST API with the token, and writes the files of the target user through the storage. Everything but the administrator and Paperless-ngx runs inside the Nextcloud server.
 
     admin(["Administrator"])
     subgraph nextcloud ["Nextcloud server"]
         settings["Settings page<br>and controllers"]
+        commands["occ<br>commands"]
         cron(["Nextcloud cron"])
-        job["Background<br>job"]
+        job["`Background jobs<br>*scheduled, and<br>Synchronize now*`"]
         sync["Synchronization"]
         template["Path<br>templates"]
         storage["Storage"]
@@ -21,8 +22,11 @@ flowchart TB
     paperless[("Paperless-ngx")]
 
     admin -- "configure,<br>dry run, run" ---> settings
+    admin -- "run, status,<br>forget" ---> commands
     cron --> job
-    settings --> sync
+    settings -- "dry run" --> sync
+    settings -- "queue a run" --> job
+    commands --> sync
     job --> sync
     sync --> template & storage & client
     storage --> files

@@ -73,7 +73,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 ## The report of a run
 
-A dry-run or a run by hand ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
+A dry-run, a run by hand or a run of `occ paperless_sync:run` ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">
@@ -98,6 +98,10 @@ A dry-run or a run by hand ends with its report: how many documents each kind of
 ### Being notified
 
 --8<-- "README.md:notifications"
+
+## Command line
+
+--8<-- "README.md:command-line"
 
 ## FAQ and troubleshooting
 

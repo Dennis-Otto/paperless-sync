@@ -10,7 +10,6 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Migration;
 
 use OCA\PaperlessSync\Migration\Version000120Date20261014000000;
-use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\DB\ISchemaWrapper;
@@ -63,7 +62,7 @@ final class Version000120Date20261014000000Test extends TestCase {
 	}
 
 	private function step(): Version000120Date20261014000000 {
-		return new Version000120Date20261014000000($this->configService(), new StatusService($this->appConfig(), new TestClock()));
+		return new Version000120Date20261014000000($this->configService(), $this->statusService(new TestClock()));
 	}
 
 	private function migrate(ISchemaWrapper $schema): ?ISchemaWrapper {
