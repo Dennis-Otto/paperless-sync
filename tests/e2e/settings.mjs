@@ -133,7 +133,7 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 5 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		helpLinks.length === 6 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
 		`Every section must link to its part of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
@@ -484,10 +484,10 @@ try {
 	const expected = {
 		title: 'Run report',
 		counts: ['Errors 2', 'Exported 1'],
-		rest: '11 unchanged, 1 skipped, for a later run',
+		rest: '11 unchanged, 1 skipped',
 		badges: ['Error', 'Error', 'Export'],
 		filters: ['All3 (on)', 'Error2', 'Export1'],
-		links: ['/apps/files/?dir=%2FDocuments%2FPaperless%2FArchive&scrollto=P9.pdf'],
+		links: ['/apps/files/?dir=%2FDocuments%2FPaperless%2FArchive'],
 		region: 'region 0',
 	}
 	expect(JSON.stringify(shown) === JSON.stringify(expected), `The report must show ${JSON.stringify(expected)}, not ${JSON.stringify(shown)}`)
@@ -508,7 +508,7 @@ try {
 	await page.waitForFunction(() => document.querySelector('#paperless-sync-message').textContent === 'The report is copied to the clipboard.')
 	const copied = await page.evaluate(() => window.copiedReport)
 	expect(
-		copied.startsWith('Run report\nRun, finished ') && copied.includes('\nErrors: 2, Exported: 1\n11 unchanged, 1 skipped, for a later run\n\nEXPORT P9: Documents/Paperless/Archive/P9.pdf\nERROR: P7: Synthetic failure.\n'),
+		copied.startsWith('Run report\nRun, finished ') && copied.includes('\nErrors: 2, Exported: 1\n11 unchanged, 1 skipped\n\nEXPORT P9: Documents/Paperless/Archive/P9.pdf\nERROR: P7: Synthetic failure.\n'),
 		`The copied report must have its heading, its counts and its lines: ${copied}`,
 	)
 	console.log('Settings: the report shows the errors first, only the counts that are not 0, a filter for each kind, links to the files and copies itself.')
@@ -596,7 +596,7 @@ try {
 			report.querySelector('#paperless-sync-report-rest').textContent,
 			report.querySelector('#paperless-sync-report-copy').textContent,
 		])
-		const germanExpected = ['Fehler', 'Fehler', 'Export', '11 unverändert, 1 übersprungen, für einen späteren Lauf', 'Bericht kopieren']
+		const germanExpected = ['Fehler', 'Fehler', 'Export', '11 unverändert, 1 übersprungen', 'Bericht kopieren']
 		expect(JSON.stringify(germanReport) === JSON.stringify(germanExpected), `The report must be German: ${JSON.stringify(germanReport)}`)
 		await page.unroute(`**${STATUS}`)
 		console.log('Settings: the report is in the language of the administrator.')

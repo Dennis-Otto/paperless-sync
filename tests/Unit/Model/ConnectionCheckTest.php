@@ -32,6 +32,7 @@ final class ConnectionCheckTest extends TestCase {
 			'storage paths' => [ConnectionCheck::STORAGE_PATHS, 'Speicherpfade'],
 			'tags' => [ConnectionCheck::TAGS, 'Tags'],
 			'upload' => [ConnectionCheck::UPLOAD, 'Hochladen aus dem Eingang'],
+			'tags of the inbox' => [ConnectionCheck::INBOX_TAGS, 'Tags des Eingangs'],
 			'folder' => [ConnectionCheck::FOLDER, 'Nextcloud-Ordner'],
 			'a line that the page doesn\'t know' => ['webhooks', 'webhooks'],
 		];

@@ -147,6 +147,17 @@ OC.L10N.register(
 		"Paperless did not say whether the account may add documents and view the tasks that import them.": "Paperless hat nicht mitgeteilt, ob das Konto Dokumente hinzufügen und die Aufgaben anzeigen darf, die sie importieren.",
 		"In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The inbox needs Add for Documents and View for Paperless Tasks.": "Gib dem Konto in Paperless unter „Benutzer & Gruppen“ die Berechtigung „Anzeigen“ für UI-Einstellungen, damit diese Checkliste seine Berechtigungen lesen kann. Der Eingang braucht „Hinzufügen“ für Dokumente und „Anzeigen“ für Paperless-Aufgaben.",
 		"The first upload from the inbox shows it; the account needs the permissions Add for Documents and View for Paperless Tasks.": "Das erste Hochladen aus dem Eingang zeigt es; das Konto braucht die Berechtigungen „Hinzufügen“ für Dokumente und „Anzeigen“ für Paperless-Aufgaben.",
+		"Tags of the inbox": "Tags des Eingangs",
+		"The account may view and create the tags that the inbox gives its files.": "Das Konto darf die Tags anzeigen und anlegen, die der Eingang seinen Dateien gibt.",
+		"The account may view the tags that the inbox gives its files.": "Das Konto darf die Tags anzeigen, die der Eingang seinen Dateien gibt.",
+		"The account may not create tags, so a file that needs a tag that Paperless lacks waits in the inbox.": "Das Konto darf keine Tags anlegen, daher wartet eine Datei, die einen Tag braucht, den Paperless nicht hat, im Eingang.",
+		"In Paperless, under Users & Groups, give the account the permission Add for Tags, or turn off \"Create missing tags\".": "Gib dem Konto in Paperless unter „Benutzer & Gruppen“ die Berechtigung „Hinzufügen“ für Tags, oder schalte „Fehlende Tags anlegen“ aus.",
+		"The account may not view tags, so the files of the inbox wait in the inbox.": "Das Konto darf keine Tags anzeigen, daher warten die Dateien des Eingangs im Eingang.",
+		"In Paperless, under Users & Groups, give the account the permissions View and Add for Tags.": "Gib dem Konto in Paperless unter „Benutzer & Gruppen“ die Berechtigungen „Anzeigen“ und „Hinzufügen“ für Tags.",
+		"Paperless did not say whether the account may view and create tags.": "Paperless hat nicht mitgeteilt, ob das Konto Tags anzeigen und anlegen darf.",
+		"Paperless did not say whether the account may view tags.": "Paperless hat nicht mitgeteilt, ob das Konto Tags anzeigen darf.",
+		"In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The tags of the inbox need View for Tags, and Add for Tags to create the missing ones.": "Gib dem Konto in Paperless unter „Benutzer & Gruppen“ die Berechtigung „Anzeigen“ für UI-Einstellungen, damit diese Checkliste seine Berechtigungen lesen kann. Die Tags des Eingangs brauchen „Anzeigen“ für Tags, und „Hinzufügen“ für Tags, um fehlende anzulegen.",
+		"The first upload from the inbox shows it; the tags of the inbox need the permission View for Tags, and Add for Tags to create the missing ones.": "Das erste Hochladen aus dem Eingang zeigt es; die Tags des Eingangs brauchen die Berechtigung „Anzeigen“ für Tags, und „Hinzufügen“ für Tags, um fehlende anzulegen.",
 		"%s may create files in %s.": "%s darf Dateien in %s anlegen.",
 		"Nextcloud cannot store the files there: %s": "Nextcloud kann die Dateien dort nicht speichern: %s",
 		"Check the target user ID, and that the base folder is a folder in which that user may create files.": "Prüfe die ID des Zielbenutzers und ob der Basisordner ein Ordner ist, in dem dieser Benutzer Dateien anlegen darf.",
@@ -232,6 +243,11 @@ OC.L10N.register(
 		"Error folder": "Fehlerordner",
 		"Scan inbox subfolders": "Unterordner des Eingangs durchsuchen",
 		"Remove source after successful import": "Quelldatei nach erfolgreichem Import entfernen",
+		"Subfolders become tags": "Unterordner werden zu Tags",
+		"Create missing tags": "Fehlende Tags anlegen",
+		"Tags for every import": "Tags für jeden Import",
+		"Scanned, Nextcloud": "Gescannt, Nextcloud",
+		"Separate tag names with commas. With \"Subfolders become tags\", a file in the subfolder Taxes/2026 of the inbox gets the tags Taxes and 2026, found by their names whatever their case. A run reports the names that Paperless has no tag of, or creates their tags when it may. Paperless names each document after its file.": "Trenne die Namen der Tags mit Kommas. Mit „Unterordner werden zu Tags“ bekommt eine Datei im Unterordner Steuer/2026 des Eingangs die Tags Steuer und 2026, gefunden über ihre Namen in jeder Schreibweise. Ein Lauf meldet die Namen, zu denen Paperless keinen Tag hat, oder legt die Tags an, wenn er darf. Paperless benennt jedes Dokument nach seiner Datei.",
 		"Trash and deletion safety": "Papierkorb und Löschsicherheit",
 		"Permanent deletion is off by default. Turn it on only after a few runs with deletion off looked right.": "Endgültiges Löschen ist standardmäßig aus. Schalte es erst ein, wenn einige Läufe ohne Löschen richtig aussahen.",
 		"Paperless trash behavior": "Verhalten beim Paperless-Papierkorb",
@@ -294,9 +310,16 @@ OC.L10N.register(
 			"%n unverändert",
 			"%n unverändert"
 		],
-		"_%n skipped, for a later run_::_%n skipped, for a later run_": [
-			"%n übersprungen, für einen späteren Lauf",
-			"%n übersprungen, für einen späteren Lauf"
+		"_%n skipped_::_%n skipped_": [
+			"%n übersprungen",
+			"%n übersprungen"
+		],
+		"New tag": "Neuer Tag",
+		"Tags: {tags}": "Tags: {tags}",
+		"The tag {name} is created in Paperless.": "Der Tag {name} wird in Paperless angelegt.",
+		"_Paperless shows the account no tag named {names}, so the files of the inbox go to Paperless without it. Create the tag in Paperless or share it with the account, or turn on \"Create missing tags\"._::_Paperless shows the account no tags named {names}, so the files of the inbox go to Paperless without them. Create the tags in Paperless or share them with the account, or turn on \"Create missing tags\"._": [
+			"Paperless zeigt dem Konto keinen Tag namens {names}, daher gehen die Dateien des Eingangs ohne ihn an Paperless. Lege den Tag in Paperless an oder teile ihn mit dem Konto, oder schalte „Fehlende Tags anlegen“ ein.",
+			"Paperless zeigt dem Konto keine Tags namens {names}, daher gehen die Dateien des Eingangs ohne sie an Paperless. Lege die Tags in Paperless an oder teile sie mit dem Konto, oder schalte „Fehlende Tags anlegen“ ein."
 		],
 		"Open the folder in Files": "Den Ordner in Dateien öffnen",
 		"The report is copied to the clipboard.": "Der Bericht ist in die Zwischenablage kopiert.",

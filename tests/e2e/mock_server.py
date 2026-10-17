@@ -35,6 +35,7 @@ RUN_PERMISSIONS = [
     "view_documenttype",
     "view_storagepath",
     "view_tag",
+    "add_tag",
     "view_paperlesstask",
 ]
 
@@ -68,6 +69,11 @@ VIEW_PERMISSIONS = {
     "/api/tasks/": "view_paperlesstask",
     "/api/ui_settings/": "view_uisettings",
 }
+# The tags of the household of the tests; insurance is in lower case, as the folders of the
+# inbox may name it in another case.
+TAGS = [{"id": 9, "name": "Inbox", "is_inbox_tag": True}, {"id": 11, "name": "insurance"}]
+# A form field tags of an upload, as Guzzle writes it: its headers, an empty line and the ID.
+TAG_FIELD = re.compile(rb'name="tags"\r\n(?:[^\r\n]+\r\n)*\r\n(\d+)\r\n')
 # The content of P123 after /control/content/revised, as after a new scan in Paperless.
 REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised.\n%%EOF\n"
 LOCK = threading.Lock()
@@ -104,6 +110,8 @@ def reset_state():
                 "invalidAuth": 0,
                 "uploads": [],
                 "refusedUploads": [],
+                # The tags that the app created, with the fields that it sent.
+                "createdTags": [],
                 "tasks": {},
                 "paperless": "3.3.0",
                 # The API version that each request asked for, "none" without one.
@@ -390,7 +398,9 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/storage_paths/":
             self._page([])
         elif parsed.path == "/api/tags/":
-            self._page(showcase.TAGS if self._showcase() else [{"id": 9, "name": "Inbox", "is_inbox_tag": True}])
+            with LOCK:
+                created = [{"id": tag["id"], "name": tag["name"]} for tag in STATE["createdTags"]]
+            self._page(showcase.TAGS if self._showcase() else [*TAGS, *created])
         elif parsed.path == "/api/users/":
             self._page(USERS)
         elif parsed.path == "/api/custom_fields/":
@@ -505,6 +515,9 @@ class Handler(BaseHTTPRequestHandler):
             reset_state()
             self._json(200, {"status": "reset"})
             return
+        if parsed.path == "/api/tags/":
+            self._create_tag()
+            return
         if parsed.path != "/api/documents/post_document/":
             self._json(404, {"detail": "Not found"})
             return
@@ -539,10 +552,38 @@ class Handler(BaseHTTPRequestHandler):
                     "taskId": task_id,
                     "filename": filename,
                     "containsFixture": b"Synthetic inbox PDF" in body,
+                    # The IDs of the tags of the new document: one form field tags for each.
+                    "tags": [int(tag) for tag in TAG_FIELD.findall(body)],
                 }
             )
             STATE["tasks"][task_id] = {"id": number, "filename": filename, "status": "pending", "result_data": None}
         self._json(200, task_id)
+
+    def _create_tag(self):
+        """Creates a tag as Paperless-ngx does: with Add for Tags, a name, and an ID of its own."""
+        token = self._authorized()
+        if token is None or not self._versioned():
+            return
+        if "add_tag" not in ACCOUNTS[token]["permissions"]:
+            self._json(403, FORBIDDEN)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            fields = json.loads(self.rfile.read(length) or b"null")
+        except ValueError:
+            fields = None
+        name = fields.get("name") if isinstance(fields, dict) else None
+        if not isinstance(name, str) or not name.strip():
+            self._json(400, {"name": ["This field is required."]})
+            return
+        with LOCK:
+            existing = [tag["name"].lower() for tag in [*TAGS, *STATE["createdTags"]]]
+            if name.lower() in existing:
+                self._json(400, {"name": ["Tag with this name already exists."]})
+                return
+            tag = {"id": 100 + len(STATE["createdTags"]), "name": name, "matching_algorithm": fields.get("matching_algorithm")}
+            STATE["createdTags"].append(tag)
+        self._json(201, tag)
 
     def _showcase(self):
         return self._scenario() in showcase.SCENARIOS

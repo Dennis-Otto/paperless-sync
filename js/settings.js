@@ -185,7 +185,7 @@
 		const previewList = element('path-preview-list')
 		const buttons = [save, test, dryRun, run, reset, refresh]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
 		// While a run is queued or active, the page asks for its status: after a change of the state
 		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
 		// once, then every five seconds, and after five minutes in the same state every thirty
@@ -624,6 +624,7 @@
 			'scan-incomplete': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'export-stopped': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'trash-empty': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'tags-unknown': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
 			trash: { label: translate('Trash'), tone: 'warning', rank: 2 },
@@ -633,6 +634,7 @@
 			move: { label: translate('Move'), tone: 'info', rank: 2 },
 			import: { label: translate('Upload'), tone: 'info', rank: 2 },
 			'import-success': { label: translate('Imported'), tone: 'success', rank: 2 },
+			'new-tag': { label: translate('New tag'), tone: 'info', rank: 2 },
 		}
 
 		// The counts of a report that name a change, with their tone; those that are 0 stay out.
@@ -664,6 +666,10 @@
 				return translate('The document has an excluded tag: its copy is removed.')
 			case 'wait':
 				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
+			case 'import':
+				return values.tags ? translate('Tags: {tags}', { tags: values.tags }) : ''
+			case 'new-tag':
+				return translate('The tag {name} is created in Paperless.', { name: entry.detail || '' })
 			case 'import-success':
 				return entry.document
 					? translate('Paperless imported it as document {document}.', { document: 'P' + entry.document })
@@ -678,6 +684,13 @@
 					: translate('The list of documents of Paperless came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.', values)
 			case 'export-stopped':
 				return translate('Nextcloud cannot store files in the archive, so the run stopped its exports and moves; the other documents wait for the next run.')
+			case 'tags-unknown':
+				return translatePlural(
+					'Paperless shows the account no tag named {names}, so the files of the inbox go to Paperless without it. Create the tag in Paperless or share it with the account, or turn on "Create missing tags".',
+					'Paperless shows the account no tags named {names}, so the files of the inbox go to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
+					Number(values.count) || 0,
+					{ names: values.names },
+				)
 			case 'trash-empty':
 				return Number(values.deletes) === 1
 					? translatePlural(
@@ -721,14 +734,14 @@
 		}
 
 		// The path of a file, relative to the home of the target user, and a link that opens its
-		// folder in the Files app, with the file in view, in a tab of its own.
+		// folder in the Files app, in a tab of its own.
 		function fileElement(path, open) {
 			const file = document.createElement(open ? 'a' : 'span')
 			file.className = 'paperless-sync-entry-file'
 			file.textContent = path
 			if (open) {
 				const slash = path.lastIndexOf('/')
-				file.href = root.dataset.filesUrl + '?' + new URLSearchParams({ dir: '/' + path.slice(0, Math.max(slash, 0)), scrollto: path.slice(slash + 1) })
+				file.href = root.dataset.filesUrl + '?' + new URLSearchParams({ dir: '/' + path.slice(0, Math.max(slash, 0)) })
 				file.target = '_blank'
 				file.rel = 'noreferrer noopener'
 				file.title = translate('Open the folder in Files')
@@ -909,15 +922,16 @@
 			}
 		}
 
-		// The documents that a run left as they were, and those that wait for a later run, in a
-		// sentence below the counts of the changes.
+		// The documents that a run left as they were, and those that it skipped, in a sentence below
+		// the counts of the changes. A skipped one may wait for a later run, as when the batch is
+		// full, or for good, as a document with an excluded tag does.
 		function restOf(result) {
 			const parts = []
 			if (Number(result.unchanged) > 0) {
 				parts.push(translatePlural('%n unchanged', '%n unchanged', Number(result.unchanged)))
 			}
 			if (Number(result.skipped) > 0) {
-				parts.push(translatePlural('%n skipped, for a later run', '%n skipped, for a later run', Number(result.skipped)))
+				parts.push(translatePlural('%n skipped', '%n skipped', Number(result.skipped)))
 			}
 			return parts.join(', ')
 		}

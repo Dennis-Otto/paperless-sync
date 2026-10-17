@@ -37,12 +37,15 @@ final class SyncReportTest extends TestCase {
 		$report->change(SyncReport::TYPE_DELETE, 6, 'Archiv/_Gelöscht/f.pdf');
 		$report->waiting(7, 'Archiv/g.pdf', 1, 3);
 		$report->upload('Eingang/h.pdf');
+		$report->newTag('Steuer');
+		$report->upload('Eingang/Steuer/n.pdf', ['scanned', 'Steuer']);
 		$report->uploadSucceeded('Eingang/i.pdf', 456);
 		$report->uploadSucceeded('Eingang/j.pdf', null);
 		$report->uploadFailed('Eingang/k.pdf', 'Fehler/k.pdf', 'Unsupported mime type');
 		$report->uploadRejected('Eingang/l.bin', 'File type not supported');
 		$report->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive.');
 		$report->notice(SyncReport::TYPE_SCAN_INCOMPLETE, 'SCAN INCOMPLETE: 3 of 5 received.', ['list' => 'documents', 'received' => 3, 'listed' => 5]);
+		$report->notice(SyncReport::TYPE_TAGS_UNKNOWN, 'TAGS UNKNOWN: no tags named 2026, Rechnungen.', ['names' => '2026, Rechnungen', 'count' => 2]);
 		$report->error('P8: Paperless is unavailable', 8);
 		$report->error('Import task Eingang/m.pdf: HTTP 500', null, 'Eingang/m.pdf');
 
@@ -55,12 +58,15 @@ final class SyncReportTest extends TestCase {
 			'DELETE P6: Archiv/_Gelöscht/f.pdf',
 			'WAIT P7: missing run 1/3',
 			'IMPORT: Eingang/h.pdf',
+			'NEW TAG: Steuer',
+			'IMPORT: Eingang/Steuer/n.pdf (tags: scanned, Steuer)',
 			'IMPORT SUCCESS: Eingang/i.pdf -> P456',
 			'IMPORT SUCCESS: Eingang/j.pdf',
 			'IMPORT ERROR: Eingang/k.pdf -> Fehler/k.pdf',
 			'IMPORT REJECTED: Eingang/l.bin: File type not supported',
 			'EXPORT STOPPED: Nextcloud cannot store files in the archive.',
 			'SCAN INCOMPLETE: 3 of 5 received.',
+			'TAGS UNKNOWN: no tags named 2026, Rechnungen.',
 			'ERROR: P8: Paperless is unavailable',
 			'ERROR: Import task Eingang/m.pdf: HTTP 500',
 		], $report->actions, 'The lines stay as the log and the command line know them.');
@@ -73,12 +79,15 @@ final class SyncReportTest extends TestCase {
 			['type' => 'delete', 'document' => 6, 'path' => 'Archiv/_Gelöscht/f.pdf'],
 			['type' => 'wait', 'document' => 7, 'path' => 'Archiv/g.pdf', 'values' => ['scans' => 1, 'limit' => 3]],
 			['type' => 'import', 'path' => 'Eingang/h.pdf'],
+			['type' => 'new-tag', 'detail' => 'Steuer'],
+			['type' => 'import', 'path' => 'Eingang/Steuer/n.pdf', 'values' => ['tags' => 'scanned, Steuer']],
 			['type' => 'import-success', 'path' => 'Eingang/i.pdf', 'document' => 456],
 			['type' => 'import-success', 'path' => 'Eingang/j.pdf'],
 			['type' => 'import-error', 'path' => 'Eingang/k.pdf', 'target' => 'Fehler/k.pdf', 'detail' => 'Unsupported mime type'],
 			['type' => 'import-rejected', 'path' => 'Eingang/l.bin', 'detail' => 'File type not supported'],
 			['type' => 'export-stopped'],
 			['type' => 'scan-incomplete', 'values' => ['list' => 'documents', 'received' => 3, 'listed' => 5]],
+			['type' => 'tags-unknown', 'values' => ['names' => '2026, Rechnungen', 'count' => 2]],
 			['type' => 'error', 'document' => 8, 'detail' => 'P8: Paperless is unavailable'],
 			['type' => 'error', 'path' => 'Eingang/m.pdf', 'detail' => 'Import task Eingang/m.pdf: HTTP 500'],
 		], $report->entries);

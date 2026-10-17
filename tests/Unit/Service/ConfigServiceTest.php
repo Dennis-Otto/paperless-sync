@@ -150,6 +150,24 @@ final class ConfigServiceTest extends TestCase {
 		self::assertArrayNotHasKey('not_a_setting', $this->settings);
 	}
 
+	public function testTheTagsOfTheInboxAreOffUntilTheyAreTurnedOn(): void {
+		$config = $this->service->save(self::validSettings(), 'secret-token');
+
+		self::assertSame([false, '', false], [$config->inboxFolderTags, $config->inboxTags, $config->inboxCreateTags]);
+	}
+
+	public function testTheTagsForEveryImportAreSavedOnceEachWhateverTheirCase(): void {
+		$config = $this->service->save(self::validSettings() + [
+			'inbox_folder_tags' => true,
+			'inbox_tags' => " Scanned,, nextcloud\nscanned\r\nNextcloud , 2026 ",
+			'inbox_create_tags' => true,
+		], 'secret-token');
+
+		self::assertSame([true, 'Scanned, nextcloud, 2026', true], [$config->inboxFolderTags, $config->inboxTags, $config->inboxCreateTags]);
+		self::assertSame([true, 'Scanned, nextcloud, 2026', true], [$this->settings['inbox_folder_tags'], $this->settings['inbox_tags'], $this->settings['inbox_create_tags']]);
+		self::assertSame('Scanned, nextcloud, 2026', $this->service->get()->inboxTags);
+	}
+
 	/** @return array<string, array{string}> the stored URL as an administrator may enter it again */
 	public static function sameUrls(): array {
 		return [
@@ -168,7 +186,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(29, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(32, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

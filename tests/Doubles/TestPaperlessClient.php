@@ -64,6 +64,18 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $uploadFailures = [];
 	/** @var list<string> the names of the files of every upload, also of the failed ones */
 	public array $uploadAttempts = [];
+	/** @var array<string, list<int>> the IDs of the tags of each upload, by the name of its file */
+	public array $uploadTags = [];
+	/** @var list<string> the names of the tags that a run created, which $tagInfo lists from then on */
+	public array $createdTags = [];
+	/** The failure of the list of the tags, as for a token without the permission View for Tags. */
+	public ?\Throwable $tagsException = null;
+	/** The failure of the creation of a tag, as for a token without the permission Add for Tags. */
+	public ?\Throwable $createTagException = null;
+	/** How often a run read the list of the tags. */
+	public int $tagReads = 0;
+	/** How often a run asked Paperless to create a tag, also when it failed. */
+	public int $tagCreations = 0;
 	public ?\Throwable $taskException = null;
 	/** @var array<string, string> the names of the users by their IDs */
 	public array $users = [];
@@ -110,7 +122,24 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	}
 
 	public function tags(): array {
+		++$this->tagReads;
+		if ($this->tagsException !== null) {
+			throw $this->tagsException;
+		}
 		return $this->tagInfo;
+	}
+
+	/** A new tag with the next free ID, from 100 on. */
+	public function createTag(string $name): int {
+		++$this->tagCreations;
+		if ($this->createTagException !== null) {
+			throw $this->createTagException;
+		}
+		$this->createdTags[] = $name;
+		$id = max([99, ...array_map('intval', array_keys($this->tagInfo['names']))]) + 1;
+		$this->tagInfo['names'][(string)$id] = $name;
+
+		return $id;
 	}
 
 	public function users(): array {
@@ -176,7 +205,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		return $this->originals[$content->sha256] ?? $this->originals[$content->md5] ?? null;
 	}
 
-	public function uploadDocument($source, string $filename): string {
+	public function uploadDocument($source, string $filename, array $tags = []): string {
 		$this->uploadAttempts[] = $filename;
 		$failure = $this->uploadFailures[$filename] ?? $this->uploadException;
 		if ($failure !== null) {
@@ -184,6 +213,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		}
 		$content = stream_get_contents($source);
 		$this->uploads[$filename] = is_string($content) ? $content : '';
+		$this->uploadTags[$filename] = $tags;
 		return 'task-' . count($this->uploads);
 	}
 

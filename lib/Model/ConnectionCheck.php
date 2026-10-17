@@ -37,6 +37,7 @@ final class ConnectionCheck {
 	public const STORAGE_PATHS = 'storage_paths';
 	public const TAGS = 'tags';
 	public const UPLOAD = 'upload';
+	public const INBOX_TAGS = 'inbox_tags';
 	public const FOLDER = 'folder';
 
 	/**
@@ -124,6 +125,7 @@ final class ConnectionCheck {
 			self::STORAGE_PATHS => $l10n->t('Storage paths'),
 			self::TAGS => $l10n->t('Tags'),
 			self::UPLOAD => $l10n->t('Upload from the inbox'),
+			self::INBOX_TAGS => $l10n->t('Tags of the inbox'),
 			self::FOLDER => $l10n->t('Nextcloud folder'),
 			default => $this->id,
 		};

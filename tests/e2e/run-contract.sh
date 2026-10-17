@@ -86,10 +86,17 @@ nextcloud_request() {
 }
 
 # A run of the app, whose report contract.py checks; the paths of the files that the run
-# wrote, URL-encoded for WebDAV, go into the array PATHS.
+# wrote, URL-encoded for WebDAV, go into the array PATHS. "Synchronize now" of the settings
+# page only queues a background job, so the run goes through occ, which runs it at once and
+# answers with its report. Its exit code 1 means errors of single documents, which
+# contract.py judges; a higher one means a run that didn't end.
 sync_run() {
-	nextcloud_request --request POST --data-urlencode 'dryRun=false' --output "${TMP_DIR}/$1.json" \
-		"${BASE_URL}/apps/paperless_sync/sync/run"
+	local code=0
+	occ paperless_sync:run --output=json > "${TMP_DIR}/$1.json" || code=$?
+	if ((code > 1)); then
+		echo "occ paperless_sync:run ended with exit code ${code}: $(cat "${TMP_DIR}/$1.json")" >&2
+		exit 1
+	fi
 	contract report "$1" < "${TMP_DIR}/$1.json" > "${TMP_DIR}/$1.paths"
 	mapfile -t PATHS < "${TMP_DIR}/$1.paths"
 }
@@ -168,6 +175,8 @@ nextcloud_request --request POST \
 	--data-urlencode 'settings[trash_mode]=move' \
 	--data-urlencode 'settings[missing_grace_runs]=2' \
 	--data-urlencode 'settings[delete_inbox_after_success]=1' \
+	--data-urlencode 'settings[inbox_tags]=contract, Nextcloud' \
+	--data-urlencode 'settings[inbox_create_tags]=1' \
 	--data-urlencode 'settings[conflict_mode]=replace' \
 	--data-urlencode "token=$(contract token)" \
 	--output "${TMP_DIR}/config.json" \
@@ -205,7 +214,8 @@ assert_content invoice "${RESTORED}"
 echo "The export, the move and the trash pass after ${SECONDS} s."
 
 # The inbox: a PDF that Paperless takes, and one that it can't read. The first run uploads
-# both, the second reads their tasks once Paperless has ended them.
+# both, with the tag Contract, which contract.py made, and the tag Nextcloud, which the run
+# creates; the second reads their tasks once Paperless has ended them.
 contract pdf receipt.pdf | dav_put 'Documents/Paperless/Inbox/receipt.pdf'
 printf '%%PDF-1.4 Synthetic broken contract test file.\n' | dav_put 'Documents/Paperless/Inbox/broken.pdf'
 sync_run import-submitted

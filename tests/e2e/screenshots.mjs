@@ -125,9 +125,14 @@ async function expandFolderTree(page, folders) {
 }
 
 // A picture of the part of the page from the top of one element to the bottom of another
-// below it, such as a button and the result that it shows, with a margin around them.
+// below it, such as a button and the result that it shows, with a margin around them. The
+// first element goes to the top of the window, below the header of Nextcloud, so that a
+// tall result, such as the whole connection checklist, fits below it.
 async function shotFromTo(page, first, last, margin = 16) {
-	await first.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+	await first.evaluate((element) => {
+		element.style.scrollMarginTop = '120px'
+		element.scrollIntoView({ block: 'start' })
+	})
 	const viewport = page.viewportSize()
 	const top = await first.boundingBox()
 	const bottom = await last.boundingBox()

@@ -8,7 +8,7 @@ The questions that come up when Paperless Sync meets a real archive, with short 
 
 ### Does Paperless Sync ever change anything in Paperless?
 
-No document that is already there. The app reads the documents, their files and checksums, the trash, the tags, correspondents, document types and storage paths, and it never edits, tags, moves or deletes a document of Paperless. Its only write is the upload of the files of the inbox folder, each as a new document, and it reads the task of Paperless that follows each upload. With the inbox off, the account of the app needs no permission beyond viewing.
+No document that is already there. The app reads the documents, their files and checksums, the trash, the tags, correspondents, document types and storage paths, and it never edits, tags, moves or deletes a document of Paperless. Its only writes are the upload of the files of the inbox folder, each as a new document with the tags that you chose for it, and, with *Create missing tags*, a new tag for a name that Paperless lacks; it reads the task of Paperless that follows each upload. With the inbox off, the account of the app needs no permission beyond viewing.
 
 ### Do my changes in Nextcloud reach Paperless?
 
@@ -16,7 +16,7 @@ No. Paperless is the source of the archive, and the app sends nothing back from 
 
 ### What does the Paperless account of the app need?
 
-A dedicated account with an API token, which can view and download the documents to mirror; when it owns them as well, their trash reaches the deleted folder right away. The inbox needs the permissions `documents.add_document` and `documents.view_paperlesstask` as well. **Test connection** in the settings checks every permission and names each one that the account lacks; with **View** for UI Settings, it also counts the documents that the account sees but doesn't own. Don't use a superuser: it would see the whole trash, but its token controls all of Paperless. The [guide](guide.md#paperless-connection) shows how to make the account the owner without taking away the access of the people who own them now, and the [security design](security.md) explains why a dedicated account.
+A dedicated account with an API token, which can view and download the documents to mirror; when it owns them as well, their trash reaches the deleted folder right away. The inbox needs the permissions `documents.add_document` and `documents.view_paperlesstask` as well, and its tags `documents.view_tag`, with `documents.add_tag` to create the missing ones; the account finds only tags without an owner, its own and those shared with it, so share existing tags with it first. **Test connection** in the settings checks every permission and names each one that the account lacks; with **View** for UI Settings, it also counts the documents that the account sees but doesn't own. Don't use a superuser: it would see the whole trash, but its token controls all of Paperless. The [guide](guide.md#paperless-connection) shows how to make the account the owner without taking away the access of the people who own them now, and the [security design](security.md) explains why a dedicated account.
 
 ## The archive in Nextcloud
 
@@ -65,7 +65,7 @@ Yes, but the app remembers what it wrote for each target user. Another target us
 
 ### Does the archive count against a quota?
 
-Yes, the files belong to the target user, so the quota of that user applies. When it is full, the run stops writing at the first failure and reports `EXPORT STOPPED`; it goes on once there is room.
+Yes, the files belong to the target user, so the quota of that user applies. When it is full, the run stops writing at the first failure and shows a notice that Nextcloud cannot store files in the archive (`EXPORT STOPPED` on the command line); it goes on once there is room.
 
 ### Does it work with object storage such as S3?
 

@@ -41,6 +41,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_UPLOAD_FAILED = 'import-error';
 	/** Paperless refused a file of the inbox, which waits there until it changes. */
 	public const TYPE_UPLOAD_REJECTED = 'import-rejected';
+	/** A tag that the run creates in Paperless, for the folder of a file of the inbox. */
+	public const TYPE_NEW_TAG = 'new-tag';
 	/** An error of a single document or file. */
 	public const TYPE_ERROR = 'error';
 	/** A notice: a list of Paperless came back incomplete, so no document counts as missing. */
@@ -49,6 +51,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_EXPORT_STOPPED = 'export-stopped';
 	/** A notice of a dry-run: documents went missing while the trash of Paperless lists none. */
 	public const TYPE_TRASH_EMPTY = 'trash-empty';
+	/** A notice: Paperless lacks tags of the inbox, so its files went to Paperless without them. */
+	public const TYPE_TAGS_UNKNOWN = 'tags-unknown';
 
 	/**
 	 * The priority of a line by its type, 1 the highest. A full report gives up its last line of
@@ -149,9 +153,22 @@ final class SyncReport implements \JsonSerializable {
 		]);
 	}
 
-	/** A file of the inbox that goes to Paperless. */
-	public function upload(string $path): void {
-		$this->action("IMPORT: {$path}", ['type' => self::TYPE_UPLOAD, 'path' => $path]);
+	/**
+	 * A file of the inbox that goes to Paperless, with the names of the tags that it gets there.
+	 *
+	 * @param list<string> $tags
+	 */
+	public function upload(string $path, array $tags = []): void {
+		$entry = ['type' => self::TYPE_UPLOAD, 'path' => $path];
+		if ($tags !== []) {
+			$entry['values'] = ['tags' => implode(', ', $tags)];
+		}
+		$this->action("IMPORT: {$path}" . ($tags !== [] ? ' (tags: ' . implode(', ', $tags) . ')' : ''), $entry);
+	}
+
+	/** A tag that the run creates in Paperless, for the folder of a file of the inbox. */
+	public function newTag(string $name): void {
+		$this->action("NEW TAG: {$name}", ['type' => self::TYPE_NEW_TAG, 'detail' => $name]);
 	}
 
 	/** A file of the inbox that Paperless imported, as the document $document when Paperless names it. */
@@ -179,7 +196,7 @@ final class SyncReport implements \JsonSerializable {
 	 * line in English, $values the numbers and names that the settings page puts into its
 	 * translation.
 	 *
-	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY $type
+	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN $type
 	 * @param array<string, int|string> $values
 	 */
 	public function notice(string $type, string $message, array $values = []): void {
