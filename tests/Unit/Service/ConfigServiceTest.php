@@ -176,6 +176,20 @@ final class ConfigServiceTest extends TestCase {
 		];
 	}
 
+	/**
+	 * A call of the webhook of Paperless mirrors its document at once, unless the administrator
+	 * leaves the documents to the background jobs.
+	 */
+	public function testTheWebhookMirrorsAtOnceUntilTheSettingsSayOtherwise(): void {
+		self::assertTrue($this->service->get()->webhookImmediate);
+
+		$config = $this->service->save(['webhook_immediate' => false] + self::validSettings(), 'secret-token');
+
+		self::assertFalse($config->webhookImmediate);
+		self::assertFalse($this->settings['webhook_immediate']);
+		self::assertFalse($this->service->get()->webhookImmediate);
+	}
+
 	/** Nextcloud loads the settings when the app asks for them, not with every request of every user. */
 	public function testEverySettingIsStoredAndReadLazily(): void {
 		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
@@ -186,7 +200,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(32, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(33, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

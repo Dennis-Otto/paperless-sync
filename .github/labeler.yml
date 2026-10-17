@@ -54,6 +54,7 @@
           - lib/Cron/**
           - lib/Controller/SyncController.php
           - lib/Controller/StatusApiController.php
+          - lib/Controller/WebhookController.php
           - lib/Notification/**
           - lib/SetupChecks/**
           - lib/Service/SyncService.php
@@ -62,6 +63,7 @@
           - lib/Service/PaperlessRequestException.php
           - lib/Service/PaperlessVersionException.php
           - lib/Service/StatusService.php
+          - lib/Service/WebhookService.php
           - lib/Service/UserTimeZones.php
           - lib/Service/SyncStateRepository*.php
           - lib/Service/ExportStates.php
@@ -75,11 +77,13 @@
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Controller/SyncController*
           - tests/Unit/Controller/StatusApiController*
+          - tests/Unit/Controller/WebhookController*
           - tests/Unit/Notification/**
           - tests/Unit/SetupChecks/**
           - tests/Unit/Service/SyncServiceTest.php
           - tests/Unit/Service/PaperlessApiServiceTest.php
           - tests/Unit/Service/StatusServiceTest.php
+          - tests/Unit/Service/WebhookServiceTest.php
           - tests/Unit/Service/SyncStateRepositoryTest.php
           - tests/Unit/Service/ExportStatesTest.php
           - tests/Unit/Migration/Version000120*

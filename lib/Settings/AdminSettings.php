@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Settings;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\WebhookService;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
 use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -32,6 +33,7 @@ final class AdminSettings implements ISettings {
 		private IInitialState $initialState,
 		private SyncHealth $syncHealth,
 		private BackgroundJobMode $backgroundJobMode,
+		private WebhookService $webhookService,
 	) {
 	}
 
@@ -43,6 +45,9 @@ final class AdminSettings implements ISettings {
 		// The stored configuration, without the token, which the form compares with what it shows
 		// to tell unsaved changes, as after a save or a disconnect.
 		$this->initialState->provideInitialState('config', $config);
+		// The webhook of the workflows of Paperless, without its secret.
+		$webhook = $this->webhookService->state();
+		$this->initialState->provideInitialState('webhook', $webhook);
 
 		return new TemplateResponse(AppConstants::APP_ID, 'settings', [
 			'config' => $config,
@@ -55,6 +60,8 @@ final class AdminSettings implements ISettings {
 			'previewUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.preview'),
 			// The Files app, where the report opens the folder of a file for the target user.
 			'filesUrl' => $this->urlGenerator->linkToRoute('files.view.index'),
+			'webhookStateUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.webhook.state'),
+			'webhook' => $webhook,
 			'health' => $this->health(),
 			'tagsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.tags'),
 			// The users of Nextcloud, which the page offers for the target user, from the provisioning

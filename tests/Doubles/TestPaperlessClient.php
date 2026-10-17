@@ -87,6 +87,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public ?\Throwable $customFieldsException = null;
 	/** @var list<string> the lists that a run read, in their order, of those that only some templates need */
 	public array $listsRead = [];
+	/** @var list<int> the ID of every document that a run read alone */
+	public array $documentReads = [];
+	/** The failure of the read of one document, such as a Paperless that can't be reached. */
+	public ?\Throwable $documentException = null;
 
 	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
 		$this->connections[] = [$url, $token, $localNetwork];
@@ -107,6 +111,21 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 
 	public function trash(): PaperlessScan {
 		return self::scan($this->trash, $this->trashListed);
+	}
+
+	/** The active document with the ID, as Paperless answers for /api/documents/<id>/. */
+	public function document(int $documentId): ?array {
+		$this->documentReads[] = $documentId;
+		if ($this->documentException !== null) {
+			throw $this->documentException;
+		}
+		foreach ($this->documents as $document) {
+			if (($document['id'] ?? null) === $documentId) {
+				return $document;
+			}
+		}
+
+		return null;
 	}
 
 	public function correspondents(): array {

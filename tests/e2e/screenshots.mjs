@@ -35,7 +35,7 @@ const VIEWPORT = { width: 1280, height: 800 }
 const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = '/Documents/Paperless/Archive'
-const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion']
+const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
 
 function files(dir) {
 	return `${BASE_URL}/index.php/apps/files/files?dir=${encodeURIComponent(dir)}`
@@ -333,6 +333,14 @@ try {
 		}
 		// The bar of the buttons sticks to the bottom of the window and would cover a section.
 		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
+		// The secret of the webhook, as the page shows it once, right after its creation.
+		if (theme === THEMES[1]) {
+			page.once('dialog', (dialog) => dialog.accept())
+		}
+		await page.locator('#paperless-sync-webhook-create').click()
+		await page.locator('#paperless-sync-webhook-secret-field').waitFor()
+		await page.locator('#paperless-sync-webhook-create:enabled').waitFor()
+		await page.locator('#paperless-sync-webhook-secret').evaluate((input) => input.blur())
 		for (const [index, card] of CARDS.entries()) {
 			save(`docs/images/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
