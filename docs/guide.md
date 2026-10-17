@@ -73,11 +73,11 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 ## The report of a run
 
-A dry-run, a run by hand or a run of `occ paperless_sync:run` ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as `IMPORT REJECTED` with the reason of Paperless, and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
+A dry-run, a run by hand or a run of `occ paperless_sync:run` ends with its report: how many documents each kind of change concerned, and a line for every file that the run writes, moves or deletes, or would in a dry-run, up to 100 lines with the errors and deletions first. The settings page shows it in your language, with a colored badge for each kind of change, the errors on top, a filter for each kind and, when you are the target user, a link from each file to its folder; **Copy report** copies it for a bug report. The page keeps the report of the last run, also of a scheduled one, for the next visit. A file of the inbox that Paperless refuses appears once, as *Refused* with the reason of Paperless (`IMPORT REJECTED` on the command line), and counts as a failed import; until it changes, the runs after it count it as skipped. This dry-run comes a few days after the first synchronization, when Paperless has two new documents, a new title, a document in its trash, one with the excluded tag *Private* and a finished import:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/report-dark.png">
-  <img alt="The report of a dry-run: the counts of exported, moved, trashed and excluded documents and of finished imports, and a list with one line for every file change" src="images/report-light.png">
+  <img alt="The report of a dry-run under the heading Dry-run — nothing was changed, with the button Copy report: the counts of the changes that are not 0, the documents that stay unchanged in a sentence, a filter for each kind of change, and a list with a colored badge, the document and the file of every change" src="images/report-light.png">
 </picture>
 
 ## Status, report and log

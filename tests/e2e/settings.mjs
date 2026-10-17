@@ -428,15 +428,30 @@ try {
 					completedAt: now + 1,
 					exported: 1,
 					errors: 2,
+					unchanged: 11,
+					skipped: 1,
 					omittedActions: 0,
 					errorMessages: ['P7: Synthetic failure.', 'P8: Synthetic failure.'],
-					actions: ['ERROR: P7: Synthetic failure.', 'ERROR: P8: Synthetic failure.', 'EXPORT P9: Documents/Paperless/Archive/P9.pdf'],
+					actions: ['EXPORT P9: Documents/Paperless/Archive/P9.pdf', 'ERROR: P7: Synthetic failure.', 'ERROR: P8: Synthetic failure.'],
+					entries: [
+						{ type: 'export', document: 9, path: 'Documents/Paperless/Archive/P9.pdf' },
+						{ type: 'error', document: 7, detail: 'P7: Synthetic failure.' },
+						{ type: 'error', document: 8, detail: 'P8: Synthetic failure.' },
+					],
 				},
 			},
 		},
 	]
+	// The status at the end of the run, whose report the page shows in German too.
+	const finishedStatus = statusAnswers[statusAnswers.length - 1]
 	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 202, json: { queued: true, status: queuedStatus } }))
 	await page.route(`**${STATUS}`, (route) => route.fulfill(statusAnswers.length > 1 ? statusAnswers.shift() : statusAnswers[0]))
+	// The report opens the folder of a file only for the owner of the archive, the target user,
+	// so the administrator of the check takes that role here.
+	const targetUser = await page.locator('[data-setting="target_user"]').inputValue()
+	await page.evaluate((uid) => {
+		window.OC.getCurrentUser = () => ({ uid, displayName: uid })
+	}, targetUser)
 	page.once('dialog', (dialog) => dialog.accept())
 	await run.click()
 	const queued = await messageAfter('Queuing the synchronization…')
@@ -452,6 +467,51 @@ try {
 	expect((await state.textContent()) !== 'Queued' && await spinner.isHidden(), 'The status must show that the run has ended.')
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: "Synchronize now" queues the run, follows it through the status past a failed answer, and counts its errors.')
+
+	// The report: a heading of its own, only the counts that aren't 0 and a sentence for the
+	// rest, the errors first with their badges, a filter for each kind, and a link to the
+	// folder of a file that the run wrote, inside a region that scrolls with the keyboard.
+	const shownReport = () => page.locator('#paperless-sync-report').evaluate((report) => ({
+		title: report.querySelector('#paperless-sync-report-title').textContent,
+		counts: Array.from(report.querySelectorAll('.paperless-sync-count'), (count) => `${count.lastChild.textContent} ${count.firstChild.textContent}`),
+		rest: report.querySelector('#paperless-sync-report-rest').textContent,
+		badges: Array.from(report.querySelectorAll('#paperless-sync-report-entries li:not([hidden]) .paperless-sync-badge'), (badge) => badge.textContent),
+		filters: Array.from(report.querySelectorAll('#paperless-sync-report-filters button'), (button) => `${button.textContent}${button.getAttribute('aria-pressed') === 'true' ? ' (on)' : ''}`),
+		links: Array.from(report.querySelectorAll('a.paperless-sync-entry-file'), (link) => link.getAttribute('href').replace(/^.*(?=\/apps\/files\/)/, '')),
+		region: `${report.querySelector('#paperless-sync-report-actions').getAttribute('role')} ${report.querySelector('#paperless-sync-report-actions').tabIndex}`,
+	}))
+	const shown = await shownReport()
+	const expected = {
+		title: 'Run report',
+		counts: ['Errors 2', 'Exported 1'],
+		rest: '11 unchanged, 1 skipped, for a later run',
+		badges: ['Error', 'Error', 'Export'],
+		filters: ['All3 (on)', 'Error2', 'Export1'],
+		links: ['/apps/files/?dir=%2FDocuments%2FPaperless%2FArchive&scrollto=P9.pdf'],
+		region: 'region 0',
+	}
+	expect(JSON.stringify(shown) === JSON.stringify(expected), `The report must show ${JSON.stringify(expected)}, not ${JSON.stringify(shown)}`)
+	await page.locator('#paperless-sync-report-filters button[data-filter="export"]').click()
+	const filtered = await shownReport()
+	expect(JSON.stringify(filtered.badges) === '["Export"]' && filtered.filters[2] === 'Export1 (on)', `The filter must show the export alone: ${JSON.stringify(filtered)}`)
+	await page.locator('#paperless-sync-report-filters button[data-filter=""]').click()
+	// "Copy report" copies the heading, the counts and the lines in English, for a bug report.
+	// The page of the check is plain HTTP, where the browser has no Clipboard API, so the page
+	// copies the text that it selects; the check takes the text from the copy command.
+	await page.evaluate(() => {
+		document.execCommand = (command) => {
+			window.copiedReport = command === 'copy' ? document.querySelector('.paperless-sync-copy-area').value : ''
+			return command === 'copy'
+		}
+	})
+	await page.locator('#paperless-sync-report-copy').click()
+	await page.waitForFunction(() => document.querySelector('#paperless-sync-message').textContent === 'The report is copied to the clipboard.')
+	const copied = await page.evaluate(() => window.copiedReport)
+	expect(
+		copied.startsWith('Run report\nRun, finished ') && copied.includes('\nErrors: 2, Exported: 1\n11 unchanged, 1 skipped, for a later run\n\nEXPORT P9: Documents/Paperless/Archive/P9.pdf\nERROR: P7: Synthetic failure.\n'),
+		`The copied report must have its heading, its counts and its lines: ${copied}`,
+	)
+	console.log('Settings: the report shows the errors first, only the counts that are not 0, a filter for each kind, links to the files and copies itself.')
 
 	// Errors without an answer of the app: no connection, and a session that ended.
 	await page.unroute(`**${STATUS}`)
@@ -526,6 +586,20 @@ try {
 		const time = await page.locator('#paperless-sync-last-ended').textContent()
 		expect(/^\d{1,2}\.\d{1,2}\.\d{4}/.test(time), `The time of the last run must be in the German format: ${time}`)
 		console.log('Settings: the times of the runs are in the format of the locale of Nextcloud.')
+
+		// The report is German too, but for the lines of the errors, which stay as the run wrote them.
+		await page.route(`**${STATUS}`, (route) => route.fulfill(finishedStatus))
+		await refresh.click()
+		await page.waitForFunction(() => document.querySelector('#paperless-sync-report-title').textContent === 'Laufbericht')
+		const germanReport = await page.locator('#paperless-sync-report').evaluate((report) => [
+			...Array.from(report.querySelectorAll('.paperless-sync-badge'), (badge) => badge.textContent),
+			report.querySelector('#paperless-sync-report-rest').textContent,
+			report.querySelector('#paperless-sync-report-copy').textContent,
+		])
+		const germanExpected = ['Fehler', 'Fehler', 'Export', '11 unverändert, 1 übersprungen, für einen späteren Lauf', 'Bericht kopieren']
+		expect(JSON.stringify(germanReport) === JSON.stringify(germanExpected), `The report must be German: ${JSON.stringify(germanReport)}`)
+		await page.unroute(`**${STATUS}`)
+		console.log('Settings: the report is in the language of the administrator.')
 
 		// So is what the server refuses, and the setting that it names gets the focus. The
 		// browser checks the numbers itself, so a URL that only the server refuses.

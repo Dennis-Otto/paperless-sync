@@ -208,7 +208,7 @@ final class StatusServiceTest extends TestCase {
 	public function testCompletedRunKeepsItsSummaryAndItsReport(): void {
 		$report = new SyncReport(false, 1000, 1060);
 		$report->exported = 2;
-		$report->action('EXPORT P1: Archiv/P1.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/P1.pdf');
 
 		$this->service->completed($report);
 
@@ -303,7 +303,7 @@ final class StatusServiceTest extends TestCase {
 	public function testFailedRunKeepsTheReportOfWhatItDid(): void {
 		$report = new SyncReport(false, 1000);
 		$report->exported = 1;
-		$report->action('EXPORT P1: Archiv/P1.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/P1.pdf');
 		$report->error('P2: Paperless was unavailable');
 
 		$this->service->failed(new RuntimeException('Paperless returned a document without a valid ID.'), $report);
@@ -312,6 +312,10 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame('Paperless returned a document without a valid ID.', $status['error']);
 		self::assertSame(['EXPORT P1: Archiv/P1.pdf', 'ERROR: P2: Paperless was unavailable'], $status['report']['actions']);
 		self::assertSame(['P2: Paperless was unavailable'], $status['report']['errorMessages']);
+		self::assertSame([
+			['type' => 'export', 'document' => 1, 'path' => 'Archiv/P1.pdf'],
+			['type' => 'error', 'detail' => 'P2: Paperless was unavailable'],
+		], $status['report']['entries'], 'The settings page shows the lines by their entries.');
 		self::assertSame(0, $status['report']['completedAt']);
 		self::assertSame(1, $status['summary']['exported']);
 	}
@@ -320,10 +324,10 @@ final class StatusServiceTest extends TestCase {
 		$report = new SyncReport(true, 1000, 1060);
 		$report->error(str_repeat('é', 1500));
 		foreach (range(1, StatusService::REPORT_ACTIONS) as $number) {
-			$report->notice("SCAN INCOMPLETE: notice {$number}");
+			$report->notice(SyncReport::TYPE_SCAN_INCOMPLETE, "SCAN INCOMPLETE: notice {$number}");
 		}
 		foreach (range(1, SyncReport::ACTION_LIMIT + 3) as $id) {
-			$report->action("EXPORT P{$id}: Archiv/{$id}.pdf");
+			$report->change(SyncReport::TYPE_EXPORT, $id, "Archiv/{$id}.pdf");
 		}
 		self::assertSame(4, $report->omittedActions);
 
@@ -334,6 +338,10 @@ final class StatusServiceTest extends TestCase {
 		self::assertCount(StatusService::REPORT_ACTIONS, $kept['actions']);
 		self::assertSame('ERROR: ' . str_repeat('é', 993), $kept['actions'][0]);
 		self::assertSame('SCAN INCOMPLETE: notice 199', $kept['actions'][199]);
+		self::assertIsArray($kept['entries']);
+		self::assertCount(StatusService::REPORT_ACTIONS, $kept['entries'], 'An entry for every kept line.');
+		self::assertSame(['type' => 'error', 'detail' => str_repeat('é', 1000)], $kept['entries'][0]);
+		self::assertSame(['type' => 'scan-incomplete'], $kept['entries'][199]);
 		self::assertSame([str_repeat('é', 1000)], $kept['errorMessages']);
 		self::assertSame(4 + 100, $kept['omittedActions'], 'The changes that the report leaves out, and the 100 lines past the limit of the kept report.');
 	}
@@ -344,7 +352,7 @@ final class StatusServiceTest extends TestCase {
 	 */
 	public function testReportKeepsALineThatIsNotValidUtf8(): void {
 		$report = new SyncReport(false, 1000, 1060);
-		$report->action("EXPORT P1: Archiv/Rechnung \xC3(.pdf");
+		$report->change(SyncReport::TYPE_EXPORT, 1, "Archiv/Rechnung \xC3(.pdf");
 
 		$this->service->completed($report);
 
@@ -352,6 +360,24 @@ final class StatusServiceTest extends TestCase {
 		self::assertIsArray($actions);
 		self::assertCount(1, $actions);
 		self::assertMatchesRegularExpression('#^EXPORT P1: Archiv/Rechnung [?\x{FFFD}]\(\.pdf$#u', $actions[0]);
+	}
+
+	public function testKeptEntriesShortenTheirTextsAndKeepTheirNumbers(): void {
+		$report = new SyncReport(false, 1000, 1060);
+		$report->uploadFailed('Eingang/' . str_repeat('a', 1200), 'Fehler/' . str_repeat('b', 1200), str_repeat('c', 1200));
+		$report->waiting(7, 'Archiv/7.pdf', 1, 3);
+
+		$this->service->completed($report);
+
+		self::assertSame([
+			[
+				'type' => 'import-error',
+				'path' => 'Eingang/' . str_repeat('a', 992),
+				'target' => 'Fehler/' . str_repeat('b', 993),
+				'detail' => str_repeat('c', 1000),
+			],
+			['type' => 'wait', 'document' => 7, 'path' => 'Archiv/7.pdf', 'values' => ['scans' => 1, 'limit' => 3]],
+		], $this->service->get()['report']['entries']);
 	}
 
 	public function testUnreadableSummaryOrReportIsIgnored(): void {
@@ -499,7 +525,7 @@ final class StatusServiceTest extends TestCase {
 
 	public function testNextScheduledRunReadsOnlyTheTimesOfTheLastRun(): void {
 		$report = new SyncReport(false, 10_000, 10_060);
-		$report->action('EXPORT P1: Archiv/P1.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/P1.pdf');
 		$this->service->completed($report);
 		$config = $this->config(true);
 		$this->lazyReads = [];

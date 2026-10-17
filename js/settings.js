@@ -16,11 +16,11 @@
 		})
 	}
 
-	function translatePlural(singular, plural, count) {
+	function translatePlural(singular, plural, count, parameters) {
 		if (window.n) {
-			return window.n('paperless_sync', singular, plural, count, undefined, { escape: false })
+			return window.n('paperless_sync', singular, plural, count, parameters, { escape: false })
 		}
-		return (count === 1 ? singular : plural).replace('%n', String(count))
+		return translate(count === 1 ? singular : plural, parameters).replace('%n', String(count))
 	}
 
 	// The locale of Nextcloud for dates and times, which the administrator chose in the personal
@@ -162,8 +162,12 @@
 		const unsaved = element('unsaved')
 		const message = element('message')
 		const report = element('report')
+		const reportTitle = element('report-title')
+		const reportCopy = element('report-copy')
 		const reportSummary = element('report-summary')
-		const reportActions = element('report-actions')
+		const reportRest = element('report-rest')
+		const reportFilters = element('report-filters')
+		const reportEntries = element('report-entries')
 		const reportMeta = element('report-meta')
 		const reportOmitted = element('report-omitted')
 		const lastState = element('last-state')
@@ -205,6 +209,16 @@
 		// stored token only there, so another URL needs the token again.
 		let tokenConfigured = false
 		let savedUrl = ''
+		// The saved target user: the report opens the folder of a file in the Files app when the
+		// administrator who reads it is that user, the owner of the archive.
+		let savedTargetUser = ''
+		// The report on the page, which "Copy report" copies, the kind of changes that its list
+		// shows, or '' for all, and what it was drawn from: the status of an active run, which the
+		// page asks for again and again, draws the same report only once, so that a filter keeps
+		// the keyboard focus.
+		let shownReport = null
+		let reportFilter = ''
+		let drawnReport = ''
 		// The state of the last run as the server last sent it. A run shows that it is running
 		// before the server answers; when the status can't be refreshed after it, the status
 		// shows this state again, not a run that never ends.
@@ -290,6 +304,7 @@
 			}
 			tokenConfigured = config.tokenConfigured === true
 			savedUrl = normalizeUrl(String(config.paperlessUrl || ''))
+			savedTargetUser = String(config.targetUser || '')
 			updateForm()
 		}
 
@@ -598,23 +613,268 @@
 			}
 		}
 
-		function showReport(result, reveal) {
-			const labels = {
-				exported: translate('Exported'), moved: translate('Moved'), movedToTrash: translate('Moved to trash'),
-				permanentlyDeleted: translate('Deleted'), removedExcluded: translate('Excluded copies removed'), importsSubmitted: translate('Imports submitted'),
-				importsSucceeded: translate('Imports succeeded'), importsFailed: translate('Imports failed'),
-				foldersPruned: translate('Folders removed'), unchanged: translate('Unchanged'), skipped: translate('Skipped'), errors: translate('Errors'),
+		// The kinds of changes of a report, by the type of their entry (SyncReport): the badge in
+		// the language of the reader, its tone, and the filter that shows them, which the three
+		// notices share. The errors come first in the list, then the notices, then the changes
+		// in the order of the run.
+		const entryKinds = {
+			error: { label: translate('Error'), tone: 'error', rank: 0 },
+			'import-error': { label: translate('Import failed'), tone: 'error', rank: 0 },
+			'import-rejected': { label: translate('Refused'), tone: 'error', rank: 0 },
+			'scan-incomplete': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'export-stopped': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'trash-empty': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
+			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
+			trash: { label: translate('Trash'), tone: 'warning', rank: 2 },
+			missing: { label: translate('Missing'), tone: 'warning', rank: 2 },
+			wait: { label: translate('Waiting'), tone: 'neutral', rank: 2 },
+			export: { label: translate('Export'), tone: 'info', rank: 2 },
+			move: { label: translate('Move'), tone: 'info', rank: 2 },
+			import: { label: translate('Upload'), tone: 'info', rank: 2 },
+			'import-success': { label: translate('Imported'), tone: 'success', rank: 2 },
+		}
+
+		// The counts of a report that name a change, with their tone; those that are 0 stay out.
+		const reportCounts = [
+			['errors', translate('Errors'), 'error'],
+			['exported', translate('Exported'), 'info'],
+			['moved', translate('Moved'), 'info'],
+			['movedToTrash', translate('Moved to trash'), 'warning'],
+			['permanentlyDeleted', translate('Deleted'), 'warning'],
+			['removedExcluded', translate('Excluded copies removed'), 'warning'],
+			['importsSubmitted', translate('Imports submitted'), 'info'],
+			['importsSucceeded', translate('Imports succeeded'), 'success'],
+			['importsFailed', translate('Imports failed'), 'error'],
+			['foldersPruned', translate('Folders removed'), 'neutral'],
+		]
+
+		// What an entry says besides its badge, its document and its file, in the language of the
+		// reader. The reasons of Paperless and the errors of a run stay as the run wrote them.
+		function entryText(entry) {
+			const values = entry.values && typeof entry.values === 'object' ? entry.values : {}
+			switch (entry.type) {
+			case 'trash':
+				return translate('In the trash of Paperless: the copy moves to the deleted folder.')
+			case 'missing':
+				return translate('Gone from Paperless: the copy moves to the deleted folder.')
+			case 'delete':
+				return translate('The copy is deleted for good.')
+			case 'remove-excluded':
+				return translate('The document has an excluded tag: its copy is removed.')
+			case 'wait':
+				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
+			case 'import-success':
+				return entry.document
+					? translate('Paperless imported it as document {document}.', { document: 'P' + entry.document })
+					: translate('Paperless imported it.')
+			case 'import-error':
+				return translate('Paperless could not import it, so it moves to the error folder: {reason}', { reason: entry.detail || '' })
+			case 'import-rejected':
+				return translate('Paperless refused it, so it stays in the inbox until it changes: {reason}', { reason: entry.detail || '' })
+			case 'scan-incomplete':
+				return values.list === 'trashed documents'
+					? translate('The trash of Paperless came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.', values)
+					: translate('The list of documents of Paperless came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.', values)
+			case 'export-stopped':
+				return translate('Nextcloud cannot store files in the archive, so the run stopped its exports and moves; the other documents wait for the next run.')
+			case 'trash-empty':
+				return Number(values.deletes) === 1
+					? translatePlural(
+						'%n document of the archive is gone from Paperless, and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, so documents in the trash of other owners count as missing: their copies are deleted after {scans} missing scans in a row, although the documents can still be restored in Paperless. Make the account of the app their owner.',
+						'%n documents of the archive are gone from Paperless, and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, so documents in the trash of other owners count as missing: their copies are deleted after {scans} missing scans in a row, although the documents can still be restored in Paperless. Make the account of the app their owner.',
+						Number(values.missing) || 0,
+						{ scans: values.scans },
+					)
+					: translatePlural(
+						'%n document of the archive is gone from Paperless, and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, so documents in the trash of other owners count as missing: their copies move to the deleted folder only after {scans} missing scans in a row. Make the account of the app their owner.',
+						'%n documents of the archive are gone from Paperless, and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner, so documents in the trash of other owners count as missing: their copies move to the deleted folder only after {scans} missing scans in a row. Make the account of the app their owner.',
+						Number(values.missing) || 0,
+						{ scans: values.scans },
+					)
+			default:
+				return entry.detail || ''
 			}
-			reportSummary.replaceChildren()
-			Object.keys(labels).forEach(function(key) {
-				const item = document.createElement('div')
-				const value = document.createElement('strong')
-				const label = document.createElement('span')
-				value.textContent = result[key] || 0
-				label.textContent = labels[key]
-				item.append(value, label)
-				reportSummary.append(item)
+		}
+
+		// The file that an entry shows: where an import that failed went, and otherwise the file
+		// that the change concerns. A dry-run moves nothing, so its failed import is still in the
+		// inbox.
+		function entryFile(entry, dryRun) {
+			return String((entry.type === 'import-error' && !dryRun ? entry.target : entry.path) || '')
+		}
+
+		// Whether the file of an entry is there after the report: what a run wrote, moved or left
+		// in place, and what a dry-run leaves where it is. A dry-run writes and moves nothing, and
+		// a deletion leaves nothing to open.
+		function fileIsThere(entry, dryRun) {
+			if (['import', 'import-rejected', 'import-error', 'wait'].includes(entry.type)) {
+				return true
+			}
+			return !dryRun && ['export', 'move', 'trash', 'missing'].includes(entry.type)
+		}
+
+		// The administrator who reads the page, as Nextcloud names the user.
+		function viewer() {
+			const user = window.OC && typeof window.OC.getCurrentUser === 'function' ? window.OC.getCurrentUser() : null
+			return (user && user.uid) || document.head.dataset.user || ''
+		}
+
+		// The path of a file, relative to the home of the target user, and a link that opens its
+		// folder in the Files app, with the file in view, in a tab of its own.
+		function fileElement(path, open) {
+			const file = document.createElement(open ? 'a' : 'span')
+			file.className = 'paperless-sync-entry-file'
+			file.textContent = path
+			if (open) {
+				const slash = path.lastIndexOf('/')
+				file.href = root.dataset.filesUrl + '?' + new URLSearchParams({ dir: '/' + path.slice(0, Math.max(slash, 0)), scrollto: path.slice(slash + 1) })
+				file.target = '_blank'
+				file.rel = 'noreferrer noopener'
+				file.title = translate('Open the folder in Files')
+			}
+			return file
+		}
+
+		function entryItem(entry, dryRun, owner) {
+			const kind = entryKinds[entry.type]
+			const item = document.createElement('li')
+			item.className = 'paperless-sync-entry'
+			item.dataset.filter = kind.filter || entry.type
+			const head = document.createElement('div')
+			head.className = 'paperless-sync-entry-head'
+			const badge = document.createElement('span')
+			badge.className = 'paperless-sync-badge paperless-sync-badge--' + kind.tone
+			badge.textContent = kind.label
+			head.append(badge)
+			// An error names its document and its file in its message, a notice concerns the run.
+			if (kind.rank === 2 && entry.document && entry.type !== 'import-success') {
+				const id = document.createElement('span')
+				id.className = 'paperless-sync-entry-document'
+				id.textContent = 'P' + entry.document
+				head.append(id)
+			}
+			const path = entryFile(entry, dryRun)
+			if (path !== '' && entry.type !== 'error') {
+				head.append(fileElement(path, owner && fileIsThere(entry, dryRun)))
+			}
+			item.append(head)
+			const text = entryText(entry)
+			if (text !== '') {
+				// A div, not a paragraph, which the CSS of Nextcloud gives a margin.
+				const detail = document.createElement('div')
+				detail.className = 'paperless-sync-entry-text'
+				detail.textContent = text
+				item.append(detail)
+			}
+			return item
+		}
+
+		// A line of a report that has no entries, as one of an older version of the app keeps.
+		function lineItem(line) {
+			const item = document.createElement('li')
+			item.className = 'paperless-sync-entry paperless-sync-entry--line'
+			item.textContent = line
+			return item
+		}
+
+		// The entries of a report, the errors first, then the notices, then the changes in the
+		// order of the run; null when the report has none for its lines, such as one of an older
+		// version of the app, or one of a type that this page doesn't know.
+		function sortedEntries(result) {
+			const lines = Array.isArray(result.actions) ? result.actions : []
+			const entries = Array.isArray(result.entries) ? result.entries : null
+			if (entries === null || entries.length !== lines.length || !entries.every(function(entry) {
+				return entry && typeof entry === 'object' && Object.prototype.hasOwnProperty.call(entryKinds, entry.type)
+			})) {
+				return null
+			}
+			return entries.map(function(entry, index) {
+				return { entry, index }
+			}).sort(function(left, right) {
+				return entryKinds[left.entry.type].rank - entryKinds[right.entry.type].rank || left.index - right.index
+			}).map(function(sorted) {
+				return sorted.entry
 			})
+		}
+
+		// The buttons that show the changes of one kind, with their counts, when the list has
+		// more than one kind.
+		function showFilters(items) {
+			const counts = new Map()
+			items.forEach(function(item) {
+				counts.set(item.dataset.filter, (counts.get(item.dataset.filter) || 0) + 1)
+			})
+			reportFilters.hidden = counts.size < 2
+			if (!counts.has(reportFilter)) {
+				reportFilter = ''
+			}
+			if (reportFilters.hidden) {
+				reportFilters.replaceChildren()
+				return
+			}
+			const labels = new Map(items.map(function(item) {
+				return [item.dataset.filter, item.querySelector('.paperless-sync-badge').textContent]
+			}))
+			reportFilters.replaceChildren(filterButton('', translate('All'), items.length), ...Array.from(counts, function([filter, count]) {
+				return filterButton(filter, labels.get(filter), count)
+			}))
+		}
+
+		function filterButton(filter, label, count) {
+			const button = document.createElement('button')
+			button.type = 'button'
+			button.className = 'paperless-sync-filter'
+			button.dataset.filter = filter
+			button.setAttribute('aria-pressed', String(filter === reportFilter))
+			const name = document.createElement('span')
+			name.textContent = label
+			const number = document.createElement('span')
+			number.className = 'paperless-sync-filter-count'
+			number.textContent = String(count)
+			button.append(name, number)
+			button.addEventListener('click', function() {
+				reportFilter = filter
+				applyFilter()
+			})
+			return button
+		}
+
+		function applyFilter() {
+			reportFilters.querySelectorAll('button').forEach(function(button) {
+				button.setAttribute('aria-pressed', String(button.dataset.filter === reportFilter))
+			})
+			reportEntries.querySelectorAll('li').forEach(function(item) {
+				item.hidden = reportFilter !== '' && item.dataset.filter !== reportFilter
+			})
+		}
+
+		function showReport(result, reveal) {
+			shownReport = result
+			const drawn = JSON.stringify([savedTargetUser, result])
+			if (drawn === drawnReport && !report.hidden) {
+				if (reveal) {
+					report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+				}
+				return
+			}
+			drawnReport = drawn
+			setText(reportTitle, result.dryRun ? translate('Dry-run — nothing was changed') : translate('Run report'))
+			reportSummary.replaceChildren(...reportCounts.filter(function([key]) {
+				return Number(result[key]) > 0
+			}).map(function([key, label, tone]) {
+				const item = document.createElement('div')
+				item.className = 'paperless-sync-count paperless-sync-count--' + tone
+				const value = document.createElement('strong')
+				const name = document.createElement('span')
+				value.textContent = String(Number(result[key]))
+				name.textContent = label
+				item.append(value, name)
+				return item
+			}))
+			reportSummary.hidden = reportSummary.children.length === 0
+			setText(reportRest, restOf(result))
+			reportRest.hidden = reportRest.textContent === ''
 			const ended = result.completedAt ? formatTime(result.completedAt) : ''
 			if (result.dryRun && result.unsavedSettings === true) {
 				setText(reportMeta, ended ? translate('Dry-run of unsaved settings, finished {time}', { time: ended }) : translate('Dry-run of unsaved settings, stopped before its end'))
@@ -623,7 +883,23 @@
 			} else {
 				setText(reportMeta, ended ? translate('Run, finished {time}', { time: ended }) : translate('Run, stopped before its end'))
 			}
-			setText(reportActions, Array.isArray(result.actions) && result.actions.length > 0 ? result.actions.join('\n') : translate('No file changes were required.'))
+			const lines = Array.isArray(result.actions) ? result.actions : []
+			const entries = sortedEntries(result)
+			const owner = savedTargetUser !== '' && viewer() === savedTargetUser
+			const items = entries === null
+				? lines.map(lineItem)
+				: entries.map(function(entry) {
+					return entryItem(entry, result.dryRun === true, owner)
+				})
+			if (items.length === 0) {
+				const empty = document.createElement('li')
+				empty.className = 'paperless-sync-entry paperless-sync-entry--line'
+				empty.textContent = translate('No file changes were required.')
+				items.push(empty)
+			}
+			showFilters(entries === null || lines.length === 0 ? [] : items)
+			reportEntries.replaceChildren(...items)
+			applyFilter()
 			const omitted = result.omittedActions || 0
 			reportOmitted.hidden = omitted === 0
 			setText(reportOmitted, omitted > 0 ? translatePlural('… and %n more change, which the list leaves out', '… and %n more changes, which the list leaves out', omitted) : '')
@@ -632,6 +908,72 @@
 				report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 			}
 		}
+
+		// The documents that a run left as they were, and those that wait for a later run, in a
+		// sentence below the counts of the changes.
+		function restOf(result) {
+			const parts = []
+			if (Number(result.unchanged) > 0) {
+				parts.push(translatePlural('%n unchanged', '%n unchanged', Number(result.unchanged)))
+			}
+			if (Number(result.skipped) > 0) {
+				parts.push(translatePlural('%n skipped, for a later run', '%n skipped, for a later run', Number(result.skipped)))
+			}
+			return parts.join(', ')
+		}
+
+		// The report as text for a bug report: its heading, its counts in the language of the
+		// reader and its lines in English, as the log and the command line show them.
+		function reportText(result) {
+			const lines = [reportTitle.textContent, reportMeta.textContent]
+			const counts = Array.from(reportSummary.children, function(item) {
+				return item.lastChild.textContent + ': ' + item.firstChild.textContent
+			})
+			if (counts.length > 0) {
+				lines.push(counts.join(', '))
+			}
+			if (!reportRest.hidden) {
+				lines.push(reportRest.textContent)
+			}
+			lines.push('', ...(Array.isArray(result.actions) ? result.actions : []))
+			if (!reportOmitted.hidden) {
+				lines.push(reportOmitted.textContent)
+			}
+			return lines.join('\n') + '\n'
+		}
+
+		// Copies a text to the clipboard: through the Clipboard API on HTTPS, and through a
+		// selected text area where the browser has no Clipboard API, such as on plain HTTP.
+		async function copyText(text) {
+			if (navigator.clipboard && window.isSecureContext) {
+				await navigator.clipboard.writeText(text)
+				return
+			}
+			const area = document.createElement('textarea')
+			area.value = text
+			area.setAttribute('readonly', '')
+			area.className = 'paperless-sync-copy-area'
+			document.body.append(area)
+			area.select()
+			const copied = document.execCommand('copy')
+			area.remove()
+			if (!copied) {
+				throw new Error('The browser refused to copy.')
+			}
+		}
+
+		reportCopy.addEventListener('click', async function() {
+			if (shownReport === null) {
+				return
+			}
+			try {
+				await copyText(reportText(shownReport))
+				showMessage(translate('The report is copied to the clipboard.'), 'success')
+			} catch (error) {
+				showMessage(translate('The browser did not allow copying the report. Select its lines and copy them yourself.'), 'error')
+			}
+			reportCopy.focus()
+		})
 
 		// How a run by hand ended, with the count of the errors that its report lists.
 		function showResult(result, isDryRun) {
@@ -961,6 +1303,7 @@
 			// Without the initial state, the form as the server rendered it is the saved state.
 			tokenConfigured = !token.required
 			savedUrl = normalizeUrl(paperlessUrl.defaultValue)
+			savedTargetUser = root.querySelector('[data-setting="target_user"]').defaultValue
 			savedSettings = JSON.stringify(settings())
 			updateForm()
 		}

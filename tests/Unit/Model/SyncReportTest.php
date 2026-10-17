@@ -16,20 +16,101 @@ final class SyncReportTest extends TestCase {
 	public function testListsTheChangesInTheirOrder(): void {
 		$report = new SyncReport(true);
 
-		$report->action('IMPORT: Eingang/a.pdf');
-		$report->action('TRASH P2: Archiv/_Gelöscht/b.pdf');
-		$report->action('EXPORT P1: Archiv/a.pdf');
+		$report->upload('Eingang/a.pdf');
+		$report->change(SyncReport::TYPE_TRASH, 2, 'Archiv/_Gelöscht/b.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/a.pdf');
 
 		self::assertSame(['IMPORT: Eingang/a.pdf', 'TRASH P2: Archiv/_Gelöscht/b.pdf', 'EXPORT P1: Archiv/a.pdf'], $report->actions);
 		self::assertSame(0, $report->omittedActions);
 		self::assertSame([0, 0], [$report->startedAt, $report->completedAt], 'A report without times has none.');
 	}
 
+	/** Every line in English for the log and the command line, and its entry for the settings page. */
+	public function testRecordsAnEntryNextToEveryLine(): void {
+		$report = new SyncReport(false);
+
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/a.pdf');
+		$report->change(SyncReport::TYPE_MOVE, 2, 'Archiv/b.pdf');
+		$report->change(SyncReport::TYPE_REMOVE_EXCLUDED, 3, 'Archiv/c.pdf');
+		$report->change(SyncReport::TYPE_TRASH, 4, 'Archiv/_Gelöscht/d.pdf');
+		$report->change(SyncReport::TYPE_MISSING, 5, 'Archiv/_Gelöscht/e.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 6, 'Archiv/_Gelöscht/f.pdf');
+		$report->waiting(7, 'Archiv/g.pdf', 1, 3);
+		$report->upload('Eingang/h.pdf');
+		$report->uploadSucceeded('Eingang/i.pdf', 456);
+		$report->uploadSucceeded('Eingang/j.pdf', null);
+		$report->uploadFailed('Eingang/k.pdf', 'Fehler/k.pdf', 'Unsupported mime type');
+		$report->uploadRejected('Eingang/l.bin', 'File type not supported');
+		$report->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive.');
+		$report->notice(SyncReport::TYPE_SCAN_INCOMPLETE, 'SCAN INCOMPLETE: 3 of 5 received.', ['list' => 'documents', 'received' => 3, 'listed' => 5]);
+		$report->error('P8: Paperless is unavailable', 8);
+		$report->error('Import task Eingang/m.pdf: HTTP 500', null, 'Eingang/m.pdf');
+
+		self::assertSame([
+			'EXPORT P1: Archiv/a.pdf',
+			'MOVE P2: Archiv/b.pdf',
+			'REMOVE EXCLUDED P3: Archiv/c.pdf',
+			'TRASH P4: Archiv/_Gelöscht/d.pdf',
+			'MISSING P5: Archiv/_Gelöscht/e.pdf',
+			'DELETE P6: Archiv/_Gelöscht/f.pdf',
+			'WAIT P7: missing run 1/3',
+			'IMPORT: Eingang/h.pdf',
+			'IMPORT SUCCESS: Eingang/i.pdf -> P456',
+			'IMPORT SUCCESS: Eingang/j.pdf',
+			'IMPORT ERROR: Eingang/k.pdf -> Fehler/k.pdf',
+			'IMPORT REJECTED: Eingang/l.bin: File type not supported',
+			'EXPORT STOPPED: Nextcloud cannot store files in the archive.',
+			'SCAN INCOMPLETE: 3 of 5 received.',
+			'ERROR: P8: Paperless is unavailable',
+			'ERROR: Import task Eingang/m.pdf: HTTP 500',
+		], $report->actions, 'The lines stay as the log and the command line know them.');
+		self::assertSame([
+			['type' => 'export', 'document' => 1, 'path' => 'Archiv/a.pdf'],
+			['type' => 'move', 'document' => 2, 'path' => 'Archiv/b.pdf'],
+			['type' => 'remove-excluded', 'document' => 3, 'path' => 'Archiv/c.pdf'],
+			['type' => 'trash', 'document' => 4, 'path' => 'Archiv/_Gelöscht/d.pdf'],
+			['type' => 'missing', 'document' => 5, 'path' => 'Archiv/_Gelöscht/e.pdf'],
+			['type' => 'delete', 'document' => 6, 'path' => 'Archiv/_Gelöscht/f.pdf'],
+			['type' => 'wait', 'document' => 7, 'path' => 'Archiv/g.pdf', 'values' => ['scans' => 1, 'limit' => 3]],
+			['type' => 'import', 'path' => 'Eingang/h.pdf'],
+			['type' => 'import-success', 'path' => 'Eingang/i.pdf', 'document' => 456],
+			['type' => 'import-success', 'path' => 'Eingang/j.pdf'],
+			['type' => 'import-error', 'path' => 'Eingang/k.pdf', 'target' => 'Fehler/k.pdf', 'detail' => 'Unsupported mime type'],
+			['type' => 'import-rejected', 'path' => 'Eingang/l.bin', 'detail' => 'File type not supported'],
+			['type' => 'export-stopped'],
+			['type' => 'scan-incomplete', 'values' => ['list' => 'documents', 'received' => 3, 'listed' => 5]],
+			['type' => 'error', 'document' => 8, 'detail' => 'P8: Paperless is unavailable'],
+			['type' => 'error', 'path' => 'Eingang/m.pdf', 'detail' => 'Import task Eingang/m.pdf: HTTP 500'],
+		], $report->entries);
+		self::assertSame($report->entries, $report->jsonSerialize()['entries']);
+		self::assertArrayNotHasKey('entries', $report->summary(), 'The summary has the counts alone.');
+	}
+
+	/** A full report gives up a line and its entry together, so that each line keeps its entry. */
+	public function testEveryLineKeepsItsEntryPastTheLimit(): void {
+		$report = new SyncReport(true);
+		foreach (range(1, SyncReport::ACTION_LIMIT) as $number) {
+			$report->upload("Eingang/scan{$number}.pdf");
+		}
+
+		$report->change(SyncReport::TYPE_DELETE, 5, 'Archiv/5.pdf');
+		$report->notice(SyncReport::TYPE_TRASH_EMPTY, 'TRASH EMPTY: 2 missing.', ['missing' => 2, 'scans' => 3, 'deletes' => 0]);
+
+		self::assertCount(count($report->actions), $report->entries);
+		self::assertSame(['type' => 'import', 'path' => 'Eingang/scan99.pdf'], $report->entries[98]);
+		self::assertSame(['type' => 'delete', 'document' => 5, 'path' => 'Archiv/5.pdf'], $report->entries[99], 'The deletion takes the place of the last import.');
+		self::assertSame(['type' => 'trash-empty', 'values' => ['missing' => 2, 'scans' => 3, 'deletes' => 0]], $report->entries[100]);
+		foreach ($report->actions as $index => $line) {
+			$path = $report->entries[$index]['path'] ?? '';
+			self::assertStringContainsString($path, $line, "Line {$index} and its entry concern the same file.");
+		}
+	}
+
 	public function testFullReportCountsTheChangesThatItLeavesOut(): void {
 		$report = new SyncReport(true);
 
 		foreach (range(1, 150) as $id) {
-			$report->action("EXPORT P{$id}: Archiv/{$id}.pdf");
+			$report->change(SyncReport::TYPE_EXPORT, $id, "Archiv/{$id}.pdf");
 		}
 
 		self::assertCount(100, $report->actions);
@@ -40,17 +121,17 @@ final class SyncReportTest extends TestCase {
 	public function testErrorsAndDeletionsNeverHideBehindImports(): void {
 		$report = new SyncReport(true);
 		foreach (range(1, SyncReport::ACTION_LIMIT) as $number) {
-			$report->action("IMPORT: Eingang/scan{$number}.pdf");
+			$report->upload("Eingang/scan{$number}.pdf");
 		}
 
-		$report->action('EXPORT P1: Archiv/1.pdf');
-		$report->action('WAIT P2: missing run 1/3');
-		$report->action('TRASH P3: Archiv/_Gelöscht/3.pdf');
-		$report->action('MISSING P4: Archiv/_Gelöscht/4.pdf');
-		$report->action('DELETE P5: Archiv/_Gelöscht/5.pdf');
-		$report->action('REMOVE EXCLUDED P6: Archiv/6.pdf');
-		$report->action('IMPORT REJECTED: Eingang/notes.bin: File type not supported');
-		$report->action('IMPORT ERROR: Eingang/broken.pdf -> Fehler/broken.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/1.pdf');
+		$report->waiting(2, 'Archiv/2.pdf', 1, 3);
+		$report->change(SyncReport::TYPE_TRASH, 3, 'Archiv/_Gelöscht/3.pdf');
+		$report->change(SyncReport::TYPE_MISSING, 4, 'Archiv/_Gelöscht/4.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 5, 'Archiv/_Gelöscht/5.pdf');
+		$report->change(SyncReport::TYPE_REMOVE_EXCLUDED, 6, 'Archiv/6.pdf');
+		$report->uploadRejected('Eingang/notes.bin', 'File type not supported');
+		$report->uploadFailed('Eingang/broken.pdf', 'Fehler/broken.pdf', 'Unsupported mime type');
 		$report->error('P7: Paperless is unavailable');
 
 		self::assertCount(SyncReport::ACTION_LIMIT, $report->actions);
@@ -69,20 +150,20 @@ final class SyncReportTest extends TestCase {
 
 	public function testLineGivesUpTheLastLineOfTheLowestPriority(): void {
 		$report = new SyncReport(false);
-		$report->action('IMPORT: Eingang/a.pdf');
+		$report->upload('Eingang/a.pdf');
 		foreach (range(1, SyncReport::ACTION_LIMIT - 2) as $id) {
-			$report->action("TRASH P{$id}: Archiv/_Gelöscht/{$id}.pdf");
+			$report->change(SyncReport::TYPE_TRASH, $id, "Archiv/_Gelöscht/{$id}.pdf");
 		}
-		$report->action('IMPORT: Eingang/b.pdf');
+		$report->upload('Eingang/b.pdf');
 
-		$report->action('DELETE P200: Archiv/200.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 200, 'Archiv/200.pdf');
 		self::assertSame('IMPORT: Eingang/a.pdf', $report->actions[0]);
 		self::assertNotContains('IMPORT: Eingang/b.pdf', $report->actions);
 
-		$report->action('DELETE P201: Archiv/201.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 201, 'Archiv/201.pdf');
 		self::assertNotContains('IMPORT: Eingang/a.pdf', $report->actions);
 
-		$report->action('DELETE P202: Archiv/202.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 202, 'Archiv/202.pdf');
 		self::assertNotContains('TRASH P98: Archiv/_Gelöscht/98.pdf', $report->actions);
 		self::assertSame(['TRASH P97: Archiv/_Gelöscht/97.pdf', 'DELETE P200: Archiv/200.pdf', 'DELETE P201: Archiv/201.pdf', 'DELETE P202: Archiv/202.pdf'], array_slice($report->actions, -4));
 		self::assertSame(3, $report->omittedActions);
@@ -94,7 +175,7 @@ final class SyncReportTest extends TestCase {
 			$report->error("P{$id}: Paperless is unavailable");
 		}
 
-		$report->action('DELETE P200: Archiv/200.pdf');
+		$report->change(SyncReport::TYPE_DELETE, 200, 'Archiv/200.pdf');
 		$report->error('P201: Paperless is unavailable');
 
 		self::assertCount(SyncReport::ACTION_LIMIT, $report->actions);
@@ -106,11 +187,11 @@ final class SyncReportTest extends TestCase {
 
 	public function testNoticesStayPastTheLimitAndKeepTheirPlaces(): void {
 		$report = new SyncReport(true);
-		$report->notice('SCAN INCOMPLETE: Paperless answered incompletely.');
+		$report->notice(SyncReport::TYPE_SCAN_INCOMPLETE, 'SCAN INCOMPLETE: Paperless answered incompletely.');
 		foreach (range(1, SyncReport::ACTION_LIMIT) as $number) {
-			$report->action("IMPORT: Eingang/scan{$number}.pdf");
+			$report->upload("Eingang/scan{$number}.pdf");
 		}
-		$report->notice('EXPORT STOPPED: Nextcloud cannot store files in the archive.');
+		$report->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive.');
 
 		$report->error('P1: Not enough free space');
 
@@ -139,7 +220,7 @@ final class SyncReportTest extends TestCase {
 		$report = new SyncReport(true, 1000, 1060);
 		$report->error('P1: Paperless is unavailable');
 		foreach (range(1, SyncReport::ACTION_LIMIT) as $id) {
-			$report->action("EXPORT P{$id}: Archiv/{$id}.pdf");
+			$report->change(SyncReport::TYPE_EXPORT, $id, "Archiv/{$id}.pdf");
 		}
 
 		$data = $report->jsonSerialize();

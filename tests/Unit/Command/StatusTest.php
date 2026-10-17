@@ -62,7 +62,7 @@ final class StatusTest extends TestCase {
 		$this->configService->save(['enabled' => true]);
 		$report = new SyncReport(false, $this->clock->time - 60, $this->clock->time);
 		$report->exported = 1;
-		$report->action('EXPORT P1: Archiv/<P1>.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/<P1>.pdf');
 		$report->error('P2: Paperless timed out');
 		$this->statusService->started(false);
 		$this->statusService->completed($report);

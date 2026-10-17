@@ -9,26 +9,60 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Model;
 
-/** @psalm-suppress PossiblyUnusedProperty */
+/**
+ * @psalm-type ReportEntry = array{type: string, document?: int, path?: string, target?: string, detail?: string, values?: array<string, int|string>}
+ * @psalm-suppress PossiblyUnusedProperty
+ */
 final class SyncReport implements \JsonSerializable {
 	/** The most lines of changes that the report lists; it counts those it leaves out in $omittedActions. */
 	public const ACTION_LIMIT = 100;
 	/** The most error messages that the report keeps; $errors counts them all. */
 	public const ERROR_LIMIT = 50;
 
+	/** The copy of a document is written anew, at its path. */
+	public const TYPE_EXPORT = 'export';
+	/** The copy of a document moves to its new path, without a download. */
+	public const TYPE_MOVE = 'move';
+	/** The copy of a document that got an excluded tag is removed. */
+	public const TYPE_REMOVE_EXCLUDED = 'remove-excluded';
+	/** The copy of a document in the trash of Paperless moves to the deleted folder. */
+	public const TYPE_TRASH = 'trash';
+	/** The copy of a document that is gone from Paperless moves to the deleted folder. */
+	public const TYPE_MISSING = 'missing';
+	/** The copy of a document is deleted for good. */
+	public const TYPE_DELETE = 'delete';
+	/** A document is gone from Paperless, and its copy waits for more scans without it. */
+	public const TYPE_WAIT = 'wait';
+	/** A file of the inbox goes to Paperless. */
+	public const TYPE_UPLOAD = 'import';
+	/** Paperless imported a file of the inbox. */
+	public const TYPE_UPLOAD_SUCCEEDED = 'import-success';
+	/** Paperless could not import a file of the inbox, which moves to the error folder. */
+	public const TYPE_UPLOAD_FAILED = 'import-error';
+	/** Paperless refused a file of the inbox, which waits there until it changes. */
+	public const TYPE_UPLOAD_REJECTED = 'import-rejected';
+	/** An error of a single document or file. */
+	public const TYPE_ERROR = 'error';
+	/** A notice: a list of Paperless came back incomplete, so no document counts as missing. */
+	public const TYPE_SCAN_INCOMPLETE = 'scan-incomplete';
+	/** A notice: Nextcloud cannot store files in the archive, so the run stopped its exports. */
+	public const TYPE_EXPORT_STOPPED = 'export-stopped';
+	/** A notice of a dry-run: documents went missing while the trash of Paperless lists none. */
+	public const TYPE_TRASH_EMPTY = 'trash-empty';
+
 	/**
-	 * The priority of a line by its start, 1 the highest. A full report gives up its last line of
+	 * The priority of a line by its type, 1 the highest. A full report gives up its last line of
 	 * the lowest priority for a line of a higher one, so that errors, deletions and moves to the
 	 * deleted folder never hide behind exports, moves and imports.
 	 */
 	private const PRIORITIES = [
-		'ERROR: ' => 1,
-		'DELETE ' => 2,
-		'REMOVE EXCLUDED ' => 2,
-		'TRASH ' => 3,
-		'MISSING ' => 3,
-		'IMPORT ERROR: ' => 4,
-		'IMPORT REJECTED: ' => 4,
+		self::TYPE_ERROR => 1,
+		self::TYPE_DELETE => 2,
+		self::TYPE_REMOVE_EXCLUDED => 2,
+		self::TYPE_TRASH => 3,
+		self::TYPE_MISSING => 3,
+		self::TYPE_UPLOAD_FAILED => 4,
+		self::TYPE_UPLOAD_REJECTED => 4,
 	];
 	/** The priority of every other line: exports, moves, imports and documents that wait. */
 	private const LOWEST = 5;
@@ -60,8 +94,18 @@ final class SyncReport implements \JsonSerializable {
 	/** The lines of changes that the report leaves out, for want of room. */
 	public int $omittedActions = 0;
 
-	/** @var list<string> */
+	/** @var list<string> the lines of the changes, in English, as the log and the command line show them */
 	public array $actions = [];
+	/**
+	 * The same changes, one for each line of $actions and in its order, for the settings page,
+	 * which shows them in the language of its reader: the type of the change, the ID of the
+	 * document in Paperless, the file in Nextcloud, relative to the home of the target user, the
+	 * file in the error folder that a failed import went to, a detail, such as the reason of
+	 * Paperless or an error message, and the numbers of a notice or of a document that waits.
+	 *
+	 * @var list<ReportEntry>
+	 */
+	public array $entries = [];
 	/** @var list<string> the first errors of the run, without the lines of its changes */
 	public array $errorMessages = [];
 
@@ -85,47 +129,83 @@ final class SyncReport implements \JsonSerializable {
 	}
 
 	/**
-	 * A line for a change of the run. In a full report, the line takes the place of the last line
-	 * of the lowest priority, when that is lower than its own, and the report counts the line that
-	 * it leaves out.
+	 * A change of the copy of a document: an export, a move, the removal of an excluded copy, a
+	 * move to the deleted folder or a deletion; $path is the file that the change concerns, at its
+	 * new path after an export or a move.
+	 *
+	 * @param self::TYPE_EXPORT|self::TYPE_MOVE|self::TYPE_REMOVE_EXCLUDED|self::TYPE_TRASH|self::TYPE_MISSING|self::TYPE_DELETE $type
 	 */
-	public function action(string $message): void {
-		$priority = self::priority($message);
-		if (count($this->actions) - $this->notices < self::ACTION_LIMIT) {
-			$this->append($message, $priority);
-			return;
+	public function change(string $type, int $document, string $path): void {
+		$this->action(strtoupper(str_replace('-', ' ', $type)) . " P{$document}: {$path}", ['type' => $type, 'document' => $document, 'path' => $path]);
+	}
+
+	/** A document that is gone from Paperless, whose copy at $path waits until $scans reaches $limit. */
+	public function waiting(int $document, string $path, int $scans, int $limit): void {
+		$this->action("WAIT P{$document}: missing run {$scans}/{$limit}", [
+			'type' => self::TYPE_WAIT,
+			'document' => $document,
+			'path' => $path,
+			'values' => ['scans' => $scans, 'limit' => $limit],
+		]);
+	}
+
+	/** A file of the inbox that goes to Paperless. */
+	public function upload(string $path): void {
+		$this->action("IMPORT: {$path}", ['type' => self::TYPE_UPLOAD, 'path' => $path]);
+	}
+
+	/** A file of the inbox that Paperless imported, as the document $document when Paperless names it. */
+	public function uploadSucceeded(string $path, ?int $document): void {
+		$entry = ['type' => self::TYPE_UPLOAD_SUCCEEDED, 'path' => $path];
+		if ($document !== null) {
+			$entry['document'] = $document;
 		}
-		++$this->omittedActions;
-		$replaced = null;
-		$lowest = $priority;
-		foreach ($this->priorities as $index => $candidate) {
-			if ($candidate > $priority && $candidate >= $lowest) {
-				$replaced = $index;
-				$lowest = $candidate;
-			}
-		}
-		if ($replaced !== null) {
-			array_splice($this->actions, $replaced, 1);
-			array_splice($this->priorities, $replaced, 1);
-			$this->append($message, $priority);
-		}
+		$this->action("IMPORT SUCCESS: {$path}" . ($document !== null ? " -> P{$document}" : ''), $entry);
+	}
+
+	/** A file of the inbox that Paperless could not import, for $reason, which moves to $destination in the error folder. */
+	public function uploadFailed(string $path, string $destination, string $reason): void {
+		$this->action("IMPORT ERROR: {$path} -> {$destination}", ['type' => self::TYPE_UPLOAD_FAILED, 'path' => $path, 'target' => $destination, 'detail' => $reason]);
+	}
+
+	/** A file of the inbox that Paperless refused, for $reason, which waits there until it changes. */
+	public function uploadRejected(string $path, string $reason): void {
+		$this->action("IMPORT REJECTED: {$path}: {$reason}", ['type' => self::TYPE_UPLOAD_REJECTED, 'path' => $path, 'detail' => $reason]);
 	}
 
 	/**
 	 * A line that the report keeps past the limit of its actions: a run that stopped its exports or
-	 * counted no document as missing says so, also after a hundred other actions.
+	 * counted no document as missing says so, also after a hundred other actions. $message is the
+	 * line in English, $values the numbers and names that the settings page puts into its
+	 * translation.
+	 *
+	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY $type
+	 * @param array<string, int|string> $values
 	 */
-	public function notice(string $message): void {
-		$this->append($message, self::NOTICE);
+	public function notice(string $type, string $message, array $values = []): void {
+		$entry = ['type' => $type];
+		if ($values !== []) {
+			$entry['values'] = $values;
+		}
+		$this->append($message, self::NOTICE, $entry);
 		++$this->notices;
 	}
 
-	public function error(string $message): void {
+	/** An error of a single document or file, with the ID of the document in Paperless or the path of the file where they are known. */
+	public function error(string $message, ?int $document = null, string $path = ''): void {
 		++$this->errors;
 		if (count($this->errorMessages) < self::ERROR_LIMIT) {
 			$this->errorMessages[] = $message;
 		}
-		$this->action('ERROR: ' . $message);
+		$entry = ['type' => self::TYPE_ERROR];
+		if ($document !== null) {
+			$entry['document'] = $document;
+		}
+		if ($path !== '') {
+			$entry['path'] = $path;
+		}
+		$entry['detail'] = $message;
+		$this->action('ERROR: ' . $message, $entry);
 	}
 
 	/**
@@ -169,36 +249,58 @@ final class SyncReport implements \JsonSerializable {
 		return $this->importResults;
 	}
 
-	/** @return array<string, bool|int|list<string>> */
+	/** @return array<string, bool|int|list<string>|list<ReportEntry>> */
 	public function jsonSerialize(): array {
 		$data = get_object_vars($this);
 		unset($data['priorities'], $data['notices'], $data['changedFiles'], $data['changedFileCount'], $data['importResults']);
 
-		/** @var array<string, bool|int|list<string>> $data */
+		/** @var array<string, bool|int|list<string>|list<ReportEntry>> $data */
 		return $data;
 	}
 
 	/** @return array<string, bool|int> */
 	public function summary(): array {
 		$data = $this->jsonSerialize();
-		unset($data['actions'], $data['errorMessages']);
+		unset($data['actions'], $data['entries'], $data['errorMessages']);
 
 		/** @var array<string, bool|int> $data */
 		return $data;
 	}
 
-	private function append(string $message, int $priority): void {
-		$this->actions[] = $message;
-		$this->priorities[] = $priority;
-	}
-
-	private static function priority(string $message): int {
-		foreach (self::PRIORITIES as $start => $priority) {
-			if (str_starts_with($message, $start)) {
-				return $priority;
+	/**
+	 * A line and its entry. In a full report, the line takes the place of the last line of the
+	 * lowest priority, when that is lower than its own, and the report counts the line that it
+	 * leaves out.
+	 *
+	 * @param ReportEntry $entry
+	 */
+	private function action(string $message, array $entry): void {
+		$priority = self::PRIORITIES[$entry['type']] ?? self::LOWEST;
+		if (count($this->actions) - $this->notices < self::ACTION_LIMIT) {
+			$this->append($message, $priority, $entry);
+			return;
+		}
+		++$this->omittedActions;
+		$replaced = null;
+		$lowest = $priority;
+		foreach ($this->priorities as $index => $candidate) {
+			if ($candidate > $priority && $candidate >= $lowest) {
+				$replaced = $index;
+				$lowest = $candidate;
 			}
 		}
+		if ($replaced !== null) {
+			array_splice($this->actions, $replaced, 1);
+			array_splice($this->entries, $replaced, 1);
+			array_splice($this->priorities, $replaced, 1);
+			$this->append($message, $priority, $entry);
+		}
+	}
 
-		return self::LOWEST;
+	/** @param ReportEntry $entry */
+	private function append(string $message, int $priority, array $entry): void {
+		$this->actions[] = $message;
+		$this->entries[] = $entry;
+		$this->priorities[] = $priority;
 	}
 }

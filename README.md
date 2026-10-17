@@ -104,7 +104,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Operations
 
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
-- Runs on demand and dry runs from the settings, each with a report of its changes and errors, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
+- Runs on demand and dry runs from the settings, each with a report of its changes and errors in the language of the administrator, errors first, with a filter for each kind of change, links to the files and a button that copies it for a bug report, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English and German: the settings, their messages and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
 - [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
@@ -123,7 +123,7 @@ A few days later, a dry-run shows every kind of change at once: new documents, a
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/report-dark.png">
-  <img alt="The report of a dry-run: the counts of exported, moved, trashed and excluded documents and of finished imports, and a list with one line for every file change" src="docs/images/report-light.png">
+  <img alt="The report of a dry-run under the heading Dry-run — nothing was changed, with the button Copy report: the counts of the changes that are not 0, the documents that stay unchanged in a sentence, a filter for each kind of change, and a list with a colored badge, the document and the file of every change" src="docs/images/report-light.png">
 </picture>
 
 The archive in Files, one folder per correspondent, document type and year, with the ID of each document in its name:
@@ -441,6 +441,13 @@ The top of the settings page shows how the last run ended, when it finished, the
 </picture>
 
 <!-- --8<-- [start:status-report] -->
+The report shows in the language of the administrator what the run changed, or would change in a dry-run, whose heading says *Dry-run — nothing was changed*. Its counts show the kinds of changes that happened, and a sentence the documents that stayed unchanged and those skipped for a later run. Each change has a badge of its kind: red for errors, failed and refused imports, amber for deletions, removals of excluded copies, moves to the deleted folder and notices such as an incomplete scan, green for finished imports. The errors come first, then the notices, then the changes in the order of the run, and a filter above the list shows the changes of one kind. An administrator who is also the target user, and so may open the files, opens the folder of a file that the run wrote, moved or left in place with a click on its path. **Copy report** copies the heading, the counts and the lines in English, as `occ paperless_sync:run` prints them, such as `EXPORT P12: Documents/Paperless/…`, for a bug report. The reasons of Paperless and the errors of a run stay in the words in which the run got them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-the-report-shows-a-change.dark.svg">
+  <img src="docs/images/diagrams/how-the-report-shows-a-change.svg" alt="How the report shows a change: For every change, a run writes a line in English and an entry beside it, with the kind of the change, the ID of the document, the file and a detail, such as the reason of Paperless. The command line and Copy report take the lines. The settings page shows the entries in the language of the administrator, the errors first, then the notices, then the changes in the order of the run; each with a colored badge, a filter for each kind, and a link to the folder of the file in Files when the administrator is the target user and the file is there.">
+</picture>
+
 The report counts every change and lists up to 100 lines of them. A run with more lines lists its errors, deletions, removals of excluded copies, moves to the deleted folder and failed imports first, in place of exports, moves and imports, and says how many lines it leaves out, so that a dry-run never hides a deletion behind a hundred imports; `SCAN INCOMPLETE` and `EXPORT STOPPED` always stay. The status keeps the first 50 errors of the run and counts the others.
 
 The Nextcloud log has a warning, with the ID of the document and its path, when an error of a document first occurs or changes; an error that comes back in every run is logged once. A run that fails as a whole is logged as an error.

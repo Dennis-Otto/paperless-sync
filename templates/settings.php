@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, health: list<array{severity: string, description: string}>} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, health: list<array{severity: string, description: string}>} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -56,7 +56,8 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
 	data-status-url="<?php p($_['statusUrl']); ?>"
-	data-preview-url="<?php p($_['previewUrl']); ?>">
+	data-preview-url="<?php p($_['previewUrl']); ?>"
+	data-files-url="<?php p($_['filesUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -303,10 +304,17 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	</form>
 
 	<div id="paperless-sync-report" class="paperless-sync-report" hidden>
-		<h3><?php p($l->t('Run report')); ?></h3>
+		<div class="paperless-sync-report-heading">
+			<h3 id="paperless-sync-report-title"><?php p($l->t('Run report')); ?></h3>
+			<button id="paperless-sync-report-copy" type="button"><?php p($l->t('Copy report')); ?></button>
+		</div>
 		<p id="paperless-sync-report-meta" class="paperless-sync-report-meta"></p>
 		<div id="paperless-sync-report-summary" class="paperless-sync-report-summary"></div>
-		<pre id="paperless-sync-report-actions" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>"></pre>
+		<p id="paperless-sync-report-rest" class="paperless-sync-report-rest" hidden></p>
+		<div id="paperless-sync-report-filters" class="paperless-sync-report-filters" role="group" aria-label="<?php p($l->t('Show changes of one kind')); ?>" hidden></div>
+		<div id="paperless-sync-report-actions" class="paperless-sync-report-list" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>">
+			<ul id="paperless-sync-report-entries"></ul>
+		</div>
 		<p id="paperless-sync-report-omitted" class="paperless-sync-report-omitted" hidden></p>
 	</div>
 </div>

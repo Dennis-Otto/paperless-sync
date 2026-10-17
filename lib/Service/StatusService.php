@@ -387,7 +387,8 @@ final class StatusService {
 
 	/**
 	 * Keeps the summary and the report of a run: its counts, its first errors and its first lines
-	 * of changes, each shortened; the lines that it leaves out count as omitted.
+	 * of changes with their entries, each text shortened; the lines that it leaves out count as
+	 * omitted.
 	 */
 	private function keep(SyncReport $report): void {
 		$summary = $report->summary();
@@ -397,6 +398,16 @@ final class StatusService {
 		$kept['omittedActions'] = $report->omittedActions + max(0, count($report->actions) - self::REPORT_ACTIONS);
 		$kept['errorMessages'] = array_map($shorten, $report->errorMessages);
 		$kept['actions'] = array_map($shorten, array_slice($report->actions, 0, self::REPORT_ACTIONS));
+		$kept['entries'] = array_map(static function (array $entry) use ($shorten): array {
+			foreach (['path', 'target', 'detail'] as $text) {
+				$value = $entry[$text] ?? null;
+				if (is_string($value)) {
+					$entry[$text] = $shorten($value);
+				}
+			}
+
+			return $entry;
+		}, array_slice($report->entries, 0, self::REPORT_ACTIONS));
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_REPORT, json_encode($kept, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), lazy: true);
 	}
 
