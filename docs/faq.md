@@ -65,7 +65,7 @@ Yes, but the app remembers what it wrote for each target user. Another target us
 
 ### Does the archive count against a quota?
 
-Yes, the files belong to the target user, so the quota of that user applies. When it is full, the run stops writing at the first failure and reports `EXPORT STOPPED`; it goes on once there is room.
+Yes, the files belong to the target user, so the quota of that user applies. When it is full, the run stops writing at the first failure and shows a notice that Nextcloud cannot store files in the archive (`EXPORT STOPPED` on the command line); it goes on once there is room.
 
 ### Does it work with object storage such as S3?
 

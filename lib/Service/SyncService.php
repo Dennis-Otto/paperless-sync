@@ -234,7 +234,7 @@ final class SyncService {
 								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $excludedPath, $archiveRoot);
 							}
 						}
-						$report->action("REMOVE EXCLUDED P{$documentId}: {$excludedPath}");
+						$report->change(SyncReport::TYPE_REMOVE_EXCLUDED, $documentId, $excludedPath);
 						++$report->removedExcluded;
 					}
 					if (!$report->dryRun) {
@@ -242,7 +242,7 @@ final class SyncService {
 					}
 				} catch (\Throwable $exception) {
 					$error = $this->exceptionMessage($exception);
-					$report->error("Excluded P{$documentId}: {$error}");
+					$report->error("Excluded P{$documentId}: {$error}", $documentId, (string)($entry['path'] ?? ''));
 					$this->logDocumentError($documentId, (string)($entry['path'] ?? ''), $error, $entry);
 					if (!$report->dryRun) {
 						$states->save($documentId, ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
@@ -348,7 +348,7 @@ final class SyncService {
 					throw new RuntimeException("Nextcloud file conflict at {$oldPath}.");
 				}
 				if ($report->dryRun) {
-					$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+					$report->change($moveOnly ? SyncReport::TYPE_MOVE : SyncReport::TYPE_EXPORT, $documentId, $target);
 					$moveOnly ? ++$report->moved : ++$report->exported;
 					++$changes;
 					continue;
@@ -393,7 +393,7 @@ final class SyncService {
 				}
 				$moveOnly ? ++$report->moved : ++$report->exported;
 				++$changes;
-				$report->action(($moveOnly ? 'MOVE' : 'EXPORT') . " P{$documentId}: {$target}");
+				$report->change($moveOnly ? SyncReport::TYPE_MOVE : SyncReport::TYPE_EXPORT, $documentId, $target);
 				$report->changedFile($target);
 				$states->save($documentId, [
 					'path' => $target,
@@ -410,7 +410,7 @@ final class SyncService {
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
-				$report->error("P{$documentId}: {$error}");
+				$report->error("P{$documentId}: {$error}", $documentId);
 				if (!$report->dryRun) {
 					$states->save($documentId, $checksumValues + ['last_seen' => $this->now(), 'last_error' => mb_substr($error, 0, 4000)]);
 				}
@@ -454,14 +454,14 @@ final class SyncService {
 					++$changes;
 					$target = $this->deletedPath($config, $oldPath, $archiveRoot, $deletedAt);
 					if ($report->dryRun) {
-						$report->action("TRASH P{$documentId}: {$target}");
+						$report->change(SyncReport::TYPE_TRASH, $documentId, $target);
 						++$report->movedToTrash;
 					} elseif ($this->storage->move($config->targetUser, $oldPath, $target, $config->conflictMode)) {
 						$values['path'] = $target;
 						if ($config->pruneEmptyFolders) {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 						}
-						$report->action("TRASH P{$documentId}: {$target}");
+						$report->change(SyncReport::TYPE_TRASH, $documentId, $target);
 						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
@@ -471,7 +471,7 @@ final class SyncService {
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
-				$report->error("Trash P{$documentId}: {$error}");
+				$report->error("Trash P{$documentId}: {$error}", $documentId);
 				if (!$report->dryRun) {
 					$states->save($documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
@@ -509,7 +509,7 @@ final class SyncService {
 				if (!$report->dryRun) {
 					$states->save($documentId, ['missing_runs' => $missingRuns]);
 				}
-				$report->action("WAIT P{$documentId}: missing run {$missingRuns}/{$config->missingGraceRuns}");
+				$report->waiting($documentId, $path, $missingRuns, $config->missingGraceRuns);
 				continue;
 			}
 
@@ -533,7 +533,7 @@ final class SyncService {
 								$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 							}
 						}
-						$report->action("DELETE P{$documentId}: {$path}");
+						$report->change(SyncReport::TYPE_DELETE, $documentId, $path);
 						++$report->permanentlyDeleted;
 					}
 					if (!$report->dryRun) {
@@ -551,14 +551,14 @@ final class SyncService {
 					++$changes;
 					$target = $this->deletedPath($config, $path, $archiveRoot, $this->now());
 					if ($report->dryRun) {
-						$report->action("MISSING P{$documentId}: {$target}");
+						$report->change(SyncReport::TYPE_MISSING, $documentId, $target);
 						++$report->movedToTrash;
 					} elseif ($this->storage->move($config->targetUser, $path, $target, $config->conflictMode)) {
 						$values['path'] = $target;
 						if ($config->pruneEmptyFolders) {
 							$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $archiveRoot);
 						}
-						$report->action("MISSING P{$documentId}: {$target}");
+						$report->change(SyncReport::TYPE_MISSING, $documentId, $target);
 						$report->changedFile($target);
 						++$report->movedToTrash;
 					}
@@ -568,7 +568,7 @@ final class SyncService {
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
-				$report->error("Missing P{$documentId}: {$error}");
+				$report->error("Missing P{$documentId}: {$error}", $documentId, $path);
 				if (!$report->dryRun) {
 					$states->save($documentId, ['last_error' => mb_substr($error, 0, 4000)]);
 				}
@@ -594,10 +594,15 @@ final class SyncService {
 		if (!$report->dryRun || $missing === 0 || $trashed > 0 || $config->trashMode !== 'move') {
 			return;
 		}
-		$fate = $config->permanentDelete && $config->allowDirectDelete
+		$deletes = $config->permanentDelete && $config->allowDirectDelete;
+		$fate = $deletes
 			? "their copies are deleted after the required missing scans ({$config->missingGraceRuns} in a row), although the documents can still be restored in Paperless"
 			: "their copies move to the deleted folder only after the required missing scans ({$config->missingGraceRuns} in a row), as those of documents deleted without the trash do";
-		$report->notice("TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.");
+		$report->notice(SyncReport::TYPE_TRASH_EMPTY, "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.", [
+			'missing' => $missing,
+			'scans' => $config->missingGraceRuns,
+			'deletes' => $deletes ? 1 : 0,
+		]);
 	}
 
 	/**
@@ -700,7 +705,11 @@ final class SyncService {
 			return true;
 		}
 		$received = count($scan->documents);
-		$report->notice("SCAN INCOMPLETE: Paperless's list of {$list} came back incomplete or changed while the run read it ({$received} of {$scan->listed} received); no document counts as missing in this run.");
+		$report->notice(SyncReport::TYPE_SCAN_INCOMPLETE, "SCAN INCOMPLETE: Paperless's list of {$list} came back incomplete or changed while the run read it ({$received} of {$scan->listed} received); no document counts as missing in this run.", [
+			'list' => $list,
+			'received' => $received,
+			'listed' => $scan->listed,
+		]);
 		$this->logger->warning("Paperless's list of {list} came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.", [
 			'list' => $list,
 			'received' => $received,
@@ -724,7 +733,7 @@ final class SyncService {
 		if (!$archiveFailed) {
 			return false;
 		}
-		$report->notice('EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.');
+		$report->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.');
 		$this->logger->warning('Nextcloud cannot store files in the archive, so this run exports and moves no further documents: {error}', [
 			'error' => $error,
 			'exception' => $exception,
@@ -881,7 +890,7 @@ final class SyncService {
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
-				$report->error("Import task {$path}: {$error}");
+				$report->error("Import task {$path}: {$error}", null, $path);
 				// The task stays pending, with its error, so that a lasting failure is logged once.
 				if ($this->changedError($pending, $error)) {
 					// Without the exception, as for the error of a document.
@@ -924,9 +933,8 @@ final class SyncService {
 					continue;
 				}
 			}
-			$line = "IMPORT: {$path}" . ($tags['names'] !== [] ? ' (tags: ' . implode(', ', $tags['names']) . ')' : '');
 			if ($report->dryRun) {
-				$report->action($line);
+				$report->upload($path, $tags['names']);
 				++$report->importsSubmitted;
 				continue;
 			}
@@ -943,7 +951,7 @@ final class SyncService {
 					'retry_at' => 0,
 					'last_error' => null,
 				]);
-				$report->action($line);
+				$report->upload($path, $tags['names']);
 				++$report->importsSubmitted;
 			} catch (PaperlessUploadException $exception) {
 				if ($exception->permanent) {
@@ -975,7 +983,10 @@ final class SyncService {
 		}
 		$list = implode(', ', $names);
 		$missing = count($names) === 1 ? "no tag named {$list}, so the files of the inbox go to Paperless without it" : "no tags named {$list}, so the files of the inbox go to Paperless without them";
-		$report->notice("TAGS UNKNOWN: Paperless shows the account {$missing}. Create the tags in Paperless or share them with the account, or turn on \"Create missing tags\".");
+		$report->notice(SyncReport::TYPE_TAGS_UNKNOWN, "TAGS UNKNOWN: Paperless shows the account {$missing}. Create the tags in Paperless or share them with the account, or turn on \"Create missing tags\".", [
+			'names' => $list,
+			'count' => count($names),
+		]);
 		if (!$report->dryRun) {
 			$this->logger->warning('Paperless shows the account of Paperless Sync no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags" in the settings of Paperless Sync.', [
 				'names' => $list,
@@ -1007,7 +1018,7 @@ final class SyncService {
 			'retry_at' => 0,
 			'last_error' => mb_substr($reason, 0, 4000),
 		]);
-		$report->action("IMPORT REJECTED: {$path}: {$reason}");
+		$report->uploadRejected($path, $reason);
 		$report->importResult(SyncReport::IMPORT_REJECTED, $path, null, $reason);
 		++$report->importsFailed;
 		$this->logger->warning('Paperless refused the inbox file {path}; it stays in the inbox until it changes: {reason}', [
@@ -1054,7 +1065,7 @@ final class SyncService {
 			} elseif (!$report->dryRun) {
 				$this->state->saveImport($config->targetUser, $path, ['etag' => $etag, 'status' => 'success', 'last_error' => null]);
 			}
-			$report->action("IMPORT SUCCESS: {$path}" . ($documentId !== null ? " -> P{$documentId}" : ''));
+			$report->uploadSucceeded($path, $documentId);
 		} elseif (!$report->dryRun) {
 			$this->state->deleteImport($config->targetUser, $path);
 		}
@@ -1076,7 +1087,7 @@ final class SyncService {
 				$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $path, $inboxRoot);
 			}
 		}
-		$report->action("IMPORT ERROR: {$path} -> {$destination}");
+		$report->uploadFailed($path, $destination, $reason);
 		$report->importResult(SyncReport::IMPORT_FAILED, $destination, null, $reason);
 		++$report->importsFailed;
 	}
@@ -1136,7 +1147,7 @@ final class SyncService {
 	 */
 	private function retryUnfinishedImport(SyncConfig $config, SyncReport $report, string $path, string $etag, int $attempts, string $taskId, string $error): void {
 		if ($report->dryRun) {
-			$report->error("Import {$path}: {$error}; a run uploads it again");
+			$report->error("Import {$path}: {$error}; a run uploads it again", null, $path);
 			return;
 		}
 		$minutes = $this->retryLater($config, $report, $path, $etag, $attempts, $error);
@@ -1178,7 +1189,7 @@ final class SyncService {
 			'retry_at' => $now + $delay,
 			'last_error' => mb_substr($error, 0, 4000),
 		]);
-		$report->error("Import {$path}: {$error} (attempt {$attempts}, the next in {$minutes} minutes)");
+		$report->error("Import {$path}: {$error} (attempt {$attempts}, the next in {$minutes} minutes)", null, $path);
 
 		return $minutes;
 	}

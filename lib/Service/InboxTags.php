@@ -126,7 +126,7 @@ final class InboxTags {
 				throw $exception;
 			}
 		}
-		$this->report->action("NEW TAG: {$name}");
+		$this->report->newTag($name);
 
 		return $this->tags[$key] = ['id' => $id, 'name' => $name];
 	}

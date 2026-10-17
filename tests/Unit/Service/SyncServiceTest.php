@@ -1332,6 +1332,7 @@ final class SyncServiceTest extends TestCase {
 			"ERROR: P3: {$error}",
 			'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.',
 		], $report->actions);
+		self::assertSame([['type' => 'error', 'document' => 3, 'detail' => "P3: {$error}"], ['type' => 'export-stopped']], $report->entries);
 		self::assertSame($error, $this->state->exports[3]['last_error']);
 		self::assertArrayNotHasKey(2, $this->state->exports);
 	}
@@ -1835,6 +1836,7 @@ final class SyncServiceTest extends TestCase {
 		$completed = $this->service->run();
 		self::assertSame(1, $completed->importsSucceeded);
 		self::assertSame(['IMPORT SUCCESS: ' . $path], $completed->actions);
+		self::assertSame([['type' => 'import-success', 'path' => $path]], $completed->entries, 'Paperless named no document.');
 		self::assertArrayNotHasKey($path, $this->storage->files);
 		self::assertSame([], $this->state->imports);
 	}
@@ -1849,6 +1851,7 @@ final class SyncServiceTest extends TestCase {
 		$errorPath = 'Dokumente/Paperless/Fehler/broken.pdf';
 		self::assertSame(1, $report->importsFailed);
 		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
+		self::assertSame([['type' => 'import-error', 'path' => $path, 'target' => $errorPath, 'detail' => 'Unsupported mime type']], $report->entries, 'The report says why, which its line leaves out.');
 		self::assertSame('broken', $this->storage->files[$errorPath]);
 		self::assertSame("Paperless import failed\n\nUnsupported mime type\n\nPaperless task: task-1\n", $this->storage->files[$errorPath . '.error.txt']);
 		self::assertSame([], $this->state->imports, 'The file left the inbox, and so did its import.');
@@ -2224,6 +2227,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 
 		self::assertSame(['ERROR: Import task ' . $path . ': Paperless timed out'], $report->actions);
+		self::assertSame([['type' => 'error', 'path' => $path, 'detail' => 'Import task ' . $path . ': Paperless timed out']], $report->entries);
 		self::assertSame('pending', $this->state->imports[$path]['status']);
 		self::assertSame('Paperless timed out', $this->state->imports[$path]['last_error']);
 		self::assertCount(1, $this->paperless->uploads);
@@ -2391,6 +2395,10 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame(['beleg.pdf' => [5, 6], 'brief.pdf' => []], $this->paperless->uploadTags, 'The names match whatever their case, and a file in the inbox itself gets none.');
 		self::assertSame(["IMPORT: {$inbox}steuer/2026/beleg.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}brief.pdf"], $report->actions);
+		self::assertSame([
+			['type' => 'import', 'path' => "{$inbox}steuer/2026/beleg.pdf", 'values' => ['tags' => 'Steuer, 2026']],
+			['type' => 'import', 'path' => "{$inbox}brief.pdf"],
+		], $report->entries, 'The settings page shows the tags of an import.');
 		self::assertSame([2, 0], [$report->importsSubmitted, $report->errors]);
 		self::assertSame(1, $this->paperless->tagReads, 'A run reads the tags of Paperless once.');
 	}
@@ -2460,6 +2468,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(count($files), $report->importsSubmitted);
 		self::assertSame(0, $report->errors);
 		self::assertSame($notice, $report->actions[count($files)], 'The names come once, after the imports.');
+		self::assertSame(['type' => 'tags-unknown', 'values' => ['names' => $names, 'count' => count(explode(', ', $names))]], $report->entries[count($files)]);
 		self::assertSame($tags, $this->paperless->uploadTags);
 	}
 
@@ -2476,6 +2485,11 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['2026'], $this->paperless->createdTags);
 		self::assertSame(['a.pdf' => [5, 100], 'b.pdf' => [100]], $this->paperless->uploadTags);
 		self::assertSame(['NEW TAG: 2026', "IMPORT: {$inbox}Steuer/2026/a.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}2026/b.pdf (tags: 2026)"], $report->actions);
+		self::assertSame([
+			['type' => 'new-tag', 'detail' => '2026'],
+			['type' => 'import', 'path' => "{$inbox}Steuer/2026/a.pdf", 'values' => ['tags' => 'Steuer, 2026']],
+			['type' => 'import', 'path' => "{$inbox}2026/b.pdf", 'values' => ['tags' => '2026']],
+		], $report->entries);
 		self::assertSame(1, $this->paperless->tagReads);
 	}
 
@@ -2490,6 +2504,7 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run(true);
 
 		self::assertSame(['NEW TAG: 2026', "IMPORT: {$inbox}Steuer/2026/a.pdf (tags: Steuer, 2026)", "IMPORT: {$inbox}2026/b.pdf (tags: 2026)"], $report->actions);
+		self::assertSame(['type' => 'new-tag', 'detail' => '2026'], $report->entries[0]);
 		self::assertSame(0, $this->paperless->tagCreations);
 		self::assertSame([], $this->paperless->uploadAttempts);
 	}
@@ -2698,6 +2713,7 @@ final class SyncServiceTest extends TestCase {
 
 		$refused = $this->service->run();
 		self::assertSame(['IMPORT REJECTED: ' . $path . ': ' . $reason], $refused->actions);
+		self::assertSame([['type' => 'import-rejected', 'path' => $path, 'detail' => $reason]], $refused->entries);
 		self::assertSame(1, $refused->importsFailed);
 		self::assertSame(0, $refused->errors);
 		self::assertSame('completed', $this->settings['status_last_state']);
@@ -3032,6 +3048,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 
 		self::assertSame(['ERROR: Excluded P123: File is locked'], $report->actions);
+		self::assertSame([['type' => 'error', 'document' => 123, 'path' => self::EXPORTED_PATH, 'detail' => 'Excluded P123: File is locked']], $report->entries);
 		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
 		self::assertSame(TestClock::START + 60, $this->state->exports[123]['last_seen'], 'The document failed in this run, so it waits behind those that failed earlier.');
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
@@ -3361,6 +3378,7 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run();
 
 		self::assertSame(['WAIT P123: missing run 1/3'], $report->actions);
+		self::assertSame([['type' => 'wait', 'document' => 123, 'path' => self::EXPORTED_PATH, 'values' => ['scans' => 1, 'limit' => 3]]], $report->entries);
 		self::assertSame(1, $this->state->exports[123]['missing_runs']);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 	}
@@ -3462,6 +3480,7 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run();
 
 		self::assertSame([$action], $report->actions);
+		self::assertSame([['type' => 'scan-incomplete', 'values' => $context]], $report->entries);
 		self::assertSame($files, $this->storage->files);
 		self::assertSame(0, $this->state->exports[123]['missing_runs']);
 		self::assertSame('active', $this->state->exports[123]['state']);
@@ -3776,6 +3795,7 @@ final class SyncServiceTest extends TestCase {
 		$report = $this->service->run(true);
 
 		self::assertSame(['WAIT P124: missing run 1/3', 'WAIT P123: missing run 1/3', self::trashEmpty(2, 3)], $report->actions);
+		self::assertSame(['type' => 'trash-empty', 'values' => ['missing' => 2, 'scans' => 3, 'deletes' => 0]], $report->entries[2], 'The page translates the notice with its numbers.');
 	}
 
 	/** @return array<string, array{array<string, mixed>, bool, string, bool}> the settings, whether the trash lists a document, the state of the missing one, and whether the run is a dry-run */
@@ -3827,6 +3847,10 @@ final class SyncServiceTest extends TestCase {
 
 		// The notice says that the copy is deleted, although the document may be in a trash that the account doesn't see.
 		self::assertSame(['DELETE P123: ' . self::EXPORTED_PATH, self::trashEmpty(1, 1, true)], $report->actions);
+		self::assertSame([
+			['type' => 'delete', 'document' => 123, 'path' => self::EXPORTED_PATH],
+			['type' => 'trash-empty', 'values' => ['missing' => 1, 'scans' => 1, 'deletes' => 1]],
+		], $report->entries);
 		self::assertSame(1, $report->permanentlyDeleted);
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
 		self::assertArrayHasKey(123, $this->state->exports);

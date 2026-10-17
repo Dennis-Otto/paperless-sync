@@ -50,6 +50,8 @@ final class AdminSettings implements ISettings {
 			'runUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.run'),
 			'statusUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.status'),
 			'previewUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.preview'),
+			// The Files app, where the report opens the folder of a file for the target user.
+			'filesUrl' => $this->urlGenerator->linkToRoute('files.view.index'),
 			'health' => $this->health(),
 		]);
 	}

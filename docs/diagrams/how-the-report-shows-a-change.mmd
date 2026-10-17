@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How the report shows a change
+    accDescr: For every change, a run writes a line in English and an entry beside it, with the kind of the change, the ID of the document, the file and a detail, such as the reason of Paperless. The command line and Copy report take the lines. The settings page shows the entries in the language of the administrator, the errors first, then the notices, then the changes in the order of the run; each with a colored badge, a filter for each kind, and a link to the folder of the file in Files when the administrator is the target user and the file is there.
+
+    change(["`⚙️ A change of a run<br>*export, move, deletion,<br>import, error or notice*`"])
+    line["`📝 Line in English<br>*EXPORT P12: Archive/…*`"]
+    entry["`🧩 Entry<br>*kind, document, file,<br>detail and numbers*`"]
+    english["`📟 occ and Copy report<br>*the lines, for a bug report*`"]
+    page["`🖥️ Settings page<br>*in the language of the<br>administrator, errors first*`"]
+    badges["`🏷️ Badges and filters<br>*a color and a filter<br>for each kind*`"]
+    link["`📂 Link to the folder in Files<br>*for the target user,<br>when the file is there*`"]
+
+    change --> line --> english
+    change --> entry --> page
+    page --> badges
+    page --> link
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class change,entry,page,badges,link nextcloud
+    class line,english warning

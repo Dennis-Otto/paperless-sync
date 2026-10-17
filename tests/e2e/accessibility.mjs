@@ -41,6 +41,47 @@ const FAILED_STATUS = {
 	nextRun: null,
 }
 
+// The status of a run whose report has a change of every kind, with their badges, which
+// no single run of the mock makes: the page gets it as the answer to Refresh.
+const EVERY_KIND = [
+	['ERROR: P7: Not enough free space', { type: 'error', document: 7, detail: 'P7: Not enough free space' }],
+	['IMPORT ERROR: Documents/Paperless/Inbox/broken.pdf -> Documents/Paperless/Failed/broken.pdf', { type: 'import-error', path: 'Documents/Paperless/Inbox/broken.pdf', target: 'Documents/Paperless/Failed/broken.pdf', detail: 'Unsupported mime type' }],
+	['IMPORT REJECTED: Documents/Paperless/Inbox/notes.bin: File type not supported', { type: 'import-rejected', path: 'Documents/Paperless/Inbox/notes.bin', detail: 'File type not supported' }],
+	['EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.', { type: 'export-stopped' }],
+	['TAGS UNKNOWN: Paperless shows the account no tag named 2026, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".', { type: 'tags-unknown', values: { names: '2026', count: 1 } }],
+	['NEW TAG: Insurance', { type: 'new-tag', detail: 'Insurance' }],
+	['IMPORT: Documents/Paperless/Inbox/Insurance/policy.pdf (tags: Insurance)', { type: 'import', path: 'Documents/Paperless/Inbox/Insurance/policy.pdf', values: { tags: 'Insurance' } }],
+	['EXPORT P1: Documents/Paperless/Archive/invoice.pdf', { type: 'export', document: 1, path: 'Documents/Paperless/Archive/invoice.pdf' }],
+	['MOVE P2: Documents/Paperless/Archive/letter.pdf', { type: 'move', document: 2, path: 'Documents/Paperless/Archive/letter.pdf' }],
+	['TRASH P3: Documents/Paperless/Deleted/old.pdf', { type: 'trash', document: 3, path: 'Documents/Paperless/Deleted/old.pdf' }],
+	['DELETE P4: Documents/Paperless/Deleted/older.pdf', { type: 'delete', document: 4, path: 'Documents/Paperless/Deleted/older.pdf' }],
+	['WAIT P5: missing run 1/3', { type: 'wait', document: 5, path: 'Documents/Paperless/Archive/gone.pdf', values: { scans: 1, limit: 3 } }],
+	['IMPORT SUCCESS: Documents/Paperless/Inbox/scan.pdf -> P456', { type: 'import-success', path: 'Documents/Paperless/Inbox/scan.pdf', document: 456 }],
+]
+const REPORT_STATUS = {
+	...FAILED_STATUS,
+	state: 'completed-with-errors',
+	error: '',
+	report: {
+		dryRun: false,
+		completedAt: 1791880060,
+		errors: 1,
+		exported: 1,
+		moved: 1,
+		movedToTrash: 1,
+		permanentlyDeleted: 1,
+		importsSubmitted: 1,
+		importsSucceeded: 1,
+		importsFailed: 2,
+		unchanged: 11,
+		skipped: 1,
+		omittedActions: 0,
+		errorMessages: ['P7: Not enough free space'],
+		actions: EVERY_KIND.map(([line]) => line),
+		entries: EVERY_KIND.map(([, entry]) => entry),
+	},
+}
+
 // The pages of the app, each with the element that holds its markup and what to do
 // before the check, such as opening a section or showing a result.
 const PAGES = [
@@ -74,6 +115,19 @@ const PAGES = [
 			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: FAILED_STATUS }))
 			await page.locator('#paperless-sync-refresh-status').click()
 			await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		},
+	},
+	{
+		// A report with a change of every kind, its badges, its counts and its filters, one of
+		// them on.
+		name: 'report with every kind of change',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: REPORT_STATUS }))
+			await page.locator('#paperless-sync-refresh-status').click()
+			await page.locator('#paperless-sync-report-filters button[data-filter="error"]').click()
+			await page.locator('#paperless-sync-report-filters button[aria-pressed="true"][data-filter="error"]').waitFor()
 		},
 	},
 	{
