@@ -27,7 +27,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-checklist-dark.png">
-  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags and the upload from the inbox failed, each with the permissions to grant in Paperless" src="images/settings-checklist-light.png">
+  <img alt="The connection checklist after Test connection: Paperless-ngx answers, the account sees the documents, correspondents, document types and storage paths, the trash has a note that the account sees a document of another owner, which the trash of Paperless leaves out, and the tags, the upload from the inbox and the tags of the inbox failed, each with the permissions to grant in Paperless" src="images/settings-checklist-light.png">
 </picture>
 
 --8<-- "README.md:configuration-checklist"
@@ -57,11 +57,11 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents and the excluded tags" src="images/settings-archive-light.png">
 </picture>
 
-**4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, and whether an imported file leaves the inbox.
+**4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, whether an imported file leaves the inbox, and the [tags of the inbox](guide.md#tags-of-the-inbox): one for each subfolder, tags for every import, and whether the app creates those that Paperless lacks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-inbox-dark.png">
-  <img alt="The section Nextcloud inbox: inbox folder, error folder, scanning the subfolders and removing the source after a successful import" src="images/settings-inbox-light.png">
+  <img alt="The section Nextcloud inbox: inbox folder, error folder, the switches for scanning the subfolders, removing the source after a successful import, subfolders becoming tags, which is on, and creating missing tags, and the field of the tags for every import" src="images/settings-inbox-light.png">
 </picture>
 
 **5 · Trash and deletion safety:** what a document in the Paperless trash does to its copy, the deleted folder, the scans before a missing document counts as gone, and the switches of permanent deletion.

@@ -42,6 +42,12 @@ final class SyncConfig implements \JsonSerializable {
 		public readonly string $untitled,
 		/** Whether Nextcloud may connect to Paperless at an address of the local network, such as http://paperless:8000. */
 		public readonly bool $paperlessLocalNetwork = false,
+		/** Whether a file of the inbox gets a tag of Paperless for each folder below the inbox that holds it. */
+		public readonly bool $inboxFolderTags = false,
+		/** The names of the tags of Paperless that every file of the inbox gets, separated by commas. */
+		public readonly string $inboxTags = '',
+		/** Whether a run creates the tags that Paperless lacks for the files of the inbox. */
+		public readonly bool $inboxCreateTags = false,
 	) {
 	}
 

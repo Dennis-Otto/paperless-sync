@@ -41,6 +41,8 @@
   - changed-files:
       - any-glob-to-any-file:
           - lib/Service/PaperlessUploadException.php
+          - lib/Service/InboxTags.php
+          - tests/Unit/Service/InboxTagsTest.php
           - lib/Migration/Version000110Date20261008000000.php
           - tests/Unit/Migration/Version000110*
 "area: runs":

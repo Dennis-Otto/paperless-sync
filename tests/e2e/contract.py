@@ -464,7 +464,8 @@ def api(url, line):
     expect_fields("The account of /api/ui_settings/", account, {"id": is_id, "is_superuser": lambda value: value is True})
     permissions = settings["permissions"]
     check(isinstance(permissions, list) and all(is_text(item) for item in permissions), f"The permissions are {permissions!r}.")
-    for permission in ("view_document", "add_document", "view_paperlesstask", "view_uisettings"):
+    # The names of the permissions that the checklist looks for, with those of the tags of the inbox.
+    for permission in ("view_document", "add_document", "view_paperlesstask", "view_uisettings", "view_tag", "add_tag"):
         check(permission in permissions, f"The administrator lacks the permission {permission}: {permissions!r}")
 
     # The checksums of the metadata, which tell a change of the metadata from one of the
@@ -593,7 +594,13 @@ def report(mode):
         paths.append(action(f"MOVE P{invoice}: "))
         check(paths[-1] == f"{ARCHIVE}/{path_of(state, 'invoice', RENAMED)}", f"restore: the copy is at {paths[-1]!r}.")
     elif mode == "import-submitted":
+        # "Tags for every import" names contract, in lower case, which finds the tag Contract,
+        # and Nextcloud, which Paperless lacks, so the run creates it.
         expect(importsSubmitted=2, errors=0)
+        check("NEW TAG: Nextcloud" in actions, f"import-submitted: the run created no tag Nextcloud: {actions!r}")
+        for name in ("receipt.pdf", "broken.pdf"):
+            line = f"IMPORT: {INBOX}/{name} (tags: Contract, Nextcloud)"
+            check(line in actions, f"import-submitted: the run lists no {line!r}: {actions!r}")
     elif mode == "import-ended":
         # The ID of the new document comes from the task of Paperless, and the broken file
         # moves to the error folder, with the reason of Paperless next to it.
@@ -628,6 +635,15 @@ def imported(name, document):
     metadata = paperless.get(f"/api/documents/{document}/metadata/")
     kind = checksum_kind(state["line"])
     check(metadata["original_checksum"] == digests(original)[kind], f"P{document} has the checksum {metadata!r}.")
+    # The tags of the upload, one form field tags for each, besides the inbox tag of Paperless;
+    # the tag that the run created assigns itself to no other document and has no owner.
+    tags = {tag["name"]: tag for tag in paperless.results("/api/tags/?page_size=100")}
+    check({"Contract", "Nextcloud"} <= set(tags), f"Paperless has the tags {sorted(tags)!r}, without those of the inbox.")
+    check(tags["Nextcloud"]["matching_algorithm"] == 0, f"The new tag has a match: {tags['Nextcloud']!r}")
+    # Without an owner, as the tags of the consume folder of Paperless, every account sees it.
+    check(tags["Nextcloud"]["owner"] is None, f"The new tag has an owner: {tags['Nextcloud']!r}")
+    wanted = {tags["Contract"]["id"], tags["Nextcloud"]["id"], tags["Inbox"]["id"]}
+    check(set(item["tags"]) == wanted, f"P{document} has the tags {item['tags']!r}, not {sorted(wanted)!r}.")
 
 
 def status():
