@@ -15,6 +15,8 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\IAppConfig;
+use OCP\Lock\ILockingProvider;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -22,11 +24,19 @@ final class StatusServiceTest extends TestCase {
 	use InMemoryConfiguration;
 
 	private TestClock $clock;
+	/** @var ILockingProvider&MockObject */
+	private ILockingProvider $locking;
+	/** Whether a run holds its lock. */
+	private bool $locked = false;
 	private StatusService $service;
 
 	protected function setUp(): void {
 		$this->clock = new TestClock();
-		$this->service = new StatusService($this->appConfig(), $this->clock);
+		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking->method('isLocked')->willReturnCallback(fn (string $path, int $type): bool => $this->locked
+			&& $path === 'paperless_sync::synchronization'
+			&& $type === ILockingProvider::LOCK_EXCLUSIVE);
+		$this->service = $this->statusService($this->clock, $this->locking);
 	}
 
 	public function testNothingRanYet(): void {
@@ -80,6 +90,88 @@ final class StatusServiceTest extends TestCase {
 		$this->service->started(true);
 		self::assertSame('dry-run-running', $this->service->get()['state']);
 		self::assertSame(1, $this->settings['status_last_sync_started'], 'A dry-run is no start for the schedule.');
+	}
+
+	/** "Synchronize now" queues a run in a background job, which hasn't started yet. */
+	public function testQueuedRunKeepsTheTimesAndTheReportOfTheLastRun(): void {
+		$this->service->completed(new SyncReport(false, 1000, 1060));
+
+		$this->service->queued();
+
+		$status = $this->service->get();
+		self::assertSame('queued', $status['state']);
+		self::assertSame(1000, $status['report']['startedAt']);
+		self::assertSame(1060, $status['lastEnded']);
+		self::assertSame(1060, $status['lastSuccess']);
+
+		$this->service->started(false);
+		self::assertSame('running', $this->service->get()['state'], 'The run says when it starts.');
+	}
+
+	public function testRunIsActiveWhileItHoldsItsLock(): void {
+		self::assertFalse($this->service->active());
+
+		$this->locked = true;
+
+		self::assertTrue($this->service->active());
+	}
+
+	/**
+	 * PHP may stop a run before it can say how it ended, such as a web server that ends a long
+	 * request or a container that stops: a run that is older than a lock lasts, and whose lock is
+	 * gone, was interrupted.
+	 */
+	public function testRunThatLostItsLockAfterTheLockTimeWasInterrupted(): void {
+		$this->service->completed(new SyncReport(false, 1000, 1060));
+		foreach (['running', 'dry-run-running'] as $state) {
+			$this->settings['status_last_state'] = $state;
+			$this->settings['status_last_started'] = $this->clock->time - 3601;
+
+			$status = $this->service->get();
+
+			self::assertSame('interrupted', $status['state'], $state);
+			self::assertSame($state, $this->settings['status_last_state'], 'Only what the status says changes, not what it keeps.');
+			self::assertSame(1060, $status['lastEnded']);
+		}
+	}
+
+	public function testRunThatHoldsItsLockIsActiveAlsoAfterTheLockTime(): void {
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_started'] = $this->clock->time - 7200;
+		$this->locked = true;
+
+		self::assertSame('running', $this->service->get()['state']);
+	}
+
+	/**
+	 * Without locking (filelocking.enabled false), a run never holds a lock; it counts as active as
+	 * long as a lock would last.
+	 */
+	public function testRecentRunWithoutALockIsActive(): void {
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_started'] = $this->clock->time - 3500;
+
+		self::assertSame('running', $this->service->get()['state']);
+	}
+
+	public function testLockTimeComesFromTheConfigurationOfNextcloud(): void {
+		$this->systemSettings['filelocking.ttl'] = 600;
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_started'] = $this->clock->time - 700;
+
+		self::assertSame('interrupted', $this->service->get()['state']);
+
+		$this->systemSettings['filelocking.ttl'] = 7200;
+		self::assertSame('running', $this->service->get()['state']);
+	}
+
+	public function testOnlyARunCanBeInterrupted(): void {
+		$this->settings['status_last_started'] = $this->clock->time - 7200;
+		foreach (['queued', 'completed', 'failed'] as $state) {
+			$this->settings['status_last_state'] = $state;
+
+			self::assertSame($state, $this->service->get()['state']);
+		}
 	}
 
 	public function testCompletedRunKeepsItsSummaryAndItsReport(): void {
@@ -441,7 +533,7 @@ final class StatusServiceTest extends TestCase {
 		$appConfig->method('getValueString')->willReturnCallback(static fn (string $app, string $key, string $default): string => $default);
 		$appConfig->expects(self::never())->method('deleteKey');
 
-		(new StatusService($appConfig, $this->clock))->completed(new SyncReport(false, 1000, 1060));
+		(new StatusService($appConfig, $this->clock, $this->locking, $this->systemConfig()))->completed(new SyncReport(false, 1000, 1060));
 	}
 
 	public function testUnreadableFailuresCountAsNone(): void {

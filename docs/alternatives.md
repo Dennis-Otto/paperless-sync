@@ -29,14 +29,14 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 | | [Paperless Sync](#paperless-sync) | [Paperless integration](#nextclouds-paperless-integration) | [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) | [rclone script](#an-rclone-or-webdav-script) | [Mount](#an-external-storage-mount-of-the-media-folder) | [Paperless itself](#paperlesss-own-ways-in) |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Direction** | Paperless → Nextcloud, and an inbox folder → Paperless | Nextcloud → Paperless | Paperless → Nextcloud | Paperless → Nextcloud | Paperless's own files, shown in Nextcloud | into Paperless |
-| **Runs** | inside Nextcloud, as a background job | inside Nextcloud, when a user clicks | in a privileged container next to Paperless | as a scheduled job on the Paperless server | inside Nextcloud | inside Paperless |
+| **Runs** | inside Nextcloud, as a background job, or in the shell with `occ` | inside Nextcloud, when a user clicks | in a privileged container next to Paperless | as a scheduled job on the Paperless server | inside Nextcloud | inside Paperless |
 | **Reads Paperless through** | its REST API, with a token | its REST API, with a token | its media folder, read-only | its media folder | its media folder, local or over SMB or SFTP | — |
 | **Nextcloud password stored** | none | none | a password or app password of an account | an app password, in `rclone.conf` | none for a local folder | — |
 | **Folders** | its own path template: correspondent, type, year or any metadata | — | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | — |
 | **New title or correspondent** | the file is renamed or moved, and keeps its shares, comments and versions | — | followed, as Paperless renames its file | a new upload, the old file deleted | seen at the next scan, as a new file without the shares of the old one | — |
 | **Delay** | the interval, 5 minutes by default, once the document has left the Paperless inbox | a click | seconds | the schedule of the job | until Nextcloud scans the folder | — |
 | **Document deleted in Paperless** | its copy moves to a folder of its own, and is deleted only when you allow it, after complete scans confirm it | — | deleted at once | deleted at once by `rclone sync` | gone at once | — |
-| **Preview of the changes** | a dry run | — | — | `--dry-run` | — | — |
+| **Preview of the changes** | a dry run, on the settings page or with `occ` | — | — | `--dry-run` | — | — |
 | **Edits in Nextcloud** | stay in the copy until its document changes in Paperless, never reach Paperless | — | overwritten at its next start | overwritten at the next run | change Paperless's own files, unless the mount is read-only | — |
 | **Paperless on another server** | yes, over HTTP or HTTPS | yes | needs its media folder | needs its media folder | over SMB or SFTP | — |
 | **Users** | one archive of one Nextcloud user, shared with others | every user with a token of their own | one account, shared with others | one account, shared with others | the users and groups of the mount | — |

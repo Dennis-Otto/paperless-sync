@@ -36,6 +36,7 @@ use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
 use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -77,7 +78,7 @@ final class SyncServiceTest extends TestCase {
 		$this->configService->save(self::validSettings(), 'test-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$this->status = new StatusService($this->appConfig(), $this->clock);
+		$this->status = $this->statusService($this->clock);
 		$this->service = new SyncService(
 			$this->configService,
 			$this->paperless,
@@ -1035,6 +1036,116 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(1, $second->unchanged);
 		self::assertSame(1, $second->exported);
 		self::assertArrayHasKey(123, $this->state->exports);
+	}
+
+	/** A run on the command line may make more or fewer changes than the batch size of the settings. */
+	public function testBatchSizeOfARunTakesThePlaceOfThatOfTheSettings(): void {
+		$this->configService->save(['batch_size' => 1]);
+		$this->paperless->documents = $this->documents(3);
+		$this->paperless->contents = [1 => '%PDF-1', 2 => '%PDF-2', 3 => '%PDF-3'];
+
+		$dryRun = $this->service->run(true, batchSize: 2);
+		$report = $this->service->run(false, batchSize: PHP_INT_MAX);
+
+		self::assertSame(2, $dryRun->exported);
+		self::assertSame(1, $dryRun->skipped);
+		self::assertSame(3, $report->exported);
+		self::assertSame(0, $report->skipped);
+		self::assertSame(1, $this->configService->get()->batchSize, 'The settings keep their batch size.');
+	}
+
+	public function testBatchSizeOfARunIsAtLeastOne(): void {
+		$this->locking->expects(self::never())->method('acquireLock');
+
+		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionMessage('The batch size must be at least 1.');
+
+		$this->service->run(false, batchSize: 0);
+	}
+
+	/**
+	 * occ paperless_sync:forget: the next run downloads the document again and writes it in place
+	 * of its copy, also of a damaged one that it took for the document before, and also when
+	 * conflicts are skipped, because the copy stays the app's own.
+	 */
+	public function testForgottenCopyIsExportedAgainInItsPlace(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-damaged';
+		self::assertSame(1, $this->service->run()->unchanged, 'Before, the run takes the copy for the document.');
+
+		self::assertSame([123], $this->service->forget([123, 999]), 'P999 has no copy to forget.');
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH), 'The copy keeps its ID, with its shares and versions.');
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame(1, $this->service->run()->unchanged, 'Written again, the copy is that of the document.');
+	}
+
+	public function testForgettingEveryCopyLeavesDocumentsWithoutOneAlone(): void {
+		$this->exportDocuments([$this->document(1), $this->document(2)]);
+		$this->state->exports[3] = ['document_id' => 3, 'last_error' => 'Nextcloud file conflict'];
+
+		$forgotten = $this->service->forget();
+
+		sort($forgotten);
+		self::assertSame([1, 2], $forgotten);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[1]['fingerprint']);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[2]['fingerprint']);
+		self::assertSame($this->archivePath(1), $this->state->exports[1]['path'], 'The copy keeps its path, so that none is left behind.');
+		self::assertSame(['document_id' => 3, 'last_error' => 'Nextcloud file conflict'], $this->state->exports[3]);
+	}
+
+	/**
+	 * The copy of a document in the trash of Paperless, or of a missing one, keeps its fingerprint:
+	 * it tells whether someone changed the copy before the app deletes it.
+	 */
+	public function testForgettingLeavesTheCopiesOfTrashedAndMissingDocumentsAlone(): void {
+		$this->exportDocuments([$this->document(1), $this->document(2), $this->document(3)]);
+		$this->state->exports[2]['state'] = 'trash';
+		$this->state->exports[3]['state'] = 'missing';
+		$exports = $this->state->exports;
+
+		self::assertSame([1], $this->service->forget([1, 2, 3]));
+		self::assertSame($exports[2], $this->state->exports[2]);
+		self::assertSame($exports[3], $this->state->exports[3]);
+		self::assertSame([1], $this->service->forget());
+	}
+
+	/** No run saves what forgetting forgets at the same time. */
+	public function testForgettingHoldsTheLockOfARun(): void {
+		$this->exportDocument();
+		$this->locking->expects(self::once())->method('acquireLock')->with('paperless_sync::synchronization', ILockingProvider::LOCK_EXCLUSIVE, 'Paperless Sync');
+		$this->locking->expects(self::once())->method('releaseLock')->with('paperless_sync::synchronization', ILockingProvider::LOCK_EXCLUSIVE);
+
+		$this->service->forget([123]);
+	}
+
+	public function testForgettingWhileARunIsActiveChangesNothing(): void {
+		$this->exportDocument();
+		$exports = $this->state->exports;
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+
+		try {
+			$this->service->forget();
+			self::fail('Forgetting must wait for no run.');
+		} catch (LockedException) {
+		}
+
+		self::assertSame($exports, $this->state->exports);
+	}
+
+	public function testForgettingNeedsATargetUser(): void {
+		$this->settings = [];
+		$this->locking->expects(self::once())->method('releaseLock');
+
+		$this->expectException(InvalidSettingException::class);
+		$this->expectExceptionMessage('Paperless Sync is not completely configured.');
+
+		$this->service->forget();
 	}
 
 	public function testMostRecentlyAddedDocumentsComeFirst(): void {

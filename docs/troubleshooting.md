@@ -5,7 +5,7 @@
 When something doesn't work, Paperless Sync says why, and this page leads from what you see to its cause and its fix. The [FAQ](faq.md) answers the questions about what the app does, such as where deleted files go. Where to look first:
 
 - **Saving the settings fails:** the message next to the buttons, in the bar at the bottom of *Administration settings → Paperless Sync*, names the cause.
-- **A run fails or ends with errors:** the status at the top of the settings shows the state of the last run, also of a scheduled one, with a box of its errors, and the [Nextcloud log](#read-the-log) has an entry of the app `paperless_sync` for each of them.
+- **A run fails or ends with errors:** the status at the top of the settings shows the state of the last run, also of a scheduled one, with a box of its errors, and the [Nextcloud log](#read-the-log) has an entry of the app `paperless_sync` for each of them. On the server, `occ paperless_sync:status` shows the same.
 - **No run starts at all:** the [background jobs](#no-run-starts) of Nextcloud don't run.
 - **A file is missing or in an unexpected place:** the report of the last run, or of a dry-run, has a line for every file that the run writes, moves or deletes.
 
@@ -49,10 +49,13 @@ When something doesn't work, Paperless Sync says why, and this page leads from w
 | A file in the error folder with `Paperless import not finished` in its `.error.txt` | Paperless still lists the task of the file as pending or started a day after the upload, and has no document with its content: its worker may be down, or its queue long. The app doesn't upload the file again, so that Paperless-ngx 3.x can't import it twice. **Fix:** Check that the worker of Paperless runs. If the document appears in Paperless, delete the file; otherwise move it back into the inbox. |
 | `Paperless has not finished the import task … a day after the upload` | Paperless doesn't list the task of the file and has no document with its content: its queue lost the task, as after a restart of Redis. The file is uploaded again after 15 minutes. **Fix:** Check that the worker of Paperless runs and that its Redis keeps its data. |
 | The status says *Failed* or *Completed with errors* | The run, or single documents, failed. **Fix:** Read the box of errors below the status, then the [log](#read-the-log). |
+| The status stays at *Queued* | *Synchronize now* queued a run, and the background jobs of Nextcloud haven't started it: they don't run, or they run with *AJAX* while nobody has Nextcloud open. **Fix:** See [No run starts](#no-run-starts), or run `occ paperless_sync:run` on the server. |
+| The status says *Interrupted* | PHP stopped the run before it could say how it ended, such as on a restart of the server or of its container, or at a limit of PHP; the run started longer ago than Nextcloud keeps its lock, an hour by default. **Fix:** Nothing, if the next run completes: it continues where this one stopped. Otherwise look for a fatal error of PHP in the [log](#read-the-log). |
+| `Another synchronization run is already active.` | A run holds the lock, such as a scheduled one or one of `occ`, and only one runs at a time. **Fix:** Wait until the status shows its end, then try again. |
 | The next run lies in the past, or the status shows no scheduled run | The background jobs of Nextcloud don't run, or synchronization is off. **Fix:** See [No run starts](#no-run-starts). |
 | Other users don't see the archive | It lies in the files of the target user alone. **Fix:** Share its folder; see [Other users don't see the archive](#other-users-dont-see-the-archive). |
 | A document in the Paperless trash stays in the archive for several runs | The account doesn't own it, so the Paperless trash doesn't show it to the account. **Fix:** See [Documents of the trash come late](#documents-of-the-trash-come-late). |
-| A deleted copy is not in *Deleted files* | A run started with *Synchronize now* deleted it. **Fix:** See [Deleted copies are not in the trash bin](#deleted-copies-are-not-in-the-trash-bin). |
+| A deleted copy is not in *Deleted files* | It is in the trash bin of the target user, which only that user sees, or the app *Deleted files* is off. **Fix:** See [Deleted copies are not in the trash bin](#deleted-copies-are-not-in-the-trash-bin). |
 
 ## Connection
 
@@ -91,9 +94,9 @@ Every run is a background job of Nextcloud. When the status shows no next run, s
 
 1. Open *Administration settings → Basic settings → Background jobs*. It must say **Cron**, and the last job must have run a few minutes ago. *AJAX* runs jobs only while someone has Nextcloud open in a browser, one job at a time.
 2. Set up the system cron as [Nextcloud describes it](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/background_jobs_configuration.html#cron): every five minutes, `php -f /var/www/html/cron.php` as the user of the web server. The image of Nextcloud for Docker runs no cron of its own; give it a second container of the same image with the command `/cron.sh`, or a cron job on the host with `docker exec -u www-data nextcloud php -f /var/www/html/cron.php`.
-3. `occ background-job:list --class 'OCA\PaperlessSync\Cron\SyncJob'` shows when Nextcloud last started the job of the app.
+3. `occ background-job:list --class 'OCA\PaperlessSync\Cron\SyncJob'` shows when Nextcloud last started the job of the app, and `occ background-job:list --class 'OCA\PaperlessSync\Cron\ManualSyncJob'` a run of *Synchronize now* that waits for its start.
 
-Nextcloud starts the job every five minutes at most, and the job starts a run when the interval of the app has passed since the last one; a dry-run doesn't count. A run that is still busy, such as the first synchronization of a large archive, holds back the next one until it ends.
+Nextcloud starts the job every five minutes at most, and the job starts a run when the interval of the app has passed since the last one; a dry-run doesn't count. A run that is still busy, such as the first synchronization of a large archive, holds back the next one until it ends. `occ paperless_sync:run` starts a run in the shell at once, without the background jobs, and says why it fails.
 
 ### Read the log
 
@@ -135,7 +138,7 @@ The archive is in the files of the target user alone; the app gives nobody else 
 
 ### Deleted copies are not in the trash bin
 
-A copy that a scheduled run deletes, and a file in the way of a copy that moves, go to the trash bin of the target user, *Deleted files* in *Files*, where only the target user sees and restores it. A run that an administrator starts with *Synchronize now* deletes such files for good instead, which [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks: until it is fixed, leave runs that may delete to the schedule, and try a change with a dry-run first. Without the app *Deleted files* of Nextcloud, every deletion is for good. A copy whose document gets a new content is no deletion: it stays the same file, with the previous content as a version.
+A copy that a run deletes, and a file in the way of a copy that moves, go to the trash bin of the target user, *Deleted files* in *Files*, where only the target user sees and restores it: an administrator who started the run doesn't find it in a trash bin of their own. That holds for a scheduled run, a run of *Synchronize now* and one of `occ paperless_sync:run`; in earlier versions, a run of *Synchronize now* ran in the request of the administrator and deleted such files for good. [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks a run whose process set up the files of another user first, which deletes them for good still: try a change with a dry-run first. Without the app *Deleted files* of Nextcloud, every deletion is for good. A copy whose document gets a new content is no deletion: it stays the same file, with the previous content as a version.
 
 ### A file is back after I deleted or renamed it
 

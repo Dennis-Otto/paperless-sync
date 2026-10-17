@@ -14,7 +14,6 @@ use OCA\PaperlessSync\Cron\SyncJob;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
-use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
@@ -60,7 +59,7 @@ final class SyncJobTest extends TestCase {
 		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->locking = $this->createMock(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$status = new StatusService($this->appConfig(), $this->clock);
+		$status = $this->statusService($this->clock, $this->locking);
 		$this->paperless = new TestPaperlessClient();
 		$this->sync = new SyncService(
 			$this->configService,

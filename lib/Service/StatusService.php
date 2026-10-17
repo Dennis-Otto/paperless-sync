@@ -14,12 +14,18 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
+use OCP\IConfig;
+use OCP\Lock\ILockingProvider;
 
 /**
  * The status of the latest run, kept in the app configuration: when it started and ended, how it
  * ended, its summary, its error, its report for the settings page, and the Paperless that it
  * reached. Every key is lazy: Nextcloud loads the status when the app asks for it, not with every
  * request of every user.
+ *
+ * Its state is one of never-run, queued (a run by hand waits for its background job), running,
+ * dry-run-running, completed, dry-run-completed, completed-with-errors, failed, and interrupted: a
+ * run that ended without saying how, because PHP stopped it, which the status tells from its lock.
  *
  * It also counts the runs in a row that did not succeed, from which the notifications, the setup
  * checks and the status API tell a mirror that keeps failing from one that failed once.
@@ -33,6 +39,8 @@ final class StatusService {
 	public const REPORT_ACTIONS = 200;
 	/** The most characters of an error and of a line of the kept report. */
 	private const LINE_LENGTH = 1000;
+	/** How long Nextcloud keeps a lock by default, in seconds: filelocking.ttl of config.php. */
+	private const LOCK_TTL = 3600;
 	/**
 	 * A mirror is stale when its last successful run is older than this many intervals of the
 	 * settings, but at least STALE_MINIMUM seconds, so that a cron job that comes a few minutes
@@ -80,7 +88,22 @@ final class StatusService {
 	public function __construct(
 		private IAppConfig $appConfig,
 		private ITimeFactory $timeFactory,
+		private ILockingProvider $lockingProvider,
+		private IConfig $config,
 	) {
+	}
+
+	/**
+	 * A run by hand waits for its background job, which Nextcloud starts with its next background
+	 * jobs. The run says when it starts; until then, the status keeps the times of the last one.
+	 */
+	public function queued(): void {
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'queued', lazy: true);
+	}
+
+	/** Whether a run is active: it holds the lock until it ends. */
+	public function active(): bool {
+		return $this->lockingProvider->isLocked(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
 	}
 
 	/**
@@ -163,15 +186,20 @@ final class StatusService {
 	/** @return Status */
 	public function get(): array {
 		$lastCompleted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_COMPLETED, 0, lazy: true);
+		$lastStarted = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true);
+		$state = $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run', lazy: true);
+		if (str_ends_with($state, 'running') && $this->interrupted($lastStarted)) {
+			$state = 'interrupted';
+		}
 
 		return [
-			'lastStarted' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_STARTED, 0, lazy: true),
+			'lastStarted' => $lastStarted,
 			'lastCompleted' => $lastCompleted,
 			// A status from before the end of every run was kept: a run that failed set the end of
 			// the last completed run then.
 			'lastEnded' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_ENDED, $lastCompleted, lazy: true),
 			'lastSuccess' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0, lazy: true),
-			'state' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_STATE, 'never-run', lazy: true),
+			'state' => $state,
 			'summary' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_SUMMARY, '{}', lazy: true)),
 			'error' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true),
 			'report' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_REPORT, '{}', lazy: true)),
@@ -276,6 +304,19 @@ final class StatusService {
 		}
 
 		return $last > 0 ? $last + $config->syncIntervalMinutes * 60 : 0;
+	}
+
+	/**
+	 * Whether a run that started then has ended without saying how, because PHP stopped it, such as
+	 * a web server that ended the request or a container that was stopped: it is older than
+	 * Nextcloud keeps a lock, and its lock is gone. The lock alone would tell, but an instance
+	 * without locking (filelocking.enabled false) never has one, and the age keeps an active run
+	 * from counting as interrupted there.
+	 */
+	private function interrupted(int $lastStarted): bool {
+		$lockTtl = $this->config->getSystemValueInt('filelocking.ttl', self::LOCK_TTL);
+
+		return $this->timeFactory->getTime() - $lastStarted > $lockTtl && !$this->active();
 	}
 
 	/**

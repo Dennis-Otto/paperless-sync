@@ -11,19 +11,25 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\StatusService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
+use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\MockObject\MockObject;
 
 /**
- * Nextcloud's app configuration and credentials store, kept in the properties of the test.
+ * Nextcloud's app configuration, system configuration and credentials store, kept in the
+ * properties of the test.
  */
 trait InMemoryConfiguration {
 	/** @var array<string, bool|int|string> */
 	private array $settings = [];
+	/** @var array<string, int> the values of config.php */
+	private array $systemSettings = [];
 	/** @var array<string, true> the keys stored as lazy, which Nextcloud reads only when asked for lazy keys */
 	private array $lazyKeys = [];
 	/** @var array<string, true> the keys read as lazy, which makes Nextcloud load every lazy value */
@@ -39,6 +45,11 @@ trait InMemoryConfiguration {
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
 		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig());
+	}
+
+	/** The status of the runs; a run holds its lock when $locking says so, and never without it. */
+	private function statusService(ITimeFactory $clock, ?ILockingProvider $locking = null): StatusService {
+		return new StatusService($this->appConfig(), $clock, $locking ?? $this->createStub(ILockingProvider::class), $this->systemConfig());
 	}
 
 	/**
@@ -144,8 +155,9 @@ trait InMemoryConfiguration {
 	}
 
 	/**
-	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language and
-	 * $defaultLanguage as default_language, which is missing when empty.
+	 * Nextcloud's system configuration, config.php, with $forcedLanguage as force_language,
+	 * $defaultLanguage as default_language, which is missing when empty, and the numbers of
+	 * $systemSettings, such as filelocking.ttl.
 	 *
 	 * @return IConfig&MockObject
 	 */
@@ -157,6 +169,7 @@ trait InMemoryConfiguration {
 			'default_language' => $this->defaultLanguage === '' ? $default : $this->defaultLanguage,
 			default => $default,
 		});
+		$config->method('getSystemValueInt')->willReturnCallback(fn (string $key, int $default = 0): int => $this->systemSettings[$key] ?? $default);
 
 		return $config;
 	}
