@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [0.4.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.3.0...v0.4.0) (2026-10-17)
+
+
+### Features
+
+* **inbox:** subfolders as tags, tags for every import and missing tags created ([#170](https://github.com/Dennis-Otto/paperless-sync/issues/170)) ([b0b9dc4](https://github.com/Dennis-Otto/paperless-sync/commit/b0b9dc4e48352c1fb0b2895cffd9ada601dd70a3))
+* near-real-time sync through a Paperless workflow webhook ([#179](https://github.com/Dennis-Otto/paperless-sync/issues/179)) ([ce4df11](https://github.com/Dennis-Otto/paperless-sync/commit/ce4df11de25cc351a909459cb053d11a5344dc35))
+* occ commands and 'Synchronize now' as a background job ([#171](https://github.com/Dennis-Otto/paperless-sync/issues/171)) ([641decc](https://github.com/Dennis-Otto/paperless-sync/commit/641decc8821251d3ca3641c9dc1a9888750462e1))
+* **settings:** a readable, translated run report ([#176](https://github.com/Dennis-Otto/paperless-sync/issues/176)) ([d91b0ea](https://github.com/Dennis-Otto/paperless-sync/commit/d91b0ea18cce308814683479f58a7754a6d224d3))
+* **settings:** user and tag pickers instead of free-text fields ([#178](https://github.com/Dennis-Otto/paperless-sync/issues/178)) ([10b70e6](https://github.com/Dennis-Otto/paperless-sync/commit/10b70e6883ee1a760a95480daf2e917147857414))
+
 ## [0.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 ### Features
