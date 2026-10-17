@@ -66,7 +66,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
 2. In Paperless-ngx, create a dedicated account for the app under *Users & Groups*, not a superuser, with the permission **View** for Documents, Correspondents, Document Types, Storage Paths, Tags and UI Settings, and, if you use the inbox, **Add** for Documents and **View** for Paperless Tasks. Make it the owner of the documents to mirror, so that their trash reaches the archive right away, and create its API token under *My Profile*.
-3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, the token and the Nextcloud user who owns the archive, and click **Test connection**: the checklist below it shows every permission that the account lacks, and what to grant. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first. Leave synchronization disabled, and save; saving runs the same checks.
+3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL and the token, pick the Nextcloud user who owns the archive from the users that the field offers, and click **Test connection**: the checklist below it shows every permission that the account lacks, and what to grant. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first. Leave synchronization disabled, and save; saving runs the same checks.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Documents/Paperless/Archive` of that user.
 
@@ -107,6 +107,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
 - [Changes within seconds](#changes-within-seconds): a workflow of Paperless calls the webhook of the app when it adds or changes a document, and its copy changes at once, without a container next to Paperless, its media folder or a password of Nextcloud
 - Runs on demand and dry runs from the settings, each with a report of its changes and errors in the language of the administrator, errors first, with a filter for each kind of change, links to the files and a button that copies it for a bug report, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
+- [Pickers in the settings](#target-user-and-tags) offer the users of Nextcloud for the target user and the tags of Paperless for the excluded tags and the tags of every import, and mark a user or a tag that doesn't exist, so that a typo shows before the first run
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English and German: the settings, their messages and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
 - [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
@@ -266,6 +267,22 @@ After a save, the form shows the settings as Nextcloud stored them: the URL with
 
 Results and errors appear in the bar of the buttons, which stays at the bottom of the window. **Synchronize now** doesn't wait for the run: it queues the run as a background job of Nextcloud and answers at once, the status says *Queued* until the next background jobs start it, within five minutes with the system cron, and the bar says how the run ended once the status shows its end. A run can so take as long as it needs, and no proxy in front of Nextcloud cuts it off. **Run dry-run** answers with its report; when a proxy or the web server answers for a long dry-run instead, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the dry-run, the page says that it continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how it ended.
 
+### Target user and tags
+
+The field **Nextcloud target user ID** offers the users of Nextcloud whose account name, display name or e-mail address holds what you type: pick one with the arrow keys and Enter, or with a click. It takes the account name, as *Accounts* in the administration lists it, not the display name, and marks a disabled account as *disabled*. When you leave the field with an ID that Nextcloud doesn't know, it says so at once: *Nextcloud has no user with the ID …*. Saving tests the target user only together with the connection, so that a schedule can always be paused; the field shows a typo before that.
+
+The fields **Additional excluded Paperless tags** and **Tags for every import** offer the tags of Paperless: type a part of a name to narrow them down, and pick one. Each tag of the field has a button that removes it, and Backspace in the empty field removes the last one. A tag that Paperless doesn't have yet can be typed too, ended with Enter or a comma, and a save, a test or a dry-run takes what you typed as well. Such a name is marked *not in Paperless*, which also shows a typo: a run excludes the documents with that tag once Paperless has it, and gives an import that tag once Paperless has it or, with *Create missing tags*, creates it. A run compares the names without regard to case, and so does the field: a name that you type takes the spelling of Paperless. The page reads the tags with the saved URL and token, as a run reads them, so they appear once the connection is saved, and the token stays on the server. A tag whose name holds a comma can't be in either list, because commas separate the names of the setting, so the fields don't offer it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-tags-dark.png">
+  <img alt="The excluded tags while a name is typed: Private, and Drfat, marked not in Paperless; below them the field with Dr typed and the open list with the tag Draft of Paperless and the option to add Dr as it is" src="docs/images/settings-tags-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.dark.svg">
+  <img src="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.svg" alt="Where the pickers of the settings take their names from: The field of the target user asks the provisioning API of Nextcloud for the users whose ID, name or e-mail address holds what is typed, and for the user ID that the field names, which it marks when Nextcloud has no such user. The fields of the excluded tags and of the tags for every import ask Paperless Sync, which reads the tags from Paperless-ngx with the stored URL and API token, as a run does; the token stays on the server. A name that Paperless has no tag of can be added too, and is marked as not in Paperless.">
+</picture>
+
 ### Folder ownership
 
 The configured Nextcloud target user owns the synchronized folders. The app operates through Nextcloud's internal filesystem API and therefore does not need that user's password or an app password. Other users see the archive when the target user shares its folder with them, or with a group of them; share it read-only, and share the inbox folder only with those who may send documents to Paperless.
@@ -376,7 +393,7 @@ When Paperless can't be reached, or fails with a server error such as `502 Bad G
 
 #### Tags of the inbox
 
-A file can bring its tags to Paperless, as the consume folder of Paperless does with `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS`. With *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026*, and *Tags for every import*, such as `Scanned, Nextcloud`, go with every file. Both are off until you turn them on. A name finds the tag of Paperless with that name, whatever its case, so the folder `taxes` finds the tag *Taxes*:
+A file can bring its tags to Paperless, as the consume folder of Paperless does with `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS`. With *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026*, and *Tags for every import*, such as *Scanned* and *Nextcloud*, which the field [offers from the tags of Paperless](#target-user-and-tags), go with every file. Both are off until you turn them on. A name finds the tag of Paperless with that name, whatever its case, so the folder `taxes` finds the tag *Taxes*:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-tags-a-file-of-the-inbox-gets.dark.svg">

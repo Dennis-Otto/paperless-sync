@@ -36,7 +36,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 The settings are in **Administration settings → Paperless Sync**. Above the sections, the status shows how the last run ended, when it finished, the last successful run and the next scheduled run, and the errors of the last run when it had any; below them, in a bar that stays at the bottom of the window, the buttons save the settings, start a dry-run or a run, and disconnect Paperless, with the note about unsaved changes and the result of each action next to them. *Saving, pausing and disconnecting* above explains when saving tests the connection, how to pause synchronization and what Disconnect keeps. The *Help* link of each section leads to its part of this guide.
 
-**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, the base folder in the files of that user, which a new installation names in the default language of Nextcloud, like the other folders, as *Folder names* above describes, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses. **Test connection** below them checks these settings without saving them, and lists every Paperless permission that the enabled modules need, as *Connection checklist* above describes.
+**1 · Connection and ownership:** the address of Paperless, its API token, the Nextcloud user who owns the archive, picked from the [users of Nextcloud](guide.md#target-user-and-tags), the base folder in the files of that user, which a new installation names in the default language of Nextcloud, like the other folders, as *Folder names* above describes, and whether Paperless runs in your local network, at an address that Nextcloud otherwise refuses. **Test connection** below them checks these settings without saving them, and lists every Paperless permission that the enabled modules need, as *Connection checklist* above describes.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-connection-dark.png">
@@ -50,14 +50,14 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Schedule and modules: switches for the scheduled synchronization, the archive export and the inbox import, the interval in minutes and the maximum changes per module and run" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the [path template](guide.md#path-template-variables) with a button for each of its variables and the paths of the newest documents with it while you type, the archive version or the original, and which documents stay out.
+**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the [path template](guide.md#path-template-variables) with a button for each of its variables and the paths of the newest documents with it while you type, the archive version or the original, and which documents stay out: those in the inbox of Paperless, and those with one of the [excluded tags](guide.md#target-user-and-tags), picked from the tags of Paperless.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
   <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents and the excluded tags" src="images/settings-archive-light.png">
 </picture>
 
-**4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, whether an imported file leaves the inbox, and the [tags of the inbox](guide.md#tags-of-the-inbox): one for each subfolder, tags for every import, and whether the app creates those that Paperless lacks.
+**4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, whether an imported file leaves the inbox, and the [tags of the inbox](guide.md#tags-of-the-inbox): one for each subfolder, tags for every import, picked from the tags of Paperless, and whether the app creates those that Paperless lacks.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-inbox-dark.png">

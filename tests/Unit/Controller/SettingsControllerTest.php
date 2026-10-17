@@ -29,7 +29,12 @@ use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\SubAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Config\IUserConfig;
 use OCP\IRequest;
@@ -530,6 +535,115 @@ final class SettingsControllerTest extends TestCase {
 		self::assertTrue($config->permanentDelete);
 		self::assertSame(20, $config->batchSize);
 		self::assertNull($this->credential);
+	}
+
+	/**
+	 * The page offers the tags of Paperless for the excluded tags, as a run reads them with the
+	 * stored URL and token, once each and in the order of their letters. A run compares the names
+	 * in small letters, so Private and PRIVATE are one tag; a name with a comma or a line break,
+	 * which separate the names of the setting, can't be one of them.
+	 */
+	public function testTagsAreTheNamesOfPaperlessThatTheSettingCanHold(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->expects(self::once())->method('tags')->willReturn([
+			'names' => [
+				'9' => 'Inbox',
+				'10' => 'Private',
+				'11' => 'draft',
+				'12' => 'Tax, 2026',
+				'13' => "Two\nlines",
+				'14' => ' ',
+				'15' => 'PRIVATE',
+				'16' => 'Tag 10',
+				'17' => ' Tag 9 ',
+				'18' => '2026',
+			],
+			'inbox' => ['9'],
+		]);
+
+		$response = $this->controller->tags();
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(['tags' => ['2026', 'draft', 'Inbox', 'Private', 'Tag 9', 'Tag 10']], self::answer($response));
+	}
+
+	/** @return array<string, array{array<string, mixed>}> */
+	public static function connectionsWithoutTheirToken(): array {
+		return [
+			'nothing saved' => [[]],
+			// The URL changed past the settings page, through occ: the token stays with its own URL.
+			'another URL' => [['paperless_url' => 'https://other.example.test']],
+		];
+	}
+
+	/**
+	 * Without a saved connection there are no tags to read; the page takes names as they are typed.
+	 *
+	 * @param array<string, mixed> $changes
+	 */
+	#[DataProvider('connectionsWithoutTheirToken')]
+	public function testTagsNeedTheSavedConnection(array $changes): void {
+		if ($changes !== []) {
+			$this->configService()->save(self::validSettings(), 'secret-token');
+			$this->settings = $changes + $this->settings;
+		}
+		$this->paperless->expects(self::never())->method('tags');
+
+		$response = $this->controller->tags();
+
+		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		self::assertSame(['message' => 'Speichere zuerst die Verbindung zu Paperless; dann erscheinen seine Tags hier.'], $response->getData());
+	}
+
+	public function testTagsSayWhyPaperlessDidNotListThem(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('tags')->willThrowException(new RuntimeException('Paperless request failed with HTTP 403.'));
+
+		$response = $this->controller->tags();
+
+		self::assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		self::assertSame(['message' => 'Paperless hat seine Tags nicht aufgelistet: Paperless request failed with HTTP 403.'], $response->getData());
+	}
+
+	/** A Paperless in the local network that the settings don't allow: the page names the setting. */
+	public function testTagsOfARefusedLocalAddressSayWhatToDo(): void {
+		$this->configService()->save(['paperless_url' => 'http://paperless:8000'] + self::validSettings(), 'secret-token');
+		$this->paperless->method('tags')->willThrowException(new PaperlessLocalNetworkException('paperless'));
+
+		$response = $this->controller->tags();
+
+		self::assertSame(Http::STATUS_BAD_GATEWAY, $response->getStatus());
+		/** @var array{message: string, setting: string} $data */
+		$data = $response->getData();
+		self::assertSame('paperless_local_network', $data['setting']);
+		self::assertStringStartsWith('Nextcloud sperrt Verbindungen zu lokalen Adressen wie paperless.', $data['message']);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function actions(): array {
+		return [
+			'save' => ['save'],
+			'test connection' => ['test'],
+			'preview of the path template' => ['preview'],
+			'disconnect' => ['reset'],
+			'tags of Paperless' => ['tags'],
+		];
+	}
+
+	/**
+	 * Every action of the controller is for administrators alone, the list of tags too, which is
+	 * read with the token of the app. Nextcloud lets others in only with one of these attributes.
+	 */
+	#[DataProvider('actions')]
+	public function testOnlyAdministratorsReachTheSettings(string $method): void {
+		$attributes = array_map(
+			static fn (\ReflectionAttribute $attribute): string => $attribute->getName(),
+			(new ReflectionMethod(SettingsController::class, $method))->getAttributes(),
+		);
+
+		self::assertSame([], array_values(array_intersect($attributes, [
+			NoAdminRequired::class, SubAdminRequired::class, AuthorizedAdminSetting::class, PublicPage::class, NoCSRFRequired::class,
+		])));
 	}
 
 	/**

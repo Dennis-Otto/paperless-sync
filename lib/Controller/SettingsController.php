@@ -205,6 +205,45 @@ final class SettingsController extends Controller {
 	}
 
 	/**
+	 * The names of the tags of Paperless, which the page offers for the excluded tags and the tags
+	 * for every import, read with the stored URL and token, as a run reads them. Without both, there is nothing to read: the page
+	 * then takes names as they are typed. A name that the setting can't hold, with a comma or a line
+	 * break, which separate its names, is left out, and so is an empty one or one that comes twice.
+	 * The names are in the order of their letters, case aside. Only administrators may ask, as for
+	 * every route of the controller.
+	 */
+	#[FrontpageRoute(verb: 'GET', url: '/settings/paperless/tags')]
+	public function tags(): JSONResponse {
+		$config = $this->configService->get();
+		if ($config->paperlessUrl === '' || !$config->tokenConfigured) {
+			return new JSONResponse(['message' => $this->l10n->t('Save the connection to Paperless first; then its tags appear here.')], Http::STATUS_CONFLICT);
+		}
+		try {
+			$names = $this->paperless->tags()['names'];
+		} catch (PaperlessLocalNetworkException $exception) {
+			return new JSONResponse(
+				['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING],
+				Http::STATUS_BAD_GATEWAY,
+			);
+		} catch (\Throwable $exception) {
+			return new JSONResponse(['message' => $this->l10n->t('Paperless did not list its tags: %s', [$exception->getMessage()])], Http::STATUS_BAD_GATEWAY);
+		}
+		// By the name in small letters, as a run compares them: Draft and draft are one tag to it.
+		$tags = [];
+		foreach ($names as $name) {
+			$name = trim($name);
+			$key = mb_strtolower($name);
+			if ($name !== '' && preg_match('/[,\r\n]/', $name) !== 1 && !isset($tags[$key])) {
+				$tags[$key] = $name;
+			}
+		}
+		$tags = array_values($tags);
+		usort($tags, strnatcasecmp(...));
+
+		return new JSONResponse(['tags' => $tags]);
+	}
+
+	/**
 	 * Disconnecting deletes the token, also only with the password confirmed. The answer is the
 	 * configuration that stays, for the page to show.
 	 */

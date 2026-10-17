@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -46,6 +46,27 @@ $help = static function (string $anchor, string $section) use ($l): void {
 		Util::sanitizeHTML($l->t('Help')),
 	));
 };
+// A list of tags of Paperless, which js/settings.js shows as a chip for each name, with a field
+// that offers the tags of Paperless and takes any name that is typed, also of a tag that Paperless
+// doesn't have yet. The setting itself is the hidden input, with the names separated by commas, as
+// the server stores them. $id starts the IDs of its elements, $hint tells how to fill it, and
+// $more, such as a link to the guide, follows the hint.
+$tagPicker = static function (string $setting, string $value, string $id, string $label, string $listLabel, string $hint, ?Closure $more = null) use ($l): void {
+	?>
+	<div class="paperless-sync-field paperless-sync-field--wide paperless-sync-tags" data-tag-picker="<?php p($setting); ?>">
+		<label for="<?php p($id); ?>-input"><?php p($label); ?></label>
+		<input data-setting="<?php p($setting); ?>" type="hidden" value="<?php p($value); ?>">
+		<ul id="<?php p($id); ?>-list" class="paperless-sync-chips" aria-label="<?php p($listLabel); ?>" hidden></ul>
+		<div class="paperless-sync-combobox">
+			<input id="<?php p($id); ?>-input" type="text" placeholder="<?php p($l->t('Add a tag')); ?>" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="<?php p($id); ?>-options" aria-describedby="<?php p($id); ?>-hint <?php p($id); ?>-status" autocomplete="off" spellcheck="false">
+			<ul id="<?php p($id); ?>-options" class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Tags of Paperless')); ?>" hidden></ul>
+		</div>
+		<p id="<?php p($id); ?>-hint" class="settings-hint"><?php p($hint); ?><?php if ($more !== null) { ?> <?php $more(); ?><?php } ?></p>
+		<p id="<?php p($id); ?>-status" class="paperless-sync-field-hint" aria-live="polite"></p>
+		<span id="<?php p($id); ?>-announcement" class="paperless-sync-visually-hidden" aria-live="polite"></span>
+	</div>
+	<?php
+};
 // A run waits for its background job or runs.
 $active = $state === 'queued' || str_ends_with($state, 'running');
 ?>
@@ -60,6 +81,8 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-status-url="<?php p($_['statusUrl']); ?>"
 	data-preview-url="<?php p($_['previewUrl']); ?>"
 	data-files-url="<?php p($_['filesUrl']); ?>"
+	data-tags-url="<?php p($_['tagsUrl']); ?>"
+	data-users-url="<?php p($_['usersUrl']); ?>"
 	data-webhook-url="<?php p($_['webhookStateUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
@@ -124,10 +147,14 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					<span><?php p($l->t('Paperless API token')); ?></span>
 					<input id="paperless-sync-token" type="password" autocomplete="new-password" aria-describedby="paperless-sync-token-hint" placeholder="<?php p($config->tokenConfigured ? $l->t('Configured — leave blank to keep it') : $l->t('Required')); ?>"<?php if (!$config->tokenConfigured) { ?> required<?php } ?>>
 				</label>
-				<label class="paperless-sync-field">
-					<span><?php p($l->t('Nextcloud target user ID')); ?></span>
-					<input data-setting="target_user" type="text" value="<?php p($config->targetUser); ?>" placeholder="paperless-service" required>
-				</label>
+				<div class="paperless-sync-field">
+					<label for="paperless-sync-target-user"><?php p($l->t('Nextcloud target user ID')); ?></label>
+					<div class="paperless-sync-combobox">
+						<input id="paperless-sync-target-user" data-setting="target_user" type="text" value="<?php p($config->targetUser); ?>" placeholder="paperless-service" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="paperless-sync-target-user-options" aria-describedby="paperless-sync-target-user-hint" autocomplete="off" autocapitalize="none" spellcheck="false">
+						<ul id="paperless-sync-target-user-options" class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Users of Nextcloud')); ?>" hidden></ul>
+					</div>
+					<p id="paperless-sync-target-user-hint" class="paperless-sync-field-hint" aria-live="polite"></p>
+				</div>
 				<label class="paperless-sync-field paperless-sync-field--wide">
 					<span><?php p($l->t('Base folder')); ?></span>
 					<input data-setting="base_path" type="text" value="<?php p($config->basePath); ?>" required>
@@ -227,11 +254,14 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Skip Paperless inbox documents')); ?></span></label>
 			</div>
-			<label class="paperless-sync-field paperless-sync-field--wide">
-				<span><?php p($l->t('Additional excluded Paperless tags')); ?></span>
-				<input data-setting="excluded_tags" type="text" value="<?php p($config->excludedTags); ?>" placeholder="<?php p($l->t('Draft, Private')); ?>">
-			</label>
-			<p class="settings-hint"><?php p($l->t('Separate tag names with commas.')); ?></p>
+			<?php $tagPicker(
+				'excluded_tags',
+				$config->excludedTags,
+				'paperless-sync-excluded-tags',
+				$l->t('Additional excluded Paperless tags'),
+				$l->t('Excluded tags'),
+				$l->t('Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.'),
+			); ?>
 		</section>
 
 		<section class="paperless-sync-card">
@@ -257,11 +287,15 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Create missing tags')); ?></span></label>
 			</div>
-			<label class="paperless-sync-field paperless-sync-field--wide">
-				<span><?php p($l->t('Tags for every import')); ?></span>
-				<input data-setting="inbox_tags" type="text" value="<?php p($config->inboxTags); ?>" placeholder="<?php p($l->t('Scanned, Nextcloud')); ?>" aria-describedby="paperless-sync-inbox-tags-hint">
-			</label>
-			<p id="paperless-sync-inbox-tags-hint" class="settings-hint"><?php p($l->t('Separate tag names with commas. With "Subfolders become tags", a file in the subfolder Taxes/2026 of the inbox gets the tags Taxes and 2026, found by their names whatever their case. A run reports the names that Paperless has no tag of, or creates their tags when it may. Paperless names each document after its file.')); ?> <?php $help('tags-of-the-inbox', $l->t('Tags of the inbox')); ?></p>
+			<?php $tagPicker(
+				'inbox_tags',
+				$config->inboxTags,
+				'paperless-sync-inbox-tags',
+				$l->t('Tags for every import'),
+				$l->t('Tags for every import'),
+				$l->t('Pick tags of Paperless, or type a name and press Enter.') . ' ' . $l->t('With "Subfolders become tags", a file in the subfolder Taxes/2026 of the inbox gets the tags Taxes and 2026, found by their names whatever their case. A run reports the names that Paperless has no tag of, or creates their tags when it may. Paperless names each document after its file.'),
+				static fn () => $help('tags-of-the-inbox', $l->t('Tags of the inbox')),
+			); ?>
 		</section>
 
 		<section class="paperless-sync-card paperless-sync-card--danger">

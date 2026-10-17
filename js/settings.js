@@ -102,17 +102,20 @@
 		}
 	}
 
-	async function request(url, method, body, confirmed = false) {
+	// A request to Nextcloud with the request token of the page. options.headers adds headers, such
+	// as the one that the OCS API of Nextcloud asks for; options.confirmed tells the request again
+	// after the password was confirmed.
+	async function request(url, method, body, options = {}) {
 		let response
 		try {
 			response = await window.fetch(url, {
 				method,
 				credentials: 'same-origin',
-				headers: {
+				headers: Object.assign({
 					Accept: 'application/json',
 					'Content-Type': 'application/json',
 					requesttoken: window.OC.requestToken,
-				},
+				}, options.headers),
 				body: body === undefined ? undefined : JSON.stringify(body),
 			})
 		} catch (error) {
@@ -120,9 +123,9 @@
 			throw requestError(translate('Nextcloud could not be reached. Check the connection and try again.'), 0)
 		}
 		const data = await answerData(response)
-		if (response.status === 403 && data !== null && data.message === PASSWORD_CONFIRMATION_REQUIRED && !confirmed) {
+		if (response.status === 403 && data !== null && data.message === PASSWORD_CONFIRMATION_REQUIRED && !options.confirmed) {
 			await confirmPassword()
-			return request(url, method, body, true)
+			return request(url, method, body, Object.assign({}, options, { confirmed: true }))
 		}
 		if (response.ok && data !== null) {
 			return data
@@ -136,6 +139,134 @@
 			throw requestError(data.message, response.status, data.setting, data.checks)
 		}
 		throw requestError(translate('The server answered with status {status}.', { status: response.status }), response.status)
+	}
+
+	// A text field that offers the options of a list below it while the administrator types, as the
+	// combobox of WAI-ARIA 1.2 with a list does. The focus stays in the field, and the option that
+	// the arrow keys reach is its active descendant: Enter or a click picks it, Escape closes the
+	// list. A click into the field or the down arrow opens the list as well. search(text) answers
+	// the options for the text of the field, each with its value, its label and a note, which may
+	// be empty; pick(option) takes the one that was picked.
+	function combobox(input, listbox, search, pick) {
+		let options = []
+		let active = -1
+		// Each search counts up, so that the answer of an earlier one, which may arrive later,
+		// changes nothing; closing the list counts up as well.
+		let generation = 0
+		let timer = 0
+
+		function isOpen() {
+			return !listbox.hidden
+		}
+
+		function activate(index) {
+			active = index
+			Array.from(listbox.children).forEach(function(item, position) {
+				item.setAttribute('aria-selected', String(position === index))
+			})
+			if (index < 0) {
+				input.removeAttribute('aria-activedescendant')
+				return
+			}
+			const item = listbox.children[index]
+			input.setAttribute('aria-activedescendant', item.id)
+			item.scrollIntoView({ block: 'nearest' })
+		}
+
+		function close() {
+			window.clearTimeout(timer)
+			generation++
+			listbox.hidden = true
+			input.setAttribute('aria-expanded', 'false')
+			activate(-1)
+		}
+
+		function show(found, first) {
+			options = found
+			if (found.length === 0) {
+				close()
+				return
+			}
+			listbox.replaceChildren(...found.map(function(option, index) {
+				const item = document.createElement('li')
+				item.id = listbox.id + '-' + index
+				item.className = 'paperless-sync-option'
+				item.setAttribute('role', 'option')
+				const label = document.createElement('span')
+				label.textContent = option.label
+				item.append(label)
+				if (option.note) {
+					const note = document.createElement('span')
+					note.className = 'paperless-sync-option-note'
+					note.textContent = option.note
+					item.append(' ', note)
+				}
+				return item
+			}))
+			listbox.hidden = false
+			input.setAttribute('aria-expanded', 'true')
+			activate(first ? 0 : -1)
+		}
+
+		// Searches after a short pause of the typing, and shows the options while the field has the
+		// focus; first activates the first option, as the down arrow does when it opens the list.
+		function update(delay, first) {
+			window.clearTimeout(timer)
+			const current = ++generation
+			timer = window.setTimeout(async function() {
+				const found = await search(input.value.trim())
+				if (current === generation && document.activeElement === input) {
+					show(found, first)
+				}
+			}, delay)
+		}
+
+		function choose(index) {
+			const option = options[index]
+			close()
+			pick(option)
+		}
+
+		input.addEventListener('keydown', function(event) {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault()
+				if (!isOpen()) {
+					update(0, event.key === 'ArrowDown')
+					return
+				}
+				const count = options.length
+				activate(event.key === 'ArrowDown' ? (active + 1) % count : (active <= 0 ? count : active) - 1)
+			} else if (event.key === 'Enter' && isOpen() && active >= 0) {
+				// Picks the option instead of submitting the form.
+				event.preventDefault()
+				choose(active)
+			} else if (event.key === 'Escape' && isOpen()) {
+				event.preventDefault()
+				event.stopPropagation()
+				close()
+			}
+		})
+		input.addEventListener('input', function() {
+			update(200, false)
+		})
+		input.addEventListener('click', function() {
+			if (!isOpen()) {
+				update(0, false)
+			}
+		})
+		input.addEventListener('blur', close)
+		// A press on the list keeps the focus in the field, so that the field doesn't lose it before
+		// the click picks the option.
+		listbox.addEventListener('mousedown', function(event) {
+			event.preventDefault()
+		})
+		listbox.addEventListener('click', function(event) {
+			const item = event.target.closest('[role="option"]')
+			if (item !== null) {
+				choose(Array.prototype.indexOf.call(listbox.children, item))
+			}
+		})
+		return { close }
 	}
 
 	document.addEventListener('DOMContentLoaded', function() {
@@ -183,6 +314,8 @@
 		const preview = element('path-preview')
 		const previewStatus = element('path-preview-status')
 		const previewList = element('path-preview-list')
+		const targetUser = element('target-user')
+		const targetUserHint = element('target-user-hint')
 		const webhookCreate = element('webhook-create')
 		const webhookRemove = element('webhook-remove')
 		const webhookState = element('webhook-state')
@@ -311,11 +444,24 @@
 			tokenConfigured = config.tokenConfigured === true
 			savedUrl = normalizeUrl(String(config.paperlessUrl || ''))
 			savedTargetUser = String(config.targetUser || '')
+			// The tags of Paperless come with the saved connection, which may be another one now.
+			if (tokenConfigured) {
+				reloadTags()
+			} else {
+				forgetTags()
+			}
+			tagPickers.forEach(function(picker) {
+				picker.show()
+			})
+			checkTargetUser()
 			updateForm()
 		}
 
+		// A name of a tag that is typed but not yet added counts as a change too.
 		function isDirty() {
-			return token.value !== '' || JSON.stringify(settings()) !== savedSettings
+			return token.value !== '' || tagPickers.some(function(picker) {
+				return picker.typed()
+			}) || JSON.stringify(settings()) !== savedSettings
 		}
 
 		function updateToken() {
@@ -386,8 +532,16 @@
 		// window and may cover the setting, where focus() would leave it: it scrolls only to an
 		// element outside the window.
 		function focusSetting(setting) {
-			setting.scrollIntoView({ block: 'center' })
-			setting.focus({ preventScroll: true })
+			const target = control(setting)
+			target.scrollIntoView({ block: 'center' })
+			target.focus({ preventScroll: true })
+		}
+
+		// The visible control of a setting, which the page moves the focus to: the field of a tag
+		// picker for its hidden setting.
+		function control(setting) {
+			const picker = setting.type === 'hidden' ? setting.closest('[data-tag-picker]') : null
+			return picker === null ? setting : picker.querySelector('[role="combobox"]')
 		}
 
 		// The sign of a line of the connection checklist, which a screen reader skips, and the word
@@ -1289,8 +1443,363 @@
 			})
 		})
 
+		// The target user: the users of Nextcloud whose ID, name or e-mail address holds what is typed,
+		// from its provisioning API, which answers administrators. A user ID that Nextcloud doesn't
+		// know is marked at once, so that a typo doesn't wait for the save or the next run.
+		const ocs = { headers: { 'OCS-APIRequest': 'true' } }
+		// The user ID that the hint of the field speaks of, null before the first check.
+		let checkedUser = null
+		// Whether the hint of the field says that the last search failed, which says nothing about
+		// the user of the field and so doesn't mark it as invalid.
+		let searchFailed = false
+
+		async function searchUsers(text) {
+			try {
+				const query = new URLSearchParams({ search: text, limit: '10' })
+				const answer = await request(root.dataset.usersUrl + '/details?' + query, 'GET', undefined, ocs)
+				if (searchFailed) {
+					searchFailed = false
+					setText(targetUserHint, '')
+				}
+				const users = answer.ocs && answer.ocs.data && answer.ocs.data.users ? Object.values(answer.ocs.data.users) : []
+				return users.filter(function(user) {
+					return user !== null && typeof user === 'object' && typeof user.id === 'string'
+				}).map(function(user) {
+					const name = typeof user.displayname === 'string' && user.displayname.trim() !== '' ? user.displayname : user.id
+					const notes = name === user.id ? [] : [user.id]
+					// A disabled user can't own the archive: a run fails until the account is enabled.
+					if (user.enabled === false) {
+						notes.push(translate('disabled'))
+					}
+					return { value: user.id, label: name, note: notes.join(' · ') }
+				})
+			} catch (error) {
+				if (targetUser.getAttribute('aria-invalid') !== 'true') {
+					searchFailed = true
+					setText(targetUserHint, translate('Could not search the users of Nextcloud: {error}', { error: error.message }))
+				}
+				return []
+			}
+		}
+
+		function showUserProblem(text) {
+			searchFailed = false
+			setText(targetUserHint, text)
+			if (text === '') {
+				targetUser.removeAttribute('aria-invalid')
+			} else {
+				targetUser.setAttribute('aria-invalid', 'true')
+			}
+		}
+
+		// Asks Nextcloud for the user of the field, unless that was the last one it asked for. Only
+		// an answer that the user doesn't exist marks the field; when Nextcloud can't answer, the save
+		// still tests the user.
+		async function checkTargetUser() {
+			const id = targetUser.value.trim()
+			if (id === checkedUser) {
+				return
+			}
+			checkedUser = id
+			showUserProblem('')
+			if (id === '') {
+				return
+			}
+			let known = true
+			try {
+				await request(root.dataset.usersUrl + '/' + encodeURIComponent(id), 'GET', undefined, ocs)
+			} catch (error) {
+				known = error.status !== 404
+			}
+			if (checkedUser === id && !known) {
+				showUserProblem(translate('Nextcloud has no user with the ID {user}. Pick one from the list.', { user: id }))
+			}
+		}
+
+		combobox(targetUser, element('target-user-options'), searchUsers, function(option) {
+			targetUser.value = option.value
+			checkedUser = option.value
+			showUserProblem('')
+			// A change, as when the field loses the focus: an input event would open the list again.
+			targetUser.dispatchEvent(new Event('change', { bubbles: true }))
+		})
+		targetUser.addEventListener('change', checkTargetUser)
+
+		// The tags of Paperless, which every tag picker offers: their names, or null while the page
+		// doesn't know them. The page reads them with the saved connection, as a run does, and anew
+		// after a save or a disconnect, which may change it, and after a failure, such as while
+		// Paperless was down. A search waits for the request; each request counts up, so that the
+		// answer for a connection that changed since then changes nothing.
+		let paperlessTags = null
+		let tagsLoading = null
+		let tagsRequest = 0
+		let tagsFailed = false
+		const tagPickers = []
+
+		// A run compares the names of tags in small letters, and so does the page.
+		function tagKey(name) {
+			return name.toLowerCase()
+		}
+
+		function splitTags(text) {
+			return text.split(/[,\r\n]+/).map(function(name) {
+				return name.trim()
+			}).filter(function(name) {
+				return name !== ''
+			})
+		}
+
+		// The name of Paperless for a name, which may differ in its case, or undefined when Paperless
+		// has no such tag; the name itself while the page doesn't know the tags.
+		function paperlessName(name) {
+			if (paperlessTags === null) {
+				return name
+			}
+			return paperlessTags.find(function(tag) {
+				return tagKey(tag) === tagKey(name)
+			})
+		}
+
+		function loadTags() {
+			if (tagsLoading === null) {
+				reloadTags()
+			}
+			return tagsLoading
+		}
+
+		// Asks for the tags anew; the names known so far stay until the answer arrives.
+		function reloadTags() {
+			tagsLoading = fetchTags()
+			return tagsLoading
+		}
+
+		async function fetchTags() {
+			const current = ++tagsRequest
+			let tags = null
+			let status = ''
+			try {
+				const answer = await request(root.dataset.tagsUrl, 'GET')
+				tags = Array.isArray(answer.tags) ? answer.tags.filter(function(tag) {
+					return typeof tag === 'string'
+				}) : []
+				status = tags.length === 0 ? translate('Paperless has no tags yet.') : ''
+			} catch (error) {
+				status = error.message
+			}
+			if (current !== tagsRequest) {
+				return
+			}
+			paperlessTags = tags
+			tagsFailed = tags === null
+			tagPickers.forEach(function(picker) {
+				picker.showStatus(status)
+				picker.show()
+			})
+		}
+
+		function forgetTags() {
+			tagsRequest++
+			tagsLoading = null
+			tagsFailed = false
+			paperlessTags = null
+			tagPickers.forEach(function(picker) {
+				picker.showStatus('')
+			})
+		}
+
+		// A list of tags of a setting, as templates/settings.php draws it: a chip for each name, with
+		// a button that removes it, and a field that adds the tags of Paperless or any name that is
+		// typed, also of a tag that Paperless doesn't have yet, which is marked, so that a typo shows.
+		// The setting itself is the hidden input, with the names separated by commas, as the server
+		// stores them; a change of it is an input event of the form, as a change of any other setting.
+		function tagPicker(container) {
+			const setting = container.querySelector('[data-setting]')
+			const input = container.querySelector('[role="combobox"]')
+			const prefix = input.id.replace(/-input$/, '')
+			const part = function(name) {
+				return container.querySelector('#' + prefix + '-' + name)
+			}
+			const list = part('list')
+			const status = part('status')
+			const announcement = part('announcement')
+
+			function chosen() {
+				return splitTags(setting.value)
+			}
+
+			function show() {
+				const names = chosen()
+				list.hidden = names.length === 0
+				list.replaceChildren(...names.map(function(name) {
+					const item = document.createElement('li')
+					item.className = 'paperless-sync-chip'
+					const label = document.createElement('span')
+					label.textContent = name
+					item.append(label)
+					if (paperlessName(name) === undefined) {
+						item.classList.add('paperless-sync-chip--new')
+						const note = document.createElement('span')
+						note.className = 'paperless-sync-chip-note'
+						note.textContent = translate('not in Paperless')
+						item.append(' ', note)
+					}
+					const remove = document.createElement('button')
+					remove.type = 'button'
+					remove.className = 'paperless-sync-chip-remove'
+					remove.title = translate('Remove {tag}', { tag: name })
+					remove.setAttribute('aria-label', remove.title)
+					remove.textContent = '×'
+					remove.addEventListener('click', function() {
+						removeTag(name)
+						input.focus()
+					})
+					item.append(remove)
+					return item
+				}))
+			}
+
+			function set(names) {
+				setting.value = names.join(', ')
+				show()
+				setting.dispatchEvent(new Event('input', { bubbles: true }))
+			}
+
+			// Adds names, as Paperless writes them when it has them, each once; a screen reader hears
+			// what changed.
+			function add(names) {
+				const before = chosen()
+				const added = []
+				let repeated = ''
+				names.forEach(function(typed) {
+					const name = paperlessName(typed) || typed
+					if (before.concat(added).some(function(tag) { return tagKey(tag) === tagKey(name) })) {
+						repeated = name
+					} else {
+						added.push(name)
+					}
+				})
+				if (added.length > 0) {
+					set(before.concat(added))
+					setText(announcement, translate('Added: {tags}', { tags: added.join(', ') }))
+				} else if (repeated !== '') {
+					setText(announcement, translate('{tag} is already in the list.', { tag: repeated }))
+				}
+			}
+
+			function removeTag(name) {
+				set(chosen().filter(function(tag) {
+					return tag !== name
+				}))
+				setText(announcement, translate('Removed: {tag}', { tag: name }))
+			}
+
+			// Adds what is typed in the field, which a save or a dry-run sends too, and closes the
+			// list, which would otherwise open again for the empty field.
+			function addTyped() {
+				if (input.value.trim() === '') {
+					return
+				}
+				const names = splitTags(input.value)
+				input.value = ''
+				picker.close()
+				add(names)
+				// The field is empty again: without a change of the setting, which updates the form
+				// by its input event, the note of unsaved changes would stay for what was typed.
+				updateForm()
+			}
+
+			async function search(text) {
+				await loadTags()
+				const taken = chosen().map(tagKey)
+				const wanted = tagKey(text)
+				const names = (paperlessTags || []).filter(function(tag) {
+					return !taken.includes(tagKey(tag)) && tagKey(tag).includes(wanted)
+				})
+				// The tags whose names start with the text first, each group in the order of the server.
+				names.sort(function(first, second) {
+					return Number(!tagKey(first).startsWith(wanted)) - Number(!tagKey(second).startsWith(wanted))
+				})
+				const found = names.map(function(tag) {
+					return { value: tag, label: tag, note: '' }
+				})
+				if (text !== '' && !taken.includes(wanted) && paperlessTags !== null && paperlessName(text) === undefined) {
+					found.push({ value: text, label: translate('Add "{tag}"', { tag: text }), note: translate('not in Paperless') })
+				}
+				return found
+			}
+
+			const picker = combobox(input, part('options'), search, function(option) {
+				input.value = ''
+				add([option.value])
+			})
+			input.addEventListener('keydown', function(event) {
+				if (event.defaultPrevented) {
+					// The list took the key, to pick an option.
+					return
+				}
+				if (event.key === 'Enter' && input.value.trim() !== '') {
+					// Adds the name instead of submitting the form.
+					event.preventDefault()
+					addTyped()
+				} else if (event.key === 'Backspace' && input.value === '') {
+					const names = chosen()
+					if (names.length > 0) {
+						event.preventDefault()
+						removeTag(names[names.length - 1])
+					}
+				}
+			})
+			// A comma or a line break, also in a pasted list, ends a name.
+			input.addEventListener('input', function() {
+				const parts = input.value.split(/[,\r\n]/)
+				if (parts.length > 1) {
+					const rest = parts.pop()
+					add(splitTags(parts.join(',')))
+					input.value = rest.trimStart()
+				}
+			})
+			// Leaving the field adds what is typed, unless the focus goes to a button that removes a tag.
+			input.addEventListener('blur', function(event) {
+				if (!list.contains(event.relatedTarget)) {
+					addTyped()
+				}
+			})
+			// After a failure, such as while Paperless was down, the tags are asked for again.
+			input.addEventListener('focus', function() {
+				if (tagsFailed) {
+					reloadTags()
+				}
+			})
+
+			return {
+				input,
+				show,
+				addTyped,
+				typed: function() {
+					return input.value.trim() !== ''
+				},
+				showStatus: function(text) {
+					setText(status, text)
+				},
+			}
+		}
+
+		root.querySelectorAll('[data-tag-picker]').forEach(function(container) {
+			tagPickers.push(tagPicker(container))
+		})
+
+		// Adds the names that are typed in a tag picker but not yet added, before the settings of the
+		// form are sent.
+		function addTypedTags() {
+			tagPickers.forEach(function(picker) {
+				picker.addTyped()
+			})
+		}
+
 		form.addEventListener('submit', async function(event) {
 			event.preventDefault()
+			// A name that is typed but not yet added is saved as well.
+			addTypedTags()
 			setBusy(true)
 			const testing = willTest()
 			showMessage(testing ? translate('Testing Paperless and Nextcloud access…') : translate('Saving the settings…'), 'progress')
@@ -1328,6 +1837,7 @@
 
 		// The checklist of the settings in the form, without saving them.
 		test.addEventListener('click', async function() {
+			addTypedTags()
 			setBusy(true)
 			showMessage(translate('Testing Paperless and Nextcloud access…'), 'progress')
 			try {
@@ -1357,6 +1867,7 @@
 		})
 
 		dryRun.addEventListener('click', function() {
+			addTypedTags()
 			runSync(true)
 		})
 		run.addEventListener('click', function() {
@@ -1423,6 +1934,13 @@
 			savedUrl = normalizeUrl(paperlessUrl.defaultValue)
 			savedTargetUser = root.querySelector('[data-setting="target_user"]').defaultValue
 			savedSettings = JSON.stringify(settings())
+			if (tokenConfigured) {
+				loadTags()
+			}
+			tagPickers.forEach(function(picker) {
+				picker.show()
+			})
+			checkTargetUser()
 			updateForm()
 		}
 		const status = initialState('status')
