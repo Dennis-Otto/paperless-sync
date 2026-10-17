@@ -636,10 +636,12 @@ def imported(name, document):
     kind = checksum_kind(state["line"])
     check(metadata["original_checksum"] == digests(original)[kind], f"P{document} has the checksum {metadata!r}.")
     # The tags of the upload, one form field tags for each, besides the inbox tag of Paperless;
-    # the tag that the run created assigns itself to no other document.
+    # the tag that the run created assigns itself to no other document and has no owner.
     tags = {tag["name"]: tag for tag in paperless.results("/api/tags/?page_size=100")}
     check({"Contract", "Nextcloud"} <= set(tags), f"Paperless has the tags {sorted(tags)!r}, without those of the inbox.")
     check(tags["Nextcloud"]["matching_algorithm"] == 0, f"The new tag has a match: {tags['Nextcloud']!r}")
+    # Without an owner, as the tags of the consume folder of Paperless, every account sees it.
+    check(tags["Nextcloud"]["owner"] is None, f"The new tag has an owner: {tags['Nextcloud']!r}")
     wanted = {tags["Contract"]["id"], tags["Nextcloud"]["id"], tags["Inbox"]["id"]}
     check(set(item["tags"]) == wanted, f"P{document} has the tags {item['tags']!r}, not {sorted(wanted)!r}.")
 

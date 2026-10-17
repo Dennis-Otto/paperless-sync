@@ -83,7 +83,8 @@ curl --fail-with-body --silent --show-error \
 	--data-urlencode 'settings[paperless_url]=http://paperless:8080' \
 	--data-urlencode 'settings[paperless_local_network]=1' \
 	--data-urlencode "settings[target_user]=${TARGET_USER}" \
-	--data-urlencode 'settings[excluded_tags]=Private' 	--data-urlencode 'settings[inbox_folder_tags]=1' \
+	--data-urlencode 'settings[excluded_tags]=Private' \
+	--data-urlencode 'settings[inbox_folder_tags]=1' \
 	--data-urlencode 'token=e2e-only-token' \
 	--output /dev/null \
 	"${BASE_URL}/apps/paperless_sync/settings"

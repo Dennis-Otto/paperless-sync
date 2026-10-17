@@ -782,7 +782,15 @@ for folder in 'Documents/Paperless/Inbox/Insurance' 'Documents/Paperless/Inbox/I
 	fi
 done
 settings_data inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
-curl --fail-with-body --silent --show-error 	--user "e2e-admin:${PASSWORD}" 	--header 'Accept: application/json' 	--header 'OCS-APIRequest: true' 	--request POST 	"${settings[@]}" 	--data-urlencode 'token=e2e-only-token' 	--output "${TMP_DIR}/inbox-tags-checklist.json" 	"${BASE_URL}/apps/paperless_sync/settings/test"
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	"${settings[@]}" \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/inbox-tags-checklist.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/test"
 assert_json inbox-tags-checklist "${TMP_DIR}/inbox-tags-checklist.json"
 save_settings "${TMP_DIR}/inbox-tags-settings.json" inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
 assert_json inbox-tags-settings "${TMP_DIR}/inbox-tags-settings.json"

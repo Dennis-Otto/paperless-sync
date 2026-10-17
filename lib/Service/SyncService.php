@@ -902,9 +902,9 @@ final class SyncService {
 		}
 		$list = implode(', ', $names);
 		$missing = count($names) === 1 ? "no tag named {$list}, so the files of the inbox go to Paperless without it" : "no tags named {$list}, so the files of the inbox go to Paperless without them";
-		$report->notice("TAGS UNKNOWN: Paperless has {$missing}. Create the tags in Paperless, or turn on \"Create missing tags\".");
+		$report->notice("TAGS UNKNOWN: Paperless shows the account {$missing}. Create the tags in Paperless or share them with the account, or turn on \"Create missing tags\".");
 		if (!$report->dryRun) {
-			$this->logger->warning('Paperless has no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless, or turn on "Create missing tags" in the settings of Paperless Sync.', [
+			$this->logger->warning('Paperless shows the account of Paperless Sync no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags" in the settings of Paperless Sync.', [
 				'names' => $list,
 			]);
 		}

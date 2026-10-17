@@ -339,8 +339,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			$this->configService->getToken(),
 			$config->paperlessLocalNetwork,
 			[
-				// Without a match, Paperless assigns the tag to no other document on its own.
-				'json' => ['name' => $name, 'matching_algorithm' => self::MATCH_NONE],
+				// Without a match, Paperless assigns the tag to no other document on its own. Without
+				// an owner, as the tags of the consume folder of Paperless, every account that may view
+				// tags sees it; left out, the owner would be the account of the app.
+				'json' => ['name' => $name, 'matching_algorithm' => self::MATCH_NONE, 'owner' => null],
 				'connect_timeout' => 10,
 				'timeout' => 60,
 				// An error comes back as a response, so that the reason in its body can be read.

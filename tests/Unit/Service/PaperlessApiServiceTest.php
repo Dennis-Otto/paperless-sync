@@ -640,7 +640,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$request = $this->requests[0];
 		self::assertSame('POST', $request['method']);
 		self::assertSame(self::URL . '/api/tags/', $request['url']);
-		self::assertSame(['name' => 'Steuer', 'matching_algorithm' => 0], $request['options']['json']);
+		self::assertSame(['name' => 'Steuer', 'matching_algorithm' => 0, 'owner' => null], $request['options']['json'], 'The new tag has no match and no owner.');
 		self::assertSame('application/json; version=9', $request['options']['headers']['Accept']);
 		self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
 		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');

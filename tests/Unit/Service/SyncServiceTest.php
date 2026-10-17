@@ -2273,13 +2273,13 @@ final class SyncServiceTest extends TestCase {
 		return [
 			'one name' => [
 				['2026/b.pdf' => '%PDF-b'],
-				'TAGS UNKNOWN: Paperless has no tag named 2026, so the files of the inbox go to Paperless without it. Create the tags in Paperless, or turn on "Create missing tags".',
+				'TAGS UNKNOWN: Paperless shows the account no tag named 2026, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
 				'2026',
 				['b.pdf' => []],
 			],
 			'several names' => [
 				['Steuer/2026/a.pdf' => '%PDF-a', '2026/b.pdf' => '%PDF-b', 'Rechnungen/c.pdf' => '%PDF-c'],
-				'TAGS UNKNOWN: Paperless has no tags named 2026, Rechnungen, so the files of the inbox go to Paperless without them. Create the tags in Paperless, or turn on "Create missing tags".',
+				'TAGS UNKNOWN: Paperless shows the account no tags named 2026, Rechnungen, so the files of the inbox go to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
 				'2026, Rechnungen',
 				['a.pdf' => [5], 'b.pdf' => [], 'c.pdf' => []],
 			],
@@ -2301,7 +2301,7 @@ final class SyncServiceTest extends TestCase {
 			$this->storage->files['Dokumente/Paperless/Eingang/' . $file] = $content;
 		}
 		$this->logger->expects(self::once())->method('warning')->with(
-			'Paperless has no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless, or turn on "Create missing tags" in the settings of Paperless Sync.',
+			'Paperless shows the account of Paperless Sync no tags named {names}, so files of the inbox went to Paperless without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags" in the settings of Paperless Sync.',
 			['names' => $names],
 		);
 
@@ -2353,7 +2353,7 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame([
 			'IMPORT: Dokumente/Paperless/Eingang/a.pdf',
-			'TAGS UNKNOWN: Paperless has no tag named Scanned, so the files of the inbox go to Paperless without it. Create the tags in Paperless, or turn on "Create missing tags".',
+			'TAGS UNKNOWN: Paperless shows the account no tag named Scanned, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".',
 		], $report->actions);
 	}
 
