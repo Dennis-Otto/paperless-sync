@@ -13,6 +13,27 @@ All notable changes to this project are documented in this file.
 - The checklist and a dry-run explain that Paperless lists in its trash only the documents that the account of the app owns and those without an owner: a dry-run says `TRASH EMPTY` when documents go missing while the trash lists none, because such documents of other owners reach the deleted folder only after the missing scans. The README lists the exact permissions that the account needs, including **View** for Paperless Tasks for the inbox, without which an uploaded file stayed in the inbox for good, and **View** for UI Settings for the checklist.
 - The **Activity** stream of the target user shows what Paperless Sync did, also in a scheduled run: one entry for each run that changed something, such as *Paperless Sync added or updated 6 documents and moved 1 document to _Gelöscht: a.pdf, b.pdf, c.pdf, d.pdf, e.pdf and 2 more*, with links to the first five files, and one entry for each file of the inbox that Paperless imported, with a link to its new document in Paperless, failed to import, with the reason and a link to the file in the error folder, or refused. The filter **Paperless Sync** of the Activity app shows them alone, and the activity settings can send them by mail or as a notification. Before, a run by hand left no entry, and a scheduled run left only entries of a *remote account* that didn't name Paperless. A dry-run and a run without changes add no entry.
 
+## [0.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.2.0...v0.3.0) (2026-10-17)
+
+
+### Features
+
+* Activity entries for runs and imports ([#142](https://github.com/Dennis-Otto/paperless-sync/issues/142)) ([4515e51](https://github.com/Dennis-Otto/paperless-sync/commit/4515e51b2675ca7da3fce8f14e2798b099a16c65))
+* notify admins when the mirror fails, with a setup check and a status endpoint ([#166](https://github.com/Dennis-Otto/paperless-sync/issues/166)) ([876e210](https://github.com/Dennis-Otto/paperless-sync/commit/876e21028ce228c5b98fba44c2dc31228530d11f))
+* **settings:** a connection checklist that tests every Paperless permission a run needs ([#127](https://github.com/Dennis-Otto/paperless-sync/issues/127)) ([76d0618](https://github.com/Dennis-Otto/paperless-sync/commit/76d06187e71c374cad4b4406ab68d46212e76968))
+* **settings:** default folder names in the language of the instance ([#165](https://github.com/Dennis-Otto/paperless-sync/issues/165)) ([9ee51fb](https://github.com/Dennis-Otto/paperless-sync/commit/9ee51fbad55d26db42d0e7685f84a01160faaf19))
+* **settings:** live path preview, dry-runs of unsaved settings and more template variables ([#151](https://github.com/Dennis-Otto/paperless-sync/issues/151)) ([717c33e](https://github.com/Dennis-Otto/paperless-sync/commit/717c33e77e6184e2eb1c7d5f6fa69102cd80f9d6))
+
+
+### Bug fixes
+
+* **l10n:** translate every message of the app and check the German catalog for completeness ([#160](https://github.com/Dennis-Otto/paperless-sync/issues/160)) ([aae7f0f](https://github.com/Dennis-Otto/paperless-sync/commit/aae7f0f526a9fe8656c87aee75c751249eeb6edb))
+
+
+### Performance
+
+* **sync:** ask Paperless only for the fields a run needs and stop rewriting unchanged state ([#156](https://github.com/Dennis-Otto/paperless-sync/issues/156)) ([999fbdb](https://github.com/Dennis-Otto/paperless-sync/commit/999fbdbd087d15e44586fc7d217c48b417b55fee))
+
 ## [0.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.1.10...v0.2.0) (2026-10-14)
 
 ### Security
