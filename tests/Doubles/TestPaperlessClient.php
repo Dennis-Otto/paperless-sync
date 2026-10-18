@@ -11,14 +11,18 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 
 /**
- * Paperless-ngx in memory: documents, trash, metadata, uploads and their tasks.
+ * Paperless-ngx in memory: documents, trash, metadata, uploads and their tasks. It is its own
+ * factory as well: every connection reaches this one Paperless, which records the connections, so
+ * that a test reads which connection a run took and what it asked of it.
  */
-final class TestPaperlessClient implements PaperlessClientInterface {
+final class TestPaperlessClient implements PaperlessClientInterface, PaperlessClientFactoryInterface {
 	/** @var list<array<string, mixed>> */
 	public array $documents = [];
 	/** @var list<array<string, mixed>> */
@@ -54,6 +58,10 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	public array $downloadRequests = [];
 	/** @var list<array{string, string, bool}> the URL, the token and whether a local address was allowed, of every test of the connection */
 	public array $connections = [];
+	/** @var list<PaperlessConnection> every connection that a client was made for, in their order */
+	public array $connects = [];
+	/** The connection of the client that connect() made last. */
+	private ?PaperlessConnection $connection = null;
 	/** @var array{names: array<string, string>, inbox: list<string>} */
 	public array $tagInfo = ['names' => [], 'inbox' => []];
 	/** The failure of every test of the connection, such as an address that Nextcloud refuses. */
@@ -92,8 +100,16 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 	/** The failure of the read of one document, such as a Paperless that can't be reached. */
 	public ?\Throwable $documentException = null;
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
-		$this->connections[] = [$url, $token, $localNetwork];
+	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
+		$this->connects[] = $connection;
+		$this->connection = $connection;
+
+		return $this;
+	}
+
+	public function testConnection(): array {
+		$connection = $this->connection ?? throw new \LogicException('A client tests the connection that it was made for: connect() first.');
+		$this->connections[] = [$connection->url, $connection->token(), $connection->localNetwork];
 		if ($this->connectionException !== null) {
 			throw $this->connectionException;
 		}
@@ -101,7 +117,7 @@ final class TestPaperlessClient implements PaperlessClientInterface {
 		return $this->server;
 	}
 
-	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array {
+	public function preflight(SyncConfig $config): array {
 		return [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
 	}
 

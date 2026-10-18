@@ -13,6 +13,7 @@ use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\AppFramework\Http;
@@ -90,9 +91,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const ACCOUNT_UNKNOWN = 'unknown';
 	private IClient $client;
 
-	/** @psalm-suppress PossiblyUnusedMethod */
+	/**
+	 * A client of the Paperless of $connection alone, which PaperlessClientFactory makes: it never
+	 * reads the settings, so that every request of a run goes where the run started.
+	 */
 	public function __construct(
-		private ConfigService $configService,
+		private PaperlessConnection $connection,
 		IClientService $clientService,
 		private ITempManager $tempManager,
 		private IRemoteHostValidator $remoteHostValidator,
@@ -100,15 +104,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$this->client = $clientService->newClient();
 	}
 
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array {
-		$page = $this->requestPage($url, $token, $localNetwork, '/api/documents/', ['page' => 1, 'page_size' => 1]);
+	public function testConnection(): array {
+		$page = $this->requestPage('/api/documents/', ['page' => 1, 'page_size' => 1]);
 
 		return ['version' => $page['version'], 'apiVersion' => self::API_VERSION];
 	}
 
-	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array {
+	public function preflight(SyncConfig $config): array {
 		try {
-			$documents = $this->probe($config, $token, '/api/documents/');
+			$documents = $this->probe('/api/documents/');
 		} catch (PaperlessLocalNetworkException $exception) {
 			return [new ConnectionCheck(
 				ConnectionCheck::PAPERLESS,
@@ -148,10 +152,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		$checks = [self::answered($documents['version']), self::visibleDocuments($listed)];
-		$account = $config->exportEnabled || $config->inboxEnabled ? $this->account($config, $token) : self::ACCOUNT_UNKNOWN;
+		$account = $config->exportEnabled || $config->inboxEnabled ? $this->account() : self::ACCOUNT_UNKNOWN;
 		if ($config->exportEnabled) {
 			foreach (self::EXPORT_LISTS as $id => $path) {
-				$checks[] = $this->listCheck($config, $token, $id, $path, $account);
+				$checks[] = $this->listCheck($id, $path, $account);
 			}
 		}
 		if ($config->inboxEnabled) {
@@ -183,12 +187,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	/** @psalm-suppress MixedAssignment */
 	public function document(int $documentId): ?array {
-		$config = $this->configService->get();
 		$response = $this->send(
 			'GET',
-			$this->url($config, '/api/documents/' . $documentId . '/'),
-			$this->configService->getToken(),
-			$config->paperlessLocalNetwork,
+			'/api/documents/' . $documentId . '/',
 			[
 				// The fields of the scan of a run, so that the document takes the same path as in a run.
 				'query' => ['fields' => implode(',', self::DOCUMENT_FIELDS), 'truncate_content' => 'true'],
@@ -278,11 +279,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function newestDocuments(int $count): array {
-		$config = $this->configService->get();
 		$page = $this->requestPage(
-			$config->paperlessUrl,
-			$this->configService->getToken(),
-			$config->paperlessLocalNetwork,
 			'/api/documents/',
 			[
 				'page' => 1,
@@ -303,12 +300,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		chmod($temporaryPath, 0600);
 		try {
-			$config = $this->configService->get();
 			$response = $this->send(
 				'GET',
-				$this->url($config, '/api/documents/' . $documentId . '/download/'),
-				$this->configService->getToken(),
-				$config->paperlessLocalNetwork,
+				'/api/documents/' . $documentId . '/download/',
 				[
 					'query' => ['original' => $original ? 'true' : 'false'],
 					'allow_redirects' => ['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']],
@@ -343,12 +337,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function documentChecksum(int $documentId, bool $original): string {
-		$config = $this->configService->get();
 		$response = $this->send(
 			'GET',
-			$this->url($config, '/api/documents/' . $documentId . '/metadata/'),
-			$this->configService->getToken(),
-			$config->paperlessLocalNetwork,
+			'/api/documents/' . $documentId . '/metadata/',
 			[
 				'connect_timeout' => 10,
 				'timeout' => 60,
@@ -369,12 +360,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function createTag(string $name): int {
-		$config = $this->configService->get();
 		$response = $this->send(
 			'POST',
-			$this->url($config, '/api/tags/'),
-			$this->configService->getToken(),
-			$config->paperlessLocalNetwork,
+			'/api/tags/',
 			[
 				// Without a match, Paperless assigns the tag to no other document on its own. Without
 				// an owner, as the tags of the consume folder of Paperless, every account that may view
@@ -442,13 +430,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @param list<int> $tags
 	 */
 	private function postDocument($upload, string $filename, array $tags): string {
-		$config = $this->configService->get();
 		try {
 			$response = $this->send(
 				'POST',
-				$this->url($config, '/api/documents/post_document/'),
-				$this->configService->getToken(),
-				$config->paperlessLocalNetwork,
+				'/api/documents/post_document/',
 				[
 					// Paperless takes the tags of the new document as one field tags for each.
 					'multipart' => [
@@ -502,14 +487,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @psalm-suppress MixedAssignment
 	 */
 	public function taskStatus(string $taskId): array {
-		$config = $this->configService->get();
-		$page = $this->requestPage(
-			$config->paperlessUrl,
-			$this->configService->getToken(),
-			$config->paperlessLocalNetwork,
-			'/api/tasks/',
-			['task_id' => $taskId, 'page_size' => 10],
-		);
+		$page = $this->requestPage('/api/tasks/', ['task_id' => $taskId, 'page_size' => 10]);
 		$task = $page['results'][0] ?? null;
 		if ($task === null) {
 			return ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'documentId' => null, 'listed' => false];
@@ -539,15 +517,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function findDocument(DocumentFingerprint $content): ?int {
-		$config = $this->configService->get();
 		foreach ([$content->sha256, $content->md5] as $checksum) {
-			$page = $this->requestPage(
-				$config->paperlessUrl,
-				$this->configService->getToken(),
-				$config->paperlessLocalNetwork,
-				'/api/documents/',
-				['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1],
-			);
+			$page = $this->requestPage('/api/documents/', ['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1]);
 			$documentId = self::id($page['results'][0]['id'] ?? null);
 			if ($documentId !== null) {
 				return $documentId;
@@ -628,15 +599,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @return array{results: list<array<string, mixed>>, byId: array<array-key, array<string, mixed>>, complete: bool, listed: int}
 	 */
 	private function pages(string $path, array $query = []): array {
-		$config = $this->configService->get();
-		$token = $this->configService->getToken();
 		$results = [];
 		$byId = [];
 		$complete = true;
 		$listed = 0;
 		$pages = 1;
 		for ($page = 1; $page <= $pages; ++$page) {
-			$next = $this->requestPage($config->paperlessUrl, $token, $config->paperlessLocalNetwork, $path, $query + ['page' => $page, 'page_size' => self::PAGE_SIZE]);
+			$next = $this->requestPage($path, $query + ['page' => $page, 'page_size' => self::PAGE_SIZE]);
 			if ($page === 1) {
 				$pages = max(1, (int)ceil($next['count'] / self::PAGE_SIZE));
 			} elseif ($next['count'] !== $listed) {
@@ -689,15 +658,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @return array{count: int, results: list<array<string, mixed>>, paginated: bool, version: string}
 	 * @psalm-suppress MixedAssignment
 	 */
-	private function requestPage(string $url, #[\SensitiveParameter] string $token, bool $localNetwork, string $path, array $query): array {
-		if ($url === '' || $token === '') {
-			throw new UnexpectedValueException('Paperless is not configured.');
-		}
+	private function requestPage(string $path, array $query): array {
 		$response = $this->send(
 			'GET',
-			rtrim($url, '/') . '/' . ltrim($path, '/'),
-			$token,
-			$localNetwork,
+			$path,
 			[
 				'query' => $query,
 				'connect_timeout' => 10,
@@ -743,12 +707,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @return array{status: int, data: array<array-key, mixed>|null, version: string}
 	 * @throws PaperlessRequestException when no answer arrives
 	 */
-	private function probe(SyncConfig $config, #[\SensitiveParameter] string $token, string $path, array $query = ['page' => 1, 'page_size' => 1]): array {
+	private function probe(string $path, array $query = ['page' => 1, 'page_size' => 1]): array {
 		$response = $this->send(
 			'GET',
-			$this->url($config, $path),
-			$token,
-			$config->paperlessLocalNetwork,
+			$path,
 			[
 				'query' => $query,
 				'connect_timeout' => 10,
@@ -792,9 +754,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @return array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_*
 	 */
-	private function account(SyncConfig $config, #[\SensitiveParameter] string $token): array|string {
+	private function account(): array|string {
 		try {
-			$answer = $this->probe($config, $token, '/api/ui_settings/', []);
+			$answer = $this->probe('/api/ui_settings/', []);
 		} catch (PaperlessRequestException) {
 			return self::ACCOUNT_UNKNOWN;
 		}
@@ -825,9 +787,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private function listCheck(SyncConfig $config, #[\SensitiveParameter] string $token, string $id, string $path, array|string $account): ConnectionCheck {
+	private function listCheck(string $id, string $path, array|string $account): ConnectionCheck {
 		try {
-			$answer = $this->probe($config, $token, $path);
+			$answer = $this->probe($path);
 		} catch (PaperlessRequestException $exception) {
 			return self::unreachable($id, $exception->getMessage(), false);
 		}
@@ -840,7 +802,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			};
 		}
 		if ($id === ConnectionCheck::TRASH) {
-			return $this->trashCheck($config, $token, $listed, $account);
+			return $this->trashCheck($listed, $account);
 		}
 
 		return ConnectionCheck::passed($id, 'Visible to the account: %s', [(string)$listed]);
@@ -856,7 +818,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private function trashCheck(SyncConfig $config, #[\SensitiveParameter] string $token, int $listed, array|string $account): ConnectionCheck {
+	private function trashCheck(int $listed, array|string $account): ConnectionCheck {
 		$visible = [(string)$listed];
 		if (!is_array($account)) {
 			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, $account === self::ACCOUNT_FORBIDDEN ? self::TRASH_UNKNOWN_HINT : self::TRASH_HINT);
@@ -868,7 +830,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if ($account['id'] !== null) {
 			try {
 				// The filters of the document list of Paperless: with an owner, and not this account.
-				$foreign = self::listed($this->probe($config, $token, '/api/documents/', ['page' => 1, 'page_size' => 1, 'owner__isnull' => 0, 'owner__id__none' => $account['id']]));
+				$foreign = self::listed($this->probe('/api/documents/', ['page' => 1, 'page_size' => 1, 'owner__isnull' => 0, 'owner__id__none' => $account['id']]));
 			} catch (PaperlessRequestException) {
 				$foreign = null;
 			}
@@ -1066,30 +1028,34 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return strlen($version) <= self::VERSION_LENGTH && preg_match('/^\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?$/', $version) === 1 ? $version : '';
 	}
 
-	private function url(SyncConfig $config, string $path): string {
-		return rtrim($config->paperlessUrl, '/') . '/' . ltrim($path, '/');
-	}
-
 	/**
-	 * Every request to Paperless, with the token in its header Authorization, and in its header
-	 * Accept the version of the API that the app reads, so that a new default of Paperless doesn't
-	 * change the shape of its answers. When the HTTP client fails before Paperless answers, as when
+	 * Every request to Paperless, to $path below the URL of the connection, with its token in the
+	 * header Authorization, and in its header Accept the version of the API that the app reads, so
+	 * that a new default of Paperless doesn't change the shape of its answers. A connection without
+	 * a URL or a token sends nothing. When the HTTP client fails before Paperless answers, as when
 	 * Paperless can't be reached, only the message of its exception goes on, in a
 	 * PaperlessRequestException: the trace of the exception of the client holds the options of the
 	 * request with the token, which Nextcloud's log would write, and no attribute can leave them
 	 * out of it. A Paperless that doesn't serve the version answers 406 Not Acceptable, which is a
 	 * PaperlessVersionException, also when the request takes errors as answers.
 	 *
-	 * Nextcloud refuses addresses of the local network, against server-side request forgery. With
-	 * $localNetwork, the setting "Paperless runs in my local network", this request alone may go
-	 * there: its URL is always the one of Paperless that an administrator entered, and the switch
+	 * Nextcloud refuses addresses of the local network, against server-side request forgery. When
+	 * the connection allows the local network, with the setting "Paperless runs in my local
+	 * network", this request alone may go there: its URL is always the one of Paperless that an
+	 * administrator entered, and the switch
 	 * allow_local_remote_servers, which would lift the protection for every app, stays off.
 	 * Without it, a request that follows redirects checks every one of them as Nextcloud does.
 	 *
 	 * @param 'GET'|'POST' $method
 	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
 	 */
-	private function send(string $method, string $url, #[\SensitiveParameter] string $token, bool $localNetwork, #[\SensitiveParameter] array $options): IResponse {
+	private function send(string $method, string $path, #[\SensitiveParameter] array $options): IResponse {
+		$token = $this->connection->token();
+		$localNetwork = $this->connection->localNetwork;
+		if ($this->connection->url === '' || $token === '') {
+			throw new UnexpectedValueException('Paperless is not configured.');
+		}
+		$url = rtrim($this->connection->url, '/') . '/' . ltrim($path, '/');
 		$options['headers'] = $this->headersForToken($token);
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];

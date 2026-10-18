@@ -16,8 +16,8 @@ use OCA\PaperlessSync\Cron\SyncJob;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
-use OCA\PaperlessSync\Service\PaperlessApiService;
-use OCA\PaperlessSync\Service\PaperlessClientInterface;
+use OCA\PaperlessSync\Service\PaperlessClientFactory;
+use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
@@ -100,7 +100,7 @@ final class ApplicationTest extends TestCase {
 		$application->boot($boot);
 
 		self::assertSame([
-			PaperlessClientInterface::class => PaperlessApiService::class,
+			PaperlessClientFactoryInterface::class => PaperlessClientFactory::class,
 			NextcloudStorageInterface::class => NextcloudStorageService::class,
 			SyncStateRepositoryInterface::class => SyncStateRepository::class,
 		], $aliases);

@@ -12,10 +12,12 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -60,6 +62,10 @@ final class SettingsControllerTest extends TestCase {
 
 	/** @var PaperlessClientInterface&MockObject */
 	private PaperlessClientInterface $paperless;
+	/** @var PaperlessClientFactoryInterface&MockObject the factory that makes $paperless the client of every connection */
+	private PaperlessClientFactoryInterface $clients;
+	/** @var list<PaperlessConnection> every connection that the controller made a client for, in their order */
+	private array $connects = [];
 	/** @var NextcloudStorageInterface&MockObject */
 	private NextcloudStorageInterface $storage;
 	private SettingsController $controller;
@@ -77,13 +83,21 @@ final class SettingsControllerTest extends TestCase {
 		];
 		$this->paperless = $this->createMock(PaperlessClientInterface::class);
 		$this->paperless->expects(self::never())->method('testConnection');
-		$this->paperless->method('preflight')->willReturnCallback(function (SyncConfig $config, string $token): array {
-			$this->preflights[] = [$config->paperlessUrl, $token, $config->paperlessLocalNetwork];
+		$this->paperless->method('preflight')->willReturnCallback(function (SyncConfig $config): array {
+			$connection = $this->connects[array_key_last($this->connects)];
+			self::assertSame([$config->paperlessUrl, $config->paperlessLocalNetwork], [$connection->url, $connection->localNetwork], 'The checklist checks the connection of the settings that it checks.');
+			$this->preflights[] = [$connection->url, $connection->token(), $connection->localNetwork];
 			if ($this->preflightFailure !== null) {
 				throw $this->preflightFailure;
 			}
 
 			return $this->checks;
+		});
+		$this->clients = $this->createMock(PaperlessClientFactoryInterface::class);
+		$this->clients->method('connect')->willReturnCallback(function (PaperlessConnection $connection): PaperlessClientInterface {
+			$this->connects[] = $connection;
+
+			return $this->paperless;
 		});
 		$this->storage = $this->createMock(NextcloudStorageInterface::class);
 		$this->controller = $this->controller($this->configService());
@@ -565,6 +579,7 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		self::assertSame(['tags' => ['2026', 'draft', 'Inbox', 'Private', 'Tag 9', 'Tag 10']], self::answer($response));
+		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'secret-token', false)], $this->connects, 'The tags come from the saved connection.');
 	}
 
 	/** @return array<string, array{array<string, mixed>}> */
@@ -591,6 +606,7 @@ final class SettingsControllerTest extends TestCase {
 
 		$response = $this->controller->tags();
 
+		self::assertSame([], $this->connects);
 		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
 		self::assertSame(['message' => 'Speichere zuerst die Verbindung zu Paperless; dann erscheinen seine Tags hier.'], $response->getData());
 	}
@@ -680,6 +696,7 @@ final class SettingsControllerTest extends TestCase {
 		], self::answer($response));
 		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->configService()->get()->pathTemplate, 'The preview saves nothing.');
 		self::assertSame('paperless', $this->configService()->get()->targetUser);
+		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'secret-token', false)], $this->connects, 'The preview reads with the saved connection, not with the URL of the page.');
 	}
 
 	public function testWithoutAConnectionThePreviewChecksTheTemplateAlone(): void {
@@ -740,7 +757,7 @@ final class SettingsControllerTest extends TestCase {
 		$status = $this->statusService($clock);
 		$sync = new SyncService(
 			$configService,
-			$this->paperless,
+			$this->clients,
 			$this->storage,
 			new TestStateRepository(),
 			$paths,
@@ -757,7 +774,7 @@ final class SettingsControllerTest extends TestCase {
 			AppConstants::APP_ID,
 			$this->createMock(IRequest::class),
 			$configService,
-			$this->paperless,
+			$this->clients,
 			$this->storage,
 			$this->germanL10n(),
 			$sync,
