@@ -108,6 +108,7 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 ### Betrieb
 
 - Der Cron von Nextcloud führt die Synchronisation im Intervall aus, das du einstellst, und die Batchgröße begrenzt die Änderungen eines Laufs
+- [Änderungen in Sekunden](#änderungen-in-sekunden): Ein Arbeitsablauf von Paperless ruft den Webhook der App auf, wenn er ein Dokument hinzufügt oder ändert, und seine Kopie ändert sich sofort, ohne einen Container neben Paperless, seinen Medienordner oder ein Passwort von Nextcloud
 - Läufe auf Abruf und Testläufe aus den Einstellungen, jeder mit einem Bericht seiner Änderungen und Fehler in der Sprache des Administrators, Fehler zuerst, mit einem Filter für jede Art von Änderung, Links zu den Dateien und einem Knopf, der ihn für einen Fehlerbericht kopiert, und mit dem Status des letzten Laufs; ein Testlauf probiert Änderungen der Einstellungen aus, bevor du sie speicherst, und ein Lauf auf Abruf läuft als Hintergrundjob, sodass kein Proxy ihn abschneidet
 - [Auswahlfelder in den Einstellungen](#zielbenutzer-und-tags) bieten die Benutzer von Nextcloud für den Zielbenutzer und die Tags von Paperless für die ausgeschlossenen Tags und die Tags jedes Imports an und markieren einen Benutzer oder einen Tag, den es nicht gibt, sodass sich ein Tippfehler vor dem ersten Lauf zeigt
 - Der [Aktivitätenstrom](#aktivität) des Zielbenutzers erzählt, was jeder Lauf geändert hat, mit Links zu seinen Dateien, und jeden Import, mit einem Link zum neuen Dokument in Paperless
@@ -461,6 +462,49 @@ Das Intervall zählt ab dem Start oder dem Ende des letzten Laufs, je nachdem, w
 *Jetzt synchronisieren* reiht einmal einen zweiten Job ein, `OCA\PaperlessSync\Cron\ManualSyncJob`, den die nächsten Hintergrundjobs ausführen. Um ihn sofort zu starten, lass einen Worker von Nextcloud für ihn laufen, etwa in einem Dienst von systemd oder einem eigenen Container: `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'`. Für einen einzelnen Lauf führt `occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'` den eingereihten Job aus und kehrt zurück. Solange ein anderer Lauf die Sperre hält, etwa ein Testlauf, wartet der Job auf die nächsten Hintergrundjobs.
 
 Ein großes Archiv braucht anfangs viele Läufe: etwa die Zahl der Dokumente geteilt durch die Batchgröße, mal das Intervall. Mit den Standardwerten, einem Batch von 100 und 5 Minuten, brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Ein größerer Batch, bis zu 1.000, macht die erste Synchronisation schneller; jeder spätere Lauf ändert nur, was sich in Paperless geändert hat. Oder importiere es in einem Zug auf der [Kommandozeile](#kommandozeile), mit `occ paperless_sync:run --unlimited`.
+
+<a id="changes-within-seconds"></a>
+
+### Änderungen in Sekunden
+
+Ein Lauf folgt dem Intervall, das mindestens 5 Minuten beträgt. Ein Arbeitsablauf von Paperless kann der App stattdessen sofort Bescheid geben: Bei *Dokument hinzugefügt* und *Dokument aktualisiert* ruft er den Webhook der App mit der ID des Dokuments auf, und die Kopie dieses Dokuments wird in Sekunden exportiert, verschoben oder entfernt, nach denselben Regeln wie in einem Lauf. Dafür läuft nichts neben Paperless, kein Container liest seinen Medienordner, und Nextcloud braucht kein Passwort: Paperless schickt die ID, und die App liest das Dokument mit ihrem eigenen Token.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-change-in-paperless-reaches-nextcloud-within-seconds.de.dark.svg">
+  <img src="docs/images/diagrams/how-a-change-in-paperless-reaches-nextcloud-within-seconds.de.svg" alt="Wie eine Änderung in Paperless Nextcloud in Sekunden erreicht: Ein Arbeitsablauf von Paperless mit den Auslösern Dokument hinzugefügt und Dokument aktualisiert ruft den Webhook der App mit der ID des Dokuments und dem Geheimnis auf. Ein Aufruf ohne das Geheimnis wird mit 401 abgelehnt, und Nextcloud verzögert die nächsten Aufrufe von dieser Adresse. Mit dem Geheimnis liest die App dieses Dokument mit ihrem eigenen Token aus Paperless und exportiert, verschiebt oder entfernt seine Kopie nach den Regeln eines Laufs, während Paperless auf die Antwort wartet. Solange ein anderer Lauf aktiv ist, oder wenn die Einstellungen es sagen, wartet das Dokument stattdessen auf die nächsten Hintergrundjobs. Dokumente im Papierkorb und gelöschte bleiben bei den geplanten Läufen.">
+</picture>
+
+So richtest du ihn ein:
+
+1. Wähle in Abschnitt 6 der Einstellungen, *Änderungen in Sekunden*, **Geheimnis erstellen** und kopiere das Geheimnis: Die Seite zeigt es nur dieses eine Mal, und Nextcloud behält nur seinen SHA-256. Kopiere auch die **Webhook-URL**, etwa `https://cloud.example.com/index.php/apps/paperless_sync/api/v1/webhook`.
+2. Öffne in Paperless **Arbeitsabläufe** und füge einen Arbeitsablauf mit den Auslösern **Dokument hinzugefügt** und **Dokument aktualisiert** hinzu, mit den Filtern, die du möchtest.
+3. Füge die Aktion **Webhook** hinzu: die Webhook-URL als *Webhook-URL*, *Parameter für Webhook-Inhalt verwenden* und *Webhook-Payload als JSON senden* an, und den Parameter `document` mit dem Wert `{{ doc_id }}`. Paperless-ngx 2.x kennt kein `{{ doc_id }}`: Gib ihm `{{ doc_url }}`, die Adresse des Dokuments, aus der die App die ID nimmt.
+4. Füge unter *Webhook-Kopfzeilen* `Authorization` mit dem Wert `Bearer`, einem Leerzeichen und dem Geheimnis hinzu, und speichere den Arbeitsablauf.
+5. Ändere in Paperless den Titel eines Dokuments: Seine Kopie wird in Sekunden verschoben, und Abschnitt 6 zeigt den letzten Aufruf, *P123 verschoben*.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-webhook-dark.png">
+  <img alt="Der Abschnitt Änderungen in Sekunden direkt nach Geheimnis erstellen: die Webhook-URL und das neue Geheimnis, jeweils mit einem Knopf Kopieren, der Hinweis, das Geheimnis jetzt zu kopieren, weil es nur dieses eine Mal angezeigt wird, die Knöpfe Neues Geheimnis erstellen und Webhook ausschalten, der Schalter Dokument während des Aufrufs spiegeln, der an ist, und die eingeklappten Schritte in Paperless" src="docs/images/settings-webhook-light.png">
+</picture>
+
+Der Webhook nimmt `{"document": 123}` als JSON oder als Formular, und die Zahl darf Text oder die Adresse des Dokuments in Paperless sein. Er antwortet:
+
+| Antwort | Wann |
+| --- | --- |
+| `200` mit `"result"`: `exported`, `moved`, `removed`, `unchanged` oder `excluded` | die Kopie des Dokuments ist aktuell; `excluded` für ein Dokument, das die Einstellungen auslassen, etwa eines im Posteingang von Paperless |
+| `404` mit `"result": "missing"` | Paperless zeigt dem Konto das Dokument nicht: in seinem Papierkorb, gelöscht oder neu und noch nicht gespeichert; Paperless versucht es nach etwa 1, 2 und 4 Sekunden noch einmal, was ein neues Dokument erwischt, und den Papierkorb übernehmen die geplanten Läufe |
+| `202` mit `"result": "queued"` | das Dokument wartet auf die nächsten Hintergrundjobs: Ein anderer Lauf hält die Sperre, oder *Dokument während des Aufrufs spiegeln* ist aus |
+| `400` | der Aufruf nennt kein Dokument |
+| `401` | das Geheimnis fehlt oder ist falsch |
+| `429` | Nextcloud lehnt die Adresse von Paperless bis zu 30 Minuten lang ab, nach mehr als zehn Aufrufen mit falschem Geheimnis oder nach mehr als 120 Aufrufen in einer Minute |
+| `409` mit `"result": "off"` | die geplante Synchronisation oder der Export ist aus, oder Paperless ist nicht verbunden |
+| `500` mit `"result": "failed"` | die Kopie ist fehlgeschlagen, etwa wegen einer Datei im Weg; einen fehlgeschlagenen Aufruf versucht Paperless noch dreimal |
+
+Mit *Dokument während des Aufrufs spiegeln* an, dem Standard, ändert sich die Kopie, während Paperless auf die Antwort wartet. Paperless gibt nach fünf Sekunden auf, etwa bei einem großen Download, und der Lauf wird trotzdem fertig. Aus, wartet jedes Dokument auf die nächsten Hintergrundjobs, die der System-Cron alle 5 Minuten startet, im Job `OCA\PaperlessSync\Cron\DocumentSyncJob`; Nextcloud reiht ihn für jedes Dokument einmal ein, wie oft Paperless auch aufruft, und solange ein anderer Lauf aktiv ist, versucht er es eine Minute später noch einmal. Ein Aufruf ändert nichts, solange die geplante Synchronisation aus ist, so wie bevor der erste Testlauf geprüft wurde.
+
+Der Papierkorb, gelöschte Dokumente und der Posteingang bleiben bei den geplanten Läufen, die ganz Paperless sehen: Ein Dokument, das Paperless nicht zeigt, wartet auf die fehlenden Scans, die die [Löschsicherheit](#löschsicherheit) verlangt, also lass die geplante Synchronisation an. Ein Aufruf des Webhooks ist kein Lauf des Status: Die Einstellungsseite, die Status-API und der Zeitplan behalten den letzten Lauf, sodass Aufrufe nie den geplanten Lauf zurückhalten, der Dokumente im Papierkorb findet. Der Aktivitätenstrom des Zielbenutzers zeigt die Änderungen eines Aufrufs wie die eines Laufs.
+
+Der Webhook ist die eine Adresse der App, die ohne Anmeldung bei Nextcloud antwortet. Ein Aufruf ohne das Geheimnis bekommt `401`, und der Brute-Force-Schutz von Nextcloud verzögert die nächsten Aufrufe dieser Adresse, bis zu 25 Sekunden, bis er sie nach mehr als zehn Fehlversuchen bis zu 30 Minuten lang ablehnt; solange die Aufrufe nur langsamer sind, beendet ein Aufruf mit dem Geheimnis die Verzögerung, und `occ security:bruteforce:reset <Adresse>` beendet eine Ablehnung sofort. Jede Adresse darf 120-mal in der Minute aufrufen. **Neues Geheimnis erstellen** ersetzt das Geheimnis sofort, und **Webhook ausschalten** löscht es. [Sicherheit](https://dennis-otto.github.io/paperless-sync/security.html#the-webhook-of-paperless) hat die Einzelheiten.
 
 <!-- --8<-- [end:configuration-checklist] -->
 

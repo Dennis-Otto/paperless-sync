@@ -6,7 +6,9 @@
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the check of its package, and the JavaScript of the settings and the
-# translations, which have no build step.
+# translations, which have no build step, and that the German twins of the documentation,
+# README.de.md and docs/*.de.md, follow their English pages; the versions check covers
+# README.de.md and docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -347,15 +349,25 @@ outline() {
       sub(/\.svg"$/, "", name)
       printf "diagram docs/diagrams/%s%s.mmd\t%d\n", name, (twin != "" ? ".de" : ""), FNR
     }
+    match($0, /srcset="[^"]*images\/diagrams\/[^"\/]+\.dark\.svg"/) {
+      name = substr($0, RSTART, RLENGTH)
+      sub(/.*\//, "", name)
+      sub(/\.dark\.svg"$/, "", name)
+      printf "dark diagram docs/diagrams/%s%s.mmd\t%d\n", name, (twin != "" ? ".de" : ""), FNR
+    }
   ' "$1"
 }
 # Compares the outline of the German page $2 with the one that its English twin $1 asks
 # for. A heading compares by its level alone, as its words differ, so the message names
-# the first entry where they part and the last two that agree, around the change.
+# the first entry where they part and the last two that agree, around the change. A
+# heading added or removed among others of its level shows only at the end of their run,
+# so for a heading the message also names the entry before that run: the change is
+# somewhere between the two.
 german_twin() {
   local english="$1" german="$2"
   awk -F '\t' -v english="$english" -v german="$german" '
     function kind(entry) { sub(/ \(.*/, "", entry); return entry }
+    function level(entry) { return entry ~ /^heading of level / ? substr(entry, 18, 1) + 0 : 0 }
     NR == FNR { want[FNR] = $1; wline[FNR] = $2; wanted = FNR; next }
     { have[FNR] = $1; hline[FNR] = $2; had = FNR }
     END {
@@ -373,6 +385,13 @@ german_twin() {
       }
       if (i > 1) {
         printf " Before it, both agree up to line %d, the %s, and line %d of %s, the %s.", hline[i - 1], have[i - 1], wline[i - 1], english, want[i - 1]
+      }
+      depth = level(want[i]) > level(have[i]) ? level(want[i]) : level(have[i])
+      for (j = i - 1; depth && j >= 1 && level(have[j]) >= depth; j--) {}
+      if (depth && j < i - 1) {
+        printf " A heading of level %d was added or removed somewhere between there and ", depth
+        if (j < 1) printf "the start of both files."
+        else printf "line %d, the %s, and line %d of %s, the %s.", hline[j], have[j], wline[j], english, want[j]
       }
       printf "\n"
       exit 1
@@ -402,8 +421,9 @@ fi
 echo "The $pages German page(s) follow the headings, snippets and diagrams of their English twins."
 
 # And the check finds what it must in broken German twins: a heading that is gone, one of
-# another level, one too many, an English diagram, a snippet of README.md in a German
-# page, and a German page that ends early.
+# another level, one too many, one gone among others of its level, an English diagram,
+# light or dark, a snippet of README.md in a German page, and a German page that ends
+# early.
 twin_copy="$(mktemp -d)"
 trap 'rm -rf "$twin_copy"' EXIT
 broken_twin() {
@@ -421,13 +441,17 @@ broken_twin README.md 'has the heading of level 4 ("#### Archiv") where line' -e
 broken_twin docs/faq.md 'has the heading of level 2 ("## Mehr"), which docs/faq.md lacks' -e '$a ## Mehr'
 broken_twin README.md 'has the diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
   -e 's/how-paperless-sync-moves-documents\.de\.svg/how-paperless-sync-moves-documents.svg/'
+broken_twin README.md 'has the dark diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
+  -e 's/how-paperless-sync-moves-documents\.de\.dark\.svg/how-paperless-sync-moves-documents.dark.svg/'
+broken_twin docs/faq.md 'removed somewhere between there and line 74, the heading of level 2 ("## Einrichtung und Betrieb"), and line' \
+  -e '/^### Wie oft läuft es?$/d'
 broken_twin docs/guide.md 'has the snippet include --8<-- "README.md:features" where line' \
   -e 's/README\.de\.md:features/README.md:features/'
 # shellcheck disable=SC2016 # The $ of sed, the last line, which the shell must not expand.
 broken_twin docs/faq.md 'it ends where line' -e '/^### Wie deinstalliere ich Paperless Sync?$/,$d'
 rm -rf "$twin_copy"
 trap - EXIT
-echo "The check of the German twins reports a heading that is gone, of another level or too many, an English diagram, an English snippet and a page that ends early."
+echo "The check of the German twins reports a heading that is gone, of another level, too many or gone among others, an English diagram, light or dark, an English snippet and a page that ends early."
 
 printf '\n== %s\n' "Area labels of pull requests"
 # The labeler bot of .github/workflows/area-labels.yml gives a pull request the area

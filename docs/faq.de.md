@@ -81,7 +81,11 @@ Um ein großes Archiv in einem Zug zu importieren, lass die geplante Synchronisa
 
 ### Wie oft läuft es?
 
-Im Intervall der Einstellungen, standardmäßig 5 Minuten und höchstens ein Tag, als Hintergrundjob von Nextcloud. Nextcloud startet diesen Job höchstens alle fünf Minuten und nur, wenn sein System-Cron läuft, also beträgt das Intervall mindestens fünf Minuten. Ein Lauf, der noch beschäftigt ist, hält den nächsten zurück. *Jetzt synchronisieren* reiht einen Lauf ein, den die nächsten Hintergrundjobs starten, innerhalb von fünf Minuten oder sofort mit einem Worker für ihn ([Hintergrundjobs](guide.de.md#hintergrundjobs)), und das Intervall zählt dann ab ihm; `occ paperless_sync:run` führt sofort einen in der Shell aus. Ein Testlauf zeigt, was ein Lauf ändern würde, ohne es zu ändern, und verschiebt den nächsten Lauf nicht.
+Im Intervall der Einstellungen, standardmäßig 5 Minuten und höchstens ein Tag, als Hintergrundjob von Nextcloud. Nextcloud startet diesen Job höchstens alle fünf Minuten und nur, wenn sein System-Cron läuft, also beträgt das Intervall mindestens fünf Minuten. Ein Lauf, der noch beschäftigt ist, hält den nächsten zurück. *Jetzt synchronisieren* reiht einen Lauf ein, den die nächsten Hintergrundjobs starten, innerhalb von fünf Minuten oder sofort mit einem Worker für ihn ([Hintergrundjobs](guide.de.md#hintergrundjobs)), und das Intervall zählt dann ab ihm; `occ paperless_sync:run` führt sofort einen in der Shell aus. Mit dem [Webhook](guide.de.md#änderungen-in-sekunden) bringt ein Arbeitsablauf von Paperless jedes neue oder geänderte Dokument in Sekunden, zwischen den Läufen. Ein Testlauf zeigt, was ein Lauf ändern würde, ohne es zu ändern, und verschiebt den nächsten Lauf nicht.
+
+### Kann eine Änderung Nextcloud in Sekunden erreichen?
+
+Ja, mit einem Arbeitsablauf von Paperless, der bei *Dokument hinzugefügt* und *Dokument aktualisiert* den Webhook der App aufruft: Die Kopie des Dokuments ändert sich dann in Sekunden, nach denselben Regeln wie in einem Lauf, ohne einen Container neben Paperless, seinen Medienordner oder ein Passwort von Nextcloud. Abschnitt 6 der Einstellungen hat die Adresse und das Geheimnis, und [Änderungen in Sekunden](guide.de.md#änderungen-in-sekunden) die Schritte in Paperless. Dokumente im Papierkorb und gelöschte warten weiter auf die geplanten Läufe, die die fehlenden Scans zählen, die die Löschsicherheit verlangt.
 
 ### Gibt es eine Kommandozeile?
 
