@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.0.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.4.0...v1.0.0) (2026-10-18)
+
+
+### Features
+
+* **archive:** optional metadata sidecars and an index next to the archive ([#191](https://github.com/Dennis-Otto/paperless-sync/issues/191)) ([fd9ceca](https://github.com/Dennis-Otto/paperless-sync/commit/fd9ceca91dc388497b36e1413d18626540c6ce58))
+* **archive:** optionally mirror only documents with chosen tags ([#198](https://github.com/Dennis-Otto/paperless-sync/issues/198)) ([a1d37c8](https://github.com/Dennis-Otto/paperless-sync/commit/a1d37c81892a9991dee1551310060c7b554774c6))
+* **archive:** show Paperless tags as Nextcloud tags on the mirrored files ([#200](https://github.com/Dennis-Otto/paperless-sync/issues/200)) ([d473bbd](https://github.com/Dennis-Otto/paperless-sync/commit/d473bbdb236ea67ad643f3e5d1fd8a1437ddb629))
+* **files:** 'Send to Paperless' and 'Open in Paperless' file actions ([#194](https://github.com/Dennis-Otto/paperless-sync/issues/194)) ([0657861](https://github.com/Dennis-Otto/paperless-sync/commit/0657861c7152faf18bb350c4997673e5eb5026e2))
+* Nextcloud Flow operation 'Send to Paperless' ([#197](https://github.com/Dennis-Otto/paperless-sync/issues/197)) ([9c31ea2](https://github.com/Dennis-Otto/paperless-sync/commit/9c31ea20e003502dfde8856dcd7b7f283cdd5d58))
+
+
+### Bug fixes
+
+* one Paperless connection per run through a client factory ([#185](https://github.com/Dennis-Otto/paperless-sync/issues/185)) ([b2a1879](https://github.com/Dennis-Otto/paperless-sync/commit/b2a187957aeb36109b2e653ba1d444f01c48633d))
+
+
+### Documentation
+
+* release the app as 1.0.0, its first stable version ([#202](https://github.com/Dennis-Otto/paperless-sync/issues/202)) ([a2b71dd](https://github.com/Dennis-Otto/paperless-sync/commit/a2b71dde816631ec92bf0aef90b8d50e5ffea9ed))
+
 ## [0.4.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.3.0...v0.4.0) (2026-10-17)
 
 ### Features
