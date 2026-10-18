@@ -106,6 +106,8 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 			'file_id' => $fileId,
 			'path' => '',
 			'folder' => '',
+			'tags' => null,
+			'rule_id' => 0,
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,

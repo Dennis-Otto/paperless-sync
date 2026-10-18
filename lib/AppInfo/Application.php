@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\AppInfo;
 
+use OCA\PaperlessSync\Listener\FlowListener;
 use OCA\PaperlessSync\Listener\LoadAdditionalScriptsListener;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
@@ -23,6 +24,8 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\WorkflowEngine\Events\LoadSettingsScriptsEvent;
+use OCP\WorkflowEngine\Events\RegisterOperationsEvent;
 
 final class Application extends App implements IBootstrap {
 	public const APP_ID = AppConstants::APP_ID;
@@ -44,6 +47,9 @@ final class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(BackgroundJobMode::class);
 		// "Send to Paperless" and "Open in Paperless" in the menu of Files.
 		$context->registerEventListener(LoadAdditionalScriptsListener::EVENT, LoadAdditionalScriptsListener::class);
+		// "Send to Paperless" in Flow, for rules of the administrators.
+		$context->registerEventListener(RegisterOperationsEvent::class, FlowListener::class);
+		$context->registerEventListener(LoadSettingsScriptsEvent::class, FlowListener::class);
 	}
 
 	public function boot(IBootContext $context): void {

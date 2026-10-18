@@ -99,6 +99,33 @@ final class SendServiceTest extends TestCase {
 		self::assertSame([3, 7], $this->paperless->uploadTags['receipt.pdf']);
 	}
 
+	/**
+	 * A file of a rule of Flow gets the tags of the rule besides those for every import, each once:
+	 * with "Create missing tags", Paperless gets a tag that it lacks, and else the file goes without it.
+	 */
+	public function testAFileOfARuleGetsTheTagsOfTheRule(): void {
+		$this->configService->save(['inbox_tags' => 'Scanned', 'inbox_create_tags' => true, 'send_group' => 'scanners'] + self::validSettings());
+		$this->paperless->tagInfo = ['names' => ['3' => 'Scanned', '5' => 'Family'], 'inbox' => []];
+		$this->queueByRule('Scans/receipt.pdf', 'family,Scanned,Taxes');
+		$this->queueByRule('Scans/letter.pdf', '');
+
+		$this->service->process();
+
+		self::assertSame([3, 5, 100], $this->paperless->uploadTags['receipt.pdf']);
+		self::assertSame([3], $this->paperless->uploadTags['letter.pdf']);
+		self::assertSame(['Taxes'], $this->paperless->createdTags);
+	}
+
+	public function testATagOfARuleThatPaperlessLacksIsLeftOutWithoutCreatingTags(): void {
+		$this->paperless->tagInfo = ['names' => ['5' => 'Family'], 'inbox' => []];
+		$this->queueByRule('Scans/receipt.pdf', 'Family,Taxes');
+
+		$this->service->process();
+
+		self::assertSame([5], $this->paperless->uploadTags['receipt.pdf']);
+		self::assertSame([], $this->paperless->createdTags);
+	}
+
 	/** A file moved after the click still goes, from its new place. */
 	public function testAMovedFileGoesFromItsNewPlace(): void {
 		$id = $this->queue('Scans/receipt.pdf');
@@ -281,6 +308,55 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123);
 	}
 
+	/**
+	 * A rule may send many files, so its owner doesn't hear of every import that worked, nor of a
+	 * file that they deleted themselves before its upload; the log keeps them.
+	 *
+	 * @return array<string, array{\Closure(self, int): void, string}>
+	 */
+	public static function quietEnds(): array {
+		return [
+			'an import' => [static function (self $test): void {
+				$test->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => 'Success. New document id 123 created', 'documentId' => 123];
+			}, NotificationPublisher::SUBJECT_SEND_IMPORTED],
+			'a content that Paperless has' => [static function (self $test, int $id): void {
+				$test->state->saveSend(self::SENDER, $id, ['status' => SendService::QUEUED]);
+				$test->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+			}, NotificationPublisher::SUBJECT_SEND_KNOWN],
+			'a file that is gone' => [static function (self $test, int $id): void {
+				$test->state->saveSend(self::SENDER, $id, ['status' => SendService::QUEUED]);
+				$test->storage->delete(self::SENDER, 'Scans/receipt.pdf');
+			}, NotificationPublisher::SUBJECT_SEND_GONE],
+		];
+	}
+
+	/** @param \Closure(self, int): void $end */
+	#[DataProvider('quietEnds')]
+	public function testTheOwnerOfAFileOfARuleHearsOfNoImportThatWorked(\Closure $end, string $subject): void {
+		$id = $this->queueByRule('Scans/receipt.pdf', '');
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::PENDING, 'task_id' => 'task-1', 'submitted_at' => TestClock::START]);
+		$end($this, $id);
+		$this->logger->expects(self::once())->method('info')->with(
+			'The import of {path} of {user}, which the rule {rule} of Flow sent to Paperless, ended: {subject}, document {document}.',
+			self::callback(static fn (array $context): bool => $context['path'] === 'Scans/receipt.pdf' && $context['user'] === self::SENDER && $context['rule'] === 7 && $context['subject'] === $subject),
+		);
+
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $id));
+		self::assertSame([], $this->notifications);
+	}
+
+	/** An import that Paperless refused or that failed needs its owner, whoever sent it. */
+	public function testTheOwnerOfAFileOfARuleHearsOfAFailedImport(): void {
+		$id = $this->queueByRule('Scans/notes.bin', '');
+		$this->paperless->uploadFailures['notes.bin'] = new PaperlessUploadException('File type application/octet-stream not supported', true, 400);
+
+		$this->service->process();
+
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_REFUSED, $id, 'Scans/notes.bin', null, 'File type application/octet-stream not supported');
+	}
+
 	/** @return array<string, array{array{status: string, message: string}, string}> */
 	public static function failedTasks(): array {
 		return [
@@ -349,6 +425,14 @@ final class SendServiceTest extends TestCase {
 	}
 
 	/** A file whose upload is the task task-1 of Paperless. */
+	/** A file that the rule 7 of Flow queued, with the names of its tags. */
+	private function queueByRule(string $path, string $tags): int {
+		$id = $this->queue($path);
+		$this->state->saveSend(self::SENDER, $id, ['tags' => $tags, 'rule_id' => 7]);
+
+		return $id;
+	}
+
 	private function pending(string $path): int {
 		$id = $this->queue($path);
 		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::PENDING, 'task_id' => 'task-1', 'submitted_at' => TestClock::START]);

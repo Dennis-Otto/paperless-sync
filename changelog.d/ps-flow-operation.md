@@ -1,0 +1,3 @@
+### Features
+
+- **Send to Paperless in Flow:** administrators can make rules in *Administration → Flow* that send files to Paperless on their own, such as every PDF that a member of a group uploads, or every file of a folder that has the tag *To Paperless*: the file goes to Paperless with the tags for every import of the inbox and the tags of the rule, which the form of the rule suggests from Paperless, and stays where it is. The uploads use the API token of the app, so only administrators can make such rules; the files of the folder of the app, which a run writes, and copies of the archive stay out. A rule may send many files, so the owner of a file hears only of an import that Paperless refused or that failed.

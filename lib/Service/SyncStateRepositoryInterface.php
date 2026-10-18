@@ -55,9 +55,11 @@ interface SyncStateRepositoryInterface {
 	public function deleteImport(string $ownerUid, string $path): void;
 
 	/**
-	 * Every file that someone sent to Paperless from Files and whose import has not ended yet, the
-	 * oldest first: its user, the ID of the file, its path when it was sent, the folder below the
-	 * sent folder that holds it, and the state of its upload as for a file of the inbox.
+	 * Every file that someone sent to Paperless from Files, or a rule of Flow, and whose import has
+	 * not ended yet, the oldest first: its user, the ID of the file, its path when it was sent, the
+	 * folder below the sent folder that holds it, the names of the tags of the rule, separated by
+	 * commas, and the ID of the rule, 0 for a file sent from Files, and the state of its upload as
+	 * for a file of the inbox.
 	 *
 	 * @return list<array<string, int|string|null>>
 	 */

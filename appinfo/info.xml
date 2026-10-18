@@ -17,6 +17,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Skips Paperless inbox documents until they are finalized and removes previously mirrored copies when an exclusion tag is added
 - Imports files from a configurable Nextcloud inbox into Paperless
 - Sends a file or a folder to Paperless from its menu in Files, for a group of your choice, and opens the document of a mirrored copy in Paperless
+- Sends files to Paperless by rules of Flow, such as every PDF that a member of a group uploads, with tags of their own
 - Mirrors the Paperless trash into a dedicated Nextcloud folder
 - Optionally removes files after they are permanently deleted from Paperless
 - Removes empty archive folders after moves and deletions
@@ -51,6 +52,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Überspringt Dokumente im Paperless-Posteingang bis zur Fertigstellung und entfernt bereits gespiegelte Kopien, wenn ein Ausschluss-Tag gesetzt wird
 - Importiert Dateien aus einem konfigurierbaren Nextcloud-Eingang in Paperless
 - Sendet eine Datei oder einen Ordner aus seinem Menü in Dateien an Paperless, für eine Gruppe nach Wahl, und öffnet das Dokument einer gespiegelten Kopie in Paperless
+- Sendet Dateien nach Regeln von Flow an Paperless, etwa jedes PDF, das ein Mitglied einer Gruppe hochlädt, mit eigenen Tags
 - Spiegelt den Paperless-Papierkorb in einen eigenen Nextcloud-Ordner
 - Kann Dateien nach dem endgültigen Löschen in Paperless ebenfalls endgültig entfernen
 - Entfernt leere Archivordner nach Verschiebungen und Löschungen

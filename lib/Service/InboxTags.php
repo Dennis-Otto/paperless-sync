@@ -55,17 +55,21 @@ final class InboxTags {
 
 	/**
 	 * The tags of a file in $folder, the path of its folder below the inbox, such as Taxes/2026, or
-	 * '' for a file in the inbox itself: the IDs to upload it with, and the names of the tags as
-	 * Paperless writes them, for the report.
+	 * '' for a file in the inbox itself, and with the names of $more, the tags of a rule of Flow that
+	 * sends it: the IDs to upload it with, and the names of the tags as Paperless writes them, for
+	 * the report. The tags of a rule follow the settings of the inbox as well: one that Paperless
+	 * doesn't have is created with "Create missing tags", and else left out.
 	 *
+	 * @param list<string> $more
 	 * @return array{ids: list<int>, names: list<string>}
 	 * @throws \Throwable when Paperless can't list its tags or create one that the file needs, so that the file waits
 	 */
-	public function forFolder(string $folder): array {
+	public function forFolder(string $folder, array $more = []): array {
 		$names = $this->defaultNames;
 		if ($this->config->inboxFolderTags && $folder !== '') {
 			array_push($names, ...explode('/', $folder));
 		}
+		array_push($names, ...$more);
 		$ids = [];
 		$found = [];
 		foreach (self::unique($names) as $key => $name) {

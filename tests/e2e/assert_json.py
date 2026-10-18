@@ -531,6 +531,21 @@ elif mode == "mock-sent":
     sent = [upload for upload in payload.get("uploads", []) if upload.get("filename") == "receipt.pdf"]
     if len(sent) != 1 or sent[0].get("containsFixture") is not True:
         raise AssertionError(f"mock-sent: the sent file did not reach Paperless once and intact: {payload.get('uploads')!r}")
+elif mode == "mock-flow":
+    # The file that the rule of Flow matched reached Paperless once, intact, with the tags of the
+    # rule, Private (10) and insurance (11); the file that it didn't match stayed.
+    sent = [upload for upload in payload.get("uploads", []) if upload.get("filename") == "scan-insurance.pdf"]
+    if len(sent) != 1 or sent[0].get("containsFixture") is not True:
+        raise AssertionError(f"mock-flow: the file of the rule did not reach Paperless once and intact: {payload.get('uploads')!r}")
+    if not {10, 11} <= set(sent[0].get("tags", [])):
+        raise AssertionError(f"mock-flow: the file of the rule did not get the tags Private and insurance: {sent[0]!r}")
+    if any(upload.get("filename") == "holiday.pdf" for upload in payload.get("uploads", [])):
+        raise AssertionError(f"mock-flow: a file that the rule did not match reached Paperless: {payload.get('uploads')!r}")
+elif mode == "notifications-flow":
+    # A rule may send many files, so its owner hears of an import that failed alone.
+    entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "send"]
+    if entries:
+        raise AssertionError(f"notifications-flow: the owner of a file of a rule heard of an import that worked: {entries!r}")
 elif mode == "notifications-sent":
     # Its sender hears that Paperless has it, and the notification opens the new document.
     entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "send"]
