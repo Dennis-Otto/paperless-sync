@@ -47,6 +47,8 @@ final class TestStorage implements NextcloudStorageInterface {
 	public ?\Throwable $writeTextException = null;
 	public ?\Throwable $moveException = null;
 	public ?\Throwable $deleteException = null;
+	/** @var array<string, \Throwable> the failure of the question whether a file is at a path, such as of a storage that is not available */
+	public array $existsFailures = [];
 	/** The failure of every read of a file, such as of a storage that is not available. */
 	public ?\Throwable $readException = null;
 	/** @var list<string> the paths that openRead was asked for */
@@ -86,6 +88,9 @@ final class TestStorage implements NextcloudStorageInterface {
 	public function exists(string $userId, string $path): bool {
 		$files = &$this->filesOf('exists', $userId, $path);
 		$this->requirePath($path);
+		if (isset($this->existsFailures[$path])) {
+			throw $this->existsFailures[$path];
+		}
 		return array_key_exists($path, $files);
 	}
 

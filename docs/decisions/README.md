@@ -27,3 +27,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0019](0019-changes-from-paperless-through-its-workflow-webhook.md) | Changes from Paperless arrive through the webhook of its workflows, as runs of one document | accepted |
 | [0020](0020-one-connection-to-paperless-for-each-run.md) | One connection to Paperless for each run, through a client for that connection | accepted |
 | [0021](0021-metadata-next-to-the-archive-in-sidecars-and-an-index.md) | The metadata of Paperless goes next to the archive, as a sidecar for each copy and one index | accepted |
+| [0022](0022-a-dry-run-takes-the-plan-of-a-run.md) | A dry-run takes the plan of a run: planners decide, executors apply or only report | accepted |

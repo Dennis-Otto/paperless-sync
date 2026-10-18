@@ -500,6 +500,47 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('failed', $this->settings['status_last_state']);
 	}
 
+	/**
+	 * Runs whose changes a dry-run shows before them. Every change succeeds, so the run that follows
+	 * the dry-run makes the changes that the dry-run reported: a failure, such as of a full quota,
+	 * is what tells a run from its dry-run.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function dryRunScenarios(): array {
+		return [
+			'new documents beyond the batch' => ['new documents'],
+			'a document with a new title' => ['new title'],
+			'a document with a new content' => ['new content'],
+			'documents in the trash and gone from Paperless, in one batch' => ['trash'],
+			'a document that waits for its missing scans' => ['waiting'],
+			'a document that Paperless deleted from its trash' => ['deletion'],
+			'a document with an excluded tag' => ['excluded'],
+			'a file of the user at the path of a document' => ['conflict'],
+			'the files of the inbox and their uploads' => ['inbox'],
+		];
+	}
+
+	/**
+	 * ExportPlanner and ImportPlanner plan a dry-run as they plan a run, and only the executors tell
+	 * them apart: a dry-run reports the changes, and the run that follows it makes the same ones.
+	 */
+	#[DataProvider('dryRunScenarios')]
+	public function testADryRunReportsTheChangesOfTheRunThatFollowsIt(string $scenario): void {
+		$this->arrangeScenario($scenario);
+		$before = [$this->storage->files, $this->state->exports, $this->state->imports];
+
+		$dryRun = $this->service->run(true);
+
+		self::assertSame($before, [$this->storage->files, $this->state->exports, $this->state->imports], 'A dry-run changes nothing.');
+
+		$run = $this->service->run();
+
+		self::assertNotSame([], $run->actions);
+		self::assertSame($dryRun->actions, $run->actions);
+		self::assertSame(self::reportCounts($dryRun), self::reportCounts($run));
+	}
+
 	public function testRunPreparesTheFoldersAndADryRunDoesNot(): void {
 		$this->service->run(true);
 
@@ -4728,6 +4769,74 @@ final class SyncServiceTest extends TestCase {
 		));
 
 		$this->service->syncDocument(123);
+	}
+
+	/** Sets up the documents, files and settings of a scenario of dryRunScenarios(). */
+	private function arrangeScenario(string $scenario): void {
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		switch ($scenario) {
+			case 'new documents':
+				$this->configService->save(['batch_size' => 2]);
+				$this->paperless->documents = $this->documents(3);
+				$this->paperless->contents = [1 => '%PDF-1', 2 => '%PDF-2', 3 => '%PDF-3'];
+				break;
+			case 'new title':
+				$this->exportDocument();
+				$this->paperless->documents[0]['title'] = 'Strom September';
+				break;
+			case 'new content':
+				$this->exportDocument();
+				$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+				$this->paperless->contents[123] = '%PDF-corrected';
+				break;
+			case 'trash':
+				// The export, the move of the trashed document and the move of the missing one, of
+				// which the batch of two leaves the last for a later run.
+				$this->configService->save(['missing_grace_runs' => 1]);
+				$this->exportDocuments([$this->document(123), $this->document(124)]);
+				$this->configService->save(['batch_size' => 2]);
+				$this->paperless->trash = [$this->document(124) + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+				$this->paperless->documents = [$this->document(125)];
+				$this->paperless->contents[125] = '%PDF-125';
+				break;
+			case 'waiting':
+				$this->configService->save(['trash_mode' => 'keep']);
+				$this->exportDocument();
+				$this->paperless->documents = [];
+				break;
+			case 'deletion':
+				$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true]);
+				$this->exportDocument();
+				$this->trashDocument();
+				$this->service->run();
+				$this->paperless->trash = [];
+				break;
+			case 'excluded':
+				$this->exportDocument();
+				$this->paperless->documents[0]['tags'] = [9];
+				$this->paperless->tagInfo = ['names' => ['9' => 'Inbox'], 'inbox' => ['9']];
+				break;
+			case 'conflict':
+				$this->configService->save(['conflict_mode' => 'skip']);
+				$this->storage->files[self::EXPORTED_PATH] = 'a file of the user';
+				$this->paperless->documents = [$this->document()];
+				break;
+			default:
+				$this->storage->files['Dokumente/Paperless/Eingang/succeeded.pdf'] = '%PDF-1';
+				$this->storage->files['Dokumente/Paperless/Eingang/Ordner/failed.pdf'] = '%PDF-2';
+				$this->service->run();
+				$this->paperless->tasks = [
+					'task-1' => ['status' => 'SUCCESS', 'message' => ''],
+					'task-2' => ['status' => 'FAILED', 'message' => 'Broken'],
+				];
+				$this->storage->files['Dokumente/Paperless/Eingang/new.pdf'] = '%PDF-3';
+		}
+	}
+
+	/** @return array<string, bool|int> the counts of a report, without those of the kind of run and the pruned folders, which a dry-run doesn't prune */
+	private static function reportCounts(SyncReport $report): array {
+		return array_diff_key($report->summary(), array_flip(['dryRun', 'startedAt', 'completedAt', 'unsavedSettings', 'foldersPruned']));
 	}
 
 	/** @return array<string, mixed> */

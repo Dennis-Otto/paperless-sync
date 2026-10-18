@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: How a dry-run and a run share one plan
+    accDescr: The planners read the documents, the trash and the tasks of Paperless, the inbox and the archive in Nextcloud, and the states in the database, and change none of them. They plan one action at a time for each document and file, such as an export, a move, a move to the deleted folder, a deletion or an upload, when it fits the batch, and leave it for a later run otherwise. In a run, the executor makes the change and saves the state; in a dry-run, it changes nothing. Both report the same line and take the same place in the batch, so the plan of the next document sees the batch as it stands: in a run, a failed export frees its place, and a full quota stops the other writes.
+
+    sources["Paperless: documents, trash, tasks<br>Nextcloud: inbox and archive<br>Database: the states"] -->|read, never changed| planner["ExportPlanner and ImportPlanner:<br>an action for each<br>document and file"]
+    batch["SyncBatch:<br>the places for changes"] -.->|"does it fit?"| planner
+    planner -->|one action at a time| kind{"A run or<br>a dry-run?"}
+    kind -->|run| apply["The executor makes the change<br>and saves the state"]
+    kind -->|dry-run| keep["The executor<br>changes nothing"]
+    apply --> report["The report: the same line<br>in both kinds of run"]
+    keep --> report
+    apply -.->|"takes its place; a failed export frees it,<br>a full quota stops the writes"| batch
+    keep -.->|"takes its place, as if<br>the change succeeded"| batch
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class planner,batch,kind check
+    class keep waits
+    class apply,report result

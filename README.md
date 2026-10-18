@@ -96,7 +96,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 ### Safety
 
-- Synchronization stays off until you turn it on, and a dry run lists every change that a run would make, without making it
+- Synchronization stays off until you turn it on, and a dry run lists every change that a run would make, without making it: it takes the plan of a run, change by change, in the same batch
 - The Paperless trash is mirrored into a folder of its own; permanent deletion is off by default and, when on, waits for the set number of complete scans of Paperless in a row
 - A conflict policy for a file in the way: replace it, or skip it and report the conflict; the app's own copies are never in the way
 - No WebDAV credentials and no password of a Nextcloud user: the app writes through Nextcloud's filesystem API
