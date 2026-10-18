@@ -24,6 +24,8 @@ use OCP\SetupCheck\SetupResult;
 final class AdminSettings implements ISettings {
 	/** The users of the provisioning API of Nextcloud, at version 2 of its OCS API. */
 	private const USERS_PATH = '/ocs/v2.php/cloud/users';
+	/** The groups of the provisioning API, which the setting of the group that may send files picks from. */
+	private const GROUPS_PATH = '/ocs/v2.php/cloud/groups';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -68,6 +70,7 @@ final class AdminSettings implements ISettings {
 			// API of Nextcloud, which is always on and answers administrators. A path from the root of
 			// the server, as the page has it, also behind a proxy that changes the scheme or the host.
 			'usersUrl' => $this->urlGenerator->getWebroot() . self::USERS_PATH,
+			'groupsUrl' => $this->urlGenerator->getWebroot() . self::GROUPS_PATH,
 		]);
 	}
 

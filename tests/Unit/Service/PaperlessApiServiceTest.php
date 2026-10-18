@@ -1563,17 +1563,19 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
-	/** @return array<string, array{array<string, bool>, list<string>, list<string>}> the modules, the requests and the lines */
+	/** @return array<string, array{array<string, bool|string>, list<string>, list<string>}> the modules, the requests and the lines */
 	public static function modules(): array {
 		return [
-			'neither module' => [['export_enabled' => false, 'inbox_enabled' => false], ['documents'], ['paperless', 'documents']],
-			'the export alone' => [['inbox_enabled' => false], ['documents', 'ui_settings', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags'], ['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags']],
-			'the inbox alone' => [['export_enabled' => false], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
+			'neither module' => [['export_enabled' => false, 'inbox_enabled' => false, 'send_group' => ''], ['documents'], ['paperless', 'documents']],
+			'the export alone' => [['inbox_enabled' => false, 'send_group' => ''], ['documents', 'ui_settings', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags'], ['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags']],
+			'the inbox alone' => [['export_enabled' => false, 'send_group' => ''], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
+			// The files that people send from Files are uploads as well.
+			'sending from Files alone' => [['export_enabled' => false, 'inbox_enabled' => false], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
 		];
 	}
 
 	/**
-	 * @param array<string, bool> $settings
+	 * @param array<string, bool|string> $settings
 	 * @param list<string> $requests
 	 * @param list<string> $lines
 	 */
@@ -1964,6 +1966,22 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('Paperless did not say whether the account may add documents and view the tasks that import them.', $checks[2]->message);
 	}
 
+	/**
+	 * Without the inbox, only "Send to Paperless" uploads. A mirror whose token may not add
+	 * documents keeps working, so the missing permissions are warnings there, not failures.
+	 */
+	public function testWithoutTheInboxAMissingUploadPermissionIsAWarning(): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(false, ['view_document'])];
+
+		$checks = $this->preflight(['export_enabled' => false, 'inbox_enabled' => false, 'inbox_tags' => 'Inbox']);
+
+		self::assertSame(['upload', 'inbox_tags'], array_map(static fn (ConnectionCheck $check): string => $check->id, array_slice($checks, 2)));
+		self::assertSame([ConnectionCheck::WARNING, ConnectionCheck::WARNING], [$checks[2]->status, $checks[3]->status]);
+		self::assertSame('The account may neither add documents nor view the tasks that import them.', $checks[2]->message);
+		self::assertFalse($checks[2]->blocks());
+	}
+
 	/** @return array<string, array{list<string>, ConnectionCheck}> the permissions of the account and the line of the inbox */
 	public static function inboxPermissions(): array {
 		return [
@@ -2041,7 +2059,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			$this->responses[] = [200, self::page(1)];
 		}
 
-		$checks = $this->preflight(['inbox_enabled' => false]);
+		$checks = $this->preflight(['inbox_enabled' => false, 'send_group' => '']);
 
 		self::assertEquals(ConnectionCheck::failed(
 			'correspondents',

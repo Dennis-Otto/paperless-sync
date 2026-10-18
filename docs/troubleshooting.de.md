@@ -127,7 +127,7 @@ Die Einträge gehen allein an den Zielbenutzer, also sieht ein anderes Konto, et
 
 ### Der Link zu einem neuen Dokument in Paperless öffnet sich nicht
 
-Der Link einer importierten Datei in der App Aktivität beginnt mit der gespeicherten Paperless-Adresse, also der Adresse, unter der der Nextcloud-Server Paperless erreicht. Ein Name oder eine Adresse, die nur der Server kennt, etwa `http://paperless:8000` in einem Docker-Netzwerk, führt den Browser ins Leere. Öffne das Dokument stattdessen über seine Nummer in Paperless, etwa *P123*, oder speichere eine Adresse, die sowohl der Server als auch die Browser erreichen, etwa die öffentliche Adresse von Paperless hinter seinem Reverse Proxy.
+Der Link einer importierten Datei in der App Aktivität, die Benachrichtigung einer aus Dateien gesendeten Datei und *In Paperless öffnen* in Dateien beginnen mit der gespeicherten Paperless-Adresse, also der Adresse, unter der der Nextcloud-Server Paperless erreicht. Ein Name oder eine Adresse, die nur der Server kennt, etwa `http://paperless:8000` in einem Docker-Netzwerk, führt den Browser ins Leere. Öffne das Dokument stattdessen über seine Nummer in Paperless, etwa *P123*, oder speichere eine Adresse, die sowohl der Server als auch die Browser erreichen, etwa die öffentliche Adresse von Paperless hinter seinem Reverse Proxy.
 
 ### Dokumente des Papierkorbs kommen spät
 
@@ -163,6 +163,10 @@ Das Archiv liegt allein in den Dateien des Zielbenutzers; die App gibt niemand a
 ### Gelöschte Kopien sind nicht im Papierkorb
 
 Eine Kopie, die ein Lauf löscht, und eine Datei im Weg einer Kopie, die wandert, kommen in den Papierkorb des Zielbenutzers, *Gelöschte Dateien* in *Dateien*, wo nur der Zielbenutzer sie sieht und wiederherstellt: Ein Administrator, der den Lauf gestartet hat, findet sie nicht in einem eigenen Papierkorb. Das gilt für einen geplanten Lauf, einen Lauf von *Jetzt synchronisieren* und einen von `occ paperless_sync:run`; in früheren Versionen lief ein Lauf von *Jetzt synchronisieren* in der Anfrage des Administrators und löschte solche Dateien endgültig. [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) verfolgt einen Lauf, dessen Prozess zuerst die Dateien eines anderen Benutzers eingerichtet hat und der sie noch endgültig löscht: Probiere eine Änderung zuerst mit einem Testlauf aus. Ohne die App *Gelöschte Dateien* von Nextcloud ist jede Löschung endgültig. Eine Kopie, deren Dokument einen neuen Inhalt bekommt, ist keine Löschung: Sie bleibt dieselbe Datei, mit dem vorigen Inhalt als Version.
+
+### An Paperless senden fehlt im Menü einer Datei
+
+Dateien bietet *An Paperless senden* den Mitgliedern der Gruppe in *Gruppe, die Dateien senden darf*, in *4 · Nextcloud-Eingang*, an, standardmäßig den Administratoren, solange die App ihr API-Token hat: Ein leeres Feld oder *Trennen* nimmt die Aktion weg, und eine Gruppe, in der du nicht Mitglied bist, auch. Lade Dateien nach einer Änderung neu. Das Menü lässt die Aktion weg für eine Datei, deren Name eine Markierung wie `[P123]` trägt, eine Kopie eines Dokuments, das Paperless hat, für eine Datei, die du nicht lesen darfst, und im Papierkorb; ein Klick auf eine Datei im Basisordner der App, etwa in ihrem Eingang, antwortet, dass sich die Läufe um sie kümmern: Verschiebe eine Datei in den Eingang, um sie von dort zu senden. Nach dem Klick geht die Datei mit dem nächsten Lauf der Hintergrundjobs von Nextcloud, sie wartet also, solange Cron nicht läuft, wie [Kein Lauf startet](#kein-lauf-startet) beschreibt.
 
 ### Eine Datei ist zurück, nachdem ich sie gelöscht oder umbenannt habe
 

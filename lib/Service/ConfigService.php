@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
 
@@ -59,6 +60,7 @@ final class ConfigService {
 		'conflict_mode' => 'replace',
 		'webhook_immediate' => true,
 		'write_metadata' => false,
+		'send_group' => 'admin',
 	];
 
 	/**
@@ -86,6 +88,7 @@ final class ConfigService {
 		private PathTemplateService $pathTemplate,
 		private IFactory $l10nFactory,
 		private IConfig $config,
+		private IGroupManager $groupManager,
 	) {
 	}
 
@@ -255,7 +258,7 @@ final class ConfigService {
 			'prune_empty_folders' => 'pruneEmptyFolders', 'delete_inbox_after_success' => 'deleteInboxAfterSuccess',
 			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
-			'write_metadata' => 'writeMetadata',
+			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -451,6 +454,12 @@ final class ConfigService {
 		$values['path_template'] = $this->pathTemplate->validateTemplate((string)$values['path_template']);
 		$values['excluded_tags'] = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\r\n]+/', (string)$values['excluded_tags']) ?: [])))));
 		$values['inbox_tags'] = implode(', ', InboxTags::names((string)$values['inbox_tags']));
+		// Its members send files with the token of the app, so a typo must not leave the action to a
+		// group that someone could create later under that name.
+		$values['send_group'] = trim((string)$values['send_group']);
+		if ($values['send_group'] !== '' && !$this->groupManager->groupExists($values['send_group'])) {
+			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['send_group']], 'send_group');
+		}
 		// The numbers, by the labels of the settings page, which their messages name.
 		$values['sync_interval_minutes'] = self::within((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES)
 			?? throw new InvalidSettingException('"Interval in minutes" must be between %1$s and %2$s.', [(string)self::MINIMUM_INTERVAL_MINUTES, (string)self::MAXIMUM_INTERVAL_MINUTES], 'sync_interval_minutes');
@@ -494,7 +503,7 @@ final class ConfigService {
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
 			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
-			(bool)$values['write_metadata'],
+			(bool)$values['write_metadata'], (string)$values['send_group'],
 		);
 	}
 }

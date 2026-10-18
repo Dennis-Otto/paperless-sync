@@ -12,7 +12,9 @@ use OCA\PaperlessSync\AppInfo\Application;
 use OCA\PaperlessSync\Command\Forget;
 use OCA\PaperlessSync\Command\Run;
 use OCA\PaperlessSync\Command\Status;
+use OCA\PaperlessSync\Cron\SendJob;
 use OCA\PaperlessSync\Cron\SyncJob;
+use OCA\PaperlessSync\Listener\LoadAdditionalScriptsListener;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
@@ -29,6 +31,7 @@ use OCP\Activity\IProvider;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
 use OCP\AppFramework\IAppContainer;
+use OCP\EventDispatcher\IEventListener;
 use OCP\IConfig;
 use OCP\Notification\INotifier;
 use OCP\SetupCheck\ISetupCheck;
@@ -70,7 +73,7 @@ final class ApplicationTest extends TestCase {
 		foreach ($commands as $command) {
 			self::assertTrue(is_subclass_of($command, Command::class), $command);
 		}
-		self::assertSame([SyncJob::class], $jobs, 'A run by hand queues its job when it is asked for.');
+		self::assertSame([SyncJob::class, SendJob::class], $jobs, 'A run by hand queues its job when it is asked for.');
 	}
 
 	public function testTheAppUsesTheContainerNextcloudRegisteredForIt(): void {
@@ -126,6 +129,21 @@ final class ApplicationTest extends TestCase {
 		self::assertTrue(is_subclass_of(Notifier::class, INotifier::class));
 		self::assertTrue(is_subclass_of(SyncHealth::class, ISetupCheck::class));
 		self::assertTrue(is_subclass_of(BackgroundJobMode::class, ISetupCheck::class));
+	}
+
+	/** Files loads the script of the actions of the app through the event that loads the scripts of other apps. */
+	public function testTheAppBringsItsActionsIntoFiles(): void {
+		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
+		$listeners = [];
+		$registration = $this->createMock(IRegistrationContext::class);
+		$registration->method('registerEventListener')->willReturnCallback(function (string $event, string $listener) use (&$listeners): void {
+			$listeners[] = [$event, $listener];
+		});
+
+		$application->register($registration);
+
+		self::assertSame([['OCA\Files\Event\LoadAdditionalScriptsEvent', LoadAdditionalScriptsListener::class]], $listeners);
+		self::assertTrue(is_subclass_of(LoadAdditionalScriptsListener::class, IEventListener::class));
 	}
 
 	/** The Activity app reads its setting, filter and provider from the app info, by their classes. */

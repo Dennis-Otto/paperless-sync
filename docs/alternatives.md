@@ -28,7 +28,7 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 
 | | [Paperless Sync](#paperless-sync) | [Paperless integration](#nextclouds-paperless-integration) | [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) | [rclone script](#an-rclone-or-webdav-script) | [Mount](#an-external-storage-mount-of-the-media-folder) | [Paperless itself](#paperlesss-own-ways-in) |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Direction** | Paperless → Nextcloud, and an inbox folder → Paperless | Nextcloud → Paperless | Paperless → Nextcloud | Paperless → Nextcloud | Paperless's own files, shown in Nextcloud | into Paperless |
+| **Direction** | Paperless → Nextcloud, and an inbox folder or a click in Files → Paperless | Nextcloud → Paperless | Paperless → Nextcloud | Paperless → Nextcloud | Paperless's own files, shown in Nextcloud | into Paperless |
 | **Runs** | inside Nextcloud, as a background job, or in the shell with `occ` | inside Nextcloud, when a user clicks | in a privileged container next to Paperless | as a scheduled job on the Paperless server | inside Nextcloud | inside Paperless |
 | **Reads Paperless through** | its REST API, with a token | its REST API, with a token | its media folder, read-only | its media folder | its media folder, local or over SMB or SFTP | — |
 | **Nextcloud password stored** | none | none | a password or app password of an account | an app password, in `rclone.conf` | none for a local folder | — |
@@ -60,7 +60,7 @@ It is not the right choice when:
 
 The app [Paperless integration](https://apps.nextcloud.com/apps/integration_paperless) of Nextcloud GmbH adds the action *Upload to Paperless* to the Files app. Every user enters the address of Paperless and an API token of their own in their personal settings and sends the files they select. It brings nothing from Paperless into Nextcloud, and its README says that it is maintained with limited effort.
 
-Choose it when people with their own Paperless accounts send single files now and then. It goes well with Paperless Sync: the integration sends a file by hand, the inbox of Paperless Sync takes whatever lands in a folder, and Paperless Sync brings the finished documents back.
+Choose it when every person should send files with their own Paperless account. Paperless Sync has [*Send to Paperless*](guide.md#send-from-files) in the menu of Files as well, with the account of the app, for a group that the administrators choose, and *Open in Paperless* for the copies of its archive; the two go well together all the same: the integration sends a file with the account of its user, the inbox of Paperless Sync takes whatever lands in a folder, and Paperless Sync brings the finished documents back.
 
 ### The WebDAV container paperless-nextcloud-sync
 
@@ -89,7 +89,7 @@ The inbox of Paperless Sync is a consume folder in Nextcloud: a file that reache
 ### Together
 
 - **Paperless Sync and [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search)**: the search of Nextcloud finds the text that Paperless recognized in a document and opens its copy in the archive.
-- **Paperless Sync and the Paperless integration**: single files by hand with the integration, folders with the inbox of Paperless Sync.
+- **Paperless Sync and the Paperless integration**: files by hand with the Paperless account of each user through the integration, with the account of the app through *Send to Paperless* of Paperless Sync, and folders with the inbox of Paperless Sync.
 - **Paperless Sync and Paperless's mail fetcher and apps**: a document that reaches Paperless any way appears in Nextcloud with the next run.
 
 ## Move to Paperless Sync

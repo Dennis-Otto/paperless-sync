@@ -34,9 +34,9 @@ use Psr\Log\LogLevel;
  */
 final class ImportExecutor {
 	/** The wait after the first failed upload of a file whose failure may pass, in seconds; it doubles with each further one. */
-	private const RETRY_DELAY = 900;
+	public const RETRY_DELAY = 900;
 	/** The longest wait between two uploads of a file that keep failing, in seconds. */
-	private const MAX_RETRY_DELAY = 86400;
+	public const MAX_RETRY_DELAY = 86400;
 
 	private bool $dryRun;
 	private InboxTags $tags;

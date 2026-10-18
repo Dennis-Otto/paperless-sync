@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
+use OCP\IGroupManager;
 use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\Lock\ILockingProvider;
@@ -40,9 +41,19 @@ trait InMemoryConfiguration {
 	private string $defaultLanguage = 'en';
 	/** The forced language of Nextcloud, false when none is set, as config.php holds it. */
 	private bool|string $forcedLanguage = false;
+	/** @var list<string> the IDs of the groups of Nextcloud */
+	private array $groupsOfNextcloud = ['admin', 'scanners'];
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
-		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig());
+		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud());
+	}
+
+	/** The groups of Nextcloud, which the setting of the group that may send files names, by the IDs of $groupsOfNextcloud. */
+	private function groupsOfNextcloud(): IGroupManager {
+		$groups = $this->createStub(IGroupManager::class);
+		$groups->method('groupExists')->willReturnCallback(fn (string $groupId): bool => in_array($groupId, $this->groupsOfNextcloud, true));
+
+		return $groups;
 	}
 
 	/** The status of the runs; a run holds its lock when $locking says so, and never without it. */

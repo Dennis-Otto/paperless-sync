@@ -10,11 +10,13 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\DB\Exception;
 use OCP\IDBConnection;
 
 final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private const EXPORT_TABLE = 'paperless_sync_export';
 	private const IMPORT_TABLE = 'paperless_sync_import';
+	private const SEND_TABLE = 'paperless_sync_send';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -128,6 +130,76 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$this->delete(self::IMPORT_TABLE, ['owner_uid' => $ownerUid, 'path_hash' => hash('sha256', $path)]);
 	}
 
+	/** @psalm-suppress MixedReturnTypeCoercion */
+	public function allSends(): array {
+		$query = $this->connection->getQueryBuilder();
+		$query->select('*')
+			->from(self::SEND_TABLE)
+			->orderBy('id');
+		$result = $query->executeQuery();
+		$rows = [];
+		while (($row = $result->fetchAssociative()) !== false) {
+			$rows[] = $this->normalizeRow($row);
+		}
+		$result->closeCursor();
+
+		return $rows;
+	}
+
+	/** @psalm-suppress MixedReturnTypeCoercion */
+	public function findSend(string $userId, int $fileId): ?array {
+		$query = $this->connection->getQueryBuilder();
+		$query->select('*')
+			->from(self::SEND_TABLE)
+			->where($query->expr()->eq('user_id', $query->createNamedParameter($userId)))
+			->andWhere($query->expr()->eq('file_id', $query->createNamedParameter($fileId)));
+		$result = $query->executeQuery();
+		$row = $result->fetchAssociative();
+		$result->closeCursor();
+
+		return is_array($row) ? $this->normalizeRow($row) : null;
+	}
+
+	public function saveSend(string $userId, int $fileId, array $values): void {
+		$existing = $this->findSend($userId, $fileId);
+		$now = $this->timeFactory->getTime();
+		$values = array_intersect_key($values, array_flip([
+			'path', 'folder', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
+		]));
+		$values['updated_at'] = $now;
+		if ($existing === null) {
+			$row = array_merge([
+				'user_id' => $userId,
+				'file_id' => $fileId,
+				'path' => '',
+				'folder' => '',
+				'task_id' => '',
+				'status' => 'queued',
+				'submitted_at' => 0,
+				'attempts' => 0,
+				'retry_at' => 0,
+				'last_error' => null,
+				'created_at' => $now,
+			], $values);
+			try {
+				$this->insert(self::SEND_TABLE, $row);
+				return;
+			} catch (Exception $exception) {
+				// Another request, such as a second click at the same time, inserted the row since
+				// it was looked up: it is there now, and takes the values.
+				if ($exception->getReason() !== Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+					throw $exception;
+				}
+			}
+		}
+
+		$this->update(self::SEND_TABLE, $values, ['user_id' => $userId, 'file_id' => $fileId]);
+	}
+
+	public function deleteSend(string $userId, int $fileId): void {
+		$this->delete(self::SEND_TABLE, ['user_id' => $userId, 'file_id' => $fileId]);
+	}
+
 	/**
 	 * @return list<array<string, int|string|null>>
 	 * @psalm-suppress MixedReturnTypeCoercion
@@ -187,7 +259,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private function normalizeRow(array $row): array {
 		/** @var array<string, int|string|null> $result */
 		$result = [];
-		$integerColumns = ['id', 'document_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'attempts', 'retry_at', 'created_at', 'updated_at'];
+		$integerColumns = ['id', 'document_id', 'file_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'attempts', 'retry_at', 'created_at', 'updated_at'];
 		/** @psalm-suppress MixedAssignment */
 		foreach ($row as $key => $value) {
 			if ($value === null) {

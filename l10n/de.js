@@ -463,7 +463,40 @@ OC.L10N.register(
 		"Under Webhook headers, add Authorization with the value Bearer, a space and the secret, and save the workflow.": "Füge unter „Webhook-Kopfzeilen“ Authorization mit dem Wert Bearer, einem Leerzeichen und dem Geheimnis hinzu, und speichere den Arbeitsablauf.",
 		"Change the title of a document in Paperless: its copy moves within seconds, and the last call appears here.": "Ändere in Paperless den Titel eines Dokuments: Seine Kopie wird in Sekunden verschoben, und der letzte Aufruf erscheint hier.",
 		"Scheduled synchronization is off, so changes from Paperless wait until it is on again.": "Die geplante Synchronisation ist aus, Änderungen aus Paperless warten also, bis sie wieder an ist.",
-		"The archive export is off, so changes from Paperless reach no copy.": "Der Archiv-Export ist aus, Änderungen aus Paperless erreichen also keine Kopie."
+		"The archive export is off, so changes from Paperless reach no copy.": "Der Archiv-Export ist aus, Änderungen aus Paperless erreichen also keine Kopie.",
+		"Nextcloud group %s does not exist.": "Die Nextcloud-Gruppe %s gibt es nicht.",
+		"{file} is in Paperless now": "{file} ist jetzt in Paperless",
+		"Paperless already has {file}": "Paperless hat {file} bereits",
+		"Paperless refused {file}": "Paperless hat {file} abgelehnt",
+		"Paperless Sync could not send {file}: it was deleted, or you may no longer read it": "Paperless Sync konnte {file} nicht senden: Die Datei wurde gelöscht, oder du darfst sie nicht mehr lesen",
+		"You may not send files to Paperless. An administrator can allow it in the settings of Paperless Sync.": "Du darfst keine Dateien an Paperless senden. Ein Administrator kann es in den Einstellungen von Paperless Sync erlauben.",
+		"Choose the files to send to Paperless.": "Wähle die Dateien, die an Paperless gehen sollen.",
+		"The file was not found, or you may not read it.": "Die Datei wurde nicht gefunden, oder du darfst sie nicht lesen.",
+		"%s is in the folder of Paperless Sync, which its runs look after: move a file into its inbox to send it to Paperless.": "%s liegt im Ordner von Paperless Sync, um den sich seine Läufe kümmern: Verschiebe eine Datei in seinen Eingang, um sie an Paperless zu senden.",
+		"These are more than %s files, the most that Paperless Sync sends at once. Send fewer at a time.": "Das sind mehr als %s Dateien, so viele sendet Paperless Sync höchstens auf einmal. Sende weniger auf einmal.",
+		"%1$s holds more than %2$s files, the most that Paperless Sync sends at once. Send its subfolders one at a time.": "%1$s enthält mehr als %2$s Dateien, so viele sendet Paperless Sync höchstens auf einmal. Sende seine Unterordner einzeln.",
+		"_Paperless Sync sends %n file to Paperless. A notification tells you when Paperless has it._::_Paperless Sync sends %n files to Paperless. A notification tells you when Paperless has each._": [
+			"Paperless Sync sendet %n Datei an Paperless. Eine Benachrichtigung sagt dir, sobald Paperless sie hat.",
+			"Paperless Sync sendet %n Dateien an Paperless. Eine Benachrichtigung sagt dir, sobald Paperless jede hat."
+		],
+		"_%n file is on its way to Paperless already._::_%n files are on their way to Paperless already._": [
+			"%n Datei ist bereits auf dem Weg zu Paperless.",
+			"%n Dateien sind bereits auf dem Weg zu Paperless."
+		],
+		"_%n file stays out: Paperless has it already, it is in the folder of Paperless Sync, or its share allows no downloads._::_%n files stay out: Paperless has them already, they are in the folder of Paperless Sync, or their shares allow no downloads._": [
+			"%n Datei bleibt außen vor: Paperless hat sie bereits, sie liegt im Ordner von Paperless Sync, oder ihre Freigabe erlaubt keine Downloads.",
+			"%n Dateien bleiben außen vor: Paperless hat sie bereits, sie liegen im Ordner von Paperless Sync, oder ihre Freigaben erlauben keine Downloads."
+		],
+		"There are no files to send.": "Es gibt keine Dateien zu senden.",
+		"Too many files were sent in a short time. Wait a minute and try again.": "In kurzer Zeit wurden zu viele Dateien gesendet. Warte eine Minute und versuche es erneut.",
+		"Paperless Sync could not send the files (HTTP {status}).": "Paperless Sync konnte die Dateien nicht senden (HTTP {status}).",
+		"Send to Paperless": "An Paperless senden",
+		"Open in Paperless": "In Paperless öffnen",
+		"Group that may send files": "Gruppe, die Dateien senden darf",
+		"Groups of Nextcloud": "Gruppen von Nextcloud",
+		"Its members find \"Send to Paperless\" in the menu of a file or a folder in Files. A file goes to Paperless with the tags above, those of its subfolders below a sent folder included, and stays where it is; a notification tells the sender when Paperless has it. The uploads use the API token of the app, so choose people whom you trust with its account of Paperless, or leave the field empty to turn the action off. \"Open in Paperless\" opens the document of a copy of the archive for everyone.": "Ihre Mitglieder finden „An Paperless senden“ im Menü einer Datei oder eines Ordners in Dateien. Eine Datei geht mit den Tags oben an Paperless, auch denen ihrer Unterordner unterhalb eines gesendeten Ordners, und bleibt, wo sie ist; eine Benachrichtigung sagt dem Absender, sobald Paperless sie hat. Die Uploads nutzen das API-Token der App, wähle also Menschen, denen du ihr Konto in Paperless anvertraust, oder lass das Feld leer, um die Aktion auszuschalten. „In Paperless öffnen“ öffnet das Dokument einer Kopie des Archivs für alle.",
+		"Send from Files": "Aus Dateien senden",
+		"Could not search the groups of Nextcloud: {error}": "Die Gruppen von Nextcloud konnten nicht gesucht werden: {error}"
 	},
 	"nplurals=2; plural=(n != 1);"
 )

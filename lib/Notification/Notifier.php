@@ -21,7 +21,8 @@ use OCP\Notification\UnknownNotificationException;
 
 /**
  * Puts the notifications of NotificationPublisher into words, in the language of the reader, with a
- * link to the settings of the app or to the file of the inbox.
+ * link to the settings of the app, to the file of the inbox or to the file sent from Files, or to
+ * the document in Paperless that a sent file became.
  */
 final class Notifier implements INotifier {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -60,6 +61,25 @@ final class Notifier implements INotifier {
 			case NotificationPublisher::SUBJECT_IMPORT_REJECTED:
 				$this->import($notification, $parameters, $l->t('Paperless refused {file}; it stays in the inbox until it changes'));
 				break;
+			case NotificationPublisher::SUBJECT_SEND_IMPORTED:
+				$this->import($notification, $parameters, $l->t('{file} is in Paperless now'));
+				$this->linkToDocument($notification, $parameters);
+				break;
+			case NotificationPublisher::SUBJECT_SEND_KNOWN:
+				$this->import($notification, $parameters, $l->t('Paperless already has {file}'));
+				$this->linkToDocument($notification, $parameters);
+				break;
+			case NotificationPublisher::SUBJECT_SEND_FAILED:
+				$this->import($notification, $parameters, $l->t('Paperless could not import {file}'));
+				break;
+			case NotificationPublisher::SUBJECT_SEND_REFUSED:
+				$this->import($notification, $parameters, $l->t('Paperless refused {file}'));
+				break;
+			case NotificationPublisher::SUBJECT_SEND_GONE:
+				// The file is gone, or the user may no longer read it: a link to it would find nothing.
+				$file = isset($parameters['file']) && is_array($parameters['file']) ? $parameters['file'] : [];
+				$this->import($notification, ['file' => ['id' => 0] + $file] + $parameters, $l->t('Paperless Sync could not send {file}: it was deleted, or you may no longer read it'));
+				break;
 			default:
 				throw new UnknownNotificationException();
 		}
@@ -86,6 +106,20 @@ final class Notifier implements INotifier {
 		if ($error !== '') {
 			// The error is text, never a template, so it is the plain message: a brace in it stays as it is.
 			$notification->setParsedMessage($error);
+		}
+	}
+
+	/**
+	 * The notification of a file that Paperless has opens its document in Paperless, as "Open in
+	 * Paperless" in Files does.
+	 *
+	 * @param array<array-key, mixed> $parameters
+	 */
+	private function linkToDocument(INotification $notification, array $parameters): void {
+		$document = isset($parameters['document']) && is_int($parameters['document']) ? $parameters['document'] : 0;
+		$url = isset($parameters['url']) && is_string($parameters['url']) ? $parameters['url'] : '';
+		if ($document > 0 && $url !== '') {
+			$notification->setLink(rtrim($url, '/') . '/documents/' . $document . '/details');
 		}
 	}
 

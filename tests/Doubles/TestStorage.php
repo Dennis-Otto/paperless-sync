@@ -63,6 +63,10 @@ final class TestStorage implements NextcloudStorageInterface {
 	public bool|\Throwable $writable = true;
 	/** @var list<string> the folders that isWritableFolder was asked about */
 	public array $writableChecks = [];
+	/** @var array<string, array<int, string>> the folders that nodeById() finds, by user and ID */
+	private array $foldersById = [];
+	/** @var list<string> the paths of the files and folders that nodeById() reports as not readable */
+	public array $unreadable = [];
 
 	public function test(string $userId, string $basePath): void {
 		$this->record('test', $userId, $basePath);
@@ -168,9 +172,47 @@ final class TestStorage implements NextcloudStorageInterface {
 			if (!$recursive && str_contains($relative, '/')) {
 				continue;
 			}
-			$result[] = ['path' => $filePath, 'name' => basename($filePath), 'etag' => hash('sha256', $content)];
+			$result[] = ['path' => $filePath, 'name' => basename($filePath), 'etag' => hash('sha256', $content), 'id' => $this->fileId($filePath, $userId)];
 		}
 		return $result;
+	}
+
+	/**
+	 * A file or folder of the user by its ID: a file that has one, or a folder of the folders of
+	 * $foldersById. Every one is readable unless $unreadable names its path.
+	 */
+	public function nodeById(string $userId, int $fileId): ?array {
+		$this->record('nodeById', $userId, (string)$fileId);
+		$path = array_search($fileId, $this->fileIds[$userId] ?? [], true);
+		$folder = $this->foldersById[$userId][$fileId] ?? null;
+		if ($path === false && $folder === null) {
+			return null;
+		}
+		$path = $folder ?? (string)$path;
+
+		return ['path' => $path, 'name' => basename($path), 'folder' => $folder !== null, 'readable' => !in_array($path, $this->unreadable, true)];
+	}
+
+	/**
+	 * Shares a file of the user with another user, who sees it at another path, with the same file
+	 * ID, as Nextcloud shows a shared file.
+	 */
+	public function shareFile(string $path, string $withUser, string $asPath, string $userId = self::USER): int {
+		$id = $this->fileId($path, $userId);
+		$content = $this->filesOfUser($userId)[$path];
+		$files = &$this->filesOfUser($withUser);
+		$files[$asPath] = $content;
+		$this->fileIds[$withUser][$asPath] = $id;
+
+		return $id;
+	}
+
+	/** Gives the folder of the user an ID, by which nodeById() finds it. */
+	public function folderId(string $path, string $userId = self::USER): int {
+		$id = ++$this->lastFileId;
+		$this->foldersById[$userId][$id] = $path;
+
+		return $id;
 	}
 
 	public function openRead(string $userId, string $path) {

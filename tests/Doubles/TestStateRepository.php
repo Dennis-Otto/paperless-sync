@@ -33,6 +33,13 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 	public array $owners = [];
 	/** @var list<string> the method of every call of the exports, in its order, for the count of reads and writes */
 	public array $exportCalls = [];
+	/**
+	 * The files sent from Files, by "user/file ID", in the order of their first save, as the
+	 * database keeps them, with the defaults of a new one as SyncStateRepository writes them.
+	 *
+	 * @var array<string, array<string, int|string|null>>
+	 */
+	public array $sends = [];
 
 	public function findExport(string $ownerUid, int $documentId): ?array {
 		$this->exportCalls[] = 'findExport';
@@ -83,6 +90,33 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 	public function deleteImport(string $ownerUid, string $path): void {
 		$imports = &$this->importsOf($ownerUid);
 		unset($imports[$path]);
+	}
+
+	public function allSends(): array {
+		return array_values($this->sends);
+	}
+
+	public function findSend(string $userId, int $fileId): ?array {
+		return $this->sends[$userId . '/' . $fileId] ?? null;
+	}
+
+	public function saveSend(string $userId, int $fileId, array $values): void {
+		$this->sends[$userId . '/' . $fileId] = array_merge($this->sends[$userId . '/' . $fileId] ?? [
+			'user_id' => $userId,
+			'file_id' => $fileId,
+			'path' => '',
+			'folder' => '',
+			'task_id' => '',
+			'status' => 'queued',
+			'submitted_at' => 0,
+			'attempts' => 0,
+			'retry_at' => 0,
+			'last_error' => null,
+		], $values);
+	}
+
+	public function deleteSend(string $userId, int $fileId): void {
+		unset($this->sends[$userId . '/' . $fileId]);
 	}
 
 	/** @return array<int, array<string, int|string|null>> */

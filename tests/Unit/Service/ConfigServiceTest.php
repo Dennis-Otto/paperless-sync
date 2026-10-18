@@ -202,6 +202,16 @@ final class ConfigServiceTest extends TestCase {
 		self::assertTrue($this->service->get()->writeMetadata);
 	}
 
+	/** The administrators may send files from Files until another group, or none, is chosen. */
+	public function testTheAdministratorsMaySendFilesUntilTheSettingsSayOtherwise(): void {
+		self::assertSame('admin', $this->service->get()->sendGroup);
+
+		self::assertSame('scanners', $this->service->save(['send_group' => ' scanners '] + self::validSettings(), 'secret-token')->sendGroup);
+		self::assertSame('scanners', $this->settings['send_group']);
+
+		self::assertSame('', $this->service->save(['send_group' => ''] + self::validSettings())->sendGroup, 'An empty group turns the action off.');
+	}
+
 	/** Nextcloud loads the settings when the app asks for them, not with every request of every user. */
 	public function testEverySettingIsStoredAndReadLazily(): void {
 		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
@@ -212,7 +222,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(34, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(35, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 
@@ -529,6 +539,8 @@ final class ConfigServiceTest extends TestCase {
 			'too many confirmation runs' => [['missing_grace_runs' => 31], '"Required consecutive missing scans" must be between 1 and 30.', 'missing_grace_runs', 'Der Wert von „Erforderliche aufeinanderfolgende Läufe ohne das Dokument“ muss zwischen 1 und 30 liegen.'],
 			'unknown trash policy' => [['trash_mode' => 'delete'], 'Choose one of the options of "Paperless trash behavior".', 'trash_mode', 'Wähle eine der Optionen von „Verhalten beim Paperless-Papierkorb“.'],
 			'unknown conflict policy' => [['conflict_mode' => 'rename'], 'Choose one of the options of "File conflict policy".', 'conflict_mode', 'Wähle eine der Optionen von „Dateikonflikt-Regel“.'],
+			// A group that someone creates later under the name must not get the action unasked.
+			'a group that does not exist' => [['send_group' => 'scaners'], 'Nextcloud group scaners does not exist.', 'send_group', 'Die Nextcloud-Gruppe scaners gibt es nicht.'],
 		];
 	}
 

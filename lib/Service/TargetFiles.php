@@ -25,7 +25,7 @@ final class TargetFiles {
 	/**
 	 * The files of a folder, and of its subfolders with $recursive.
 	 *
-	 * @return list<array{path: string, name: string, etag: string}>
+	 * @return list<array{path: string, name: string, etag: string, id: int}>
 	 */
 	public function list(string $folder, bool $recursive): array {
 		return $this->storage->listFiles($this->user, $folder, $recursive);

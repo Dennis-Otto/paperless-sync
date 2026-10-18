@@ -13,8 +13,10 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\Node;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
+use OCP\Files\Storage\ISharedStorage;
 use OCP\IUserManager;
 use RuntimeException;
 
@@ -130,11 +132,37 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		$this->collectFiles($root, $path, $recursive, $files);
 		usort(
 			$files,
-			/** @param array{path: string, name: string, etag: string} $left @param array{path: string, name: string, etag: string} $right */
+			/** @param array{path: string, name: string, etag: string, id: int} $left @param array{path: string, name: string, etag: string, id: int} $right */
 			static fn (array $left, array $right): int => strcmp($left['path'], (string)$right['path']),
 		);
 
 		return $files;
+	}
+
+	public function nodeById(string $userId, int $fileId): ?array {
+		$userFolder = $this->rootFolder->getUserFolder($userId);
+		$node = $userFolder->getFirstNodeById($fileId);
+		$path = $node === null ? null : $userFolder->getRelativePath($node->getPath());
+		// The folder of the files of the user itself is no file of theirs to send.
+		if ($node === null || $path === null || trim($path, '/') === '') {
+			return null;
+		}
+
+		return ['path' => trim($path, '/'), 'name' => $node->getName(), 'folder' => $node instanceof Folder, 'readable' => $node->isReadable() && self::downloadable($node)];
+	}
+
+	/**
+	 * Whether the user may download the file or folder: not when it reaches them through a share
+	 * whose owner allows viewing only, which Nextcloud enforces for downloads over WebDAV and
+	 * which a copy in Paperless would get around.
+	 */
+	private static function downloadable(Node $node): bool {
+		$storage = $node->getStorage();
+		if (!$storage->instanceOfStorage(ISharedStorage::class)) {
+			return true;
+		}
+		/** @var ISharedStorage $storage */
+		return $storage->getShare()->getAttributes()?->getAttribute('permissions', 'download') !== false;
 	}
 
 	public function openRead(string $userId, string $path) {
@@ -256,7 +284,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		return is_array($stat) ? $stat['size'] : 0;
 	}
 
-	/** @param list<array{path: string, name: string, etag: string}> $files */
+	/** @param list<array{path: string, name: string, etag: string, id: int}> $files */
 	private function collectFiles(Folder $folder, string $path, bool $recursive, array &$files): void {
 		foreach ($folder->getDirectoryListing() as $node) {
 			if (str_starts_with($node->getName(), '.')) {
@@ -264,7 +292,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 			}
 			$childPath = $this->join($path, $node->getName());
 			if ($node instanceof File) {
-				$files[] = ['path' => $childPath, 'name' => $node->getName(), 'etag' => $node->getEtag()];
+				$files[] = ['path' => $childPath, 'name' => $node->getName(), 'etag' => $node->getEtag(), 'id' => $node->getId()];
 			} elseif ($recursive && $node instanceof Folder) {
 				$this->collectFiles($node, $childPath, true, $files);
 			}

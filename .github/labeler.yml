@@ -51,6 +51,17 @@
           - tests/Unit/Service/ImportExecutorTest.php
           - lib/Migration/Version000110Date20261008000000.php
           - tests/Unit/Migration/Version000110*
+          - lib/Service/FileActions.php
+          - lib/Service/SendService.php
+          - lib/Controller/FileActionController.php
+          - lib/Listener/**
+          - lib/Migration/Version000140Date20261018000000.php
+          - js/files.js
+          - tests/Unit/Service/FileActionsTest.php
+          - tests/Unit/Service/SendServiceTest.php
+          - tests/Unit/Controller/FileActionControllerTest.php
+          - tests/Unit/Listener/**
+          - tests/Unit/Migration/Version000140*
 "area: runs":
   - changed-files:
       - any-glob-to-any-file:

@@ -324,7 +324,7 @@
 		const webhookSecret = element('webhook-secret')
 		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group']
 		// While a run is queued or active, the page asks for its status: after a change of the state
 		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
 		// once, then every five seconds, and after five minutes in the same state every thirty
@@ -1524,6 +1524,35 @@
 			targetUser.dispatchEvent(new Event('change', { bubbles: true }))
 		})
 		targetUser.addEventListener('change', checkTargetUser)
+
+		// The group that may send files from Files: the groups of Nextcloud whose ID or name holds
+		// what is typed, from the same provisioning API. The save checks that the group exists.
+		const sendGroup = element('send-group')
+		const sendGroupProblem = element('send-group-problem')
+
+		async function searchGroups(text) {
+			try {
+				const query = new URLSearchParams({ search: text, limit: '10' })
+				const answer = await request(root.dataset.groupsUrl + '/details?' + query, 'GET', undefined, ocs)
+				setText(sendGroupProblem, '')
+				const groups = answer.ocs && answer.ocs.data && Array.isArray(answer.ocs.data.groups) ? answer.ocs.data.groups : []
+				return groups.filter(function(group) {
+					return group !== null && typeof group === 'object' && typeof group.id === 'string'
+				}).map(function(group) {
+					const name = typeof group.displayname === 'string' && group.displayname.trim() !== '' ? group.displayname : group.id
+					return { value: group.id, label: name, note: name === group.id ? '' : group.id }
+				})
+			} catch (error) {
+				setText(sendGroupProblem, translate('Could not search the groups of Nextcloud: {error}', { error: error.message }))
+				return []
+			}
+		}
+
+		combobox(sendGroup, element('send-group-options'), searchGroups, function(option) {
+			sendGroup.value = option.value
+			setText(sendGroupProblem, '')
+			sendGroup.dispatchEvent(new Event('change', { bubbles: true }))
+		})
 
 		// The tags of Paperless, which every tag picker offers: their names, or null while the page
 		// doesn't know them. The page reads them with the saved connection, as a run does, and anew

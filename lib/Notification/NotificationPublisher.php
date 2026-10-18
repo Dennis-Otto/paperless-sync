@@ -29,6 +29,7 @@ use Psr\Log\LoggerInterface;
  *   mirror keeps failing: ALERT_RUNS runs in a row, not dry-runs, did not succeed, or the first of
  *   them ended ALERT_AFTER seconds ago. The next successful run removes it again.
  * - The target user gets one for each file of the inbox that Paperless could not import or refused.
+ * - Whoever sent a file to Paperless from Files gets one when its import ended, whatever its end.
  *
  * A dry-run notifies nobody. Notifier puts the notifications into words in the language of the
  * reader.
@@ -37,9 +38,17 @@ final class NotificationPublisher {
 	public const SUBJECT_FAILING = 'sync_failing';
 	public const SUBJECT_IMPORT_FAILED = 'import_failed';
 	public const SUBJECT_IMPORT_REJECTED = 'import_rejected';
+	/** The ends of the import of a file sent from Files: Paperless has its document now, or had it already, or didn't create it, or refused it, or the file was gone before its upload. */
+	public const SUBJECT_SEND_IMPORTED = 'send_imported';
+	public const SUBJECT_SEND_KNOWN = 'send_known';
+	public const SUBJECT_SEND_FAILED = 'send_failed';
+	public const SUBJECT_SEND_REFUSED = 'send_refused';
+	public const SUBJECT_SEND_GONE = 'send_gone';
+	public const SEND_SUBJECTS = [self::SUBJECT_SEND_IMPORTED, self::SUBJECT_SEND_KNOWN, self::SUBJECT_SEND_FAILED, self::SUBJECT_SEND_REFUSED, self::SUBJECT_SEND_GONE];
 	/** The object of the notification of a failing mirror, the same for every recipient, by which a success removes it. */
 	public const OBJECT_SYNCHRONIZATION = 'synchronization';
 	public const OBJECT_IMPORT = 'import';
+	public const OBJECT_SEND = 'send';
 	/** The runs in a row that did not succeed before the administrators hear of it. */
 	public const ALERT_RUNS = 3;
 	/** The seconds since the first run of the row that did not succeed after which they hear of it all the same, for long intervals. */
@@ -85,6 +94,38 @@ final class NotificationPublisher {
 			}
 		} catch (\Throwable $exception) {
 			$this->logger->warning('Paperless Sync could not send its notifications: {error}', [
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+		}
+	}
+
+	/**
+	 * Tells whoever sent a file from Files how its import ended: with the document of Paperless,
+	 * which the notification links to, or with the reason why there is none. A notification that
+	 * Nextcloud refuses is logged; the import has ended all the same.
+	 *
+	 * @param self::SUBJECT_SEND_* $subject
+	 */
+	public function sendEnded(string $userId, int $fileId, string $path, string $subject, ?int $documentId = null, string $reason = '', string $paperlessUrl = ''): void {
+		try {
+			$this->notifications->notify(
+				$this->notifications->createNotification()
+					->setApp(AppConstants::APP_ID)
+					->setUser($userId)
+					->setDateTime($this->timeFactory->getDateTime())
+					->setObject(self::OBJECT_SEND, (string)$fileId)
+					->setSubject($subject, [
+						'file' => ['id' => $fileId, 'path' => $path],
+						'document' => $documentId,
+						'url' => $paperlessUrl,
+						'reason' => mb_substr($reason, 0, self::ERROR_LIMIT),
+					]),
+			);
+		} catch (\Throwable $exception) {
+			$this->logger->warning('Paperless Sync could not tell {user} how the import of {path} ended: {error}', [
+				'user' => $userId,
+				'path' => $path,
 				'error' => $exception->getMessage(),
 				'exception' => $exception,
 			]);

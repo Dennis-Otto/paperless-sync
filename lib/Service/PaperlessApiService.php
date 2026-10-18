@@ -152,16 +152,24 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		$checks = [self::answered($documents['version']), self::visibleDocuments($listed)];
-		$account = $config->exportEnabled || $config->inboxEnabled ? $this->account() : self::ACCOUNT_UNKNOWN;
+		// The inbox and the files that people send from Files reach Paperless as uploads.
+		$uploads = $config->inboxEnabled || $config->sendGroup !== '';
+		$account = $config->exportEnabled || $uploads ? $this->account() : self::ACCOUNT_UNKNOWN;
 		if ($config->exportEnabled) {
 			foreach (self::EXPORT_LISTS as $id => $path) {
 				$checks[] = $this->listCheck($id, $path, $account);
 			}
 		}
-		if ($config->inboxEnabled) {
-			$checks[] = self::upload($account);
+		if ($uploads) {
+			$uploadChecks = [self::upload($account)];
 			if ($config->inboxFolderTags || $config->inboxTags !== '') {
-				$checks[] = self::inboxTags($account, $config->inboxCreateTags);
+				$uploadChecks[] = self::inboxTags($account, $config->inboxCreateTags);
+			}
+			foreach ($uploadChecks as $check) {
+				// Without the inbox, only "Send to Paperless" uploads, which the group of the setting
+				// offers to admins by default. A token that may not upload still keeps every run
+				// working, as for a mirror that never sends, so it gets a warning, not a failure.
+				$checks[] = $config->inboxEnabled ? $check : $check->warningOnly();
 			}
 		}
 

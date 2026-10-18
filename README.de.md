@@ -97,6 +97,12 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 - Die App verfolgt die Paperless-Aufgabe jeder Datei: Nach einem Erfolg entfernt sie die Datei oder behält sie, wie du wählst; nach einem Fehler verschiebt sie die Datei in den Fehlerordner, neben den Grund
 - Kann Paperless eine Datei gerade nicht annehmen, wartet das Hochladen und versucht es erneut, nach 15 Minuten bis zu einem Tag
 
+### Dateien
+
+- [An Paperless senden](#aus-dateien-senden) im Menü einer Datei oder eines Ordners in Dateien: Die Mitglieder einer Gruppe, die du wählst, standardmäßig die Administratoren, senden sie mit den Tags des Eingangs, sie bleibt, wo sie ist, und eine Benachrichtigung sagt ihnen, sobald Paperless sie hat, mit einem Link zum neuen Dokument
+- *In Paperless öffnen* im Menü jeder Kopie des Archivs öffnet ihr Dokument in Paperless
+- Eine Datei, deren Inhalt Paperless schon hat, wird nicht noch einmal hochgeladen, Paperless-ngx 3.x legt also kein Duplikat an; der Absender erfährt das Dokument, das ihn hat
+
 ### Sicherheit
 
 - Die Synchronisation bleibt aus, bis du sie einschaltest, und ein Testlauf listet jede Änderung auf, die ein Lauf machen würde, ohne sie zu machen: Er nimmt den Plan eines Laufs, Änderung für Änderung, in derselben Batchgröße
@@ -482,6 +488,35 @@ Eine Datei kann ihre Tags zu Paperless mitbringen, wie es der Consume-Ordner von
 - **Der Titel** des neuen Dokuments ist der Name der Datei ohne ihre Endung: Paperless nimmt ihn aus der Datei, wie bei jedem Hochladen.
 
 Jeder, der in den Eingangsordner schreiben darf, kann seine Ordner benennen, also kann er mit *Fehlende Tags anlegen* auch Tags in Paperless anlegen. Schalte es für einen Eingang ein, in den nur Menschen schreiben, denen du vertraust, und nimm für den Rest die Tags für jeden Import.
+
+<a id="send-from-files"></a>
+
+### Aus Dateien senden
+
+Eine Datei muss nicht über den Eingang gehen: **An Paperless senden** im Menü einer Datei oder eines Ordners in Dateien, oder einer Auswahl davon, sendet sie an Paperless, und die Datei bleibt, wo sie ist. Die Mitglieder der Gruppe in *Gruppe, die Dateien senden darf*, in *4 · Nextcloud-Eingang*, bekommen die Aktion: standardmäßig die Administratoren, die Gruppe `admin`. Die Uploads nutzen das API-Token der App, also das Paperless-Konto, das du für sie eingerichtet hast, nicht ein Konto der Person, die sendet; wähle also eine Gruppe von Menschen, denen du dieses Konto anvertraust, etwa eine für die Menschen, die die Post scannen, und lass das Feld leer, um die Aktion auszuschalten. Das Konto braucht die Berechtigungen **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben, die die Verbindungs-Checkliste prüft, solange das Feld eine Gruppe nennt.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-send-dark.png">
+  <img alt="Nextcloud-Dateien mit der Datei Letter from the bank.pdf im Ordner Scans und ihrem geöffneten Menü, das unter den Aktionen von Dateien Send to Paperless anbietet, auf Deutsch An Paperless senden" src="docs/images/files-send-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.de.dark.svg">
+  <img src="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.de.svg" alt="Wie eine Datei aus Dateien zu Paperless kommt: Ein Mitglied der Gruppe der Einstellung klickt auf An Paperless senden im Menü einer Datei oder eines Ordners in Dateien. Nextcloud prüft die Gruppe, dass die Person jede Datei lesen darf und dass keine im Ordner von Paperless Sync liegt, und reiht die Datei ein, oder die Dateien unterhalb des Ordners, höchstens einen Batch; Dateien mit einer Markierung wie [P123], die Paperless hat, bleiben außen vor. Mit dem nächsten Cron-Lauf fragt der Hintergrundjob Paperless nach einem Dokument mit dem Inhalt jeder Datei, und der Absender erfährt das Dokument, wenn Paperless eines hat. Sonst lädt er die Datei mit den Tags des Eingangs hoch: Paperless lehnt sie ab, oder das Hochladen scheitert und wartet 15 Minuten, dann jedes Mal doppelt so lange, bis zu sechs Uploads, oder Paperless nimmt sie an. Die nächsten Cron-Läufe verfolgen die Aufgabe des Uploads. Jedes Ende, ein neues Dokument, eines, das Paperless hatte, ein Fehler oder eine Ablehnung, erreicht den Absender als Benachrichtigung, mit einem Link zum Dokument in Paperless, wenn es eines gibt. Die Datei bleibt, wo sie ist.">
+</picture>
+
+- **Ein Klick antwortet sofort,** mit der Zahl der Dateien, die gehen, und derer, die schon unterwegs sind, und der Hintergrundjob der App sendet sie mit dem nächsten Cron-Lauf, den Nextcloud alle fünf Minuten startet. Eine Benachrichtigung sagt dem Absender, wie jeder Import geendet hat: *receipt.pdf ist jetzt in Paperless*, die das neue Dokument in Paperless öffnet, oder den Grund von Paperless, wenn es die Datei nicht importiert hat.
+- **Ein Ordner sendet die Dateien unter ihm,** ohne versteckte, höchstens so viele in einem Klick, wie die Batchgröße erlaubt; sende die Unterordner eines größeren Ordners einzeln. Mit *Unterordner werden zu Tags* bekommt eine Datei in `Steuer/2026` unterhalb des gesendeten Ordners die Tags *Steuer* und *2026*, und jede Datei bekommt die *Tags für jeden Import*, wie aus dem [Eingang](#tags-des-eingangs).
+- **Paperless bekommt jede Datei einmal:** Der Job fragt Paperless zuerst nach einem Dokument mit dem Inhalt der Datei, über ihre Prüfsumme, und hat Paperless eines, nennt es die Benachrichtigung statt eines Uploads, den Paperless-ngx 3.x als zweites Dokument importieren würde. Eine Datei, die auf ihren Upload oder ihre Aufgabe wartet, ist schon unterwegs, und ein zweiter Klick sendet sie nicht noch einmal.
+- **Dateien des Archivs bleiben außen vor:** Eine Datei, deren Name eine Markierung wie `[P123]` trägt, ist schon ein Dokument von Paperless, und die Dateien des Basisordners, etwa der Eingang und das Archiv, gehören den Läufen: Verschiebe eine Datei in den Eingang, um sie von dort zu senden. Das Menü lässt die Aktion bei Dateien mit Markierung weg; ein Klick auf eine andere Datei des Basisordners antwortet, dass die Läufe sich um sie kümmern. Nextcloud prüft jeden Klick erneut, zusammen mit der Gruppe und dass die Person jede Datei lesen und herunterladen darf: Eine Freigabe, deren Besitzer nur das Ansehen erlaubt, bleibt außen vor.
+- **Kann Paperless eine Datei gerade nicht annehmen,** wartet das Hochladen 15 Minuten, dann jedes Mal doppelt so lange, und gibt nach dem sechsten auf, mit einer Benachrichtigung; eine Datei, die Paperless ablehnt, etwa eine eines Typs, den es nicht nimmt, wird nicht noch einmal hochgeladen. Eine Aufgabe, die Paperless einen Tag nach dem Upload nicht beendet hat, beendet den Import mit einer Benachrichtigung, da Paperless das Dokument noch anlegen kann.
+
+**In Paperless öffnen** steht im Menü jeder Datei, deren Name eine Markierung wie `[P123]` trägt, etwa jeder Kopie des Archivs, für alle, die die Datei sehen, auch über eine Freigabe: Es öffnet das Dokument in Paperless, unter der Paperless-URL der Einstellungen, wo Paperless nach seiner eigenen Anmeldung fragt und das Dokument nur denen zeigt, denen es das erlaubt. So erfährt jeder Benutzer von Dateien diese Adresse; die [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) nennen sie auch.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-open-dark.png">
+  <img alt="Nextcloud-Dateien mit der Kopie 2026-06-30 - Electricity bill June des Archivs und ihrem geöffneten Menü, das Open in Paperless anbietet, auf Deutsch In Paperless öffnen" src="docs/images/files-open-light.png">
+</picture>
 
 ### Löschsicherheit
 

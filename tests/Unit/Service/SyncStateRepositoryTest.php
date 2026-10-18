@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\DB\Exception;
 use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IExpressionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -24,13 +25,18 @@ use PHPUnit\Framework\TestCase;
 final class SyncStateRepositoryTest extends TestCase {
 	private const EXPORTS = 'paperless_sync_export';
 	private const IMPORTS = 'paperless_sync_import';
+	private const SENDS = 'paperless_sync_send';
 
 	/** @var array<string, list<array<string, string|null>>> the rows of each table, as the database driver returns them */
-	private array $tables = [self::EXPORTS => [], self::IMPORTS => []];
+	private array $tables = [self::EXPORTS => [], self::IMPORTS => [], self::SENDS => []];
 	/** @var list<string> the kind of every statement that changed a table, in order */
 	private array $statements = [];
 	/** The queries that read a table. */
 	private int $selects = 0;
+	/** @var array<string, string|null>|null a row that another request inserts right before the next insert, which then violates the unique index */
+	private ?array $racingRow = null;
+	/** The reason of the database error that the racing insert causes. */
+	private int $racingReason = Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION;
 	private TestClock $clock;
 	private SyncStateRepository $repository;
 
@@ -237,6 +243,75 @@ final class SyncStateRepositoryTest extends TestCase {
 		], $this->repository->findExport('paperless', 123));
 	}
 
+	/** A file sent from Files waits for its upload, and is there once for each user. */
+	public function testANewSendIsQueuedAndFoundByItsUserAndFile(): void {
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf', 'folder' => '2026', 'not_a_column' => 'x']);
+
+		self::assertSame([
+			'id' => 1,
+			'user_id' => 'alice',
+			'file_id' => 42,
+			'path' => 'Scans/receipt.pdf',
+			'folder' => '2026',
+			'task_id' => '',
+			'status' => 'queued',
+			'submitted_at' => 0,
+			'attempts' => 0,
+			'retry_at' => 0,
+			'last_error' => null,
+			'created_at' => TestClock::START,
+			'updated_at' => TestClock::START,
+		], $this->repository->findSend('alice', 42));
+		self::assertNull($this->repository->findSend('bob', 42));
+		self::assertNull($this->repository->findSend('alice', 43));
+	}
+
+	public function testSavingAnExistingSendChangesOnlyTheGivenColumns(): void {
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf']);
+		$this->clock->advance(60);
+
+		$this->repository->saveSend('alice', 42, ['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START + 60]);
+
+		self::assertSame(['insert', 'update'], $this->statements);
+		self::assertSame(
+			['path' => 'Scans/receipt.pdf', 'task_id' => 'task-1', 'status' => 'pending', 'submitted_at' => TestClock::START + 60, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
+			array_intersect_key($this->repository->findSend('alice', 42) ?? [], array_flip(['path', 'task_id', 'status', 'submitted_at', 'created_at', 'updated_at'])),
+		);
+	}
+
+	/** Two clicks at the same time both find no row; the second insert then updates the row of the first. */
+	public function testASendThatAnotherRequestInsertedMeanwhileIsUpdated(): void {
+		$this->racingRow = ['user_id' => 'alice', 'file_id' => '42', 'path' => 'Scans/old.pdf', 'folder' => '', 'task_id' => '', 'status' => 'queued', 'submitted_at' => '0', 'attempts' => '0', 'retry_at' => '0', 'last_error' => null, 'created_at' => (string)TestClock::START, 'updated_at' => (string)TestClock::START];
+
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf', 'status' => 'queued']);
+
+		self::assertSame(['insert', 'update'], $this->statements);
+		self::assertCount(1, $this->repository->allSends());
+		self::assertSame('Scans/receipt.pdf', $this->repository->findSend('alice', 42)['path'] ?? null);
+	}
+
+	/** Any other error of the database stays an error. */
+	public function testAnotherErrorOfTheInsertOfASendIsThrown(): void {
+		$this->racingRow = ['user_id' => 'bob', 'file_id' => '7'];
+		$this->racingReason = Exception::REASON_LOCK_WAIT_TIMEOUT;
+
+		$this->expectException(Exception::class);
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf']);
+	}
+
+	/** The job takes every sent file, the oldest first, and an ended import leaves the others alone. */
+	public function testEverySendIsListedInTheOrderOfItsClickAndDeletedAlone(): void {
+		$this->repository->saveSend('alice', 42, ['path' => 'a.pdf']);
+		$this->repository->saveSend('bob', 42, ['path' => 'b.pdf']);
+		$this->repository->saveSend('alice', 7, ['path' => 'c.pdf']);
+
+		self::assertSame(['a.pdf', 'b.pdf', 'c.pdf'], array_column($this->repository->allSends(), 'path'));
+
+		$this->repository->deleteSend('alice', 42);
+
+		self::assertSame(['b.pdf', 'c.pdf'], array_column($this->repository->allSends(), 'path'));
+	}
+
 	private function queryBuilder(): IQueryBuilder {
 		$query = ['type' => '', 'table' => '', 'values' => [], 'where' => []];
 		$parameters = [];
@@ -273,6 +348,13 @@ final class SyncStateRepositoryTest extends TestCase {
 				return $builder;
 			});
 		}
+		$builder->method('orderBy')->willReturnCallback(function (string $column) use (&$query, $builder): IQueryBuilder {
+			// The rows of the database in memory are in the order of their IDs already.
+			self::assertSame('id', $column);
+			$query['order'] = $column;
+
+			return $builder;
+		});
 		foreach (['where', 'andWhere'] as $method) {
 			$builder->method($method)->willReturnCallback(function (string $predicate) use (&$query, $builder): IQueryBuilder {
 				$query['where'][] = $predicate;
@@ -302,10 +384,27 @@ final class SyncStateRepositoryTest extends TestCase {
 	 */
 	private function execute(array $query, array $parameters): int {
 		$this->statements[] = $query['type'];
+		self::assertTrue($query['type'] === 'insert' || $query['where'] !== [], 'Every change of the repository is limited by conditions.');
 		$table = &$this->tables[$query['table']];
 		$values = array_map(fn (string $parameter): ?string => $this->stored($parameters[$parameter]), $query['values']);
 		if ($query['type'] === 'insert') {
 			self::assertSame([], $query['where']);
+			if ($this->racingRow !== null) {
+				$table[] = ['id' => (string)(count($table) + 1)] + $this->racingRow;
+				$this->racingRow = null;
+				$reason = $this->racingReason;
+				throw new class($reason) extends Exception {
+					public function __construct(
+						private int $reason,
+					) {
+						parent::__construct('Duplicate entry');
+					}
+
+					public function getReason(): ?int {
+						return $this->reason;
+					}
+				};
+			}
 			$table[] = ['id' => (string)(count($table) + 1)] + $values;
 
 			return 1;
@@ -335,7 +434,6 @@ final class SyncStateRepositoryTest extends TestCase {
 	 * @param array<string, mixed> $parameters
 	 */
 	private function rowMatches(array $row, array $where, array $parameters): bool {
-		self::assertNotSame([], $where, 'Every query of the repository is limited by conditions.');
 		foreach ($where as $predicate) {
 			[$column, $parameter] = explode(' = ', $predicate);
 			if (($row[$column] ?? null) !== $this->stored($parameters[$parameter])) {

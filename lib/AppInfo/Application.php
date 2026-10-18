@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\AppInfo;
 
+use OCA\PaperlessSync\Listener\LoadAdditionalScriptsListener;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
@@ -41,6 +42,8 @@ final class Application extends App implements IBootstrap {
 		$context->registerNotifierService(Notifier::class);
 		$context->registerSetupCheck(SyncHealth::class);
 		$context->registerSetupCheck(BackgroundJobMode::class);
+		// "Send to Paperless" and "Open in Paperless" in the menu of Files.
+		$context->registerEventListener(LoadAdditionalScriptsListener::EVENT, LoadAdditionalScriptsListener::class);
 	}
 
 	public function boot(IBootContext $context): void {
