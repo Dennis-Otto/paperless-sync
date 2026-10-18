@@ -311,6 +311,7 @@
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
 		const pathTemplate = element('path-template')
+		const includedTagsInput = element('included-tags-input')
 		const preview = element('path-preview')
 		const previewStatus = element('path-preview-status')
 		const previewList = element('path-preview-list')
@@ -365,7 +366,7 @@
 		// The settings that decide the path of a document, or whether a run skips it, which the
 		// preview of the path template sends, as SettingsController::preview() takes them. A change
 		// of one of them shows the paths anew, once the typing pauses for previewDelay.
-		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
+		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
 		const previewDelay = 400
 		let previewTimer = 0
 		// The number of the last request of the preview: an answer to an earlier one, which may
@@ -823,7 +824,7 @@
 			case 'delete':
 				return translate('The copy is deleted for good.')
 			case 'remove-excluded':
-				return translate('The document has an excluded tag: its copy is removed.')
+				return translate('The settings leave the document out, with an excluded tag or without a tag to mirror: its copy is removed.')
 			case 'wait':
 				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
 			case 'import':
@@ -1084,7 +1085,7 @@
 
 		// The documents that a run left as they were, and those that it skipped, in a sentence below
 		// the counts of the changes. A skipped one may wait for a later run, as when the batch is
-		// full, or for good, as a document with an excluded tag does.
+		// full, or for good, as a document with an excluded tag or without a tag to mirror does.
 		function restOf(result) {
 			const parts = []
 			if (Number(result.unchanged) > 0) {
@@ -1252,6 +1253,7 @@
 		// template of the form, or why there are none.
 		function showPreview(answer) {
 			pathTemplate.removeAttribute('aria-invalid')
+			includedTagsInput.removeAttribute('aria-invalid')
 			previewStatus.classList.remove('paperless-sync-path-preview-status--error')
 			const paths = Array.isArray(answer.paths) ? answer.paths : []
 			if (answer.connected !== true) {
@@ -1267,7 +1269,7 @@
 				if (entry.skipped === true) {
 					const note = document.createElement('span')
 					note.className = 'paperless-sync-path-preview-skipped'
-					note.textContent = ' — ' + translate('a run skips it: in the inbox or with an excluded tag')
+					note.textContent = ' — ' + translate('a run skips it: in the inbox, with an excluded tag or without a tag to mirror')
 					item.append(note)
 				}
 				return item
@@ -1275,13 +1277,21 @@
 			previewList.hidden = paths.length === 0
 		}
 
-		// Says why there is no preview: an invalid template, which a save would refuse too, or a
-		// Paperless that can't be read.
+		// Says why there is no preview: an invalid template or a tag to mirror that Paperless
+		// lacks, which a run would refuse too, or a Paperless that can't be read. Only the field
+		// that the answer names is marked as invalid.
 		function showPreviewError(error) {
-			if (error.status === 400) {
-				pathTemplate.setAttribute('aria-invalid', 'true')
-			} else {
-				pathTemplate.removeAttribute('aria-invalid')
+			const invalid = error.status !== 400
+				? null
+				: error.setting === 'included_tags'
+					? includedTagsInput
+					: (!error.setting || error.setting === 'path_template' ? pathTemplate : null)
+			for (const field of [pathTemplate, includedTagsInput]) {
+				if (field === invalid) {
+					field.setAttribute('aria-invalid', 'true')
+				} else {
+					field.removeAttribute('aria-invalid')
+				}
 			}
 			previewStatus.classList.add('paperless-sync-path-preview-status--error')
 			setText(previewStatus, error.message || translate('The preview could not be loaded.'))

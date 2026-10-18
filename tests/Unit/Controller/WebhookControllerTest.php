@@ -314,6 +314,24 @@ final class WebhookControllerTest extends TestCase {
 		self::assertSame('failed', $webhook->state()['lastCall']['result'] ?? null);
 	}
 
+	/**
+	 * A tag to mirror that Paperless lacks is a setting that the app can't use, not runs that are
+	 * off: the call fails, so that Paperless retries it and the settings page shows the failure.
+	 */
+	public function testACallWithATagToMirrorThatPaperlessLacksFails(): void {
+		$this->configService()->save(['enabled' => true, 'included_tags' => 'Nextclod'] + self::validSettings());
+		$webhook = $this->webhookService($this->clock);
+		$webhook->create();
+		$this->authorization = 'Bearer ' . self::SECRET;
+
+		$response = $this->controller()->receive(123);
+
+		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		self::assertSame(['document' => 123, 'result' => 'failed', 'message' => 'Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.'], $response->getData());
+		self::assertSame([], $this->storage->files);
+		self::assertSame('failed', $webhook->state()['lastCall']['result'] ?? null);
+	}
+
 	/** The copy of the document failed, such as for a file in the way: the run reports it, and so does the answer. */
 	public function testAFailedCopyAnswersWithItsError(): void {
 		$this->configService()->save(['enabled' => true, 'conflict_mode' => 'skip'] + self::validSettings());

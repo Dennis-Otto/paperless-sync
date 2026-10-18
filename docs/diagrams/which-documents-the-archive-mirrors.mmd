@@ -1,0 +1,22 @@
+flowchart TB
+    accTitle: Which documents the archive mirrors
+    accDescr: A run first checks that Paperless has every tag to mirror of the settings; without one of them, the export stops before a file changes. Then it asks three questions of every active document. A document in the inbox of Paperless, while the settings skip the inbox, stays out of the archive, and so does a document with an excluded tag. When the settings name tags to mirror, a document without any of them stays out as well. Every other document is mirrored. A document that stays out loses its copy in the archive, within the batch size.
+
+    run["A run reads the tags<br>of Paperless"] --> known{"Has Paperless every<br>tag to mirror?"}
+    known -->|no| stop["The export stops<br>before a file changes"]
+    known -->|yes| document["Each active document"]
+    document --> inbox{"In the inbox of Paperless,<br>while the settings skip it?"}
+    inbox -->|yes| out["Stays out of the archive:<br>its copy is removed,<br>within the batch size"]
+    inbox -->|no| excluded{"Has it an<br>excluded tag?"}
+    excluded -->|yes| out
+    excluded -->|no| list{"Tags to mirror<br>in the settings?"}
+    list -->|none| mirrored["Mirrored: exported,<br>moved or kept current"]
+    list -->|some| included{"Has it at least<br>one of them?"}
+    included -->|yes| mirrored
+    included -->|no| out
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,known,document,inbox,excluded,list,included check
+    class mirrored kept
+    class stop,out changed

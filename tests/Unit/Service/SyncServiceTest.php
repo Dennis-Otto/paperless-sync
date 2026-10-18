@@ -3079,6 +3079,106 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayNotHasKey(130, $this->state->exports);
 	}
 
+	/**
+	 * With tags to mirror, the archive holds only the documents that have one of them, whatever
+	 * the case of its name, and the others are skipped, as a document with an excluded tag is.
+	 */
+	public function testOnlyTheDocumentsWithATagToMirrorAreExported(): void {
+		$this->configService->save(['included_tags' => 'Nextcloud, Steuer']);
+		$this->paperless->tagInfo = ['names' => ['5' => 'nextcloud', '6' => 'Haushalt', '7' => 'Steuer'], 'inbox' => []];
+		$mirrored = $this->document(130);
+		$mirrored['tags'] = [['id' => 6], ['id' => 5]];
+		$taxes = $this->document(125);
+		$taxes['tags'] = [7];
+		$household = $this->document(120);
+		$household['tags'] = [6];
+		$untagged = $this->document(110);
+
+		$report = $this->exportDocuments([$household, $mirrored, $untagged, $taxes]);
+
+		self::assertSame(['EXPORT P130: ' . $this->archivePath(130), 'EXPORT P125: ' . $this->archivePath(125)], $report->actions);
+		self::assertSame([2, 2], [$report->exported, $report->skipped]);
+		self::assertEqualsCanonicalizing([125, 130], array_keys($this->state->exports));
+	}
+
+	/** An excluded tag wins over a tag to mirror, and so does the inbox while the settings skip it. */
+	public function testAnExcludedTagAndTheInboxWinOverATagToMirror(): void {
+		$this->configService->save(['included_tags' => 'Nextcloud', 'excluded_tags' => 'Privat']);
+		$this->paperless->tagInfo = ['names' => ['1' => 'Posteingang', '5' => 'Nextcloud', '9' => 'Privat'], 'inbox' => ['1']];
+		$private = $this->document(130);
+		$private['tags'] = [5, 9];
+		$inbox = $this->document(125);
+		$inbox['tags'] = [5, 1];
+		$mirrored = $this->document(120);
+		$mirrored['tags'] = [5];
+
+		$report = $this->exportDocuments([$private, $inbox, $mirrored]);
+
+		self::assertSame(['EXPORT P120: ' . $this->archivePath(120)], $report->actions);
+		self::assertSame(2, $report->skipped);
+	}
+
+	/**
+	 * A document that loses its tag to mirror leaves the archive as one that gets an excluded tag:
+	 * its copy is removed and its state forgotten, within the batch size, and the rest waits.
+	 */
+	public function testADocumentThatLosesItsTagToMirrorLosesItsCopyWithinTheBatch(): void {
+		$this->paperless->tagInfo = ['names' => ['5' => 'Nextcloud'], 'inbox' => []];
+		$documents = $this->documents(3);
+		foreach ($documents as $index => $document) {
+			$documents[$index]['tags'] = [5];
+		}
+		$this->exportDocuments($documents);
+		$this->configService->save(['included_tags' => 'Nextcloud', 'batch_size' => 1]);
+		$this->paperless->documents[0]['tags'] = [];
+		$this->paperless->documents[2]['tags'] = [];
+
+		$first = $this->service->run();
+		$second = $this->service->run();
+
+		self::assertSame(['REMOVE EXCLUDED P3: ' . $this->archivePath(3)], $first->actions, 'The batch of one leaves the second removal to the next run.');
+		self::assertSame(['REMOVE EXCLUDED P1: ' . $this->archivePath(1)], $second->actions);
+		self::assertSame([1, 0], [$second->removedExcluded, $second->exported]);
+		self::assertSame([2], array_keys($this->state->exports));
+		self::assertSame([$this->archivePath(2)], array_keys($this->storage->files));
+	}
+
+	/**
+	 * A tag to mirror that Paperless doesn't have, such as one with a typo or one renamed in
+	 * Paperless, would remove the copies of every document that it should keep, so the export of
+	 * the run fails, before a copy moves, and says which name is missing.
+	 */
+	public function testATagToMirrorThatPaperlessDoesNotHaveFailsTheRunBeforeACopyIsRemoved(): void {
+		$this->paperless->tagInfo = ['names' => ['5' => 'Nextcloud', '6' => 'Steuer'], 'inbox' => []];
+		$document = $this->document();
+		$document['tags'] = [5, 6];
+		$this->exportDocument($document);
+		$this->configService->save(['included_tags' => 'steuer, Nextclod']);
+
+		try {
+			$this->service->run();
+			self::fail('A tag to mirror that Paperless does not have would empty the archive.');
+		} catch (InvalidSettingException $exception) {
+			self::assertSame('Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.', $exception->getMessage());
+			self::assertSame('included_tags', $exception->setting);
+		}
+		self::assertSame([self::EXPORTED_PATH], array_keys($this->storage->files), 'The file stays where it is.');
+		self::assertArrayHasKey(123, $this->state->exports);
+	}
+
+	/** The preview of the path template marks a document without a tag to mirror as skipped, as a run skips it. */
+	public function testThePreviewSkipsTheDocumentsWithoutATagToMirror(): void {
+		$this->paperless->tagInfo = ['names' => ['5' => 'Nextcloud'], 'inbox' => []];
+		$mirrored = ['id' => 202, 'title' => 'Brief 2', 'tags' => [5]] + $this->document();
+		$this->paperless->documents = [$mirrored, ['id' => 201, 'title' => 'Brief 1'] + $this->document()];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$config = $this->configService->validate(['path_template' => '{{ title }} [P{{ id }}]', 'included_tags' => 'nextcloud']);
+
+		$paths = $this->service->previewPaths($config, 5);
+
+		self::assertSame([[202, false], [201, true]], array_map(static fn (array $path): array => [$path['id'], $path['skipped']], $paths));
+	}
+
 	public function testExcludedDocumentWhoseExportNeverSucceededIsForgottenQuietly(): void {
 		$this->paperless->downloadException = new RuntimeException('Paperless is unavailable');
 		$this->exportDocument();

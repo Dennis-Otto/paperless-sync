@@ -217,6 +217,14 @@ elif mode == "move":
 elif mode == "excluded":
     expect("removedExcluded", 1)
     expect("errors", 0)
+elif mode == "included":
+    # The save takes the spelling of the tag as typed, each name once.
+    expect("includedTags", "private")
+elif mode == "not-included":
+    # The document has no tag to mirror, so the run leaves it out and exports nothing.
+    expect("exported", 0)
+    expect("skipped", 1)
+    expect("errors", 0)
 elif mode == "trash":
     expect("movedToTrash", 1)
     expect("errors", 0)

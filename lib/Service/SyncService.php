@@ -127,7 +127,7 @@ final class SyncService {
 	 * start to its end, as a run does.
 	 *
 	 * @throws LockedException while another run is active
-	 * @throws InvalidSettingException while the app is not completely configured, or scheduled synchronization or the export is off
+	 * @throws RunsOffException while the app is not completely configured, or scheduled synchronization or the export is off
 	 */
 	public function syncDocument(int $documentId): SyncReport {
 		// Runs that are off are no failure: a document that was queued before an administrator
@@ -166,17 +166,17 @@ final class SyncService {
 	 * reviewed or while Paperless is down, or turns the export off, a call of the webhook changes
 	 * nothing either.
 	 *
-	 * @throws InvalidSettingException with the setting that stops the runs of one document
+	 * @throws RunsOffException with the setting that stops the runs of one document
 	 */
 	public function requireDocumentRuns(SyncConfig $config): void {
 		if (!$config->complete()) {
-			throw new InvalidSettingException('Paperless Sync is not completely configured.');
+			throw new RunsOffException('Paperless Sync is not completely configured.');
 		}
 		if (!$config->enabled) {
-			throw new InvalidSettingException('Scheduled synchronization is off, so changes from Paperless wait until it is on again.', [], 'enabled');
+			throw new RunsOffException('Scheduled synchronization is off, so changes from Paperless wait until it is on again.', [], 'enabled');
 		}
 		if (!$config->exportEnabled) {
-			throw new InvalidSettingException('The archive export is off, so changes from Paperless reach no copy.', [], 'export_enabled');
+			throw new RunsOffException('The archive export is off, so changes from Paperless reach no copy.', [], 'export_enabled');
 		}
 	}
 
@@ -261,6 +261,8 @@ final class SyncService {
 		$storagePaths = $paperless->storagePaths();
 		$tags = $paperless->tags();
 		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null);
+		// A tag to mirror that Paperless doesn't have fails the run here, before a copy moves.
+		$filter = new ExportFilter($config, $tags);
 		$report->activeDocuments = count($documentScan->documents);
 		$report->trashedDocuments = count($trashScan->documents);
 
@@ -276,7 +278,7 @@ final class SyncService {
 			new TargetFiles($this->storage, $config->targetUser),
 			$paperless,
 			fn (array $document): string => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
-			new ExportFilter($config, $tags),
+			$filter,
 			$this->timeZones,
 			$this->timeFactory,
 			$archiveRoot,
@@ -345,11 +347,11 @@ final class SyncService {
 	 * The paths that the newest documents of Paperless would have in the archive with $config, such
 	 * as the settings of the page before they are saved, relative to the archive folder, for the
 	 * preview of the path template; skipped is whether a run leaves the document out, as one of
-	 * the inbox or with an excluded tag. It reads Paperless, through the connection of $config, and
-	 * nothing else, and changes nothing.
+	 * the inbox, with an excluded tag or without a tag to mirror. It reads Paperless, through the
+	 * connection of $config, and nothing else, and changes nothing.
 	 *
 	 * @return list<array{id: int, title: string, path: string, skipped: bool}>
-	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template
+	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template or a tag to mirror
 	 */
 	public function previewPaths(SyncConfig $config, int $count): array {
 		$paperless = $this->clients->connect($this->configService->connection($config));

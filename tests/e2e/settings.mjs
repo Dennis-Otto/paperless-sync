@@ -135,8 +135,8 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 9 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
-		`Every section, the metadata next to the archive and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
+		helpLinks.length === 10 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Every section, the tags to mirror, the metadata next to the archive and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
 
@@ -260,6 +260,39 @@ try {
 	await inboxTagInput.press('Backspace')
 	expect((await inboxTags()) === '' && await unsaved.isHidden(), 'Backspace must remove the tag again.')
 	console.log('Settings: the tags for every import are picked from the tags of Paperless as well, also with the keyboard.')
+
+	// The tags to mirror come from the same tags of Paperless, and a change shows the paths of the
+	// preview anew, which then marks the newest documents that lack every tag to mirror.
+	const includedTags = () => page.locator('[data-setting="included_tags"]').inputValue()
+	const includedTagInput = page.locator('#paperless-sync-included-tags-input')
+	const includedTagOptions = page.locator('#paperless-sync-included-tags-options [role="option"]')
+	expect((await includedTags()) === '', `run.sh leaves no tags to mirror: ${await includedTags()}`)
+	await includedTagInput.click()
+	await includedTagOptions.first().waitFor()
+	const offeredIncludedTags = await includedTagOptions.allTextContents()
+	expect(JSON.stringify(offeredIncludedTags) === JSON.stringify(offeredTags), `The tags to mirror must offer the same tags: ${JSON.stringify(offeredIncludedTags)}`)
+	await includedTagInput.fill('draft')
+	await includedTagInput.press('Enter')
+	expect((await includedTags()) === 'Draft' && await unsaved.isVisible(), `A typed tag to mirror must take the spelling of Paperless: ${await includedTags()}`)
+	// No document of the mock has Draft, so the preview marks each of the newest as skipped.
+	await page.waitForFunction(() => {
+		const items = [...document.querySelectorAll('#paperless-sync-path-preview-list li')]
+		return items.length > 0 && items.every((item) => item.querySelector('.paperless-sync-path-preview-skipped') !== null)
+	}, null, { timeout: 5000 })
+	await includedTagInput.press('Backspace')
+	expect((await includedTags()) === '' && await unsaved.isHidden(), 'Backspace must remove the tag to mirror again.')
+	// A tag to mirror that Paperless lacks stops the runs, so the preview says why and marks the
+	// tag field, not the valid path template.
+	await includedTagInput.fill('Nextclod,')
+	await page.locator('#paperless-sync-path-preview-status', { hasText: 'Paperless has no tag named "Nextclod"' }).waitFor({ timeout: 5000 })
+	expect(
+		(await page.locator('#paperless-sync-path-template').getAttribute('aria-invalid')) === null && (await includedTagInput.getAttribute('aria-invalid')) === 'true',
+		'A missing tag to mirror marks the tag field as invalid, not the path template.',
+	)
+	await includedTagInput.press('Backspace')
+	await page.locator('#paperless-sync-path-preview-list li').first().waitFor({ timeout: 5000 })
+	expect((await includedTags()) === '' && (await includedTagInput.getAttribute('aria-invalid')) === null, 'Without the missing tag, the tag field is valid again.')
+	console.log('Settings: the tags to mirror are picked from the tags of Paperless, and the preview marks the documents without one of them.')
 
 	const saves = []
 	await page.route(`**${SETTINGS}`, async (route) => {

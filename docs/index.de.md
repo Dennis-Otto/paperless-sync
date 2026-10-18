@@ -44,7 +44,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 
     ---
 
-    Ändern sich die Metadaten eines Dokuments in Paperless, wird seine Datei in Nextcloud umbenannt oder verschoben. Dokumente im Posteingang von Paperless oder mit einem ausgeschlossenen Tag bleiben draußen.
+    Ändern sich die Metadaten eines Dokuments in Paperless, wird seine Datei in Nextcloud umbenannt oder verschoben. Dokumente im Posteingang von Paperless oder mit einem ausgeschlossenen Tag bleiben draußen, und das Archiv kann nur die Dokumente mit den Tags spiegeln, die du wählst.
 
 - :material-inbox-arrow-up-outline:{ .lg .middle } **Aus einem Nextcloud-Eingang zu Paperless**
 

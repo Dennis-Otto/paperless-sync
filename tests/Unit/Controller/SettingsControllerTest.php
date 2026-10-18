@@ -131,6 +131,7 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->save([
 			'paperless_url' => 'https://paperless.example.test/',
 			'excluded_tags' => 'Private, Draft, Private',
+			'included_tags' => 'Nextcloud, nextcloud',
 			'untitled' => ' ',
 		] + self::validSettings(), 'secret-token');
 
@@ -140,6 +141,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertCount(3, $answer['checks']);
 		self::assertSame('https://paperless.example.test', $answer['paperlessUrl']);
 		self::assertSame('Private, Draft', $answer['excludedTags']);
+		self::assertSame('Nextcloud', $answer['includedTags']);
 		self::assertSame('Unknown', $answer['untitled']);
 		self::assertStringNotContainsString('secret-token', json_encode($answer, JSON_THROW_ON_ERROR));
 	}
@@ -697,6 +699,27 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->configService()->get()->pathTemplate, 'The preview saves nothing.');
 		self::assertSame('paperless', $this->configService()->get()->targetUser);
 		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'secret-token', false)], $this->connects, 'The preview reads with the saved connection, not with the URL of the page.');
+	}
+
+	/**
+	 * The preview takes the tags to mirror of the page, and a name that Paperless has no tag of
+	 * says why at the field, in the language of the administrator, as a run would fail with it.
+	 */
+	public function testThePreviewSaysWhichTagToMirrorPaperlessDoesNotHave(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('newestDocuments')->willReturn([['id' => 12, 'title' => 'Strom', 'created' => '2026-03-02', 'original_file_name' => 'scan.pdf', 'tags' => [5]]]);
+		$this->paperless->method('tags')->willReturn(['names' => ['5' => 'Nextcloud'], 'inbox' => []]);
+
+		$mirrored = $this->controller->preview(['path_template' => '{{ title }} [P{{ id }}]', 'included_tags' => 'nextcloud']);
+		$missing = $this->controller->preview(['path_template' => '{{ title }} [P{{ id }}]', 'included_tags' => 'Nextcloud, Nextclod']);
+
+		self::assertSame([['id' => 12, 'title' => 'Strom', 'path' => 'Strom [P12].pdf', 'skipped' => false]], self::answer($mirrored)['paths']);
+		self::assertSame(Http::STATUS_BAD_REQUEST, $missing->getStatus());
+		self::assertSame([
+			'message' => 'Paperless hat keinen Tag namens "Nextclod", den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente entfernen, die bleiben sollen.',
+			'setting' => 'included_tags',
+		], self::answer($missing));
+		self::assertSame('', $this->configService()->get()->includedTags, 'The preview saves nothing.');
 	}
 
 	public function testWithoutAConnectionThePreviewChecksTheTemplateAlone(): void {

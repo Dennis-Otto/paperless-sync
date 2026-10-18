@@ -142,6 +142,18 @@ final class DocumentSyncJobTest extends TestCase {
 		self::assertSame('off', $this->webhook->state()['lastCall']['result'] ?? null);
 	}
 
+	/** A tag to mirror that Paperless lacks makes the run fail, logged as an error, not skipped as if it were off. */
+	public function testATagToMirrorThatPaperlessLacksFailsTheJob(): void {
+		$this->configService()->save(['enabled' => true, 'included_tags' => 'Nextclod'] + self::validSettings());
+		$this->logger->expects(self::never())->method('info');
+		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization of document {document} failed: {error}', ['document' => 123, 'error' => 'Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.']);
+
+		$this->job->start($this->createMock(IJobList::class));
+
+		self::assertSame([], $this->storage->files);
+		self::assertSame('failed', $this->webhook->state()['lastCall']['result'] ?? null);
+	}
+
 	/** Only the message: the synchronization logs the failure with its trace already. */
 	public function testAFailedRunIsLogged(): void {
 		$this->paperless->documentException = new PaperlessRequestException('cURL error 7: Failed to connect');

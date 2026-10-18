@@ -39,6 +39,7 @@ It depends on what deletes them:
 | It is restored in Paperless | Back into the archive |
 | It is deleted for good in Paperless | Deleted in Nextcloud after the configured number of complete scans, only when permanent deletion is on; otherwise it stays in the deleted folder |
 | It gets an excluded tag, or the inbox tag again | Deleted in Nextcloud in the next run |
+| It loses its last [tag to mirror](guide.md#which-documents-the-archive-mirrors) | Deleted in Nextcloud in the next run |
 | You delete it in Nextcloud | Into your trash bin, and the next run writes it anew |
 | An inbox file after its import | Deleted in Nextcloud, when *Remove source after successful import* is on |
 

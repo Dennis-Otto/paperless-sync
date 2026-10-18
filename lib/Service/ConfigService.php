@@ -45,6 +45,7 @@ final class ConfigService {
 		'prefer_archive' => true,
 		'skip_inbox' => true,
 		'excluded_tags' => '',
+		'included_tags' => '',
 		'sync_interval_minutes' => 5,
 		'batch_size' => 100,
 		'trash_mode' => 'move',
@@ -252,7 +253,7 @@ final class ConfigService {
 			'base_path' => 'basePath', 'archive_folder' => 'archiveFolder', 'inbox_folder' => 'inboxFolder',
 			'error_folder' => 'errorFolder', 'deleted_folder' => 'deletedFolder', 'path_template' => 'pathTemplate',
 			'export_enabled' => 'exportEnabled', 'inbox_enabled' => 'inboxEnabled', 'prefer_archive' => 'preferArchive',
-			'skip_inbox' => 'skipInbox', 'excluded_tags' => 'excludedTags', 'sync_interval_minutes' => 'syncIntervalMinutes',
+			'skip_inbox' => 'skipInbox', 'excluded_tags' => 'excludedTags', 'included_tags' => 'includedTags', 'sync_interval_minutes' => 'syncIntervalMinutes',
 			'batch_size' => 'batchSize', 'trash_mode' => 'trashMode', 'permanent_delete' => 'permanentDelete',
 			'allow_direct_delete' => 'allowDirectDelete', 'missing_grace_runs' => 'missingGraceRuns',
 			'prune_empty_folders' => 'pruneEmptyFolders', 'delete_inbox_after_success' => 'deleteInboxAfterSuccess',
@@ -453,6 +454,8 @@ final class ConfigService {
 		}
 		$values['path_template'] = $this->pathTemplate->validateTemplate((string)$values['path_template']);
 		$values['excluded_tags'] = implode(', ', array_values(array_unique(array_filter(array_map('trim', preg_split('/[,\r\n]+/', (string)$values['excluded_tags']) ?: [])))));
+		// Each tag to mirror once, whatever its case: ExportFilter compares the names without it.
+		$values['included_tags'] = implode(', ', InboxTags::names((string)$values['included_tags']));
 		$values['inbox_tags'] = implode(', ', InboxTags::names((string)$values['inbox_tags']));
 		// Its members send files with the token of the app, so a typo must not leave the action to a
 		// group that someone could create later under that name.
@@ -503,7 +506,7 @@ final class ConfigService {
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
 			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
-			(bool)$values['write_metadata'], (string)$values['send_group'],
+			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
 		);
 	}
 }
