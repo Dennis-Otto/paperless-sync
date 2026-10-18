@@ -133,6 +133,7 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame('rejected', $this->state->imports[self::FILE]['status']);
 		self::assertSame([['outcome' => SyncReport::IMPORT_REJECTED, 'path' => self::FILE, 'document' => null, 'reason' => 'Unsupported file type']], $this->report->importResults());
 		self::assertFalse($this->batch->stopped());
+		self::assertSame([], array_filter($this->storage->openedStreams, 'is_resource'), 'A failed upload closes the file as well.');
 	}
 
 	/** A Paperless that is down or overloaded would fail every other upload as well, so they wait for the next run. */
@@ -292,6 +293,7 @@ final class ImportExecutorTest extends TestCase {
 
 	public function testAnUnknownActionIsRefused(): void {
 		$this->expectException(LogicException::class);
+		$this->expectExceptionMessageMatches('/^The inbox has no action .*ImportAction@anonymous.*\.$/s');
 
 		$this->executor->apply(new class implements ImportAction {
 		});

@@ -311,6 +311,21 @@ final class ExportPlannerTest extends TestCase {
 		self::assertSame(1, $this->paperless->checksumRequests);
 	}
 
+	/**
+	 * Documents whose last change failed take turns: the one that failed longest ago first, one
+	 * without a time of its last run before all others, and the newest of the same time first.
+	 */
+	public function testDocumentsWhoseChangeFailedTakeTurns(): void {
+		$documents = $this->arrange([
+			'exported' => [[2, 'B', 'm1', ['last_error' => 'locked', 'last_seen' => 50]], [3, 'C', 'm1', ['last_error' => 'locked', 'last_seen' => 50]], [4, 'D', 'm1', ['last_error' => 'locked']], [5, 'E', 'm1', ['last_error' => 'locked', 'last_seen' => 1]], [6, 'F', 'm1', ['last_error' => 'locked', 'last_seen' => 10]]],
+			'documents' => [[2, 'B2', 'm1'], [3, 'C2', 'm1'], [4, 'D2', 'm1'], [5, 'E2', 'm1'], [6, 'F2', 'm1'], [1, 'A']],
+		]);
+
+		$plan = $this->plan($documents, [], false);
+
+		self::assertSame(['export P1', 'move P4', 'move P5', 'move P6', 'move P3', 'move P2'], array_map(static fn (string $line): string => (string)strstr($line, ':', true), $plan));
+	}
+
 	/** Paperless is asked once for the checksum of each revision: the state keeps the answer. */
 	public function testAChecksumThatTheStateKeepsIsNotAskedForAgain(): void {
 		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['remote_checksum' => hash('sha256', '%PDF-1'), 'remote_revision' => 'archive:m2']]], 'documents' => [[1, 'A', 'm2']]]);

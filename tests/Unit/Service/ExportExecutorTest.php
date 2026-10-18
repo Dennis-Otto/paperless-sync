@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use LogicException;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\Plan\Copy;
 use OCA\PaperlessSync\Model\Plan\DocumentContext;
 use OCA\PaperlessSync\Model\Plan\ExportAction;
 use OCA\PaperlessSync\Model\Plan\ExportCopy;
@@ -25,6 +26,7 @@ use OCA\PaperlessSync\Model\Plan\WaitForMissing;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ExportExecutor;
 use OCA\PaperlessSync\Service\ExportStates;
+use OCA\PaperlessSync\Service\MetadataSidecars;
 use OCA\PaperlessSync\Service\SyncBatch;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -284,6 +286,26 @@ final class ExportExecutorTest extends TestCase {
 		$this->executor($repository)->apply(new SaveState(1, ['missing_runs' => 0]));
 	}
 
+	/** With the metadata next to the archive, a run describes each copy that it exported, moved or kept at its path. */
+	public function testARunDescribesItsCopiesNextToTheArchive(): void {
+		$sidecar = self::ARCHIVE . '/' . MetadataSidecars::FOLDER . '/P1.json';
+		$this->executor($this->state, $this->sidecars())->apply($this->export(oldPath: '', download: true));
+
+		self::assertStringContainsString('"title": "A"', $this->storage->files[$sidecar]);
+
+		$this->arrange(false);
+		$unchanged = new Unchanged(1, ['missing_runs' => 1], DocumentContext::export(1, $this->exported(), self::OLD), new Copy(['id' => 1, 'title' => 'A'], self::OLD, 'old fingerprint', false));
+		$this->executor($this->state, $this->sidecars())->apply($unchanged);
+
+		self::assertArrayHasKey($sidecar, $this->storage->files);
+
+		$this->arrange(true);
+		$this->exported();
+		$this->executor($this->state, $this->sidecars())->apply($unchanged);
+
+		self::assertArrayNotHasKey($sidecar, $this->storage->files, 'A dry-run writes no metadata.');
+	}
+
 	public function testAnExportBeyondTheBatchIsRefused(): void {
 		$this->apply($this->export(oldPath: '', download: true));
 
@@ -295,6 +317,7 @@ final class ExportExecutorTest extends TestCase {
 
 	public function testAnUnknownActionIsRefused(): void {
 		$this->expectException(LogicException::class);
+		$this->expectExceptionMessageMatches('/^An export has no action .*ExportAction@anonymous.*\.$/s');
 
 		$this->apply(new class implements ExportAction {
 		});
@@ -341,7 +364,11 @@ final class ExportExecutorTest extends TestCase {
 		$this->executor($this->state)->apply($action);
 	}
 
-	private function executor(SyncStateRepositoryInterface $repository): ExportExecutor {
+	private function sidecars(): MetadataSidecars {
+		return new MetadataSidecars($this->storage, TestConfig::of(), $this->report, self::ARCHIVE, [], [], [], [], [], static fn (\Throwable $exception): bool => false);
+	}
+
+	private function executor(SyncStateRepositoryInterface $repository, ?MetadataSidecars $sidecars = null): ExportExecutor {
 		return new ExportExecutor(
 			TestConfig::of(['batchSize' => $this->batch->size]),
 			$this->report,
@@ -352,6 +379,7 @@ final class ExportExecutorTest extends TestCase {
 			$this->logger,
 			$this->clock,
 			self::ARCHIVE,
+			$sidecars,
 		);
 	}
 
