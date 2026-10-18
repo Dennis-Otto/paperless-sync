@@ -20,6 +20,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Optionally removes files after they are permanently deleted from Paperless
 - Removes empty archive folders after moves and deletions
 - Runs through native Nextcloud background jobs with resumable state
+- Mirrors a new or changed document within seconds when a workflow of Paperless calls its webhook, protected by a secret
 - Notifies the administrators when the mirror keeps failing, with setup checks under Administration and a status API for monitors such as Uptime Kuma or Home Assistant
 
 ### Safe by default
@@ -52,6 +53,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Kann Dateien nach dem endgültigen Löschen in Paperless ebenfalls endgültig entfernen
 - Entfernt leere Archivordner nach Verschiebungen und Löschungen
 - Verwendet native Nextcloud-Hintergrundjobs und einen wiederaufnehmbaren Synchronisationszustand
+- Spiegelt ein neues oder geändertes Dokument in Sekunden, wenn ein Arbeitsablauf von Paperless seinen durch ein Geheimnis geschützten Webhook aufruft
 - Benachrichtigt die Administratoren, wenn der Spiegel wiederholt fehlschlägt, mit Einrichtungsprüfungen in der Verwaltung und einer Status-API für Überwachungsdienste wie Uptime Kuma oder Home Assistant
 
 ### Standardmäßig sicher
@@ -68,7 +70,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
 ]]></description>
-	<version>0.3.0</version>
+	<version>0.4.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -83,9 +85,9 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<discussion>https://github.com/Dennis-Otto/paperless-sync/discussions</discussion>
 	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.3.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.4.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.4.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v0.4.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
 		<php min-version="8.2"/>

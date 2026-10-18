@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 
 final class SyncJob extends TimedJob {
@@ -40,9 +41,13 @@ final class SyncJob extends TimedJob {
 		}
 		try {
 			$this->syncService->run(false);
+		} catch (LockedException) {
+			// Another run holds the lock, such as a run of one document for a call of the webhook of
+			// Paperless: no failure, and the next background jobs try again, as the schedule says.
+			$this->logger->info('Scheduled Paperless synchronization postponed: another run is active.');
 		} catch (\Throwable $exception) {
 			// Only the message: the synchronization has logged the failure of a run with its trace
-			// already. A run that didn't start, because another one holds the lock, is named here.
+			// already.
 			$this->logger->error('Scheduled Paperless synchronization failed: {error}', ['error' => $exception->getMessage()]);
 		}
 	}

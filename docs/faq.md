@@ -81,7 +81,11 @@ To import a large archive in one go, leave scheduled synchronization off and run
 
 ### How often does it run?
 
-At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* queues a run that the next background jobs start, within five minutes, or at once with a worker for it ([background jobs](guide.md#background-jobs)), and the interval then counts from it; `occ paperless_sync:run` runs one at once in the shell. A dry-run shows what a run would change without changing it, and doesn't move the next run.
+At the interval of the settings, 5 minutes by default and a day at most, as a background job of Nextcloud. Nextcloud starts that job every five minutes at most, and only when its system cron runs, so the interval is at least five minutes. A run that is still busy holds back the next one. *Synchronize now* queues a run that the next background jobs start, within five minutes, or at once with a worker for it ([background jobs](guide.md#background-jobs)), and the interval then counts from it; `occ paperless_sync:run` runs one at once in the shell. With the [webhook](guide.md#changes-within-seconds), a workflow of Paperless brings each new or changed document within seconds, between the runs. A dry-run shows what a run would change without changing it, and doesn't move the next run.
+
+### Can a change reach Nextcloud within seconds?
+
+Yes, with a workflow of Paperless that calls the webhook of the app on *Document Added* and *Document Updated*: the copy of the document then changes within seconds, by the same rules as in a run, without a container next to Paperless, its media folder or a password of Nextcloud. Section 6 of the settings has the address and the secret, and [Changes within seconds](guide.md#changes-within-seconds) the steps in Paperless. Trashed and deleted documents still wait for the scheduled runs, which count the missing scans that deletion safety asks for.
 
 ### Is there a command line?
 

@@ -24,6 +24,7 @@ use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
+use OCA\PaperlessSync\Service\WebhookService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
@@ -4323,6 +4324,184 @@ final class SyncServiceTest extends TestCase {
 		$trashed['deleted_at'] = '2026-08-27T08:00:00+02:00';
 		$this->paperless->documents = [];
 		$this->paperless->trash = [$trashed];
+	}
+
+	/**
+	 * The run of one document, which the webhook of Paperless asks for, takes the way of a run
+	 * through the export: the same path, the same fingerprints, a move without a download, with a
+	 * batch of one. It reads that document alone, neither the list of the documents nor the trash.
+	 */
+	public function testTheRunOfOneDocumentFollowsTheRulesOfARun(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+
+		$exported = $this->service->syncDocument(123);
+
+		self::assertSame([1, 0, 1], [$exported->exported, $exported->moved, $exported->activeDocuments]);
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $exported->actions);
+		self::assertSame('%PDF-content-v1', $this->storage->files[self::EXPORTED_PATH]);
+		self::assertSame([123], $this->paperless->documentReads);
+		self::assertSame($this->clock->time, $exported->completedAt);
+
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$moved = $this->service->syncDocument(123);
+
+		$renamedPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(['MOVE P123: ' . $renamedPath], $moved->actions);
+		self::assertArrayNotHasKey(self::EXPORTED_PATH, $this->storage->files);
+		self::assertSame('%PDF-content-v1', $this->storage->files[$renamedPath]);
+		self::assertSame(1, $this->paperless->downloads, 'A new title moves the copy without a download, as in a run.');
+
+		// A run afterwards finds the copy where the run of the document put it.
+		self::assertSame(1, $this->service->run()->unchanged);
+		self::assertSame(1, $this->paperless->downloads);
+	}
+
+	/** A document that the settings exclude loses its copy, as in a run. */
+	public function testTheRunOfOneDocumentRemovesTheCopyOfAnExcludedDocument(): void {
+		$this->configService->save(['enabled' => true, 'excluded_tags' => 'Privat'] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->paperless->tagInfo = ['names' => ['2' => 'Privat'], 'inbox' => []];
+		$this->service->syncDocument(123);
+		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
+		$this->paperless->documents[0]['tags'] = [2];
+
+		$report = $this->service->syncDocument(123);
+
+		self::assertSame([1, 1], [$report->removedExcluded, $report->skipped]);
+		self::assertArrayNotHasKey(self::EXPORTED_PATH, $this->storage->files);
+		self::assertSame([], $this->state->exports);
+	}
+
+	/**
+	 * A document that Paperless doesn't show, in its trash or deleted, waits for a scheduled run,
+	 * which counts its missing scans: the run of one document counts none, and moves nothing.
+	 */
+	public function testTheRunOfOneDocumentLeavesTrashedAndDeletedDocumentsToTheScheduledRuns(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->service->run();
+		$trashed = $this->paperless->documents[0];
+		$trashed['deleted_at'] = '2026-08-27T08:00:00+02:00';
+		$this->paperless->documents = [];
+		$this->paperless->trash = [$trashed];
+
+		$report = $this->service->syncDocument(123);
+
+		self::assertSame([0, 0, 0], [$report->movedToTrash, $report->trashedDocuments, $report->activeDocuments]);
+		self::assertSame([], $report->actions);
+		self::assertSame('missing', WebhookService::result($report));
+		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
+		self::assertSame([0, 'active'], [(int)($this->state->exports[123]['missing_runs'] ?? 0), $this->state->exports[123]['state'] ?? null]);
+	}
+
+	/**
+	 * The run of one document is no run of the status: the schedule counts from the last run, so
+	 * calls of the webhook never hold back the scheduled run that finds trashed and deleted
+	 * documents, and it gives no sign of life, which would make an interrupted run look active.
+	 */
+	public function testTheRunOfOneDocumentLeavesTheStatusOfTheLastRunAlone(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->settings['status_last_state'] = 'running';
+		$this->settings['status_last_started'] = $this->clock->time - 7200;
+		$this->settings['status_last_heartbeat'] = $this->clock->time - StatusService::HEARTBEAT_GRACE - 1;
+		$keys = array_flip(['status_last_state', 'status_last_started', 'status_last_heartbeat', 'status_last_sync_started', 'status_last_ended', 'status_last_report']);
+		$before = array_intersect_key($this->settings, $keys);
+		$this->locking->expects(self::once())->method('acquireLock')->with('paperless_sync::synchronization', ILockingProvider::LOCK_EXCLUSIVE, 'Paperless Sync');
+		$this->locking->expects(self::once())->method('releaseLock')->with('paperless_sync::synchronization', ILockingProvider::LOCK_EXCLUSIVE);
+
+		self::assertSame(1, $this->service->syncDocument(123)->exported);
+
+		self::assertSame($before, array_intersect_key($this->settings, $keys));
+		self::assertSame('interrupted', $this->status->get()['state']);
+		self::assertSame([], $this->paperless->connections, 'The read of the document is the test of the connection.');
+		self::assertCount(1, $this->activities, 'The Activity stream of the target user shows the export.');
+	}
+
+	/** While another run is active, the run of one document waits, for the background job that the webhook queues. */
+	public function testTheRunOfOneDocumentWaitsForAnActiveRun(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+
+		try {
+			$this->service->syncDocument(123);
+			self::fail('A run of one document must not start beside an active run.');
+		} catch (LockedException) {
+		}
+
+		self::assertSame([], $this->paperless->documentReads);
+	}
+
+	/** @return array<string, array{array<string, mixed>, string, string}> the settings that stop the runs of one document, the reason and the setting to change */
+	public static function settingsWithoutDocumentRuns(): array {
+		return [
+			'scheduled synchronization off' => [['enabled' => false], 'Scheduled synchronization is off, so changes from Paperless wait until it is on again.', 'enabled'],
+			'the export off' => [['enabled' => true, 'export_enabled' => false], 'The archive export is off, so changes from Paperless reach no copy.', 'export_enabled'],
+		];
+	}
+
+	/** @param array<string, mixed> $settings */
+	#[DataProvider('settingsWithoutDocumentRuns')]
+	public function testTheRunOfOneDocumentFollowsTheSwitchesOfTheRuns(array $settings, string $message, string $setting): void {
+		$this->configService->save($settings + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		// An expected state, no failure: no lock, and no error in the log.
+		$this->locking->expects(self::never())->method('acquireLock');
+		$this->logger->expects(self::never())->method('error');
+
+		try {
+			$this->service->syncDocument(123);
+			self::fail('A run of one document must not start while the runs are off.');
+		} catch (InvalidSettingException $exception) {
+			self::assertSame([$message, $setting], [$exception->getMessage(), $exception->setting]);
+		}
+
+		self::assertSame([], $this->paperless->documentReads);
+		self::assertSame([], $this->activities);
+	}
+
+	public function testTheRunOfOneDocumentNeedsTheConnectionToPaperless(): void {
+		$this->configService->reset();
+
+		$this->expectException(InvalidSettingException::class);
+		$this->expectExceptionMessage('Paperless Sync is not completely configured.');
+		$this->service->syncDocument(123);
+	}
+
+	/** A failure is logged with its trace, and the lock is free again for the next run. */
+	public function testAFailedRunOfOneDocumentIsLoggedAndReleasesTheLock(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$failure = new PaperlessRequestException('cURL error 7: Failed to connect to paperless.example.test');
+		$this->paperless->documentException = $failure;
+		$this->locking->expects(self::once())->method('releaseLock');
+		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization of document {document} failed', ['document' => 123, 'exception' => $failure]);
+
+		$this->expectExceptionObject($failure);
+		$this->service->syncDocument(123);
+	}
+
+	public function testACompletedRunOfOneDocumentIsLogged(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization of document {document} completed', self::callback(
+			static fn (array $context): bool => $context['document'] === 123 && $context['exported'] === 1,
+		));
+
+		$this->service->syncDocument(123);
 	}
 
 	/** @return array<string, mixed> */

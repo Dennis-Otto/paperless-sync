@@ -1,3 +1,0 @@
-### Features
-
-- The settings offer the users of Nextcloud for the target user, and the tags of Paperless for the excluded tags and the tags for every import, so that you pick them instead of typing them. A user ID that Nextcloud doesn't know is marked as soon as you leave the field, a disabled account says *disabled*, and a tag that Paperless doesn't have is marked *not in Paperless*, so a typo shows before a run instead of as documents that are exported anyway or imports without their tag. A tag that Paperless doesn't have yet can still be typed, ended with Enter or a comma. The tags come from Paperless with the saved URL and token, which stays on the server.

@@ -17,6 +17,7 @@ use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
 use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\InMemoryWebhook;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IDateTimeFormatter;
@@ -29,6 +30,7 @@ use RuntimeException;
 final class AdminSettingsTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
+	use InMemoryWebhook;
 
 	/** @var IURLGenerator&MockObject */
 	private IURLGenerator $urlGenerator;
@@ -70,6 +72,23 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);
 		self::assertSame('/cloud/ocs/v2.php/cloud/users', $parameters['usersUrl'], 'The users come from the provisioning API, below the root of the server.');
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
+		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
+		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);
+		self::assertSame($parameters['webhook'], $this->initialState['webhook']);
+	}
+
+	/** The page shows the address of the webhook and its last call, never its secret. */
+	public function testThePageShowsTheWebhookWithoutItsSecret(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$webhook = $this->webhookService(new TestClock());
+		$webhook->create();
+		$webhook->called(123, 'moved');
+
+		$parameters = $this->adminSettings()->getForm()->getParams();
+
+		self::assertTrue($parameters['webhook']['configured']);
+		self::assertSame(['at' => TestClock::START, 'document' => 123, 'result' => 'moved', 'message' => ''], $parameters['webhook']['lastCall']);
+		self::assertStringNotContainsString(self::SECRET, json_encode($this->initialState, JSON_THROW_ON_ERROR));
 	}
 
 	/**
@@ -143,7 +162,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertIsString($guide);
 		self::assertIsString($readme);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(7, $links[1], 'Each of the five sections, each warning of the setup checks, and the tags of the inbox link to the guide.');
+		self::assertCount(8, $links[1], 'Each of the six sections, each warning of the setup checks, and the tags of the inbox link to the guide.');
 
 		$page = preg_replace_callback('/^--8<-- "README\.md:([a-z-]+)"$/m', static function (array $include) use ($readme): string {
 			$name = preg_quote($include[1], '/');
@@ -213,6 +232,7 @@ final class AdminSettingsTest extends TestCase {
 			$initialState,
 			new SyncHealth($status, $this->configService(), $this->germanL10n(), $formatter),
 			new BackgroundJobMode($this->appConfig(), $this->configService(), $this->germanL10n()),
+			$this->webhookService(new TestClock()),
 		);
 	}
 }

@@ -34,7 +34,7 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 | **Nextcloud password stored** | none | none | a password or app password of an account | an app password, in `rclone.conf` | none for a local folder | — |
 | **Folders** | its own path template: correspondent, type, year or any metadata | — | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | Paperless's `PAPERLESS_FILENAME_FORMAT` | — |
 | **New title or correspondent** | the file is renamed or moved, and keeps its shares, comments and versions | — | followed, as Paperless renames its file | a new upload, the old file deleted | seen at the next scan, as a new file without the shares of the old one | — |
-| **Delay** | the interval, 5 minutes by default, once the document has left the Paperless inbox | a click | seconds | the schedule of the job | until Nextcloud scans the folder | — |
+| **Delay** | seconds with the webhook of a Paperless workflow, otherwise the interval, 5 minutes by default; once the document has left the Paperless inbox | a click | seconds | the schedule of the job | until Nextcloud scans the folder | — |
 | **Document deleted in Paperless** | its copy moves to a folder of its own, and is deleted only when you allow it, after complete scans confirm it | — | deleted at once | deleted at once by `rclone sync` | gone at once | — |
 | **Preview of the changes** | a dry run, on the settings page or with `occ` | — | — | `--dry-run` | — | — |
 | **Edits in Nextcloud** | stay in the copy until its document changes in Paperless, never reach Paperless | — | overwritten at its next start | overwritten at the next run | change Paperless's own files, unless the mount is read-only | — |
@@ -47,12 +47,11 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 
 ### Paperless Sync
 
-Choose it when you want the finished documents of Paperless as a tidy archive in Nextcloud, by correspondent, type and year or any path from their metadata, that keeps itself current, and when files from Nextcloud should go to Paperless too. It runs inside Nextcloud: no container, no access to the media folder of Paperless, no Nextcloud password, and Paperless may run on another server. Every copy stays the same file in Nextcloud, with its shares, comments and versions, when its document gets a new title or a new content. A deletion in Paperless never takes a copy with it at once: the copy moves to a folder of its own and is deleted only when you allow it and complete scans of Paperless confirm it. A dry run shows every change before it happens. The [guide](guide.md) has the details.
+Choose it when you want the finished documents of Paperless as a tidy archive in Nextcloud, by correspondent, type and year or any path from their metadata, that keeps itself current, and when files from Nextcloud should go to Paperless too. It runs inside Nextcloud: no container, no access to the media folder of Paperless, no Nextcloud password, and Paperless may run on another server. Every copy stays the same file in Nextcloud, with its shares, comments and versions, when its document gets a new title or a new content. A deletion in Paperless never takes a copy with it at once: the copy moves to a folder of its own and is deleted only when you allow it and complete scans of Paperless confirm it. A dry run shows every change before it happens. With the [webhook](guide.md#changes-within-seconds) of a Paperless workflow, a new or changed document arrives within seconds. The [guide](guide.md) has the details.
 
 It is not the right choice when:
 
 - you can't install apps in your Nextcloud, such as a Nextcloud of a provider: the [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) and [rclone](#an-rclone-or-webdav-script) work over WebDAV;
-- a document must be in Nextcloud within seconds: a run follows the interval, 5 minutes by default, and Nextcloud's cron, and by default a document comes only once it has left the inbox of Paperless;
 - your Nextcloud is older than the versions in the [requirements](guide.md#requirements);
 - every user should have an archive of their own Paperless account: one Nextcloud user owns the archive and shares it, and [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84) asks for more;
 - a second copy of every document is too much for the disk: the archive is a copy, as PDF/A or the original file.
@@ -67,7 +66,7 @@ Choose it when people with their own Paperless accounts send single files now an
 
 [paperless-nextcloud-sync](https://github.com/Flo-R1der/paperless-nextcloud-sync) by Flo-R1der is a Docker container next to Paperless. It reads the media folder of Paperless, mounts a folder of Nextcloud over WebDAV with FUSE, for which the container runs privileged, and copies every change within seconds, with a file watcher. The folders are those of `PAPERLESS_FILENAME_FORMAT`. It needs the password or an app password of a Nextcloud account, and a file that leaves the media folder leaves Nextcloud at once; at its start, it also deletes every file of its folder that Paperless doesn't have.
 
-Choose it when you can't install apps in Nextcloud, when your cloud is ownCloud, OpenCloud or another WebDAV service, or when seconds count.
+Choose it when you can't install apps in Nextcloud, or when your cloud is ownCloud, OpenCloud or another WebDAV service.
 
 ### An rclone or WebDAV script
 

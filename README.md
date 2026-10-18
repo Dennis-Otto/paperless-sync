@@ -105,6 +105,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Operations
 
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
+- [Changes within seconds](#changes-within-seconds): a workflow of Paperless calls the webhook of the app when it adds or changes a document, and its copy changes at once, without a container next to Paperless, its media folder or a password of Nextcloud
 - Runs on demand and dry runs from the settings, each with a report of its changes and errors in the language of the administrator, errors first, with a filter for each kind of change, links to the files and a button that copies it for a bug report, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
 - [Pickers in the settings](#target-user-and-tags) offer the users of Nextcloud for the target user and the tags of Paperless for the excluded tags and the tags of every import, and mark a user or a tag that doesn't exist, so that a typo shows before the first run
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
@@ -456,6 +457,47 @@ The interval counts from the start or the end of the last run, whichever is late
 *Synchronize now* queues a second job, `OCA\PaperlessSync\Cron\ManualSyncJob`, once, which the next background jobs run. To start it at once, run a worker of Nextcloud for it, such as in a service of systemd or a container of its own: `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'`. For a single run, `occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'` runs the queued job and returns. While another run holds the lock, such as a dry-run, the job waits for the next background jobs.
 
 A large archive takes many runs at first: about the number of documents divided by the batch size, times the interval. With the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes the first synchronization faster; every later run changes only what changed in Paperless. Or import it in one go on the [command line](#command-line), with `occ paperless_sync:run --unlimited`.
+
+### Changes within seconds
+
+A run follows the interval, 5 minutes at the shortest. A workflow of Paperless can tell the app at once instead: on *Document Added* and *Document Updated*, it calls the webhook of the app with the ID of the document, and the copy of that document is exported, moved or removed within seconds, by the same rules as in a run. Nothing runs next to Paperless for it, no container reads its media folder, and Nextcloud needs no password: Paperless sends the ID, and the app reads the document with its own token.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-change-in-paperless-reaches-nextcloud-within-seconds.dark.svg">
+  <img src="docs/images/diagrams/how-a-change-in-paperless-reaches-nextcloud-within-seconds.svg" alt="How a change in Paperless reaches Nextcloud within seconds: A workflow of Paperless with the triggers Document Added and Document Updated calls the webhook of the app with the ID of the document and the secret. A call without the secret is refused with 401, and Nextcloud delays the next calls from that address. With the secret, the app reads that document from Paperless with its own token and exports, moves or removes its copy by the rules of a run, while Paperless waits for the answer. While another run is active, or when the settings say so, the document waits for the next background jobs instead. Trashed and deleted documents stay with the scheduled runs.">
+</picture>
+
+To set it up:
+
+1. In section 6 of the settings, *Changes within seconds*, choose **Create secret** and copy the secret: the page shows it this once, and Nextcloud keeps only its SHA-256. Copy the **Webhook URL** as well, such as `https://cloud.example.com/index.php/apps/paperless_sync/api/v1/webhook`.
+2. In Paperless, open **Workflows** and add a workflow with the triggers **Document Added** and **Document Updated**, with the filters you like.
+3. Add the action **Webhook**: the webhook URL as *Webhook url*, *Use parameters for webhook body* and *Send webhook payload as JSON* on, and the parameter `document` with the value `{{ doc_id }}`. Paperless-ngx 2.x has no `{{ doc_id }}`: give it `{{ doc_url }}`, the address of the document, from which the app takes the ID.
+4. Under *Webhook headers*, add `Authorization` with the value `Bearer`, a space and the secret, and save the workflow.
+5. Change the title of a document in Paperless: its copy moves within seconds, and section 6 shows the last call, *P123 moved*.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-webhook-dark.png">
+  <img alt="The section Changes within seconds right after Create secret: the webhook URL and the new secret, each with a button Copy, the note to copy the secret now because it is shown only this once, the buttons Create a new secret and Turn the webhook off, the switch Mirror the document during the call, which is on, and the folded steps in Paperless" src="docs/images/settings-webhook-light.png">
+</picture>
+
+The webhook takes `{"document": 123}` as JSON or as a form, and the number may be text or the address of the document in Paperless. It answers:
+
+| Answer | When |
+| --- | --- |
+| `200` with `"result"`: `exported`, `moved`, `removed`, `unchanged` or `excluded` | the copy of the document is current; `excluded` for a document that the settings leave out, such as one in the inbox of Paperless |
+| `404` with `"result": "missing"` | Paperless doesn't show the document to the account: in its trash, deleted, or new and not committed yet; Paperless tries again after about 1, 2 and 4 seconds, which catches a new document, and the scheduled runs handle the trash |
+| `202` with `"result": "queued"` | the document waits for the next background jobs: another run holds the lock, or *Mirror the document during the call* is off |
+| `400` | the call names no document |
+| `401` | the secret is missing or wrong |
+| `429` | Nextcloud refuses the address of Paperless for up to 30 minutes after more than ten calls with a wrong secret, or after more than 120 calls a minute |
+| `409` with `"result": "off"` | scheduled synchronization or the export is off, or Paperless is not connected |
+| `500` with `"result": "failed"` | the copy failed, such as for a file in the way; Paperless tries a call that failed three more times |
+
+With *Mirror the document during the call* on, the default, the copy changes while Paperless waits for the answer. Paperless gives up after five seconds, as for a large download, and the run finishes all the same. Off, every document waits for the next background jobs, which system cron starts every 5 minutes, in the job `OCA\PaperlessSync\Cron\DocumentSyncJob`; Nextcloud queues it once for each document, however often Paperless calls, and while another run is active, it tries again a minute later. A call changes nothing while scheduled synchronization is off, as before the first dry-run was reviewed.
+
+The trash, deleted documents and the inbox stay with the scheduled runs, which see the whole of Paperless: a document that Paperless doesn't show waits for the missing scans that [deletion safety](#deletion-safety) asks for, so keep scheduled synchronization on. A call of the webhook is no run of the status: the settings page, the status API and the schedule keep the last run, so that calls never hold back the scheduled run that finds trashed documents. The Activity stream of the target user shows the changes of a call as those of a run.
+
+The webhook is the one address of the app that answers without a login of Nextcloud. A call without the secret gets `401`, and Nextcloud's brute-force protection delays the next calls of that address, up to 25 seconds, until it refuses them for up to 30 minutes after more than ten failures; while the calls are only slower, a call with the secret ends the delay, and `occ security:bruteforce:reset <address>` ends a refusal at once. Every address may call 120 times a minute. **Create a new secret** replaces the secret at once, and **Turn the webhook off** deletes it. [Security](https://dennis-otto.github.io/paperless-sync/security.html#the-webhook-of-paperless) has the details.
 
 <!-- --8<-- [end:configuration-checklist] -->
 

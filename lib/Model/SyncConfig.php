@@ -48,6 +48,11 @@ final class SyncConfig implements \JsonSerializable {
 		public readonly string $inboxTags = '',
 		/** Whether a run creates the tags that Paperless lacks for the files of the inbox. */
 		public readonly bool $inboxCreateTags = false,
+		/**
+		 * Whether a call of the webhook of Paperless mirrors its document at once, while Paperless
+		 * waits for the answer, or leaves it to the next background jobs.
+		 */
+		public readonly bool $webhookImmediate = true,
 	) {
 	}
 

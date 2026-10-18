@@ -529,6 +529,36 @@ elif mode == "status-api-recovered":
     # ok, or off while the scheduled runs of the tests are off.
     if data.get("healthy") is not True or data.get("health") not in ("ok", "off") or data.get("failedRuns") != 0 or data.get("error") != "":
         raise AssertionError(f"status-api-recovered: the status API does not report the recovered mirror: {data!r}")
+elif mode == "webhook-secret":
+    # The answer to the creation of the secret of the webhook, the one time that it shows it.
+    secret = payload.get("secret")
+    if not isinstance(secret, str) or len(secret) != 48 or not secret.isalnum():
+        raise AssertionError(f"webhook-secret: no secret of 48 letters and digits: {payload!r}")
+    expect("configured", True)
+    if not str(payload.get("url", "")).endswith("/apps/paperless_sync/api/v1/webhook"):
+        raise AssertionError(f"webhook-secret: the address of the webhook is wrong: {payload!r}")
+elif mode == "webhook-result":
+    # The answer of the webhook to a call for P123, or another document, with its result.
+    if payload.get("result") != argument:
+        raise AssertionError(f"webhook-result: expected the result {argument!r}: {payload!r}")
+    expect("document", 999 if argument == "missing" else 123)
+elif mode == "webhook-state":
+    # The webhook as the settings page shows it after the calls: the last call, and never the secret.
+    if argument in serialized or "secret" in payload:
+        raise AssertionError("webhook-state: the settings page received the secret of the webhook again")
+    expect("configured", True)
+    last_call = payload.get("lastCall") or {}
+    if last_call.get("document") != 123 or last_call.get("result") != "moved":
+        raise AssertionError(f"webhook-state: the last call is not the move of P123: {payload!r}")
+elif mode == "mock-after-webhook":
+    # Every call read its document alone, with the fields of the scan of a run.
+    reads = payload.get("documentReads", [])
+    if sorted({read.get("id") for read in reads}) != [123, 999]:
+        raise AssertionError(f"mock-after-webhook: the runs of one document read other documents: {reads!r}")
+    for read in reads:
+        fields = read.get("fields", "").split(",")
+        if "title" not in fields or "content" in fields:
+            raise AssertionError(f"mock-after-webhook: a read asked for other fields than a run reads: {read!r}")
 elif mode == "recovered":
     if payload.get("errors") != 0 or payload.get("dryRun") is not False:
         raise AssertionError(f"recovered: the run after the failures did not succeed: {payload!r}")

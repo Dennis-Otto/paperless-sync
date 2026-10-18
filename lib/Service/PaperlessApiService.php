@@ -181,6 +181,43 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $this->scan('/api/trash/');
 	}
 
+	/** @psalm-suppress MixedAssignment */
+	public function document(int $documentId): ?array {
+		$config = $this->configService->get();
+		$response = $this->send(
+			'GET',
+			$this->url($config, '/api/documents/' . $documentId . '/'),
+			$this->configService->getToken(),
+			$config->paperlessLocalNetwork,
+			[
+				// The fields of the scan of a run, so that the document takes the same path as in a run.
+				'query' => ['fields' => implode(',', self::DOCUMENT_FIELDS), 'truncate_content' => 'true'],
+				'connect_timeout' => 10,
+				'timeout' => 60,
+				'http_errors' => false,
+			],
+		);
+		// Paperless answers 404 for a document in its trash, a deleted one, and one that the
+		// account may not view, which a run leaves to the scheduled runs as well.
+		if ($response->getStatusCode() === Http::STATUS_NOT_FOUND) {
+			return null;
+		}
+		$this->requireSuccess($response->getStatusCode(), 'query document ' . $documentId);
+		$data = $this->decodeBody($response->getBody());
+		$document = [];
+		foreach (is_array($data) ? $data : [] as $key => $value) {
+			if (is_string($key)) {
+				$document[$key] = $value;
+			}
+		}
+		$id = $document['id'] ?? null;
+		if (!is_numeric($id) || (int)$id !== $documentId) {
+			throw new UnexpectedValueException("Paperless returned no document {$documentId}.");
+		}
+
+		return $document;
+	}
+
 	public function correspondents(): array {
 		return $this->namedMap('/api/correspondents/');
 	}

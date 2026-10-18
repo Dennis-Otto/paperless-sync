@@ -206,6 +206,12 @@
 	grid-column: 1 / -1;
 }
 
+/* A field that the page shows only at times, such as the secret of the webhook right after its
+   creation: its display of a flexbox would show it all the same. */
+.paperless-sync-field[hidden] {
+	display: none;
+}
+
 .paperless-sync-field input,
 .paperless-sync-field select {
 	width: 100%;
@@ -521,8 +527,45 @@
 	margin-bottom: 18px;
 }
 
-/* Test connection, at the end of the connection settings, with its checklist below it. */
-.paperless-sync-test {
+/* The webhook URL and its secret, each with its button Copy beside it, which wraps below it on a
+   narrow screen. */
+.paperless-sync-copy {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 8px;
+	align-items: center;
+}
+
+.paperless-sync-copy input {
+	flex: 1 1 260px;
+	min-width: 0;
+	margin: 0;
+}
+
+.paperless-sync-field .settings-hint {
+	font-weight: 400;
+}
+
+/* The steps in Paperless, folded away once the workflow is set up. */
+.paperless-sync-webhook-guide summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.paperless-sync-webhook-guide ol {
+	margin: 10px 0 0;
+	padding-inline-start: 22px;
+	list-style: decimal;
+}
+
+.paperless-sync-webhook-guide li {
+	margin-bottom: 6px;
+}
+
+/* Test connection, at the end of the connection settings, with its checklist below it, and the
+   buttons of the secret of the webhook with its state. */
+.paperless-sync-test,
+.paperless-sync-webhook-actions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 14px;
@@ -530,7 +573,8 @@
 	margin-top: 18px;
 }
 
-.paperless-sync-test .settings-hint {
+.paperless-sync-test .settings-hint,
+.paperless-sync-webhook-actions .settings-hint {
 	flex: 1 1 260px;
 	margin: 0;
 }

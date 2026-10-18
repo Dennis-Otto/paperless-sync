@@ -133,6 +133,25 @@ The Paperless trash shows an account only the documents that it owns and those w
 
 **Fix:** Make the account of the app the owner of the documents, with a workflow for new ones and the bulk edit of permissions for the others, as the [guide](guide.md#paperless-connection) shows; both keep the access of the people who own them now. Don't make the account a superuser: it would see the whole trash, but its token controls all of Paperless.
 
+### A change in Paperless doesn't arrive within seconds
+
+Section 6 of the settings, *Changes within seconds*, shows the last call of the webhook and what came of it. Without a last call, Paperless didn't reach the app; the log of Paperless has a line `Failed attempt sending webhook to …` with the reason:
+
+| What you see | Cause and fix |
+| --- | --- |
+| No last call, and nothing in the log of Paperless | The workflow didn't run: it needs the triggers *Document Added* and *Document Updated*, and its filters must match the document. **Fix:** Check the workflow in Paperless, and that it is enabled. |
+| `Connection blocked: … resolves to a non-public address` in the log of Paperless | Paperless refuses webhooks to addresses of its network when `PAPERLESS_WEBHOOKS_ALLOW_INTERNAL_REQUESTS` is `false`. **Fix:** Set it to `true` for a Nextcloud in your network, or use the public address of Nextcloud. |
+| `Destination port not permitted` or `Invalid URL scheme` | `PAPERLESS_WEBHOOKS_ALLOWED_PORTS` or `PAPERLESS_WEBHOOKS_ALLOWED_SCHEMES` of Paperless leave out the address of Nextcloud. **Fix:** Add its port or scheme there. |
+| `401 Unauthorized` | The secret is missing or wrong, or a proxy in front of Nextcloud drops the header `Authorization`. **Fix:** Enter `Bearer`, a space and the secret as the value of the header `Authorization` under *Webhook headers*, or create a new secret; let the proxy pass the header, as Nextcloud's own clients need it as well. |
+| Calls take longer and longer | Calls with a wrong secret made Nextcloud's brute-force protection slow down the address of Paperless. **Fix:** Correct the secret; the first call with the right one ends the delay. |
+| `429 Too Many Requests` | More than ten calls with a wrong secret within 30 minutes: Paperless tries every refused call three more times, so three events are enough. Nextcloud now refuses the address before the app sees the call, so the right secret can't end it. **Fix:** Correct the secret, then wait up to 30 minutes, or run `occ security:bruteforce:reset <address>` at once. More than 120 calls a minute also answer 429; the scheduled runs catch up on those. |
+| `400 Bad Request` | The call names no document. **Fix:** Turn on *Use parameters for webhook body* and *Send webhook payload as JSON*, and add the parameter `document` with `{{ doc_id }}`, or `{{ doc_url }}` with Paperless-ngx 2.x. If the answer is the HTML page *Access through untrusted domain*, Paperless calls Nextcloud by a host name that isn't in `trusted_domains`, such as the name of its container. **Fix:** Add that host name to `trusted_domains` in `config.php`, or use the address that the browser uses. |
+| `404 Not Found`, and the last call says Paperless shows no active document | Paperless called before it had committed a new document, or the document is in its trash. Paperless tries again after a few seconds, which catches a new document; the scheduled runs handle the trash. **Fix:** Nothing to fix, unless the document is active in Paperless and the account of the token can't see it: then give that account the permission to view it. |
+| `409 Conflict`, and the last call says nothing changed | Scheduled synchronization or the export is off, or Paperless is not connected. **Fix:** Turn them on in sections 1 and 2 and save. |
+| `ReadTimeout` in the log of Paperless, but the copy has changed | Paperless waits five seconds for the answer, and a large document takes longer; the run finished all the same. **Fix:** Nothing to fix, or turn off *Mirror the document during the call*, so that the app answers at once and the background jobs take the document. |
+| The last call says *waits for the next background jobs* | Another run held the lock, or *Mirror the document during the call* is off. The next background jobs mirror the document, within five minutes with system cron. |
+| The last call says *Paperless shows no active document* | The document is in the trash of Paperless, deleted, or not visible to the account of the app. The scheduled runs handle the trash; for the permissions, see [Documents of the trash come late](#documents-of-the-trash-come-late). |
+
 ## Files
 
 ### Other users don't see the archive
