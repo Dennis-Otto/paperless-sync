@@ -36,8 +36,10 @@ use RuntimeException;
  *
  * The plan is lazy. It plans each document once the executor has applied the actions of the one
  * before, so that it sees the batch as it stands: an export that failed leaves its place to the
- * next document, and after Nextcloud refused a write for the whole archive the others wait. A
- * document that waits for a later run costs no question to Paperless and no read of its copy.
+ * next document, and after Nextcloud refused a write for the whole archive the others wait. When
+ * the batch is full, a document with a new path waits without a question to Paperless or a read of
+ * its copy; one that keeps its path is still asked once for the checksum of its revision, which its
+ * state keeps for a later run.
  */
 final class ExportPlanner {
 	/** @var array<string, true> the paths that the states give to more than one document */

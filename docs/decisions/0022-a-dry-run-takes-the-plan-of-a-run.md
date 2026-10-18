@@ -19,7 +19,7 @@ The export and the inbox were two long loops of `SyncService` that decided what 
 
 Option 3. `ExportPlanner` and `ImportPlanner` plan the export and the inbox as generators of actions (`lib/Model/Plan/`), such as an export, a move to the deleted folder, a deletion, an upload or a document that waits; a planner reaches the files of Nextcloud only through `TargetFiles`, which lists, finds and reads them but can't write. `ExportExecutor` and `ImportExecutor` apply the actions, and `SyncBatch` holds the places of the changes, with the rules that a run had before: a failed export takes the place of an attempt but no change, a removal still has a place after the writes stopped.
 
-The plan is lazy: a planner plans a document once the executor has applied the actions before it, so it sees the batch as it stands, in a dry-run as in a run, and asks Paperless only about the documents that have a place.
+The plan is lazy: a planner plans a document once the executor has applied the actions before it, so it sees the batch as it stands, in a dry-run as in a run. When the batch is full, a document with a new path waits without a question to Paperless; one that keeps its path is still asked once for the checksum of its revision, which its state keeps for a later run.
 
 ## Consequences
 
