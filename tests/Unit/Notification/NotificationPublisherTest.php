@@ -212,6 +212,35 @@ final class NotificationPublisherTest extends TestCase {
 		self::assertSame([], $this->notifications);
 	}
 
+	/** Whoever sent a file from Files hears how its import ended, with the document of Paperless when there is one. */
+	public function testTheSenderOfAFileHearsHowItsImportEnded(): void {
+		$this->publisher->sendEnded('alice', 42, 'Scans/receipt.pdf', NotificationPublisher::SUBJECT_SEND_IMPORTED, 123, '', 'https://paperless.example.test');
+		$this->publisher->sendEnded('alice', 43, 'Scans/notes.bin', NotificationPublisher::SUBJECT_SEND_REFUSED, null, str_repeat('x', 300));
+
+		self::assertSame(['alice'], $this->notifiedUsers(NotificationPublisher::SUBJECT_SEND_IMPORTED));
+		[$imported, $refused] = $this->notifications;
+		self::assertSame([NotificationPublisher::OBJECT_SEND, '42'], [$imported->getObjectType(), $imported->getObjectId()]);
+		self::assertSame([
+			'file' => ['id' => 42, 'path' => 'Scans/receipt.pdf'],
+			'document' => 123,
+			'url' => 'https://paperless.example.test',
+			'reason' => '',
+		], $imported->getSubjectParameters());
+		self::assertSame(NotificationPublisher::ERROR_LIMIT, mb_strlen((string)$refused->getSubjectParameters()['reason']));
+	}
+
+	/** The import has ended all the same; only the log says that its sender didn't hear of it. */
+	public function testANotificationOfASentFileThatNextcloudRefusesIsLogged(): void {
+		$this->notificationFailure = new RuntimeException('The database is full.');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('could not tell {user} how the import of {path} ended'), self::callback(
+			static fn (array $context): bool => $context['user'] === 'alice' && $context['path'] === 'Scans/receipt.pdf' && $context['error'] === 'The database is full.',
+		));
+
+		$this->publisher->sendEnded('alice', 42, 'Scans/receipt.pdf', NotificationPublisher::SUBJECT_SEND_GONE);
+
+		self::assertSame([], $this->notifications);
+	}
+
 	private function failedRuns(int $count): void {
 		for ($run = 0; $run < $count; ++$run) {
 			$this->failedRun('Paperless is down.');

@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import json
+import re
 import sys
 from urllib.parse import quote
 
@@ -525,6 +526,18 @@ elif mode == "notifications-imports":
         raise AssertionError(f"notifications-imports: no notification of the refusal with its reason: {list(entries)!r}")
     if any(subject.endswith("was imported into Paperless") or " as P" in subject for subject in entries):
         raise AssertionError(f"notifications-imports: a successful import notified the user: {list(entries)!r}")
+elif mode == "mock-sent":
+    # The file sent from Files reached Paperless once, intact.
+    sent = [upload for upload in payload.get("uploads", []) if upload.get("filename") == "receipt.pdf"]
+    if len(sent) != 1 or sent[0].get("containsFixture") is not True:
+        raise AssertionError(f"mock-sent: the sent file did not reach Paperless once and intact: {payload.get('uploads')!r}")
+elif mode == "notifications-sent":
+    # Its sender hears that Paperless has it, and the notification opens the new document.
+    entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "send"]
+    if len(entries) != 1 or entries[0].get("subject") != "receipt.pdf is in Paperless now":
+        raise AssertionError(f"notifications-sent: expected one notification that Paperless has receipt.pdf: {entries!r}")
+    if not re.fullmatch(r"https?://[^/]+/documents/[0-9]+/details", str(entries[0].get("link"))):
+        raise AssertionError(f"notifications-sent: the notification does not open the document in Paperless: {entries[0]!r}")
 elif mode == "notifications-failing":
     entries = [entry for entry in payload["ocs"]["data"] if entry.get("app") == "paperless_sync" and entry.get("object_type") == "synchronization"]
     if len(entries) != 1:

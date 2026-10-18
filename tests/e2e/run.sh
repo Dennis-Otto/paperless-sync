@@ -123,14 +123,16 @@ mock_state() {
 # administrator does: it saves them with the confirmation of the password, tests the
 # connection with the token of an account with too few permissions, disconnects and
 # connects again with the token, and checks what the page says about unsaved changes,
-# results and errors, also in German. The files of the checks reach the
-# browser through standard input, so that npm leaves nothing in the checkout.
+# results and errors, also in German. files.mjs checks the actions of the app in the
+# menu of Files for a member of the group of the setting and for another user. The files
+# of the checks reach the browser through standard input, so that npm leaves nothing in
+# the checkout.
 accessibility() {
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -139,7 +141,7 @@ accessibility() {
 			--env E2E_TOKEN=e2e-only-token \
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
-			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs'
+			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs'
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -1129,6 +1131,48 @@ for path in "${NAMED_PATHS[@]}"; do
 done
 
 echo "The scenarios pass after ${SECONDS} s."
+
+# "Send to Paperless" in the menu of Files: e2e-admin, a member of the group admin of the
+# setting, sends a file of their own, which stays where it is. The background job uploads it
+# with the next run of cron, follows its task and tells the sender in a notification that
+# Paperless has it, with a link to the document; e2e-other may not send. files.mjs then clicks
+# the actions in the browser.
+send_files() {
+	curl --silent --show-error \
+		--user "$1:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'Content-Type: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data "{\"fileIds\": [$3]}" \
+		--output "$2" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/api/v1/send"
+}
+dav_upload e2e-admin 'receipt.pdf' '%PDF-1.4 Synthetic inbox PDF receipt.'
+dav_upload e2e-admin 'Invoice%20%5BP123%5D.pdf' '%PDF-1.4 Synthetic copy of P123.'
+dav_upload e2e-other 'letter.pdf' '%PDF-1.4 Synthetic letter.'
+RECEIPT_ID="$(file_id e2e-admin 'receipt.pdf')"
+SEND_STATUS="$(send_files e2e-other "${TMP_DIR}/send-other.json" "${RECEIPT_ID}")"
+if [[ "${SEND_STATUS}" != "403" ]]; then
+	echo "A user outside the group of the setting could send a file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send-other.json")" >&2
+	exit 1
+fi
+SEND_STATUS="$(send_files e2e-admin "${TMP_DIR}/send.json" "${RECEIPT_ID}")"
+if [[ "${SEND_STATUS}" != "200" ]] || ! grep --fixed-strings 'Paperless Sync sends 1 file to Paperless.' "${TMP_DIR}/send.json" >/dev/null; then
+	echo "Send to Paperless did not queue the file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send.json")" >&2
+	exit 1
+fi
+SEND_JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SendJob' --output=json | json_value 0 id)"
+occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+mock_state > "${TMP_DIR}/mock-sent.json"
+assert_json mock-sent "${TMP_DIR}/mock-sent.json"
+control /control/task-of/receipt.pdf/success >/dev/null
+occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+notifications e2e-admin "${TMP_DIR}/notifications-sent.json"
+assert_json notifications-sent "${TMP_DIR}/notifications-sent.json"
+assert_dav_file e2e-admin 'receipt.pdf' 'Synthetic inbox PDF receipt.'
+echo "Send to Paperless passes after ${SECONDS} s."
 
 # The administration settings and the report of a dry-run over a larger archive meet
 # WCAG 2.1 AA.

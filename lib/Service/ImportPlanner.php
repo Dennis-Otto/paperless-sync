@@ -35,11 +35,11 @@ use OCP\AppFramework\Utility\ITimeFactory;
  */
 final class ImportPlanner {
 	/** The statuses of a task of Paperless that imported its file. */
-	private const TASK_SUCCEEDED = ['SUCCESS', 'SUCCEEDED'];
+	public const TASK_SUCCEEDED = ['SUCCESS', 'SUCCEEDED'];
 	/** The statuses of a task that ended without a document; Paperless-ngx 3.x revokes a task that it cancels. */
-	private const TASK_FAILED = ['FAILURE', 'FAILED', 'ERROR', 'REVOKED'];
+	public const TASK_FAILED = ['FAILURE', 'FAILED', 'ERROR', 'REVOKED'];
 	/** How long after its upload a task that Paperless has not finished, or doesn't list, may take, in seconds. */
-	private const TASK_TIMEOUT = 86400;
+	public const TASK_TIMEOUT = 86400;
 
 	/** @param \Closure(): void $heartbeat the sign of life of the run, for each file that the plan may upload */
 	public function __construct(
@@ -125,7 +125,7 @@ final class ImportPlanner {
 				return [new ImportSucceeded($context, $etag, $unchangedFile, $task['documentId'])];
 			}
 			if (in_array($task['status'], self::TASK_FAILED, true)) {
-				$reason = $this->failureReason($task);
+				$reason = self::failureReason($task);
 
 				return [new ImportFailed($context, $this->errorPath($context->path), $reason, $this->diagnostic($taskId, $reason))];
 			}
@@ -177,7 +177,7 @@ final class ImportPlanner {
 	 *
 	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
 	 */
-	private function failureReason(array $task): string {
+	public static function failureReason(array $task): string {
 		if ($task['status'] === 'REVOKED') {
 			return 'Paperless cancelled the task before it finished (REVOKED), so it created no document' . ($task['message'] !== '' ? ': ' . $task['message'] : '.');
 		}

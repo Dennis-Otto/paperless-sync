@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How a file goes from Files to Paperless
+    accDescr: A member of the group of the setting clicks Send to Paperless in the menu of a file or a folder in Files. Nextcloud checks the group, that the user may read each file and that none is in the folder of Paperless Sync, and queues the file, or the files below the folder, at most a batch; files with a marker such as [P123], which Paperless has, stay out. With the next run of cron, the background job asks Paperless for a document with the content of each file, and the sender learns the document if Paperless has one. Otherwise it uploads the file with the tags of the inbox: Paperless refuses it, or the upload fails and waits 15 minutes, then twice as long each time, up to six uploads, or Paperless accepts it. The next runs of cron follow the task of the upload. Every end, a new document, one that Paperless had, a failure or a refusal, reaches the sender as a notification, with a link to the document in Paperless when there is one. The file stays where it is.
+
+    %% The wait takes the uploads that failed for a time back to the upload.
+    menu["🖱️ Send to Paperless<br>on a file or folder"]
+    queue["Queued: the files<br>that the user may<br>read, at most a batch,<br>none of the app or<br>with a marker"]
+    known{"Paperless<br>has the<br>content?"}
+    upload{"Upload with<br>the tags of<br>the inbox"}
+    retry["Waits 15 minutes,<br>then twice as<br>long, up to<br>6 uploads"]
+    task{"Its task,<br>with the next<br>runs of cron"}
+    notified["🔔 A notification to the<br>sender: a new document,<br>one that Paperless had,<br>a failure or a refusal,<br>with a link to the<br>document"]
+
+    retry -- "again" --> upload
+    menu -- "member of<br>the group" --> queue
+    queue -- "next run<br>of cron" --> known
+    known -- "yes" --> notified
+    known -- "no" --> upload
+    upload -- "unreachable<br>or overloaded" --> retry
+    upload -- "refused" --> notified
+    upload -- "accepted" --> task
+    task -- "success, failure,<br>or a day later" --> notified
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class menu,queue,retry,notified nextcloud
+    class known,upload,task paperless

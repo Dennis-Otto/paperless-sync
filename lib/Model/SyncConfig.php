@@ -58,6 +58,11 @@ final class SyncConfig implements \JsonSerializable {
 		 * folder .paperless of the archive: a sidecar P123.json for each copy and the index index.csv.
 		 */
 		public readonly bool $writeMetadata = false,
+		/**
+		 * The ID of the group of Nextcloud whose members may send files and folders to Paperless from
+		 * the menu of Files, with the token of the app; '' turns the action off.
+		 */
+		public readonly string $sendGroup = 'admin',
 	) {
 	}
 

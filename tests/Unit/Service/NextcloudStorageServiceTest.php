@@ -39,6 +39,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $nodes = [self::HOME => null];
 	/** @var array<string, true> the folders in which nothing can be created */
 	private array $readOnly = [];
+	/** @var array<string, true> the files and folders that the user may not read, by absolute path */
+	private array $unreadable = [];
 	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete */
 	private array $failures = [];
 	/** @var array<string, int> the file ID of every node, which Nextcloud keeps through moves and updates in place */
@@ -440,15 +442,37 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->nodes[self::HOME . '/Eingang/a.pdf'] = 'a';
 
 		self::assertSame([
-			['path' => 'Eingang/Versicherung/2026/beitrag.pdf', 'name' => 'beitrag.pdf', 'etag' => md5('beitrag')],
-			['path' => 'Eingang/Versicherung/police.pdf', 'name' => 'police.pdf', 'etag' => md5('police')],
-			['path' => 'Eingang/a.pdf', 'name' => 'a.pdf', 'etag' => md5('a')],
-			['path' => 'Eingang/z.pdf', 'name' => 'z.pdf', 'etag' => md5('z')],
+			['path' => 'Eingang/Versicherung/2026/beitrag.pdf', 'name' => 'beitrag.pdf', 'etag' => md5('beitrag'), 'id' => $this->fileId(self::HOME . '/Eingang/Versicherung/2026/beitrag.pdf')],
+			['path' => 'Eingang/Versicherung/police.pdf', 'name' => 'police.pdf', 'etag' => md5('police'), 'id' => $this->fileId(self::HOME . '/Eingang/Versicherung/police.pdf')],
+			['path' => 'Eingang/a.pdf', 'name' => 'a.pdf', 'etag' => md5('a'), 'id' => $this->fileId(self::HOME . '/Eingang/a.pdf')],
+			['path' => 'Eingang/z.pdf', 'name' => 'z.pdf', 'etag' => md5('z'), 'id' => $this->fileId(self::HOME . '/Eingang/z.pdf')],
 		], $this->service->listFiles(self::USER, 'Eingang', true));
 		self::assertSame(
 			['Eingang/a.pdf', 'Eingang/z.pdf'],
 			array_column($this->service->listFiles(self::USER, 'Eingang', false), 'path'),
 		);
+	}
+
+	/** A file or folder by its ID, as the user sees it among their files, which "Send to Paperless" names. */
+	public function testANodeIsFoundByItsIdAmongTheFilesOfTheUser(): void {
+		$this->nodes[self::HOME . '/Scans'] = null;
+		$this->nodes[self::HOME . '/Scans/receipt.pdf'] = 'receipt';
+		$this->nodes[self::HOME . '/Scans/secret.pdf'] = 'secret';
+		$this->unreadable[self::HOME . '/Scans/secret.pdf'] = true;
+
+		self::assertSame(['path' => 'Scans/receipt.pdf', 'name' => 'receipt.pdf', 'folder' => false, 'readable' => true], $this->service->nodeById(self::USER, $this->fileId(self::HOME . '/Scans/receipt.pdf')));
+		self::assertSame(['path' => 'Scans', 'name' => 'Scans', 'folder' => true, 'readable' => true], $this->service->nodeById(self::USER, $this->fileId(self::HOME . '/Scans')));
+		self::assertFalse($this->service->nodeById(self::USER, $this->fileId(self::HOME . '/Scans/secret.pdf'))['readable'] ?? true);
+		self::assertNull($this->service->nodeById(self::USER, 999));
+	}
+
+	/** The folder of the files of the user itself, and a node that its files don't hold, are no files of the user. */
+	public function testTheFolderOfTheUserAndANodeOutsideItAreNoFilesOfTheUser(): void {
+		$this->nodes[self::HOME] = null;
+		$this->nodes['/someone/files/letter.pdf'] = 'letter';
+
+		self::assertNull($this->service->nodeById(self::USER, $this->fileId(self::HOME)));
+		self::assertNull($this->service->nodeById(self::USER, $this->fileId('/someone/files/letter.pdf')));
 	}
 
 	public function testOpenReadReturnsTheContent(): void {
@@ -557,6 +581,17 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$folder->method('get')->willReturnCallback(fn (string $relative): Node => $this->node($this->resolve($path, $relative)));
 		$folder->method('getFullPath')->willReturnCallback(fn (string $relative): string => $this->resolve($path, $relative));
 		$folder->method('isCreatable')->willReturnCallback(fn (): bool => !isset($this->readOnly[$path]));
+		// The node with the ID, as Nextcloud finds it among the files that the folder shows, here among all.
+		$folder->method('getFirstNodeById')->willReturnCallback(function (int $id): ?Node {
+			$found = array_search($id, $this->fileIds, true);
+
+			return $found === false ? null : $this->node($found);
+		});
+		$folder->method('getRelativePath')->willReturnCallback(static fn (string $absolute): ?string => match (true) {
+			$absolute === $path => '/',
+			str_starts_with($absolute, $path . '/') => substr($absolute, strlen($path)),
+			default => null,
+		});
 		$folder->method('getFreeSpace')->willReturnCallback(fn (): int|float => $this->freeSpace[$path] ?? FileInfo::SPACE_UNLIMITED);
 		$folder->method('getDirectoryListing')->willReturnCallback(fn (): array => array_map(
 			fn (string $child): Node => $this->node($child),
@@ -609,6 +644,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	/** The operations of every node: its name and ID, deleting and moving it with everything below it. */
 	private function describe(Folder|File $node, string $path): void {
 		$node->method('getName')->willReturn(basename($path));
+		$node->method('getPath')->willReturn($path);
+		$node->method('isReadable')->willReturnCallback(fn (): bool => !isset($this->unreadable[$path]));
 		$node->method('getId')->willReturnCallback(fn (): int => $this->fileId($path));
 		$node->method('delete')->willReturnCallback(function () use ($path): void {
 			if (isset($this->failures['delete'])) {

@@ -1563,17 +1563,19 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
-	/** @return array<string, array{array<string, bool>, list<string>, list<string>}> the modules, the requests and the lines */
+	/** @return array<string, array{array<string, bool|string>, list<string>, list<string>}> the modules, the requests and the lines */
 	public static function modules(): array {
 		return [
-			'neither module' => [['export_enabled' => false, 'inbox_enabled' => false], ['documents'], ['paperless', 'documents']],
-			'the export alone' => [['inbox_enabled' => false], ['documents', 'ui_settings', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags'], ['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags']],
-			'the inbox alone' => [['export_enabled' => false], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
+			'neither module' => [['export_enabled' => false, 'inbox_enabled' => false, 'send_group' => ''], ['documents'], ['paperless', 'documents']],
+			'the export alone' => [['inbox_enabled' => false, 'send_group' => ''], ['documents', 'ui_settings', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags'], ['paperless', 'documents', 'trash', 'correspondents', 'document_types', 'storage_paths', 'tags']],
+			'the inbox alone' => [['export_enabled' => false, 'send_group' => ''], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
+			// The files that people send from Files are uploads as well.
+			'sending from Files alone' => [['export_enabled' => false, 'inbox_enabled' => false], ['documents', 'ui_settings'], ['paperless', 'documents', 'upload']],
 		];
 	}
 
 	/**
-	 * @param array<string, bool> $settings
+	 * @param array<string, bool|string> $settings
 	 * @param list<string> $requests
 	 * @param list<string> $lines
 	 */
@@ -2041,7 +2043,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			$this->responses[] = [200, self::page(1)];
 		}
 
-		$checks = $this->preflight(['inbox_enabled' => false]);
+		$checks = $this->preflight(['inbox_enabled' => false, 'send_group' => '']);
 
 		self::assertEquals(ConnectionCheck::failed(
 			'correspondents',

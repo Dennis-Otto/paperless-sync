@@ -39,8 +39,22 @@ interface NextcloudStorageInterface {
 
 	public function delete(string $userId, string $path): void;
 
-	/** @return list<array{path: string, name: string, etag: string}> */
+	/**
+	 * The files below the folder, without hidden ones, whose names start with a dot, and without
+	 * those in hidden folders, with the ID of each.
+	 *
+	 * @return list<array{path: string, name: string, etag: string, id: int}>
+	 */
 	public function listFiles(string $userId, string $path, bool $recursive): array;
+
+	/**
+	 * The file or folder with the ID as the user sees it among their files, also one that is shared
+	 * with them, or null when they see none with the ID: its path among their files, its name,
+	 * whether it is a folder and whether they may read it.
+	 *
+	 * @return array{path: string, name: string, folder: bool, readable: bool}|null
+	 */
+	public function nodeById(string $userId, int $fileId): ?array;
 
 	/** @return resource */
 	public function openRead(string $userId, string $path);

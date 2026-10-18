@@ -128,6 +128,71 @@ final class NotifierTest extends TestCase {
 		self::assertSame('', $notification->getParsedMessage());
 	}
 
+	/** @return array<string, array{string, string}> */
+	public static function endsOfASentFile(): array {
+		return [
+			'imported' => [NotificationPublisher::SUBJECT_SEND_IMPORTED, '{file} ist jetzt in Paperless'],
+			'known already' => [NotificationPublisher::SUBJECT_SEND_KNOWN, 'Paperless hat {file} bereits'],
+			'failed' => [NotificationPublisher::SUBJECT_SEND_FAILED, 'Paperless konnte {file} nicht importieren'],
+			'refused' => [NotificationPublisher::SUBJECT_SEND_REFUSED, 'Paperless hat {file} abgelehnt'],
+			'gone' => [NotificationPublisher::SUBJECT_SEND_GONE, 'Paperless Sync konnte {file} nicht senden: Die Datei wurde gelöscht, oder du darfst sie nicht mehr lesen'],
+		];
+	}
+
+	/** The end of the import of a file sent from Files names the file, with the reason of Paperless below it. */
+	#[DataProvider('endsOfASentFile')]
+	public function testTheEndOfTheImportOfASentFileNamesTheFile(string $subject, string $rich): void {
+		$notification = $this->notifier->prepare($this->notification($subject, [
+			'file' => ['id' => 42, 'path' => 'Scans/receipt.pdf'],
+			'document' => null,
+			'url' => 'https://paperless.example.test',
+			'reason' => 'Not consuming receipt.pdf',
+		]), 'de');
+
+		self::assertSame($rich, $notification->getRichSubject());
+		self::assertSame(str_replace('{file}', 'receipt.pdf', $rich), $notification->getParsedSubject());
+		self::assertSame('https://cloud.example.test/files.viewcontroller.showFile?fileid=42', $notification->getLink());
+		self::assertSame('Not consuming receipt.pdf', $notification->getParsedMessage());
+	}
+
+	/** @return array<string, array{string}> */
+	public static function documentsOfASentFile(): array {
+		return [
+			'imported' => [NotificationPublisher::SUBJECT_SEND_IMPORTED],
+			'known already' => [NotificationPublisher::SUBJECT_SEND_KNOWN],
+		];
+	}
+
+	/** A file that Paperless has opens its document there, as "Open in Paperless" does. */
+	#[DataProvider('documentsOfASentFile')]
+	public function testASentFileThatPaperlessHasLinksItsDocument(string $subject): void {
+		$notification = $this->notifier->prepare($this->notification($subject, [
+			'file' => ['id' => 42, 'path' => 'Scans/receipt.pdf'],
+			'document' => 123,
+			'url' => 'https://paperless.example.test/',
+			'reason' => '',
+		]), 'en');
+
+		self::assertSame('https://paperless.example.test/documents/123/details', $notification->getLink());
+	}
+
+	/** @return array<string, array{array<string, mixed>}> */
+	public static function sentFilesWithoutADocument(): array {
+		return [
+			'no document' => [['document' => null, 'url' => 'https://paperless.example.test']],
+			'no address of Paperless' => [['document' => 123, 'url' => '']],
+			'neither' => [[]],
+		];
+	}
+
+	/** @param array<string, mixed> $parameters */
+	#[DataProvider('sentFilesWithoutADocument')]
+	public function testASentFileWithoutADocumentLinksTheFile(array $parameters): void {
+		$notification = $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_SEND_IMPORTED, ['file' => ['id' => 42, 'path' => 'Scans/receipt.pdf']] + $parameters), 'en');
+
+		self::assertSame('https://cloud.example.test/files.viewcontroller.showFile?fileid=42', $notification->getLink());
+	}
+
 	/** @return list<array{array<string, mixed>}> */
 	public static function unreadableFiles(): array {
 		return [[[]], [['file' => 'broken.pdf']], [['file' => ['id' => '42', 'path' => 'a.pdf']]], [['file' => ['id' => 42, 'path' => '']]]];

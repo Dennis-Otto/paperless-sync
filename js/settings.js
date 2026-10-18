@@ -1525,6 +1525,35 @@
 		})
 		targetUser.addEventListener('change', checkTargetUser)
 
+		// The group that may send files from Files: the groups of Nextcloud whose ID or name holds
+		// what is typed, from the same provisioning API. The save checks that the group exists.
+		const sendGroup = element('send-group')
+		const sendGroupProblem = element('send-group-problem')
+
+		async function searchGroups(text) {
+			try {
+				const query = new URLSearchParams({ search: text, limit: '10' })
+				const answer = await request(root.dataset.groupsUrl + '/details?' + query, 'GET', undefined, ocs)
+				setText(sendGroupProblem, '')
+				const groups = answer.ocs && answer.ocs.data && Array.isArray(answer.ocs.data.groups) ? answer.ocs.data.groups : []
+				return groups.filter(function(group) {
+					return group !== null && typeof group === 'object' && typeof group.id === 'string'
+				}).map(function(group) {
+					const name = typeof group.displayname === 'string' && group.displayname.trim() !== '' ? group.displayname : group.id
+					return { value: group.id, label: name, note: name === group.id ? '' : group.id }
+				})
+			} catch (error) {
+				setText(sendGroupProblem, translate('Could not search the groups of Nextcloud: {error}', { error: error.message }))
+				return []
+			}
+		}
+
+		combobox(sendGroup, element('send-group-options'), searchGroups, function(option) {
+			sendGroup.value = option.value
+			setText(sendGroupProblem, '')
+			sendGroup.dispatchEvent(new Event('change', { bubbles: true }))
+		})
+
 		// The tags of Paperless, which every tag picker offers: their names, or null while the page
 		// doesn't know them. The page reads them with the saved connection, as a run does, and anew
 		// after a save or a disconnect, which may change it, and after a failure, such as while

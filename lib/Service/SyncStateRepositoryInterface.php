@@ -53,4 +53,25 @@ interface SyncStateRepositoryInterface {
 	public function saveImport(string $ownerUid, string $path, array $values): void;
 
 	public function deleteImport(string $ownerUid, string $path): void;
+
+	/**
+	 * Every file that someone sent to Paperless from Files and whose import has not ended yet, the
+	 * oldest first: its user, the ID of the file, its path when it was sent, the folder below the
+	 * sent folder that holds it, and the state of its upload as for a file of the inbox.
+	 *
+	 * @return list<array<string, int|string|null>>
+	 */
+	public function allSends(): array;
+
+	/** @return array<string, int|string|null>|null */
+	public function findSend(string $userId, int $fileId): ?array;
+
+	/**
+	 * Saves the values of a sent file, a new one waiting for its upload.
+	 *
+	 * @param array<string, int|string|null> $values
+	 */
+	public function saveSend(string $userId, int $fileId, array $values): void;
+
+	public function deleteSend(string $userId, int $fileId): void;
 }

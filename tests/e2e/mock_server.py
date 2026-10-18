@@ -391,6 +391,15 @@ class Handler(BaseHTTPRequestHandler):
             # account. The account of the app owns every document of the mock.
             others = query["owner__id__none"][0] != str(OWNER_ID) and query.get("owner__isnull") == ["0"]
             self._page(documents if others else [])
+        elif parsed.path == "/api/documents/" and "checksum__iexact" in query:
+            # The lookup of a document by the checksum of its original, MD5 up to Paperless-ngx 2.x
+            # and SHA-256 since 3.0, as before an upload from Files.
+            checksum = query["checksum__iexact"][0].lower()
+            self._page([
+                {"id": item["id"]}
+                for item in documents
+                if checksum in (hashlib.md5(document_content(item["id"])).hexdigest(), hashlib.sha256(document_content(item["id"])).hexdigest())
+            ])
         elif parsed.path == "/api/documents/":
             # Paperless-ngx sends only the fields that a request names, and the scan of a run names them.
             if "ordering" in query:

@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -83,6 +83,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-files-url="<?php p($_['filesUrl']); ?>"
 	data-tags-url="<?php p($_['tagsUrl']); ?>"
 	data-users-url="<?php p($_['usersUrl']); ?>"
+	data-groups-url="<?php p($_['groupsUrl']); ?>"
 	data-webhook-url="<?php p($_['webhookStateUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
@@ -302,6 +303,17 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				$l->t('Pick tags of Paperless, or type a name and press Enter.') . ' ' . $l->t('With "Subfolders become tags", a file in the subfolder Taxes/2026 of the inbox gets the tags Taxes and 2026, found by their names whatever their case. A run reports the names that Paperless has no tag of, or creates their tags when it may. Paperless names each document after its file.'),
 				static fn () => $help('tags-of-the-inbox', $l->t('Tags of the inbox')),
 			); ?>
+			<div class="paperless-sync-grid">
+				<div class="paperless-sync-field">
+					<label for="paperless-sync-send-group"><?php p($l->t('Group that may send files')); ?></label>
+					<div class="paperless-sync-combobox">
+						<input id="paperless-sync-send-group" data-setting="send_group" type="text" value="<?php p($config->sendGroup); ?>" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="paperless-sync-send-group-options" aria-describedby="paperless-sync-send-group-problem paperless-sync-send-group-hint" autocomplete="off" autocapitalize="none" spellcheck="false">
+						<ul id="paperless-sync-send-group-options" class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Groups of Nextcloud')); ?>" hidden></ul>
+					</div>
+					<p id="paperless-sync-send-group-problem" class="paperless-sync-field-hint" aria-live="polite"></p>
+				</div>
+			</div>
+			<p class="settings-hint" id="paperless-sync-send-group-hint"><?php p($l->t('Its members find "Send to Paperless" in the menu of a file or a folder in Files. A file goes to Paperless with the tags above, those of its subfolders below a sent folder included, and stays where it is; a notification tells the sender when Paperless has it. The uploads use the API token of the app, so choose people whom you trust with its account of Paperless, or leave the field empty to turn the action off. "Open in Paperless" opens the document of a copy of the archive for everyone.')); ?> <?php $help('send-from-files', $l->t('Send from Files')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card paperless-sync-card--danger">

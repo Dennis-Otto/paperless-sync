@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie eine Datei aus Dateien zu Paperless kommt
+    accDescr: Ein Mitglied der Gruppe der Einstellung klickt auf An Paperless senden im Menü einer Datei oder eines Ordners in Dateien. Nextcloud prüft die Gruppe, dass die Person jede Datei lesen darf und dass keine im Ordner von Paperless Sync liegt, und reiht die Datei ein, oder die Dateien unterhalb des Ordners, höchstens einen Batch; Dateien mit einer Markierung wie [P123], die Paperless hat, bleiben außen vor. Mit dem nächsten Cron-Lauf fragt der Hintergrundjob Paperless nach einem Dokument mit dem Inhalt jeder Datei, und der Absender erfährt das Dokument, wenn Paperless eines hat. Sonst lädt er die Datei mit den Tags des Eingangs hoch: Paperless lehnt sie ab, oder das Hochladen scheitert und wartet 15 Minuten, dann jedes Mal doppelt so lange, bis zu sechs Uploads, oder Paperless nimmt sie an. Die nächsten Cron-Läufe verfolgen die Aufgabe des Uploads. Jedes Ende, ein neues Dokument, eines, das Paperless hatte, ein Fehler oder eine Ablehnung, erreicht den Absender als Benachrichtigung, mit einem Link zum Dokument in Paperless, wenn es eines gibt. Die Datei bleibt, wo sie ist.
+
+    %% Das Warten führt die Uploads, die vorerst gescheitert sind, zurück zum Upload.
+    menu["🖱️ An Paperless senden<br>an einer Datei oder<br>einem Ordner"]
+    queue["Eingereiht: die Dateien,<br>die die Person lesen<br>darf, höchstens ein<br>Batch, keine der App<br>oder mit Markierung"]
+    known{"Hat Paperless<br>den Inhalt?"}
+    upload{"Upload mit<br>den Tags des<br>Eingangs"}
+    retry["Wartet 15 Minuten,<br>dann doppelt so<br>lange, bis zu<br>6 Uploads"]
+    task{"Seine Aufgabe,<br>mit den nächsten<br>Cron-Läufen"}
+    notified["🔔 Eine Benachrichtigung<br>an den Absender: ein<br>neues Dokument, eines,<br>das Paperless hatte,<br>ein Fehler oder eine<br>Ablehnung, mit einem<br>Link zum Dokument"]
+
+    retry -- "erneut" --> upload
+    menu -- "Mitglied<br>der Gruppe" --> queue
+    queue -- "nächster<br>Cron-Lauf" --> known
+    known -- "ja" --> notified
+    known -- "nein" --> upload
+    upload -- "nicht erreichbar<br>oder überlastet" --> retry
+    upload -- "abgelehnt" --> notified
+    upload -- "angenommen" --> task
+    task -- "Erfolg, Fehler<br>oder einen Tag<br>später" --> notified
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class menu,queue,retry,notified nextcloud
+    class known,upload,task paperless
