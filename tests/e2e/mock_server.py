@@ -245,7 +245,15 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
         "mime_type": "application/pdf",
         # Paperless-ngx sends the text of a document and its notes unless the request names the fields it needs.
         "content": "Synthetic OCR text of the monthly invoice. " * 100,
-        "notes": [],
+        # A note, which the metadata next to the archive keeps with the name of its author.
+        "notes": [
+            {
+                "id": 1,
+                "note": "Paid on 1 September.",
+                "created": "2026-09-01T09:00:00+02:00",
+                "user": {"id": 3, "username": "e2e-owner"},
+            }
+        ],
         # The fields of the variables of Paperless's own file names, which the default path
         # template doesn't use.
         "owner": 3,

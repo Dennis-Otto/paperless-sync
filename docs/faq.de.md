@@ -109,6 +109,10 @@ Ja, mit der Einstellung **Paperless läuft in meinem lokalen Netzwerk**, die die
 
 [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) ist eine eigene App desselben Autors, die die Volltextsuche von Paperless in die Suche von Nextcloud bringt und ein Ergebnis in der Datei des Archivs öffnet. Sie findet ein Dokument für einen Benutzer, der seine Datei öffnen kann, über die Markierung `[P123]` im Namen, also entscheiden die Freigaben des Archivs, wer was findet. Paperless Sync funktioniert ohne sie, und es schreibt die Dateien mit den Markierungen, nach denen Paperless Unified Search sucht.
 
+### Überlebt mein Archiv Paperless?
+
+Ja, mit den [Metadaten neben dem Archiv](guide.de.md#metadaten-neben-dem-archiv). Die Kopien sind gewöhnliche Dateien, die jedes Programm öffnet, und der Ordner `.paperless` des Archivs fügt hinzu, was Paperless über jedes Dokument weiß: eine JSON-Datei mit seinem Titel, Korrespondenten, Dokumenttyp, seinen Tags, Notizen, benutzerdefinierten Feldern und Daten, und ein Verzeichnis des ganzen Archivs als CSV, das eine Tabellenkalkulation öffnet und ein Skript liest. So behält eine Sicherung von Nextcloud allein die Dokumente mit ihren Metadaten, und ein Wechsel zu einem anderen System beginnt bei ihnen, ohne einen Export aus Paperless.
+
 ### Wie deinstalliere ich Paperless Sync?
 
 1. Wähle **Trennen** in seinen Einstellungen, was das API-Token löscht und den Zeitplan und **Paperless läuft in meinem lokalen Netzwerk** ausschaltet. Die übrigen Einstellungen bleiben für eine spätere Verbindung, bis du die Einträge der App unten löschst.

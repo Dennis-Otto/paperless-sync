@@ -53,6 +53,11 @@ final class SyncConfig implements \JsonSerializable {
 		 * waits for the answer, or leaves it to the next background jobs.
 		 */
 		public readonly bool $webhookImmediate = true,
+		/**
+		 * Whether a run writes what Paperless knows of each document next to the archive, in the
+		 * folder .paperless of the archive: a sidecar P123.json for each copy and the index index.csv.
+		 */
+		public readonly bool $writeMetadata = false,
 	) {
 	}
 

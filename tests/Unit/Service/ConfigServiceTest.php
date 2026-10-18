@@ -191,6 +191,17 @@ final class ConfigServiceTest extends TestCase {
 		self::assertFalse($this->service->get()->webhookImmediate);
 	}
 
+	/** The metadata next to the archive is off until an administrator turns it on. */
+	public function testTheMetadataNextToTheArchiveIsOffUntilTurnedOn(): void {
+		self::assertFalse($this->service->get()->writeMetadata);
+
+		$config = $this->service->save(['write_metadata' => true] + self::validSettings(), 'secret-token');
+
+		self::assertTrue($config->writeMetadata);
+		self::assertTrue($this->settings['write_metadata']);
+		self::assertTrue($this->service->get()->writeMetadata);
+	}
+
 	/** Nextcloud loads the settings when the app asks for them, not with every request of every user. */
 	public function testEverySettingIsStoredAndReadLazily(): void {
 		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
@@ -201,7 +212,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(33, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(34, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

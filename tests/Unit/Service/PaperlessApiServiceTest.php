@@ -215,8 +215,9 @@ final class PaperlessApiServiceTest extends TestCase {
 				$read = [...$read, ...$matches[1]];
 			}
 		}
-		// The trash is read whole: Paperless ignores the list of fields there.
-		$read = array_values(array_diff(array_unique($read), ['deleted_at']));
+		// The trash is read whole: Paperless ignores the list of fields there. The notes are asked for
+		// only for the metadata next to the archive, see testTheMetadataNextToTheArchiveAsksForTheNotes().
+		$read = array_values(array_diff(array_unique($read), ['deleted_at', 'notes']));
 
 		self::assertNotEmpty($read);
 		self::assertSame([], array_values(array_diff($read, PaperlessApiService::DOCUMENT_FIELDS)), 'Every field that the app reads from a document is asked for.');
@@ -614,6 +615,22 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(['fields' => implode(',', PaperlessApiService::DOCUMENT_FIELDS), 'truncate_content' => 'true'], $this->requests[0]['options']['query']);
 		self::assertFalse($this->requests[0]['options']['http_errors']);
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
+	}
+
+	/**
+	 * The notes of a document, which may be long, reach Nextcloud only for the metadata next to the
+	 * archive: then the scan of a run and the read of one document ask for them as well.
+	 */
+	public function testTheMetadataNextToTheArchiveAsksForTheNotes(): void {
+		$this->responses[] = [200, ['count' => 1, 'results' => self::entries(1, 1)]];
+		$this->responses[] = [200, ['id' => 123, 'title' => 'Strom August', 'notes' => []]];
+
+		$this->service->documents(true);
+		$this->service->document(123, true);
+
+		$fields = implode(',', [...PaperlessApiService::DOCUMENT_FIELDS, 'notes']);
+		self::assertSame(['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 1, 'page_size' => 1000], $this->requests[0]['options']['query']);
+		self::assertSame(['fields' => $fields, 'truncate_content' => 'true'], $this->requests[1]['options']['query']);
 	}
 
 	/** The answer of a real Paperless for one document: the fields of a run, as a scan reads them. */

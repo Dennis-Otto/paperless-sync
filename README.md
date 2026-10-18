@@ -85,6 +85,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - Each copy stays the same file in Nextcloud: a new content of its document, such as a new archive version, updates it in place, so its shares, public links, comments, tags, favorites and versions stay with it
 - Documents in the Paperless inbox wait until they are finished, and a document that gets a tag you exclude, or the inbox tag again, stays out, its copy removed
 - A stable marker such as `[P123]` in every file name, which [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) understands
+- Optional [metadata next to the archive](#metadata-next-to-the-archive): a JSON file for each document with its tags, notes, custom fields and dates, and an index of the whole archive as CSV, so that the archive describes itself also without Paperless
 
 ### Inbox
 
@@ -373,6 +374,72 @@ Nextcloud accepts names of up to 250 bytes, and a character of Cyrillic takes tw
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.dark.svg">
   <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.svg" alt="How a part of the path is built: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.">
 </picture>
+
+### Metadata next to the archive
+
+With *Write metadata next to the archive* in *3 · Structured archive*, which is off by default, every run writes what Paperless knows of each document into the folder `.paperless` of the archive folder. The archive then describes itself also without Paperless: when you move to another system, keep a backup of Nextcloud alone, or hand the archive to someone without an account in Paperless. Files shows the folder once *Show hidden files* is on in its settings.
+
+- **A sidecar for each copy,** `.paperless/P123.json` for the document 123: its title, its correspondent, document type and storage path by their names, its tags, when it was created, added and last changed, its archive serial number, original file name, MIME type and number of pages, its notes with their authors, its custom fields by their names, a select field with the label of its choice, whether the copy is the original or the archive version, with its SHA-256, and the address of the document in Paperless.
+- **One index of the archive,** `.paperless/index.csv`, with a row for each sidecar: the ID, the title, the correspondent, the document type, the tags and the dates, the path of the copy below the archive folder, the state of the document, `active`, `trash` or `missing`, the SHA-256 of the copy, the address in Paperless and the SHA-256 of the sidecar. It is CSV after RFC 4180, in UTF-8 with a byte order mark, so LibreOffice Calc and Excel open it as it is. A value that a spreadsheet would take for a formula, one that starts with `=`, `+`, `-` or `@`, starts with an apostrophe in the index, and the sidecar has it as it is.
+
+The sidecar of a document, here with the archive version of its copy:
+
+```json
+{
+    "version": 1,
+    "id": 123,
+    "title": "Monthly invoice",
+    "correspondent": "Example GmbH",
+    "document_type": "Invoice",
+    "storage_path": null,
+    "tags": [
+        "Electricity",
+        "Paid"
+    ],
+    "created": "2026-08-26",
+    "added": "2026-08-26T10:00:00+02:00",
+    "modified": "2026-09-01T09:00:00+02:00",
+    "archive_serial_number": 42,
+    "original_file_name": "scan.pdf",
+    "mime_type": "application/pdf",
+    "page_count": 2,
+    "notes": [
+        {
+            "note": "Paid on 1 September.",
+            "created": "2026-09-01T09:00:00+02:00",
+            "user": "anna"
+        }
+    ],
+    "custom_fields": [
+        {
+            "name": "Invoice number",
+            "type": "string",
+            "value": "INV-2026-08"
+        }
+    ],
+    "file": {
+        "version": "archive",
+        "sha256": "9fae5fe3947195044d068993bb1c63bd15029aab64fdc4827ee6d9e08b304d84"
+    },
+    "url": "https://paperless.example.com/documents/123/details"
+}
+```
+
+And its row in the index, below the names of the columns, with the checksums shortened here:
+
+```csv
+id,title,correspondent,document_type,tags,created,added,modified,archive_serial_number,path,state,sha256,url,metadata_sha256
+123,Monthly invoice,Example GmbH,Invoice,"Electricity, Paid",2026-08-26,2026-08-26T10:00:00+02:00,2026-09-01T09:00:00+02:00,42,Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice [P123].pdf,active,9fae5fe3…,https://paperless.example.com/documents/123/details,5d41402a…
+```
+
+A run writes a sidecar only when its content changes, such as after a change of the document in Paperless or of the name of its correspondent: the index keeps the SHA-256 of every sidecar, so a run reads one file for all of them. A copy in the deleted folder keeps its sidecar, and its row names its path there and the state of its document. A sidecar goes with its copy, under the same rules of [deletion safety](#deletion-safety): when a run deletes the copy of a document that Paperless deleted, or removes the copy of a document with an excluded tag.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-keeps-the-metadata-next-to-the-archive.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-keeps-the-metadata-next-to-the-archive.svg" alt="How a run keeps the metadata next to the archive: For each copy that a run exports, moves or finds unchanged, it builds the sidecar from what Paperless knows of the document and compares its SHA-256 with the one in index.csv. Only a sidecar whose content changed is written to .paperless/P123.json. At the end of the run, the sidecar of a document whose copy the run deleted, under the rules of deletion safety, goes with its row; the rows of the other copies follow their paths and states, such as into the deleted folder, and index.csv is written when it changed.">
+</picture>
+
+A dry-run writes no metadata, and a call of the [webhook](#changes-within-seconds) writes the sidecar and the row of its document at once. Paperless sends the notes of the documents only while the setting is on, and the account of the app needs the permission to view custom fields, as for a path template that uses them. When Nextcloud can't write the metadata, such as with a full quota, the report shows an error, `Metadata P123: …` or `Metadata index: …`, the run writes no further metadata, and the next run catches up. Delete `index.csv` to have the next run write every sidecar again. Turning the setting off leaves the folder as it is.
 
 ### Nextcloud inbox
 

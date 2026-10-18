@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
+use OCA\PaperlessSync\Service\MetadataSidecars;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientFactory;
@@ -4463,6 +4464,111 @@ final class SyncServiceTest extends TestCase {
 		// A run afterwards finds the copy where the run of the document put it.
 		self::assertSame(1, $this->service->run()->unchanged);
 		self::assertSame(1, $this->paperless->downloads);
+	}
+
+	/**
+	 * The metadata next to the archive follows the copy of its document: a run writes its sidecar
+	 * and its row in the index, a run without a change writes neither, the row follows the copy
+	 * into the deleted folder, and the sidecar goes with the copy, under the rules of deletion
+	 * safety alone. A dry-run writes no metadata.
+	 */
+	public function testTheMetadataNextToTheArchiveFollowsTheCopyOfItsDocument(): void {
+		$this->configService->save(['write_metadata' => true]);
+		$this->paperless->documents = [[
+			'tags' => [9],
+			'custom_fields' => [['field' => 1, 'value' => 'INV-7']],
+			'notes' => [['id' => 1, 'note' => 'Bezahlt.', 'created' => '2026-09-01T09:00:00+02:00', 'user' => ['id' => 3, 'username' => 'dennis']]],
+		] + $this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Strom'], 'inbox' => []];
+		$this->paperless->customFields = ['1' => ['name' => 'Rechnungsnummer', 'type' => 'string', 'options' => []]];
+		$sidecar = self::ARCHIVE . '/.paperless/P123.json';
+		$index = self::ARCHIVE . '/.paperless/index.csv';
+
+		$this->service->run(true);
+		self::assertSame([], $this->storage->files, 'A dry-run writes no metadata.');
+		self::assertSame([], $this->paperless->listsRead, 'Nor does it need the custom fields for it.');
+		self::assertSame([false], $this->paperless->notesAsked, 'Nor the notes.');
+
+		self::assertSame(1, $this->service->run()->exported);
+		$metadata = json_decode($this->storage->files[$sidecar], true, flags: JSON_THROW_ON_ERROR);
+		self::assertSame(['Strom August', 'Energie GmbH', 'Rechnung', ['Strom']], [$metadata['title'], $metadata['correspondent'], $metadata['document_type'], $metadata['tags']]);
+		self::assertSame([['note' => 'Bezahlt.', 'created' => '2026-09-01T09:00:00+02:00', 'user' => 'dennis']], $metadata['notes']);
+		self::assertSame([['name' => 'Rechnungsnummer', 'type' => 'string', 'value' => 'INV-7']], $metadata['custom_fields']);
+		self::assertSame(['version' => 'archive', 'sha256' => hash('sha256', '%PDF-content-v1')], $metadata['file']);
+		self::assertStringContainsString(',Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf,active,' . hash('sha256', '%PDF-content-v1') . ',', $this->storage->files[$index]);
+		self::assertSame(['custom fields'], $this->paperless->listsRead);
+		self::assertSame([false, true], $this->paperless->notesAsked);
+
+		$this->storage->writes = [];
+		self::assertSame(1, $this->service->run()->unchanged);
+		self::assertSame([], $this->storage->writes, 'A run without a change writes no metadata.');
+
+		$this->paperless->trash = [$this->paperless->documents[0] + ['deleted_at' => '2026-08-27T08:00:00+02:00']];
+		$this->paperless->documents = [];
+		self::assertSame(1, $this->service->run()->movedToTrash);
+		self::assertArrayHasKey($sidecar, $this->storage->files, 'A copy in the deleted folder keeps its sidecar.');
+		self::assertStringContainsString(',_Gelöscht/2026-08-27/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].pdf,trash,', $this->storage->files[$index]);
+
+		// Deleted for good in Paperless, while permanent deletion is off: the copy and its sidecar stay.
+		$this->configService->save(['missing_grace_runs' => 1]);
+		$this->paperless->trash = [];
+		$this->service->run();
+		self::assertArrayHasKey($sidecar, $this->storage->files);
+		self::assertStringContainsString(',missing,', $this->storage->files[$index]);
+
+		$this->configService->save(['permanent_delete' => true, 'allow_direct_delete' => true]);
+		self::assertSame(1, $this->service->run()->permanentlyDeleted);
+		self::assertSame([$index], array_keys($this->storage->files), 'The sidecar went with the copy.');
+		self::assertSame("\u{FEFF}" . implode(',', MetadataSidecars::COLUMNS) . "\r\n", $this->storage->files[$index]);
+	}
+
+	/** A call of the webhook writes the metadata of its document at once, as a run does. */
+	public function testTheRunOfOneDocumentWritesItsMetadata(): void {
+		$this->configService->save(['enabled' => true, 'write_metadata' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+
+		self::assertSame(1, $this->service->syncDocument(123)->exported);
+
+		self::assertArrayHasKey(self::ARCHIVE . '/.paperless/P123.json', $this->storage->files);
+		self::assertStringContainsString("\r\n123,Strom August,", $this->storage->files[self::ARCHIVE . '/.paperless/index.csv']);
+		self::assertSame([true], $this->paperless->notesAsked, 'The document comes with its notes.');
+	}
+
+	/** An index that Nextcloud can't read is an error of the run, which still exports its documents and leaves the metadata as it is. */
+	public function testAnIndexThatNextcloudCannotReadLeavesTheMetadataAsItIs(): void {
+		$this->configService->save(['write_metadata' => true]);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$index = self::ARCHIVE . '/.paperless/index.csv';
+		$this->storage->files[$index] = 'id';
+		$this->storage->readException = new RuntimeException('The storage is not available');
+
+		$report = $this->service->run();
+
+		self::assertSame([1, 1], [$report->exported, $report->errors]);
+		self::assertSame(['Metadata index: The storage is not available'], $report->errorMessages);
+		self::assertContains(['type' => 'error', 'path' => $index, 'detail' => 'Metadata index: The storage is not available'], $report->entries);
+		self::assertArrayNotHasKey(self::ARCHIVE . '/.paperless/P123.json', $this->storage->files);
+		self::assertSame('id', $this->storage->files[$index]);
+	}
+
+	/** The metadata names the custom fields, so a run fails without them, with the permission that is missing. */
+	public function testTheMetadataNeedsThePermissionToViewCustomFields(): void {
+		$this->configService->save(['write_metadata' => true]);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->customFieldsException = new RuntimeException('HTTP 403.');
+
+		try {
+			$this->service->run();
+			self::fail('Without the custom fields, the metadata would lack them.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless did not list its custom fields, which the metadata next to the archive names; the user of the API token needs the permission to view custom fields: HTTP 403.', $exception->getMessage());
+		}
+		self::assertSame([], $this->storage->files);
 	}
 
 	/** A document that the settings exclude loses its copy, as in a run. */

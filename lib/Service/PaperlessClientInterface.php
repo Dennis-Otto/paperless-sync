@@ -43,8 +43,11 @@ interface PaperlessClientInterface {
 	 */
 	public function preflight(SyncConfig $config): array;
 
-	/** The active documents, and whether the run received all of them. */
-	public function documents(): PaperlessScan;
+	/**
+	 * The active documents, and whether the run received all of them; with $notes, the notes of
+	 * each, which only the metadata next to the archive holds.
+	 */
+	public function documents(bool $notes = false): PaperlessScan;
 
 	/** The documents in the trash of Paperless, and whether the run received all of them. */
 	public function trash(): PaperlessScan;
@@ -52,11 +55,12 @@ interface PaperlessClientInterface {
 	/**
 	 * One active document, with the fields that documents() lists of each, for the run of one
 	 * document that the webhook of a Paperless workflow asks for; null when Paperless doesn't show
-	 * it to the account: in the trash, deleted, or of another owner who doesn't share it.
+	 * it to the account: in the trash, deleted, or of another owner who doesn't share it. With
+	 * $notes, its notes as well, as documents() lists them.
 	 *
 	 * @return array<string, mixed>|null
 	 */
-	public function document(int $documentId): ?array;
+	public function document(int $documentId, bool $notes = false): ?array;
 
 	/** @return array<string, string> */
 	public function correspondents(): array;
