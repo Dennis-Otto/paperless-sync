@@ -50,7 +50,9 @@ interface NextcloudStorageInterface {
 	/**
 	 * The file or folder with the ID as the user sees it among their files, also one that is shared
 	 * with them, or null when they see none with the ID: its path among their files, its name,
-	 * whether it is a folder and whether they may read it.
+	 * whether it is a folder and whether they may read it. A file or folder of a share whose owner
+	 * allows viewing only, without downloads, counts as not readable: a copy in Paperless would be
+	 * a download.
 	 *
 	 * @return array{path: string, name: string, folder: bool, readable: bool}|null
 	 */

@@ -28,6 +28,9 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 final class NotifierTest extends TestCase {
+	/** The link of a notification to the file with the ID 42. */
+	private const FILE_LINK = 'https://cloud.example.test/files.viewcontroller.showFile?fileid=42';
+
 	use GermanTranslations;
 	use InMemoryConfiguration;
 
@@ -128,20 +131,23 @@ final class NotifierTest extends TestCase {
 		self::assertSame('', $notification->getParsedMessage());
 	}
 
-	/** @return array<string, array{string, string}> */
+	/** @return array<string, array{string, string, string}> the subject, its rich text and the link */
 	public static function endsOfASentFile(): array {
 		return [
-			'imported' => [NotificationPublisher::SUBJECT_SEND_IMPORTED, '{file} ist jetzt in Paperless'],
-			'known already' => [NotificationPublisher::SUBJECT_SEND_KNOWN, 'Paperless hat {file} bereits'],
-			'failed' => [NotificationPublisher::SUBJECT_SEND_FAILED, 'Paperless konnte {file} nicht importieren'],
-			'refused' => [NotificationPublisher::SUBJECT_SEND_REFUSED, 'Paperless hat {file} abgelehnt'],
-			'gone' => [NotificationPublisher::SUBJECT_SEND_GONE, 'Paperless Sync konnte {file} nicht senden: Die Datei wurde gelöscht, oder du darfst sie nicht mehr lesen'],
+			'imported' => [NotificationPublisher::SUBJECT_SEND_IMPORTED, '{file} ist jetzt in Paperless', self::FILE_LINK],
+			'known already' => [NotificationPublisher::SUBJECT_SEND_KNOWN, 'Paperless hat {file} bereits', self::FILE_LINK],
+			'failed' => [NotificationPublisher::SUBJECT_SEND_FAILED, 'Paperless konnte {file} nicht importieren', self::FILE_LINK],
+			'refused' => [NotificationPublisher::SUBJECT_SEND_REFUSED, 'Paperless hat {file} abgelehnt', self::FILE_LINK],
+			'gone' => [NotificationPublisher::SUBJECT_SEND_GONE, 'Paperless Sync konnte {file} nicht senden: Die Datei wurde gelöscht, oder du darfst sie nicht mehr lesen', ''],
 		];
 	}
 
-	/** The end of the import of a file sent from Files names the file, with the reason of Paperless below it. */
+	/**
+	 * The end of the import of a file sent from Files names the file, with the reason of Paperless
+	 * below it, and links to the file, unless it is gone: a link would find nothing.
+	 */
 	#[DataProvider('endsOfASentFile')]
-	public function testTheEndOfTheImportOfASentFileNamesTheFile(string $subject, string $rich): void {
+	public function testTheEndOfTheImportOfASentFileNamesTheFile(string $subject, string $rich, string $link): void {
 		$notification = $this->notifier->prepare($this->notification($subject, [
 			'file' => ['id' => 42, 'path' => 'Scans/receipt.pdf'],
 			'document' => null,
@@ -151,7 +157,8 @@ final class NotifierTest extends TestCase {
 
 		self::assertSame($rich, $notification->getRichSubject());
 		self::assertSame(str_replace('{file}', 'receipt.pdf', $rich), $notification->getParsedSubject());
-		self::assertSame('https://cloud.example.test/files.viewcontroller.showFile?fileid=42', $notification->getLink());
+		self::assertSame($link, $notification->getLink());
+		self::assertSame($link === '' ? 'highlight' : 'file', $notification->getRichSubjectParameters()['file']['type'] ?? null);
 		self::assertSame('Not consuming receipt.pdf', $notification->getParsedMessage());
 	}
 

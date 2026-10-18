@@ -431,6 +431,14 @@ try {
 	expect(await lineState('trash') === 'warning', 'An account that sees documents of another owner gets a note: the trash leaves them out.')
 	expect((await page.locator('[data-check="tags"] .paperless-sync-check-state').textContent()) === 'Failed', 'The state of a line is a word, not a color alone.')
 	expect(await unsaved.isVisible(), 'The test saves nothing: the token stays an unsaved change.')
+	// The group that may send files decides whether the checklist tests the upload, so a change
+	// of it makes the checklist outdated as well.
+	const sendGroup = page.locator('#paperless-sync-send-group')
+	const savedSendGroup = await sendGroup.inputValue()
+	await sendGroup.fill(savedSendGroup === '' ? 'admin' : '')
+	expect(await checklist.isHidden(), 'A change of the group that may send files makes the checklist outdated.')
+	await sendGroup.fill(savedSendGroup)
+	await sendGroup.press('Escape')
 	await token.fill('')
 	expect(await unsaved.isHidden() && await checklist.isHidden(), 'Without the token, nothing is unsaved, and the checklist of the other token is gone.')
 	console.log('Settings: Test connection names every Paperless permission that a token lacks, with what to grant, and saves nothing.')

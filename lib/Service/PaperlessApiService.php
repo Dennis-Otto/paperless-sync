@@ -161,9 +161,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 		}
 		if ($uploads) {
-			$checks[] = self::upload($account);
+			$uploadChecks = [self::upload($account)];
 			if ($config->inboxFolderTags || $config->inboxTags !== '') {
-				$checks[] = self::inboxTags($account, $config->inboxCreateTags);
+				$uploadChecks[] = self::inboxTags($account, $config->inboxCreateTags);
+			}
+			foreach ($uploadChecks as $check) {
+				// Without the inbox, only "Send to Paperless" uploads, which the group of the setting
+				// offers to admins by default. A token that may not upload still keeps every run
+				// working, as for a mirror that never sends, so it gets a warning, not a failure.
+				$checks[] = $config->inboxEnabled ? $check : $check->warningOnly();
 			}
 		}
 

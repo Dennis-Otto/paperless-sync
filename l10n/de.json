@@ -482,9 +482,9 @@
 			"%n Datei ist bereits auf dem Weg zu Paperless.",
 			"%n Dateien sind bereits auf dem Weg zu Paperless."
 		],
-		"_%n file stays out: Paperless has it already, or it is in the folder of Paperless Sync._::_%n files stay out: Paperless has them already, or they are in the folder of Paperless Sync._": [
-			"%n Datei bleibt außen vor: Paperless hat sie bereits, oder sie liegt im Ordner von Paperless Sync.",
-			"%n Dateien bleiben außen vor: Paperless hat sie bereits, oder sie liegen im Ordner von Paperless Sync."
+		"_%n file stays out: Paperless has it already, it is in the folder of Paperless Sync, or its share allows no downloads._::_%n files stay out: Paperless has them already, they are in the folder of Paperless Sync, or their shares allow no downloads._": [
+			"%n Datei bleibt außen vor: Paperless hat sie bereits, sie liegt im Ordner von Paperless Sync, oder ihre Freigabe erlaubt keine Downloads.",
+			"%n Dateien bleiben außen vor: Paperless hat sie bereits, sie liegen im Ordner von Paperless Sync, oder ihre Freigaben erlauben keine Downloads."
 		],
 		"There are no files to send.": "Es gibt keine Dateien zu senden.",
 		"Too many files were sent in a short time. Wait a minute and try again.": "In kurzer Zeit wurden zu viele Dateien gesendet. Warte eine Minute und versuche es erneut.",

@@ -21,8 +21,12 @@ use OCP\Files\Node;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
+use OCP\Files\Storage\ISharedStorage;
+use OCP\Files\Storage\IStorage;
 use OCP\IUser;
 use OCP\IUserManager;
+use OCP\Share\IAttributes;
+use OCP\Share\IShare;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -41,6 +45,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $readOnly = [];
 	/** @var array<string, true> the files and folders that the user may not read, by absolute path */
 	private array $unreadable = [];
+	/** @var array<string, bool|null> the nodes that reach the user through a share, by absolute path: whether it allows downloads, null without attributes */
+	private array $shareDownload = [];
 	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete */
 	private array $failures = [];
 	/** @var array<string, int> the file ID of every node, which Nextcloud keeps through moves and updates in place */
@@ -466,6 +472,18 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertNull($this->service->nodeById(self::USER, 999));
 	}
 
+	/** A share whose owner allows viewing only makes its files unreadable for sending; other shares don't. */
+	public function testAFileOfAViewOnlyShareIsNotReadable(): void {
+		foreach (['view-only' => false, 'download' => true, 'plain' => null] as $name => $download) {
+			$this->nodes[self::HOME . "/{$name}.pdf"] = $name;
+			$this->shareDownload[self::HOME . "/{$name}.pdf"] = $download;
+		}
+
+		self::assertFalse($this->service->nodeById(self::USER, $this->fileId(self::HOME . '/view-only.pdf'))['readable'] ?? true);
+		self::assertTrue($this->service->nodeById(self::USER, $this->fileId(self::HOME . '/download.pdf'))['readable'] ?? false);
+		self::assertTrue($this->service->nodeById(self::USER, $this->fileId(self::HOME . '/plain.pdf'))['readable'] ?? false);
+	}
+
 	/** The folder of the files of the user itself, and a node that its files don't hold, are no files of the user. */
 	public function testTheFolderOfTheUserAndANodeOutsideItAreNoFilesOfTheUser(): void {
 		$this->nodes[self::HOME] = null;
@@ -646,6 +664,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$node->method('getName')->willReturn(basename($path));
 		$node->method('getPath')->willReturn($path);
 		$node->method('isReadable')->willReturnCallback(fn (): bool => !isset($this->unreadable[$path]));
+		$node->method('getStorage')->willReturnCallback(fn (): IStorage => $this->storageOf($path));
 		$node->method('getId')->willReturnCallback(fn (): int => $this->fileId($path));
 		$node->method('delete')->willReturnCallback(function () use ($path): void {
 			if (isset($this->failures['delete'])) {
@@ -675,6 +694,26 @@ final class NextcloudStorageServiceTest extends TestCase {
 
 			return $this->node($target);
 		});
+	}
+
+	/** The storage of a node: a share for those of $shareDownload, with or without its attribute for downloads. */
+	private function storageOf(string $path): IStorage {
+		if (!array_key_exists($path, $this->shareDownload)) {
+			return $this->createStub(IStorage::class);
+		}
+		$download = $this->shareDownload[$path];
+		$attributes = null;
+		if ($download !== null) {
+			$attributes = $this->createStub(IAttributes::class);
+			$attributes->method('getAttribute')->willReturnCallback(static fn (string $scope, string $key): ?bool => $scope === 'permissions' && $key === 'download' ? $download : null);
+		}
+		$share = $this->createStub(IShare::class);
+		$share->method('getAttributes')->willReturn($attributes);
+		$storage = $this->createStub(ISharedStorage::class);
+		$storage->method('instanceOfStorage')->willReturnCallback(static fn (string $class): bool => $class === ISharedStorage::class);
+		$storage->method('getShare')->willReturn($share);
+
+		return $storage;
 	}
 
 	private function resolve(string $folder, string $relative): string {

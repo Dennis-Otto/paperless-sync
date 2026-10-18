@@ -109,7 +109,7 @@ final class FileActionControllerTest extends TestCase {
 		$response = $this->controller->send([$waiting, $new, $known]);
 
 		self::assertSame(
-			'Paperless Sync sendet 1 Datei an Paperless. Eine Benachrichtigung sagt dir, sobald Paperless sie hat. 1 Datei ist bereits auf dem Weg zu Paperless. 1 Datei bleibt außen vor: Paperless hat sie bereits, oder sie liegt im Ordner von Paperless Sync.',
+			'Paperless Sync sendet 1 Datei an Paperless. Eine Benachrichtigung sagt dir, sobald Paperless sie hat. 1 Datei ist bereits auf dem Weg zu Paperless. 1 Datei bleibt außen vor: Paperless hat sie bereits, sie liegt im Ordner von Paperless Sync, oder ihre Freigabe erlaubt keine Downloads.',
 			$response->getData()['message'],
 		);
 	}

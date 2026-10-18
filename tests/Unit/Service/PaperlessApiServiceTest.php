@@ -1966,6 +1966,22 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('Paperless did not say whether the account may add documents and view the tasks that import them.', $checks[2]->message);
 	}
 
+	/**
+	 * Without the inbox, only "Send to Paperless" uploads. A mirror whose token may not add
+	 * documents keeps working, so the missing permissions are warnings there, not failures.
+	 */
+	public function testWithoutTheInboxAMissingUploadPermissionIsAWarning(): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = [200, self::account(false, ['view_document'])];
+
+		$checks = $this->preflight(['export_enabled' => false, 'inbox_enabled' => false, 'inbox_tags' => 'Inbox']);
+
+		self::assertSame(['upload', 'inbox_tags'], array_map(static fn (ConnectionCheck $check): string => $check->id, array_slice($checks, 2)));
+		self::assertSame([ConnectionCheck::WARNING, ConnectionCheck::WARNING], [$checks[2]->status, $checks[3]->status]);
+		self::assertSame('The account may neither add documents nor view the tasks that import them.', $checks[2]->message);
+		self::assertFalse($checks[2]->blocks());
+	}
+
 	/** @return array<string, array{list<string>, ConnectionCheck}> the permissions of the account and the line of the inbox */
 	public static function inboxPermissions(): array {
 		return [

@@ -76,7 +76,9 @@ final class Notifier implements INotifier {
 				$this->import($notification, $parameters, $l->t('Paperless refused {file}'));
 				break;
 			case NotificationPublisher::SUBJECT_SEND_GONE:
-				$this->import($notification, $parameters, $l->t('Paperless Sync could not send {file}: it was deleted, or you may no longer read it'));
+				// The file is gone, or the user may no longer read it: a link to it would find nothing.
+				$file = isset($parameters['file']) && is_array($parameters['file']) ? $parameters['file'] : [];
+				$this->import($notification, ['file' => ['id' => 0] + $file] + $parameters, $l->t('Paperless Sync could not send {file}: it was deleted, or you may no longer read it'));
 				break;
 			default:
 				throw new UnknownNotificationException();

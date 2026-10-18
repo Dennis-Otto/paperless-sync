@@ -324,7 +324,7 @@
 		const webhookSecret = element('webhook-secret')
 		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group']
 		// While a run is queued or active, the page asks for its status: after a change of the state
 		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
 		// once, then every five seconds, and after five minutes in the same state every thirty

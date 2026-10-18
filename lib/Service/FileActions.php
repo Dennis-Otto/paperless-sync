@@ -73,7 +73,8 @@ final class FileActions {
 	 * Queues the files and the files below the folders with the IDs, as the user sees them, for
 	 * SendService, unless one of them is missing or in the folder of the app, or they are more than
 	 * a batch. A file that waits for its upload already waits on; the files that Paperless has
-	 * already, by the marker in their names, and those of the folder of the app below a folder
+	 * already, by the marker in their names, those that the user may not read or download, as
+	 * through a share that allows viewing only, and those of the folder of the app below a folder
 	 * stay out. The answer says why nothing was queued, and else how many files were.
 	 *
 	 * @param list<int> $fileIds
@@ -100,14 +101,20 @@ final class FileActions {
 				continue;
 			}
 			foreach ($this->storage->listFiles($userId, $node['path'], true) as $file) {
-				if (self::documentId($file['name']) !== null || $this->inAppFolder($config, $userId, $file['id'], $file['path'])) {
+				if (isset($files[$file['id']])) {
+					continue;
+				}
+				// A share below the folder may allow viewing only, which a copy in Paperless would get around.
+				if (self::documentId($file['name']) !== null || !($this->storage->nodeById($userId, $file['id'])['readable'] ?? false)
+					|| $this->inAppFolder($config, $userId, $file['id'], $file['path'])) {
 					++$skipped;
 					continue;
 				}
-				$files[$file['id']] ??= ['path' => $file['path'], 'folder' => self::folderBelow($node['path'], $file['path'])];
-			}
-			if (count($files) > $config->batchSize) {
-				return self::refused(self::REFUSED_TOO_MANY, $node['name'], $config);
+				$files[$file['id']] = ['path' => $file['path'], 'folder' => self::folderBelow($node['path'], $file['path'])];
+				// More than a batch is refused anyway, so the files beyond it need no lookups.
+				if (count($files) > $config->batchSize) {
+					return self::refused(self::REFUSED_TOO_MANY, $node['name'], $config);
+				}
 			}
 		}
 		if (count($files) > $config->batchSize) {

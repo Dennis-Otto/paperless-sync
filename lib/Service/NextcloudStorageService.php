@@ -13,8 +13,10 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\Node;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
+use OCP\Files\Storage\ISharedStorage;
 use OCP\IUserManager;
 use RuntimeException;
 
@@ -146,7 +148,21 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 			return null;
 		}
 
-		return ['path' => trim($path, '/'), 'name' => $node->getName(), 'folder' => $node instanceof Folder, 'readable' => $node->isReadable()];
+		return ['path' => trim($path, '/'), 'name' => $node->getName(), 'folder' => $node instanceof Folder, 'readable' => $node->isReadable() && self::downloadable($node)];
+	}
+
+	/**
+	 * Whether the user may download the file or folder: not when it reaches them through a share
+	 * whose owner allows viewing only, which Nextcloud enforces for downloads over WebDAV and
+	 * which a copy in Paperless would get around.
+	 */
+	private static function downloadable(Node $node): bool {
+		$storage = $node->getStorage();
+		if (!$storage->instanceOfStorage(ISharedStorage::class)) {
+			return true;
+		}
+		/** @var ISharedStorage $storage */
+		return $storage->getShare()->getAttributes()?->getAttribute('permissions', 'download') !== false;
 	}
 
 	public function openRead(string $userId, string $path) {

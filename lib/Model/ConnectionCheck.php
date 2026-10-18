@@ -79,6 +79,13 @@ final class ConnectionCheck {
 		return new self($id, self::FAILED, $message, $parameters, $hint, $hintParameters, $blocking);
 	}
 
+	/** The line as a warning when it failed, for what only an optional feature needs: it blocks nothing then. */
+	public function warningOnly(): self {
+		return $this->status === self::FAILED
+			? new self($this->id, self::WARNING, $this->message, $this->parameters, $this->hint, $this->hintParameters, false, $this->setting)
+			: $this;
+	}
+
 	/** Whether the failure makes the settings unusable for every run, so that a save refuses them. */
 	public function blocks(): bool {
 		return $this->status === self::FAILED && $this->blocking;

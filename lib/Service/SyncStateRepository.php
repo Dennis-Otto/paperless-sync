@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\DB\Exception;
 use OCP\IDBConnection;
 
 final class SyncStateRepository implements SyncStateRepositoryInterface {
@@ -167,7 +168,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
-			$values = array_merge([
+			$row = array_merge([
 				'user_id' => $userId,
 				'file_id' => $fileId,
 				'path' => '',
@@ -180,8 +181,16 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'last_error' => null,
 				'created_at' => $now,
 			], $values);
-			$this->insert(self::SEND_TABLE, $values);
-			return;
+			try {
+				$this->insert(self::SEND_TABLE, $row);
+				return;
+			} catch (Exception $exception) {
+				// Another request, such as a second click at the same time, inserted the row since
+				// it was looked up: it is there now, and takes the values.
+				if ($exception->getReason() !== Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+					throw $exception;
+				}
+			}
 		}
 
 		$this->update(self::SEND_TABLE, $values, ['user_id' => $userId, 'file_id' => $fileId]);

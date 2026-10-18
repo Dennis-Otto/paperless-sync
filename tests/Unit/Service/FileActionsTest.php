@@ -133,6 +133,19 @@ final class FileActionsTest extends TestCase {
 		self::assertSame(FileActions::REFUSED_MISSING, $this->send([$id])['refused']);
 	}
 
+	/** A file below a sent folder that the user may not read or download, as through a view-only share, stays out. */
+	public function testAFileBelowAFolderThatTheUserMayNotDownloadStaysOut(): void {
+		$this->file('Taxes/receipt.pdf');
+		$this->file('Taxes/Contract/contract.pdf');
+		$this->storage->unreadable[] = 'Taxes/Contract/contract.pdf';
+		$folder = $this->storage->folderId('Taxes', self::SENDER);
+
+		$result = $this->send([$folder]);
+
+		self::assertSame([1, 1], [$result['queued'], $result['skipped']]);
+		self::assertSame(['Taxes/receipt.pdf'], array_column(array_values($this->state->sends), 'path'));
+	}
+
 	/** The runs look after the folder of the app: a file of the inbox goes with the next run, and a copy of the archive came from Paperless. */
 	public function testAFileOfTheFolderOfTheAppIsRefused(): void {
 		$this->storage->files['Documents/Paperless/Inbox/scan.pdf'] = 'Synthetic scan';

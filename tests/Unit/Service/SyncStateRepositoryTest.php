@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\DB\Exception;
 use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IExpressionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -32,6 +33,10 @@ final class SyncStateRepositoryTest extends TestCase {
 	private array $statements = [];
 	/** The queries that read a table. */
 	private int $selects = 0;
+	/** @var array<string, string|null>|null a row that another request inserts right before the next insert, which then violates the unique index */
+	private ?array $racingRow = null;
+	/** The reason of the database error that the racing insert causes. */
+	private int $racingReason = Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION;
 	private TestClock $clock;
 	private SyncStateRepository $repository;
 
@@ -274,6 +279,26 @@ final class SyncStateRepositoryTest extends TestCase {
 		);
 	}
 
+	/** Two clicks at the same time both find no row; the second insert then updates the row of the first. */
+	public function testASendThatAnotherRequestInsertedMeanwhileIsUpdated(): void {
+		$this->racingRow = ['user_id' => 'alice', 'file_id' => '42', 'path' => 'Scans/old.pdf', 'folder' => '', 'task_id' => '', 'status' => 'queued', 'submitted_at' => '0', 'attempts' => '0', 'retry_at' => '0', 'last_error' => null, 'created_at' => (string)TestClock::START, 'updated_at' => (string)TestClock::START];
+
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf', 'status' => 'queued']);
+
+		self::assertSame(['insert', 'update'], $this->statements);
+		self::assertCount(1, $this->repository->allSends());
+		self::assertSame('Scans/receipt.pdf', $this->repository->findSend('alice', 42)['path'] ?? null);
+	}
+
+	/** Any other error of the database stays an error. */
+	public function testAnotherErrorOfTheInsertOfASendIsThrown(): void {
+		$this->racingRow = ['user_id' => 'bob', 'file_id' => '7'];
+		$this->racingReason = Exception::REASON_LOCK_WAIT_TIMEOUT;
+
+		$this->expectException(Exception::class);
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf']);
+	}
+
 	/** The job takes every sent file, the oldest first, and an ended import leaves the others alone. */
 	public function testEverySendIsListedInTheOrderOfItsClickAndDeletedAlone(): void {
 		$this->repository->saveSend('alice', 42, ['path' => 'a.pdf']);
@@ -364,6 +389,22 @@ final class SyncStateRepositoryTest extends TestCase {
 		$values = array_map(fn (string $parameter): ?string => $this->stored($parameters[$parameter]), $query['values']);
 		if ($query['type'] === 'insert') {
 			self::assertSame([], $query['where']);
+			if ($this->racingRow !== null) {
+				$table[] = ['id' => (string)(count($table) + 1)] + $this->racingRow;
+				$this->racingRow = null;
+				$reason = $this->racingReason;
+				throw new class($reason) extends Exception {
+					public function __construct(
+						private int $reason,
+					) {
+						parent::__construct('Duplicate entry');
+					}
+
+					public function getReason(): ?int {
+						return $this->reason;
+					}
+				};
+			}
 			$table[] = ['id' => (string)(count($table) + 1)] + $values;
 
 			return 1;

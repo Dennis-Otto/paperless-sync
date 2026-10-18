@@ -59,8 +59,25 @@
 		return markers.length === 0 ? null : markers[markers.length - 1][1]
 	}
 
+	// Whether the share that the node reaches the user through allows downloads, as the Download
+	// action of Files tests it: a share whose owner allows viewing only, which a copy in Paperless
+	// would get around, doesn't.
+	function downloadable(node) {
+		let attributes = node.attributes ? node.attributes['share-attributes'] : null
+		if (typeof attributes === 'string') {
+			try {
+				attributes = JSON.parse(attributes)
+			} catch (error) {
+				attributes = null
+			}
+		}
+		return !Array.isArray(attributes) || !attributes.some(function(attribute) {
+			return attribute !== null && typeof attribute === 'object' && attribute.scope === 'permissions' && attribute.key === 'download' && attribute.value === false
+		})
+	}
+
 	function readable(node) {
-		return typeof node.fileid === 'number' && (node.permissions & READ) !== 0
+		return typeof node.fileid === 'number' && (node.permissions & READ) !== 0 && downloadable(node)
 	}
 
 	function toast(kind, text) {

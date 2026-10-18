@@ -89,7 +89,7 @@ final class FileActionController extends Controller {
 			$sentences[] = $this->l10n->n('%n file is on its way to Paperless already.', '%n files are on their way to Paperless already.', $result['waiting']);
 		}
 		if ($result['skipped'] > 0) {
-			$sentences[] = $this->l10n->n('%n file stays out: Paperless has it already, or it is in the folder of Paperless Sync.', '%n files stay out: Paperless has them already, or they are in the folder of Paperless Sync.', $result['skipped']);
+			$sentences[] = $this->l10n->n('%n file stays out: Paperless has it already, it is in the folder of Paperless Sync, or its share allows no downloads.', '%n files stay out: Paperless has them already, they are in the folder of Paperless Sync, or their shares allow no downloads.', $result['skipped']);
 		}
 		if ($sentences === []) {
 			return $this->refusal($this->l10n->t('There are no files to send.'), Http::STATUS_BAD_REQUEST);
