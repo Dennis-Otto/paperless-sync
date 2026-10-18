@@ -64,6 +64,7 @@ RUNTIME_FILES=(
 	CHANGELOG.md
 	LICENSE
 	README.md
+	README.de.md
 )
 write appinfo/info.xml '<?xml version="1.0"?>' '<info><id>paperless_sync</id><version>1.0.0</version></info>'
 write css/settings.css '.paperless-sync { display: grid; }'
@@ -78,6 +79,7 @@ write templates/settings.php '<?php' '// The settings page.'
 write CHANGELOG.md '# Changelog'
 write LICENSE 'The license of the app.'
 write README.md '# Paperless Sync'
+write README.de.md '# Paperless Sync'
 write composer.json '{}'
 write docs/index.md '# Paperless Sync'
 write tests/Unit/SyncJobTest.php '<?php'
