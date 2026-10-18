@@ -141,6 +141,16 @@ final class PathTemplateService {
 		}
 	}
 
+	/**
+	 * A folder path below the folder of a user, which it never leaves: it fails for an
+	 * absolute path and for an empty, . or .. component.
+	 *
+	 * It makes a path from a request safe for the file APIs of Nextcloud, so the taint
+	 * analysis of Psalm ends there the paths from it that reach them.
+	 *
+	 * @psalm-taint-escape file
+	 * @throws InvalidSettingException
+	 */
 	public function normalizeRelativePath(string $path, bool $allowEmpty = false): string {
 		$normalized = trim(str_replace('\\', '/', $path), " /\t\n\r\0\x0B");
 		if ($normalized === '') {
