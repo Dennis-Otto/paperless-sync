@@ -44,7 +44,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 
     ---
 
-    When the metadata of a document changes in Paperless, its file is renamed or moved in Nextcloud. Documents in the Paperless inbox or with an excluded tag stay out.
+    When the metadata of a document changes in Paperless, its file is renamed or moved in Nextcloud. Documents in the Paperless inbox or with an excluded tag stay out, and the archive can mirror only the documents with the tags that you choose.
 
 - :material-inbox-arrow-up-outline:{ .lg .middle } **From a Nextcloud inbox to Paperless**
 

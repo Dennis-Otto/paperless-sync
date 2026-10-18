@@ -39,6 +39,7 @@ Das hängt davon ab, was sie löscht:
 | Es wird in Paperless wiederhergestellt | Zurück ins Archiv |
 | Es wird in Paperless endgültig gelöscht | Nach der eingestellten Zahl vollständiger Scans in Nextcloud gelöscht, nur wenn endgültiges Löschen an ist; sonst bleibt es im Gelöscht-Ordner |
 | Es bekommt einen ausgeschlossenen Tag oder wieder den Posteingangs-Tag | Im nächsten Lauf in Nextcloud gelöscht |
+| Es verliert seinen letzten [Tag zum Spiegeln](guide.de.md#welche-dokumente-das-archiv-spiegelt) | Im nächsten Lauf in Nextcloud gelöscht |
 | Du löschst es in Nextcloud | In deinen Papierkorb, und der nächste Lauf schreibt es neu |
 | Eine Datei des Eingangs nach ihrem Import | In Nextcloud gelöscht, wenn *Quelldatei nach erfolgreichem Import entfernen* an ist |
 

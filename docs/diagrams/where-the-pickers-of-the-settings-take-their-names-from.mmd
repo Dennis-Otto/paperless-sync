@@ -5,7 +5,7 @@ config:
 ---
 flowchart TB
     accTitle: Where the pickers of the settings take their names from
-    accDescr: The field of the target user asks the provisioning API of Nextcloud for the users whose ID, name or e-mail address holds what is typed, and for the user ID that the field names, which it marks when Nextcloud has no such user. The fields of the excluded tags and of the tags for every import ask Paperless Sync, which reads the tags from Paperless-ngx with the stored URL and API token, as a run does; the token stays on the server. A name that Paperless has no tag of can be added too, and is marked as not in Paperless.
+    accDescr: The field of the target user asks the provisioning API of Nextcloud for the users whose ID, name or e-mail address holds what is typed, and for the user ID that the field names, which it marks when Nextcloud has no such user. The fields of the excluded tags, the tags to mirror and the tags for every import ask Paperless Sync, which reads the tags from Paperless-ngx with the stored URL and API token, as a run does; the token stays on the server. A name that Paperless has no tag of can be added too, and is marked as not in Paperless.
 
     page(["Settings page in the<br>browser of an administrator"])
     subgraph nextcloud ["Nextcloud server"]
@@ -15,7 +15,7 @@ flowchart TB
     paperless[("Paperless-ngx")]
 
     page -- "`target user:<br>users that match,<br>*an unknown ID is marked*`" --> users
-    page -- "`excluded tags and<br>tags for every import:<br>names to pick,<br>*a new name is marked*`" --> app
+    page -- "`excluded tags,<br>tags to mirror and<br>tags for every import:<br>names to pick,<br>*a new name is marked*`" --> app
     app -- "`the stored URL and token,<br>as a run reads them;<br>*the token stays on the server*`" --> paperless
 
     classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px

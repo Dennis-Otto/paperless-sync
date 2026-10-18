@@ -1,0 +1,22 @@
+flowchart TB
+    accTitle: Welche Dokumente das Archiv spiegelt
+    accDescr: Ein Lauf prüft zuerst, dass Paperless jeden Tag zum Spiegeln der Einstellungen hat; fehlt einer davon, hält der Export an, bevor sich eine Datei ändert. Dann stellt er jedem aktiven Dokument drei Fragen. Ein Dokument im Posteingang von Paperless, solange die Einstellungen den Posteingang überspringen, bleibt draußen, ebenso ein Dokument mit einem ausgeschlossenen Tag. Nennen die Einstellungen Tags zum Spiegeln, bleibt auch ein Dokument ohne jeden davon draußen. Jedes andere Dokument wird gespiegelt. Ein Dokument, das draußen bleibt, verliert seine Kopie im Archiv, im Rahmen der Batchgröße.
+
+    run["Ein Lauf liest die Tags<br>von Paperless"] --> known{"Hat Paperless jeden<br>Tag zum Spiegeln?"}
+    known -->|nein| stop["Der Export hält an,<br>bevor sich eine Datei ändert"]
+    known -->|ja| document["Jedes aktive Dokument"]
+    document --> inbox{"Im Posteingang von Paperless,<br>während die Einstellungen<br>ihn überspringen?"}
+    inbox -->|ja| out["Bleibt draußen:<br>Seine Kopie wird entfernt,<br>im Rahmen der Batchgröße"]
+    inbox -->|nein| excluded{"Hat es einen<br>ausgeschlossenen Tag?"}
+    excluded -->|ja| out
+    excluded -->|nein| list{"Tags zum Spiegeln<br>in den Einstellungen?"}
+    list -->|keine| mirrored["Gespiegelt: exportiert,<br>verschoben oder aktuell gehalten"]
+    list -->|welche| included{"Hat es mindestens<br>einen davon?"}
+    included -->|ja| mirrored
+    included -->|nein| out
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,known,document,inbox,excluded,list,included check
+    class mirrored kept
+    class stop,out changed

@@ -169,6 +169,21 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('Scanned, nextcloud, 2026', $this->service->get()->inboxTags);
 	}
 
+	/**
+	 * The archive mirrors every document until tags to mirror are saved, each once, whatever its
+	 * case, and a list of nothing but separators mirrors every document again.
+	 */
+	public function testTheArchiveMirrorsEveryDocumentUntilTagsToMirrorAreSaved(): void {
+		self::assertSame('', $this->service->get()->includedTags);
+
+		$config = $this->service->save(self::validSettings() + ['included_tags' => " Nextcloud,, steuer\nnextcloud\r\n"], 'secret-token');
+
+		self::assertSame('Nextcloud, steuer', $config->includedTags);
+		self::assertSame('Nextcloud, steuer', $this->settings['included_tags']);
+		self::assertSame('Nextcloud, steuer', $this->service->get()->includedTags);
+		self::assertSame('', $this->service->save(['included_tags' => " ,\n, "])->includedTags);
+	}
+
 	/** @return array<string, array{string}> the stored URL as an administrator may enter it again */
 	public static function sameUrls(): array {
 		return [
@@ -222,7 +237,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(35, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(36, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

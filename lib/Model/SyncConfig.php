@@ -63,6 +63,12 @@ final class SyncConfig implements \JsonSerializable {
 		 * the menu of Files, with the token of the app; '' turns the action off.
 		 */
 		public readonly string $sendGroup = 'admin',
+		/**
+		 * The names of the tags of Paperless whose documents the archive mirrors, separated by
+		 * commas: a document needs one of them, whatever the case of its name; '' mirrors every
+		 * document. Excluded tags and the inbox of Paperless still leave a document out.
+		 */
+		public readonly string $includedTags = '',
 	) {
 	}
 

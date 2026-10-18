@@ -261,6 +261,8 @@ final class SyncService {
 		$storagePaths = $paperless->storagePaths();
 		$tags = $paperless->tags();
 		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null);
+		// A tag to mirror that Paperless doesn't have fails the run here, before a copy moves.
+		$filter = new ExportFilter($config, $tags);
 		$report->activeDocuments = count($documentScan->documents);
 		$report->trashedDocuments = count($trashScan->documents);
 
@@ -276,7 +278,7 @@ final class SyncService {
 			new TargetFiles($this->storage, $config->targetUser),
 			$paperless,
 			fn (array $document): string => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
-			new ExportFilter($config, $tags),
+			$filter,
 			$this->timeZones,
 			$this->timeFactory,
 			$archiveRoot,
@@ -345,11 +347,11 @@ final class SyncService {
 	 * The paths that the newest documents of Paperless would have in the archive with $config, such
 	 * as the settings of the page before they are saved, relative to the archive folder, for the
 	 * preview of the path template; skipped is whether a run leaves the document out, as one of
-	 * the inbox or with an excluded tag. It reads Paperless, through the connection of $config, and
-	 * nothing else, and changes nothing.
+	 * the inbox, with an excluded tag or without a tag to mirror. It reads Paperless, through the
+	 * connection of $config, and nothing else, and changes nothing.
 	 *
 	 * @return list<array{id: int, title: string, path: string, skipped: bool}>
-	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template
+	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template or a tag to mirror
 	 */
 	public function previewPaths(SyncConfig $config, int $count): array {
 		$paperless = $this->clients->connect($this->configService->connection($config));

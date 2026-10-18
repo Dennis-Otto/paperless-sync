@@ -365,7 +365,7 @@
 		// The settings that decide the path of a document, or whether a run skips it, which the
 		// preview of the path template sends, as SettingsController::preview() takes them. A change
 		// of one of them shows the paths anew, once the typing pauses for previewDelay.
-		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
+		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
 		const previewDelay = 400
 		let previewTimer = 0
 		// The number of the last request of the preview: an answer to an earlier one, which may
@@ -823,7 +823,7 @@
 			case 'delete':
 				return translate('The copy is deleted for good.')
 			case 'remove-excluded':
-				return translate('The document has an excluded tag: its copy is removed.')
+				return translate('The settings leave the document out, with an excluded tag or without a tag to mirror: its copy is removed.')
 			case 'wait':
 				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
 			case 'import':
@@ -1084,7 +1084,7 @@
 
 		// The documents that a run left as they were, and those that it skipped, in a sentence below
 		// the counts of the changes. A skipped one may wait for a later run, as when the batch is
-		// full, or for good, as a document with an excluded tag does.
+		// full, or for good, as a document with an excluded tag or without a tag to mirror does.
 		function restOf(result) {
 			const parts = []
 			if (Number(result.unchanged) > 0) {
@@ -1267,7 +1267,7 @@
 				if (entry.skipped === true) {
 					const note = document.createElement('span')
 					note.className = 'paperless-sync-path-preview-skipped'
-					note.textContent = ' — ' + translate('a run skips it: in the inbox or with an excluded tag')
+					note.textContent = ' — ' + translate('a run skips it: in the inbox, with an excluded tag or without a tag to mirror')
 					item.append(note)
 				}
 				return item

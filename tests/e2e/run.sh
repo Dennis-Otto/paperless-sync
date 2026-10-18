@@ -891,6 +891,17 @@ if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/Example%20
 	exit 1
 fi
 
+# With tags to mirror, the archive holds only the documents with one of them: the document of
+# the scenario lacks Private, a tag of the mock, so it stays out, whatever the case of the name.
+# Without the list, the next steps export the document again.
+control /control/scenario/renamed >/dev/null
+save_settings "${TMP_DIR}/included.json" included_tags=private
+assert_json included "${TMP_DIR}/included.json"
+sync_run false "${TMP_DIR}/not-included.json"
+assert_json not-included "${TMP_DIR}/not-included.json"
+assert_dav_missing sync-target "${RENAMED_PATH}"
+save_settings "${TMP_DIR}/included.json" included_tags=
+
 # Nextcloud applies no quota to the temporary file of a write, so the app checks the free space
 # itself: with the quota of the target user used up, the export stops at its first document, and
 # the document follows once there is space again.
@@ -1200,6 +1211,18 @@ OLD_PAPERLESS_STATUS="$(curl --silent --show-error \
 control /control/paperless/3.3.0 >/dev/null
 if [[ "${OLD_PAPERLESS_STATUS}" != "500" ]] || ! grep --fixed-strings 'Paperless Sync needs Paperless-ngx 2.16 or newer' "${TMP_DIR}/old-paperless.json" >/dev/null; then
 	echo "A run against Paperless-ngx 2.15 did not name the Paperless it needs: HTTP ${OLD_PAPERLESS_STATUS}, $(cat "${TMP_DIR}/old-paperless.json")" >&2
+	exit 1
+fi
+
+# A tag to mirror that Paperless doesn't have, a typo here, stops the export before a file
+# changes, as the run would otherwise remove the copies of the documents that should stay. It
+# comes after assert_log.py as well, because the failed run logs its error.
+save_settings "${TMP_DIR}/included.json" included_tags=Nextclod
+INCLUDED_CODE=0
+occ paperless_sync:run --dry-run > "${TMP_DIR}/included-missing.txt" 2>&1 || INCLUDED_CODE=$?
+save_settings "${TMP_DIR}/included.json" included_tags=
+if [[ "${INCLUDED_CODE}" != "2" ]] || ! grep --fixed-strings 'Paperless has no tag named "Nextclod"' "${TMP_DIR}/included-missing.txt" >/dev/null; then
+	echo "A tag to mirror that Paperless doesn't have must stop the run, but it ended with exit code ${INCLUDED_CODE}: $(cat "${TMP_DIR}/included-missing.txt")" >&2
 	exit 1
 fi
 

@@ -34,7 +34,7 @@ final class SettingsController extends Controller {
 
 	/** The settings of the page that decide the path of a document or whether a run skips it; the preview takes the others as saved. */
 	private const PREVIEW_SETTINGS = [
-		'path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags',
+		'path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags',
 		'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled',
 	];
 
@@ -206,8 +206,8 @@ final class SettingsController extends Controller {
 	}
 
 	/**
-	 * The names of the tags of Paperless, which the page offers for the excluded tags and the tags
-	 * for every import, read with the stored URL and token, as a run reads them. Without both, there is nothing to read: the page
+	 * The names of the tags of Paperless, which the page offers for the excluded tags, the tags to
+	 * mirror and the tags for every import, read with the stored URL and token, as a run reads them. Without both, there is nothing to read: the page
 	 * then takes names as they are typed. A name that the setting can't hold, with a comma or a line
 	 * break, which separate its names, is left out, and so is an empty one or one that comes twice.
 	 * The names are in the order of their letters, case aside. Only administrators may ask, as for

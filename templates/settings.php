@@ -263,6 +263,15 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				$l->t('Excluded tags'),
 				$l->t('Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.'),
 			); ?>
+			<?php $tagPicker(
+				'included_tags',
+				$config->includedTags,
+				'paperless-sync-included-tags',
+				$l->t('Only mirror documents with these tags'),
+				$l->t('Tags to mirror'),
+				$l->t('Without tags, the archive mirrors every document. With tags, it mirrors only the documents with at least one of them, and a run removes the copies of the others; an excluded tag still leaves a document out. Paperless must have every tag of the list, or the runs stop before they remove a copy.'),
+				static fn () => $help('which-documents-the-archive-mirrors', $l->t('Which documents the archive mirrors')),
+			); ?>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="write_metadata" type="checkbox" aria-describedby="paperless-sync-write-metadata-hint" <?php if ($config->writeMetadata) {
 					print_unescaped('checked');
