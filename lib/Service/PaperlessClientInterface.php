@@ -14,10 +14,14 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 
+/**
+ * A client of one Paperless-ngx, which PaperlessClientFactoryInterface::connect() makes for a
+ * connection: every request goes to the URL of that connection, with its token, and to an
+ * address of the local network only when the connection allows it.
+ */
 interface PaperlessClientInterface {
 	/**
-	 * A request with $token to $url; #[\SensitiveParameter] keeps the token out of the trace of its
-	 * failure. $localNetwork allows an address of the local network for it.
+	 * The first request of a run, which tests the connection.
 	 *
 	 * The answer names the version of Paperless-ngx as Paperless names itself, '' when it doesn't,
 	 * and the version of its API that the app uses.
@@ -26,19 +30,18 @@ interface PaperlessClientInterface {
 	 * @throws PaperlessLocalNetworkException when Nextcloud refuses the address as a local one
 	 * @throws PaperlessVersionException when Paperless doesn't serve the version of its API that the app uses
 	 */
-	public function testConnection(string $url, #[\SensitiveParameter] string $token, bool $localNetwork): array;
+	public function testConnection(): array;
 
 	/**
-	 * The checks of Paperless for the connection checklist, with $token to the URL of $config and
-	 * its local network: that Paperless answers there and takes the token, and that its account
-	 * may read every list that the modules of $config need, owns the documents that it sees, so
-	 * that the trash shows them, and may add documents and view their tasks for the inbox. A
-	 * check that fails is a line of the list, not an exception; after a failure of the connection
-	 * itself, the list ends there.
+	 * The checks of Paperless for the connection checklist: that Paperless answers at the URL of
+	 * the connection and takes its token, and that its account may read every list that the
+	 * modules of $config need, owns the documents that it sees, so that the trash shows them, and
+	 * may add documents and view their tasks for the inbox. A check that fails is a line of the
+	 * list, not an exception; after a failure of the connection itself, the list ends there.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
-	public function preflight(SyncConfig $config, #[\SensitiveParameter] string $token): array;
+	public function preflight(SyncConfig $config): array;
 
 	/** The active documents, and whether the run received all of them. */
 	public function documents(): PaperlessScan;

@@ -114,6 +114,7 @@ expect_contract() {
   fi
 }
 for path in lib/Service/PaperlessApiService.php lib/Service/PaperlessClientInterface.php \
+  lib/Service/PaperlessClientFactory.php lib/Model/PaperlessConnection.php \
   lib/Model/DocumentFingerprint.php tests/fixtures/paperless-ngx-2/metadata.json tests/e2e/contract.py \
   tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml tests/e2e/compose.yaml tests/e2e/mock_server.py \
   .github/workflows/e2e.yml; do

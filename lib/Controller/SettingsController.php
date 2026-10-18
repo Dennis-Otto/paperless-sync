@@ -11,11 +11,12 @@ namespace OCA\PaperlessSync\Controller;
 
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
-use OCA\PaperlessSync\Service\PaperlessClientInterface;
+use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\SyncService;
@@ -42,7 +43,7 @@ final class SettingsController extends Controller {
 		string $appName,
 		IRequest $request,
 		private ConfigService $configService,
-		private PaperlessClientInterface $paperless,
+		private PaperlessClientFactoryInterface $clients,
 		private NextcloudStorageInterface $storage,
 		private IL10N $l10n,
 		private SyncService $syncService,
@@ -214,12 +215,12 @@ final class SettingsController extends Controller {
 	 */
 	#[FrontpageRoute(verb: 'GET', url: '/settings/paperless/tags')]
 	public function tags(): JSONResponse {
-		$config = $this->configService->get();
+		[$config, $connection] = $this->configService->snapshot();
 		if ($config->paperlessUrl === '' || !$config->tokenConfigured) {
 			return new JSONResponse(['message' => $this->l10n->t('Save the connection to Paperless first; then its tags appear here.')], Http::STATUS_CONFLICT);
 		}
 		try {
-			$names = $this->paperless->tags()['names'];
+			$names = $this->clients->connect($connection)->tags()['names'];
 		} catch (PaperlessLocalNetworkException $exception) {
 			return new JSONResponse(
 				['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING],
@@ -254,13 +255,14 @@ final class SettingsController extends Controller {
 	}
 
 	/**
-	 * The connection checklist: the checks of Paperless, then whether the target user may create
-	 * files in the base folder, which every run needs, whatever Paperless answered.
+	 * The connection checklist: the checks of Paperless, with $token to the URL of $config and its
+	 * local network, then whether the target user may create files in the base folder, which every
+	 * run needs, whatever Paperless answered.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
 	private function checks(SyncConfig $config, #[\SensitiveParameter] string $token): array {
-		$checks = $this->paperless->preflight($config, $token);
+		$checks = $this->clients->connect(PaperlessConnection::of($config, $token))->preflight($config);
 		try {
 			$this->storage->test($config->targetUser, $config->basePath);
 			$checks[] = ConnectionCheck::passed(ConnectionCheck::FOLDER, '%s may create files in %s.', [$config->targetUser, $config->basePath]);

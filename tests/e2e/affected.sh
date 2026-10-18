@@ -49,12 +49,13 @@ path_affects_variants() {
 }
 
 # A file whose change can alter what the app asks Paperless or how it reads the answers:
-# the client of Paperless and the checksums that it compares, the mock that stands in for
-# Paperless and the answers recorded from it, which the unit tests read, and the contract
-# tests themselves and their workflow.
+# the client of Paperless, the connection that it takes and the checksums that it compares,
+# the mock that stands in for Paperless and the answers recorded from it, which the unit
+# tests read, and the contract tests themselves and their workflow.
 path_affects_contract() {
 	case "$1" in
-		lib/Service/Paperless* | lib/Model/DocumentFingerprint.php | tests/fixtures/paperless-ngx-*) return 0 ;;
+		lib/Service/Paperless* | lib/Model/DocumentFingerprint.php | lib/Model/PaperlessConnection.php) return 0 ;;
+		tests/fixtures/paperless-ngx-*) return 0 ;;
 		tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.yaml | tests/e2e/compose.paperless.yaml) return 0 ;;
 		tests/e2e/mock_server.py | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;

@@ -60,6 +60,8 @@
           - lib/Service/SyncService.php
           - lib/Service/PaperlessApiService.php
           - lib/Service/PaperlessClientInterface.php
+          - lib/Service/PaperlessClientFactory*.php
+          - lib/Model/PaperlessConnection.php
           - lib/Service/PaperlessRequestException.php
           - lib/Service/PaperlessVersionException.php
           - lib/Service/StatusService.php
@@ -88,4 +90,5 @@
           - tests/Unit/Service/ExportStatesTest.php
           - tests/Unit/Migration/Version000120*
           - tests/Unit/Model/SyncReportTest.php
+          - tests/Unit/Model/PaperlessConnectionTest.php
           - tests/Unit/SensitiveParametersTest.php
