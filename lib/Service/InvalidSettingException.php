@@ -18,7 +18,7 @@ use OCP\IL10N;
  * text is the key of its translation in l10n/, so it is a literal at the place that throws it,
  * where scripts/check-l10n.mjs finds it, never a variable.
  */
-final class InvalidSettingException extends InvalidArgumentException {
+class InvalidSettingException extends InvalidArgumentException {
 	/**
 	 * @param string $text the text in English, with %s or %1$s for each parameter
 	 * @param list<string> $parameters the values of its placeholders, which no translation changes

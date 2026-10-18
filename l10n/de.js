@@ -230,7 +230,7 @@ OC.L10N.register(
 		"Unknown archive path variable: %s.": "Unbekannte Variable in der Archiv-Pfadvorlage: %s.",
 		"The archive path template contains an invalid placeholder.": "Die Archiv-Pfadvorlage enthält einen ungültigen Platzhalter.",
 		"Paperless has no custom field named %s, which the archive path template uses.": "Paperless hat kein benutzerdefiniertes Feld namens %s, das die Archiv-Pfadvorlage verwendet.",
-		"Paperless has no tag named %s, which \"Only mirror documents with these tags\" names; a run would remove the copies of the documents with it.": "Paperless hat keinen Tag namens %s, den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente damit entfernen.",
+		"Paperless has no tag named %s, which \"Only mirror documents with these tags\" names; a run would remove the copies of the documents that should stay.": "Paperless hat keinen Tag namens %s, den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente entfernen, die bleiben sollen.",
 		"\"Interval in minutes\" must be between %1$s and %2$s.": "Der Wert von „Intervall in Minuten“ muss zwischen %1$s und %2$s liegen.",
 		"\"Maximum changes per module and run\" must be between %1$s and %2$s.": "Der Wert von „Maximale Änderungen je Modul und Lauf“ muss zwischen %1$s und %2$s liegen.",
 		"\"Required consecutive missing scans\" must be between %1$s and %2$s.": "Der Wert von „Erforderliche aufeinanderfolgende Läufe ohne das Dokument“ muss zwischen %1$s und %2$s liegen.",

@@ -43,7 +43,7 @@ final class ExportFilter {
 			static fn (string $name): bool => !in_array(mb_strtolower($name), $known, true),
 		));
 		if ($missing !== []) {
-			throw new InvalidSettingException('Paperless has no tag named %s, which "Only mirror documents with these tags" names; a run would remove the copies of the documents with it.', ['"' . implode('", "', $missing) . '"'], 'included_tags');
+			throw new InvalidSettingException('Paperless has no tag named %s, which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.', ['"' . implode('", "', $missing) . '"'], 'included_tags');
 		}
 	}
 

@@ -281,6 +281,17 @@ try {
 	}, null, { timeout: 5000 })
 	await includedTagInput.press('Backspace')
 	expect((await includedTags()) === '' && await unsaved.isHidden(), 'Backspace must remove the tag to mirror again.')
+	// A tag to mirror that Paperless lacks stops the runs, so the preview says why and marks the
+	// tag field, not the valid path template.
+	await includedTagInput.fill('Nextclod,')
+	await page.locator('#paperless-sync-path-preview-status', { hasText: 'Paperless has no tag named "Nextclod"' }).waitFor({ timeout: 5000 })
+	expect(
+		(await page.locator('#paperless-sync-path-template').getAttribute('aria-invalid')) === null && (await includedTagInput.getAttribute('aria-invalid')) === 'true',
+		'A missing tag to mirror marks the tag field as invalid, not the path template.',
+	)
+	await includedTagInput.press('Backspace')
+	await page.locator('#paperless-sync-path-preview-list li').first().waitFor({ timeout: 5000 })
+	expect((await includedTags()) === '' && (await includedTagInput.getAttribute('aria-invalid')) === null, 'Without the missing tag, the tag field is valid again.')
 	console.log('Settings: the tags to mirror are picked from the tags of Paperless, and the preview marks the documents without one of them.')
 
 	const saves = []

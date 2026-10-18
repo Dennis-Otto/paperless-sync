@@ -716,7 +716,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame([['id' => 12, 'title' => 'Strom', 'path' => 'Strom [P12].pdf', 'skipped' => false]], self::answer($mirrored)['paths']);
 		self::assertSame(Http::STATUS_BAD_REQUEST, $missing->getStatus());
 		self::assertSame([
-			'message' => 'Paperless hat keinen Tag namens "Nextclod", den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente damit entfernen.',
+			'message' => 'Paperless hat keinen Tag namens "Nextclod", den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente entfernen, die bleiben sollen.',
 			'setting' => 'included_tags',
 		], self::answer($missing));
 		self::assertSame('', $this->configService()->get()->includedTags, 'The preview saves nothing.');

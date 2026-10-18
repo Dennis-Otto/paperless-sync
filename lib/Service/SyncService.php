@@ -127,7 +127,7 @@ final class SyncService {
 	 * start to its end, as a run does.
 	 *
 	 * @throws LockedException while another run is active
-	 * @throws InvalidSettingException while the app is not completely configured, or scheduled synchronization or the export is off
+	 * @throws RunsOffException while the app is not completely configured, or scheduled synchronization or the export is off
 	 */
 	public function syncDocument(int $documentId): SyncReport {
 		// Runs that are off are no failure: a document that was queued before an administrator
@@ -166,17 +166,17 @@ final class SyncService {
 	 * reviewed or while Paperless is down, or turns the export off, a call of the webhook changes
 	 * nothing either.
 	 *
-	 * @throws InvalidSettingException with the setting that stops the runs of one document
+	 * @throws RunsOffException with the setting that stops the runs of one document
 	 */
 	public function requireDocumentRuns(SyncConfig $config): void {
 		if (!$config->complete()) {
-			throw new InvalidSettingException('Paperless Sync is not completely configured.');
+			throw new RunsOffException('Paperless Sync is not completely configured.');
 		}
 		if (!$config->enabled) {
-			throw new InvalidSettingException('Scheduled synchronization is off, so changes from Paperless wait until it is on again.', [], 'enabled');
+			throw new RunsOffException('Scheduled synchronization is off, so changes from Paperless wait until it is on again.', [], 'enabled');
 		}
 		if (!$config->exportEnabled) {
-			throw new InvalidSettingException('The archive export is off, so changes from Paperless reach no copy.', [], 'export_enabled');
+			throw new RunsOffException('The archive export is off, so changes from Paperless reach no copy.', [], 'export_enabled');
 		}
 	}
 

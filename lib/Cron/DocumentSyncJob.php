@@ -9,7 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Cron;
 
-use OCA\PaperlessSync\Service\InvalidSettingException;
+use OCA\PaperlessSync\Service\RunsOffException;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\WebhookService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -57,7 +57,7 @@ final class DocumentSyncJob extends QueuedJob {
 			// minute, not for the next job of this cron run, which would start it again at once.
 			$this->jobList->scheduleAfter(self::class, $this->time->getTime() + self::RETRY_DELAY, $argument);
 			$this->logger->info('Paperless synchronization of document {document} postponed: another run is active.', ['document' => $document]);
-		} catch (InvalidSettingException $exception) {
+		} catch (RunsOffException $exception) {
 			// An administrator turned synchronization off since Paperless called: the call changes nothing.
 			$this->webhook->called($document, 'off', $exception->getMessage());
 			$this->logger->info('Paperless synchronization of document {document} skipped: {reason}', ['document' => $document, 'reason' => $exception->getMessage()]);

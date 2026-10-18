@@ -311,6 +311,7 @@
 		const errorsTitle = element('errors-title')
 		const errorsList = element('errors-list')
 		const pathTemplate = element('path-template')
+		const includedTagsInput = element('included-tags-input')
 		const preview = element('path-preview')
 		const previewStatus = element('path-preview-status')
 		const previewList = element('path-preview-list')
@@ -1252,6 +1253,7 @@
 		// template of the form, or why there are none.
 		function showPreview(answer) {
 			pathTemplate.removeAttribute('aria-invalid')
+			includedTagsInput.removeAttribute('aria-invalid')
 			previewStatus.classList.remove('paperless-sync-path-preview-status--error')
 			const paths = Array.isArray(answer.paths) ? answer.paths : []
 			if (answer.connected !== true) {
@@ -1275,13 +1277,21 @@
 			previewList.hidden = paths.length === 0
 		}
 
-		// Says why there is no preview: an invalid template, which a save would refuse too, or a
-		// Paperless that can't be read.
+		// Says why there is no preview: an invalid template or a tag to mirror that Paperless
+		// lacks, which a run would refuse too, or a Paperless that can't be read. Only the field
+		// that the answer names is marked as invalid.
 		function showPreviewError(error) {
-			if (error.status === 400) {
-				pathTemplate.setAttribute('aria-invalid', 'true')
-			} else {
-				pathTemplate.removeAttribute('aria-invalid')
+			const invalid = error.status !== 400
+				? null
+				: error.setting === 'included_tags'
+					? includedTagsInput
+					: (!error.setting || error.setting === 'path_template' ? pathTemplate : null)
+			for (const field of [pathTemplate, includedTagsInput]) {
+				if (field === invalid) {
+					field.setAttribute('aria-invalid', 'true')
+				} else {
+					field.removeAttribute('aria-invalid')
+				}
 			}
 			previewStatus.classList.add('paperless-sync-path-preview-status--error')
 			setText(previewStatus, error.message || translate('The preview could not be loaded.'))

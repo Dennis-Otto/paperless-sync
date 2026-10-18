@@ -11,7 +11,7 @@ namespace OCA\PaperlessSync\Controller;
 
 use OCA\PaperlessSync\Cron\DocumentSyncJob;
 use OCA\PaperlessSync\Service\ConfigService;
-use OCA\PaperlessSync\Service\InvalidSettingException;
+use OCA\PaperlessSync\Service\RunsOffException;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\WebhookService;
 use OCP\AppFramework\Controller;
@@ -104,7 +104,7 @@ final class WebhookController extends Controller {
 			$report = $this->syncService->syncDocument($documentId);
 		} catch (LockedException) {
 			return $this->queue($documentId);
-		} catch (InvalidSettingException $exception) {
+		} catch (RunsOffException $exception) {
 			$this->webhook->called($documentId, 'off', $exception->getMessage());
 
 			return new JSONResponse(['document' => $documentId, 'result' => 'off', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);

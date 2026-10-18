@@ -21,7 +21,7 @@
 // - in templates/ and lib/, ->t('…') and ->n('…', '…') of IL10N;
 // - in lib/, the texts that a class translates later, in the language of the administrator who
 //   reads them: the message and the hint of a ConnectionCheck, and the text of an
-//   InvalidSettingException.
+//   InvalidSettingException or a RunsOffException.
 // A class constant there, self::NAME or self::NAME[…], counts with its text or the texts of its
 // array, and a text that an argument only compares, such as in $a === self::NAME ? …, doesn't.
 // Any other argument, such as a variable, fails the check with its place, and --fix then writes
@@ -46,7 +46,7 @@ const phpCalls = [
 	{ call: /\bConnectionCheck::passed\(/g, texts: [[1, 'message']] },
 	{ call: /\bConnectionCheck::(?:warning|failed)\(/g, texts: [[1, 'message'], [3, 'hint']] },
 	{ call: /\bnew ConnectionCheck\(/g, texts: [[2, 'message'], [4, 'hint']] },
-	{ call: /\bnew InvalidSettingException\(/g, texts: [[0, 'text']] },
+	{ call: /\bnew (?:InvalidSetting|RunsOff)Exception\(/g, texts: [[0, 'text']] },
 ]
 const phpString = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/y
 const jsString = String.raw`('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|\x60(?:[^\x60\\$]|\\.)*\x60)`

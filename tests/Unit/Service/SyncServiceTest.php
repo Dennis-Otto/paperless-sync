@@ -3159,7 +3159,7 @@ final class SyncServiceTest extends TestCase {
 			$this->service->run();
 			self::fail('A tag to mirror that Paperless does not have would empty the archive.');
 		} catch (InvalidSettingException $exception) {
-			self::assertSame('Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents with it.', $exception->getMessage());
+			self::assertSame('Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.', $exception->getMessage());
 			self::assertSame('included_tags', $exception->setting);
 		}
 		self::assertSame([self::EXPORTED_PATH], array_keys($this->storage->files), 'The file stays where it is.');
