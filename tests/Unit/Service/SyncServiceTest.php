@@ -4556,19 +4556,34 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('id', $this->storage->files[$index]);
 	}
 
-	/** The metadata names the custom fields, so a run fails without them, with the permission that is missing. */
+	/**
+	 * The metadata names the custom fields: without the permission to view them, the run exports
+	 * its documents and writes no metadata, which is an error of the run that names the permission.
+	 */
 	public function testTheMetadataNeedsThePermissionToViewCustomFields(): void {
 		$this->configService->save(['write_metadata' => true]);
 		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
 		$this->paperless->customFieldsException = new RuntimeException('HTTP 403.');
 
-		try {
-			$this->service->run();
-			self::fail('Without the custom fields, the metadata would lack them.');
-		} catch (RuntimeException $exception) {
-			self::assertSame('Paperless did not list its custom fields, which the metadata next to the archive names; the user of the API token needs the permission to view custom fields: HTTP 403.', $exception->getMessage());
-		}
-		self::assertSame([], $this->storage->files);
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->exported, 'The copies need no custom fields.');
+		self::assertSame(['Metadata: Paperless did not list its custom fields, which the metadata next to the archive names, so the run writes no metadata; the user of the API token needs the permission to view custom fields: HTTP 403.'], $report->errorMessages);
+		self::assertSame([], array_filter(array_keys($this->storage->files), static fn (string $path): bool => str_contains($path, '/.paperless/')));
+	}
+
+	/** A full quota stops the metadata of the run, once reported, and the run still exports its copies. */
+	public function testAFullArchiveStopsTheMetadataOfTheRun(): void {
+		$this->configService->save(['write_metadata' => true]);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->storage->writeFailures[self::ARCHIVE . '/.paperless/P123.json'] = new NotEnoughSpaceException('Insufficient space in Documents');
+
+		$report = $this->service->run();
+
+		self::assertSame([1, ['Metadata P123: Insufficient space in Documents']], [$report->exported, $report->errorMessages]);
+		self::assertArrayNotHasKey(self::ARCHIVE . '/.paperless/index.csv', $this->storage->files);
 	}
 
 	/** A document that the settings exclude loses its copy, as in a run. */

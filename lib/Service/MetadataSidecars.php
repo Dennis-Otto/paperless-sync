@@ -25,6 +25,10 @@ use OCA\PaperlessSync\Model\SyncReport;
  * safety, or removes the copy of an excluded document. A copy in the deleted folder keeps its
  * sidecar, and its row names its path there and the state of its document.
  *
+ * A run writes at most as many sidecars as its batch size, as it makes at most as many changes
+ * in a module: the first run after the setting is on, in an archive of many documents, leaves the
+ * rest to the next runs, which the SHA-256 of each row brings to them on its own.
+ *
  * @psalm-import-type CustomField from PathTemplateService
  * @psalm-type Metadata = array{version: int, id: int, title: string, correspondent: string|null, document_type: string|null, storage_path: string|null, tags: list<string>, created: string|null, added: string|null, modified: string|null, archive_serial_number: int|null, original_file_name: string|null, mime_type: string|null, page_count: int|null, notes: list<array{note: string, created: string|null, user: string|null}>, custom_fields: list<array{name: string, type: string, value: mixed}>, file: array{version: string, sha256: string|null}, url: string}
  */
@@ -49,8 +53,10 @@ final class MetadataSidecars {
 	/** The index as the run found it, empty when there was none. */
 	private string $found = '';
 	private bool $indexExists = false;
-	/** After a write failed, the run writes no more metadata: the next ones would fail as well, such as against a full quota. */
+	/** After the archive refused a write, such as against a full quota, the run writes no more sidecars: the next ones would fail as well. */
 	private bool $stopped = false;
+	/** The sidecars that the run wrote or tried to write, which its batch size limits. */
+	private int $writes = 0;
 
 	/**
 	 * Reads the index of the archive, when there is one.
@@ -60,6 +66,7 @@ final class MetadataSidecars {
 	 * @param array<string, string> $storagePaths
 	 * @param array<string, string> $tagNames
 	 * @param array<string, CustomField> $customFields
+	 * @param \Closure(\Throwable): bool $archiveFailed whether a failure is one of the whole archive, such as a full quota, after which the run writes no further sidecar
 	 * @throws \Throwable when Nextcloud can't read the index
 	 */
 	public function __construct(
@@ -72,6 +79,7 @@ final class MetadataSidecars {
 		private array $storagePaths,
 		private array $tagNames,
 		private array $customFields,
+		private \Closure $archiveFailed,
 	) {
 		$path = $this->indexPath();
 		if (!$this->storage->exists($this->config->targetUser, $path)) {
@@ -98,7 +106,9 @@ final class MetadataSidecars {
 
 	/**
 	 * Describes the copy of a document that the run exported, moved or found unchanged at its path:
-	 * it writes the sidecar when its content changed, and gives the copy its row in the index.
+	 * it writes the sidecar when its content changed, and gives the copy its row in the index. A
+	 * sidecar that the run can't write keeps its old row, so that the next run writes it, as does
+	 * one beyond the batch size of the run.
 	 *
 	 * @param array<string, mixed> $document as Paperless lists it
 	 * @param string $fingerprint the checksums of the copy, as the state keeps them
@@ -113,10 +123,15 @@ final class MetadataSidecars {
 		$json = json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) . "\n";
 		$hash = hash('sha256', $json);
 		if (($this->rows[$documentId]['metadata_sha256'] ?? '') !== $hash) {
+			if ($this->writes >= $this->config->batchSize) {
+				return;
+			}
+			// A write takes its place in the batch before it is tried, also one that fails.
+			++$this->writes;
 			try {
 				$this->storage->writeText($this->config->targetUser, $this->sidecarPath($documentId), $json);
 			} catch (\Throwable $exception) {
-				$this->stop("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
+				$this->fail("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
 
 				return;
 			}
@@ -143,21 +158,20 @@ final class MetadataSidecars {
 	 * Ends the metadata of the run: the sidecar of a document that left the state of the export
 	 * goes, the rows of the others follow their copies, such as into the deleted folder, and the
 	 * index is written when it changed. A run of one document ends it as well: the state of the
-	 * export knows every document.
+	 * export knows every document. After the archive refused a write, the run still tries the
+	 * deletions and the index once, so that the rows of the sidecars that it wrote are kept,
+	 * without reporting their failures a second time.
 	 */
 	public function finish(ExportStates $states): void {
-		if ($this->stopped) {
-			return;
-		}
 		foreach ($this->rows as $documentId => $row) {
 			$entry = $states->find($documentId);
 			if ($entry === null) {
 				try {
 					$this->storage->delete($this->config->targetUser, $this->sidecarPath($documentId));
 				} catch (\Throwable $exception) {
-					$this->stop("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
-
-					return;
+					// The row stays, so that the next run deletes the sidecar.
+					$this->fail("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
+					continue;
 				}
 				unset($this->rows[$documentId]);
 				continue;
@@ -176,7 +190,7 @@ final class MetadataSidecars {
 		try {
 			$this->storage->writeText($this->config->targetUser, $this->indexPath(), $index);
 		} catch (\Throwable $exception) {
-			$this->stop('Metadata index', $exception, null, $this->indexPath());
+			$this->fail('Metadata index', $exception, null, $this->indexPath());
 		}
 	}
 
@@ -308,8 +322,15 @@ final class MetadataSidecars {
 		return str_starts_with($path, $prefix) ? substr($path, strlen($prefix)) : $path;
 	}
 
-	private function stop(string $subject, \Throwable $exception, ?int $documentId, string $path): void {
-		$this->stopped = true;
+	/**
+	 * Reports a failed write or deletion as an error of its document, or of the run for the index.
+	 * A failure of the whole archive stops the sidecars of the run and is reported once.
+	 */
+	private function fail(string $subject, \Throwable $exception, ?int $documentId, string $path): void {
+		if ($this->stopped) {
+			return;
+		}
+		$this->stopped = ($this->archiveFailed)($exception);
 		$message = trim($exception->getMessage());
 		$this->report->error($subject . ': ' . ($message !== '' ? $message : $exception::class), $documentId, $path);
 	}

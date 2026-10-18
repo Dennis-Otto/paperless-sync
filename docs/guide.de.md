@@ -54,7 +54,7 @@ Die Einstellungen stehen unter **Administrationseinstellungen → Paperless Sync
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
-  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten und die ausgeschlossenen Tags" src="images/settings-archive-light.png">
+  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten, die ausgeschlossenen Tags und der Schalter Metadaten neben das Archiv schreiben" src="images/settings-archive-light.png">
 </picture>
 
 **4 · Nextcloud-Eingang:** der Eingangsordner, der Fehlerordner, die Unterordner des Eingangs, ob eine importierte Datei den Eingang verlässt, und die [Tags des Eingangs](guide.de.md#tags-des-eingangs): einer für jeden Unterordner, Tags für jeden Import, ausgewählt aus den Tags von Paperless, und ob die App die anlegt, die Paperless fehlen.

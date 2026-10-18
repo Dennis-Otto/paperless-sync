@@ -243,6 +243,7 @@
 		"Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.": "Wähle einen Tag von Paperless, oder tippe seinen Namen und drücke die Eingabetaste; auch ein Tag, den Paperless noch nicht hat, funktioniert.",
 		"Write metadata next to the archive": "Metadaten neben das Archiv schreiben",
 		"A JSON file for each document in the hidden folder .paperless of the archive, with its title, correspondent, tags, notes, custom fields and dates, and an index of every document in index.csv, so that the archive describes itself also without Paperless.": "Eine JSON-Datei für jedes Dokument im versteckten Ordner .paperless des Archivs, mit seinem Titel, Korrespondenten, Tags, Notizen, benutzerdefinierten Feldern und Daten, und ein Verzeichnis aller Dokumente in index.csv, damit sich das Archiv auch ohne Paperless selbst beschreibt.",
+		"Everyone who can open the archive folder, also through a share or a public link, can read them, the notes and custom fields as well.": "Alle, die den Archivordner öffnen können, auch über eine Freigabe oder einen öffentlichen Link, können sie lesen, auch die Notizen und benutzerdefinierten Felder.",
 		"Metadata next to the archive": "Metadaten neben dem Archiv",
 		"Save the connection to Paperless first; then its tags appear here.": "Speichere zuerst die Verbindung zu Paperless; dann erscheinen seine Tags hier.",
 		"Paperless did not list its tags: %s": "Paperless hat seine Tags nicht aufgelistet: %s",

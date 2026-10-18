@@ -1,0 +1,101 @@
+{
+  "body": {
+    "all": [
+      1,
+      2,
+      3
+    ],
+    "count": 3,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "added": "2026-10-18T02:05:35.060935Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-26 Example GmbH Monthly invoice.pdf",
+        "correspondent": 1,
+        "created": "2026-08-26",
+        "custom_fields": [
+          {
+            "field": 1,
+            "value": "vIBYoEI7cB50ll8E"
+          }
+        ],
+        "document_type": 1,
+        "id": 1,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-18T02:05:41.863698Z",
+        "notes": [
+          {
+            "created": "2026-10-18T02:05:41.831788Z",
+            "id": 1,
+            "note": "Paid on 1 September.",
+            "user": {
+              "first_name": "",
+              "id": 3,
+              "last_name": "",
+              "username": "contract-admin"
+            }
+          }
+        ],
+        "original_file_name": "invoice.pdf",
+        "owner": 3,
+        "page_count": 1,
+        "storage_path": null,
+        "tags": [
+          2
+        ],
+        "title": "Monthly invoice"
+      },
+      {
+        "added": "2026-10-18T02:05:36.726653Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-27 Example GmbH Annual statement.pdf",
+        "correspondent": 1,
+        "created": "2026-08-27",
+        "custom_fields": [],
+        "document_type": 2,
+        "id": 2,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-18T02:05:41.657115Z",
+        "notes": [],
+        "original_file_name": "statement.pdf",
+        "owner": 3,
+        "page_count": 1,
+        "storage_path": 1,
+        "tags": [
+          2
+        ],
+        "title": "Annual statement"
+      },
+      {
+        "added": "2026-10-18T02:05:38.562443Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-08-28 Example Insurance Unread letter.pdf",
+        "correspondent": 2,
+        "created": "2026-08-28",
+        "custom_fields": [],
+        "document_type": 3,
+        "id": 3,
+        "mime_type": "application/pdf",
+        "modified": "2026-10-18T02:05:41.752926Z",
+        "notes": [],
+        "original_file_name": "unread.pdf",
+        "owner": 3,
+        "page_count": 1,
+        "storage_path": null,
+        "tags": [
+          1
+        ],
+        "title": "Unread letter"
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,notes&truncate_content=true&page=1&page_size=1000",
+  "status": 200
+}

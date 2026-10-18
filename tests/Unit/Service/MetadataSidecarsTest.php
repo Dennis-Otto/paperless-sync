@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCP\Files\NotEnoughSpaceException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -241,7 +242,7 @@ final class MetadataSidecarsTest extends TestCase {
 
 	/**
 	 * Nextcloud refuses the writes of a run against a full quota, and those of the metadata as
-	 * well: the first one is an error of its document, and the run writes no further metadata,
+	 * well: the first one is an error of its document, and the run writes no further sidecar,
 	 * which the next run catches up.
 	 */
 	public function testAFailedWriteStopsTheMetadataOfTheRun(): void {
@@ -256,6 +257,126 @@ final class MetadataSidecarsTest extends TestCase {
 		self::assertSame(['Metadata P123: Insufficient space in Documents'], $this->report->errorMessages);
 		self::assertSame(['writeText'], array_values(array_filter($this->storage->methods(), static fn (string $method): bool => $method !== 'exists')));
 		self::assertSame(['type' => 'error', 'document' => 123, 'path' => self::SIDECAR, 'detail' => 'Metadata P123: Insufficient space in Documents'], $this->report->entries[0]);
+	}
+
+	/**
+	 * After a full quota stopped the sidecars, the run still writes the index, so that the rows
+	 * of the sidecars that it wrote are kept: without them, no run would delete those sidecars.
+	 * Its failure then is no second error.
+	 */
+	public function testAStoppedRunKeepsTheRowsOfTheSidecarsThatItWrote(): void {
+		$this->exports([
+			123 => ['path' => self::PATH, 'state' => 'active'],
+			124 => ['path' => self::ARCHIVE . '/b.pdf', 'state' => 'active'],
+			125 => ['path' => self::ARCHIVE . '/c.pdf', 'state' => 'active'],
+			126 => ['path' => self::ARCHIVE . '/d.pdf', 'state' => 'active'],
+		]);
+		$this->storage->writeFailures[self::ARCHIVE . '/.paperless/P124.json'] = new NotEnoughSpaceException('Insufficient space in Documents');
+		$sidecars = $this->sidecars();
+
+		$sidecars->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$sidecars->describe(['id' => 126] + self::document(), 126, self::ARCHIVE . '/d.pdf', self::SHA256, false);
+		$sidecars->describe(['id' => 124] + self::document(), 124, self::ARCHIVE . '/b.pdf', self::SHA256, false);
+		$sidecars->describe(['id' => 125] + self::document(), 125, self::ARCHIVE . '/c.pdf', self::SHA256, false);
+		$sidecars->finish($this->states());
+
+		self::assertSame(['Metadata P124: Insufficient space in Documents'], $this->report->errorMessages);
+		self::assertArrayNotHasKey(self::ARCHIVE . '/.paperless/P125.json', $this->storage->files, 'The run writes no further sidecar.');
+		$rows = explode("\r\n", $this->storage->files[self::INDEX]);
+		self::assertCount(4, $rows, 'The header, the rows of P123 and P126 and the end of the last line.');
+		self::assertStringStartsWith('123,', $rows[1]);
+		self::assertStringStartsWith('126,', $rows[2]);
+
+		// The next run fails on the index as well, and on the deletion of a sidecar: neither is a second error.
+		$this->storage->writeFailures[self::INDEX] = new NotEnoughSpaceException('Insufficient space in Documents');
+		$this->storage->deleteException = new NotEnoughSpaceException('Insufficient space in Documents');
+		unset($this->repository->exports[123]);
+		$this->repository->exports[126]['state'] = 'trash';
+		$stopped = $this->sidecars();
+		$stopped->describe(['id' => 124] + self::document(), 124, self::ARCHIVE . '/b.pdf', self::SHA256, false);
+		$stopped->describe(['id' => 125] + self::document(), 125, self::ARCHIVE . '/c.pdf', self::SHA256, false);
+		$stopped->finish($this->states());
+		self::assertSame(['Metadata P124: Insufficient space in Documents', 'Metadata P124: Insufficient space in Documents'], $this->report->errorMessages, 'One error in each run.');
+		self::assertArrayHasKey(self::SIDECAR, $this->storage->files, 'The sidecar waits for the next run.');
+	}
+
+	/**
+	 * A sidecar that Nextcloud refuses alone, such as one that is locked, is an error of its
+	 * document, and the run goes on with the others; the next run tries it again.
+	 */
+	public function testASidecarThatFailsAloneLeavesTheOthersAsTheyAre(): void {
+		$this->exports([123 => ['path' => self::PATH, 'state' => 'active'], 124 => ['path' => self::ARCHIVE . '/b.pdf', 'state' => 'active']]);
+		$this->storage->writeFailures[self::SIDECAR] = new RuntimeException('The file is locked.');
+		$sidecars = $this->sidecars();
+
+		$sidecars->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$sidecars->describe(['id' => 124] + self::document(), 124, self::ARCHIVE . '/b.pdf', self::SHA256, false);
+		$sidecars->finish($this->states());
+
+		self::assertSame(['Metadata P123: The file is locked.'], $this->report->errorMessages);
+		self::assertArrayHasKey(self::ARCHIVE . '/.paperless/P124.json', $this->storage->files);
+		self::assertStringNotContainsString("\r\n123,", $this->storage->files[self::INDEX]);
+
+		unset($this->storage->writeFailures[self::SIDECAR]);
+		$next = $this->sidecars();
+		$next->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$next->finish($this->states());
+		self::assertArrayHasKey(self::SIDECAR, $this->storage->files, 'The next run catches up.');
+		self::assertStringContainsString("\r\n123,", $this->storage->files[self::INDEX]);
+	}
+
+	/**
+	 * A run writes at most as many sidecars as its batch size: the first run after the setting is
+	 * on doesn't write one for each copy of a large archive at once. A sidecar without a change
+	 * takes no place in the batch, and the next run writes the rest.
+	 */
+	public function testARunWritesAtMostItsBatchSizeOfSidecars(): void {
+		$this->config = $this->config->withBatchSize(1);
+		$this->exports([123 => ['path' => self::PATH, 'state' => 'active'], 124 => ['path' => self::ARCHIVE . '/b.pdf', 'state' => 'active']]);
+		$first = $this->sidecars();
+		$first->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$first->describe(['id' => 124] + self::document(), 124, self::ARCHIVE . '/b.pdf', self::SHA256, false);
+		$first->finish($this->states());
+		self::assertSame([[self::SIDECAR, 'created'], [self::INDEX, 'created']], $this->storage->writes);
+
+		$this->storage->writes = [];
+		$second = $this->sidecars();
+		$second->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$second->describe(['id' => 124] + self::document(), 124, self::ARCHIVE . '/b.pdf', self::SHA256, false);
+		$second->finish($this->states());
+		self::assertSame([[self::ARCHIVE . '/.paperless/P124.json', 'created'], [self::INDEX, 'updated']], $this->storage->writes);
+		self::assertSame(0, $this->report->errors);
+	}
+
+	/**
+	 * The notes as a real Paperless-ngx sends them, which the contract tests recorded into
+	 * tests/fixtures/paperless-ngx-<line>/: with the name of their author and their time.
+	 */
+	#[DataProvider('paperlessLines')]
+	public function testTheNotesOfARealPaperlessKeepTheirAuthor(string $line): void {
+		$recording = json_decode((string)file_get_contents(dirname(__DIR__, 2) . "/fixtures/paperless-ngx-{$line}/documents-notes.json"), true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($recording);
+		/** @var list<array<string, mixed>> $documents */
+		$documents = $recording['body']['results'];
+		$invoice = array_values(array_filter($documents, static fn (array $document): bool => $document['notes'] !== []))[0];
+		$documentId = $invoice['id'];
+		self::assertIsInt($documentId);
+		$this->exports([$documentId => ['path' => self::PATH, 'state' => 'active']]);
+		$sidecars = $this->sidecars();
+
+		$sidecars->describe($invoice, $documentId, self::PATH, self::SHA256, false);
+		$sidecars->finish($this->states());
+
+		$sidecar = json_decode($this->storage->files[$sidecars->sidecarPath($documentId)], true, flags: JSON_THROW_ON_ERROR);
+		self::assertIsArray($sidecar);
+		self::assertSame(['Paid on 1 September.', 'contract-admin'], [$sidecar['notes'][0]['note'], $sidecar['notes'][0]['user']]);
+		self::assertCount(1, $sidecar['notes']);
+		self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/', $sidecar['notes'][0]['created']);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function paperlessLines(): array {
+		return ['Paperless-ngx 2.x' => ['2'], 'Paperless-ngx 3.x' => ['3']];
 	}
 
 	/** A sidecar that Nextcloud doesn't delete stays in the index, for the next run to delete. */
@@ -305,6 +426,7 @@ final class MetadataSidecarsTest extends TestCase {
 				'2' => ['name' => 'Zahlart', 'type' => 'select', 'options' => ['opt-a' => 'Lastschrift', 'opt-b' => 'Überweisung']],
 				'3' => ['name' => 'Betrag', 'type' => 'monetary', 'options' => []],
 			],
+			static fn (\Throwable $exception): bool => $exception instanceof NotEnoughSpaceException,
 		);
 	}
 

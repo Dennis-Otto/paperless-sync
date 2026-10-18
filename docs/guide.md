@@ -54,7 +54,7 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
-  <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents and the excluded tags" src="images/settings-archive-light.png">
+  <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents, the excluded tags and the switch Write metadata next to the archive" src="images/settings-archive-light.png">
 </picture>
 
 **4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, whether an imported file leaves the inbox, and the [tags of the inbox](guide.md#tags-of-the-inbox): one for each subfolder, tags for every import, picked from the tags of Paperless, and whether the app creates those that Paperless lacks.
