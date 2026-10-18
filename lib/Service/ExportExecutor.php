@@ -39,7 +39,9 @@ use Psr\Log\LoggerInterface;
  * archive, such as a full quota, stops the other exports and moves of the run.
  *
  * With the metadata next to the archive, a run describes each copy that it exported, moved or
- * found unchanged at its path; a dry-run writes no metadata.
+ * found unchanged at its path; a dry-run writes no metadata. With the tags of Paperless as tags of
+ * Nextcloud, a run and a dry-run name each such copy to the tags of the run, which give the copies
+ * their tags once the export is done.
  */
 final class ExportExecutor {
 	private bool $dryRun;
@@ -55,6 +57,7 @@ final class ExportExecutor {
 		private ITimeFactory $clock,
 		private string $archiveRoot,
 		private ?MetadataSidecars $sidecars = null,
+		private ?ArchiveTags $tags = null,
 	) {
 		$this->dryRun = $report->dryRun;
 	}
@@ -70,6 +73,9 @@ final class ExportExecutor {
 		} elseif ($action instanceof Unchanged) {
 			++$this->report->unchanged;
 			$this->save($action->document, $action->values, $action->onFailure, $action->copy);
+			if ($action->document !== null && $action->copy !== null) {
+				$this->tags?->copy($action->document, $action->copy->document, $action->copy->path, $action->copy->path);
+			}
 		} elseif ($action instanceof Skipped) {
 			++$this->report->skipped;
 			$this->save($action->document, $action->values, $action->onFailure);
@@ -115,6 +121,8 @@ final class ExportExecutor {
 					$this->prune($action->oldPath);
 				}
 			}
+			// A dry-run moves no copy, so the copy that it would move is still at its old path.
+			$this->tags?->copy($documentId, $action->document, $action->target, $this->dryRun && $action->move ? $action->oldPath : $action->target);
 		} catch (\Throwable $exception) {
 			$this->fail($action->context, $exception);
 		}

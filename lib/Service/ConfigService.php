@@ -62,6 +62,7 @@ final class ConfigService {
 		'webhook_immediate' => true,
 		'write_metadata' => false,
 		'send_group' => 'admin',
+		'nextcloud_tags' => false,
 	];
 
 	/**
@@ -259,7 +260,7 @@ final class ConfigService {
 			'prune_empty_folders' => 'pruneEmptyFolders', 'delete_inbox_after_success' => 'deleteInboxAfterSuccess',
 			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
-			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup',
+			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup', 'nextcloud_tags' => 'nextcloudTags',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -507,6 +508,7 @@ final class ConfigService {
 			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
 			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
+			(bool)$values['nextcloud_tags'],
 		);
 	}
 }

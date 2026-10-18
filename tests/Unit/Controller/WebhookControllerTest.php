@@ -396,6 +396,7 @@ final class WebhookControllerTest extends TestCase {
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService($this->storage),
 		);
 
 		return new WebhookController(AppConstants::APP_ID, $request, $this->webhookService($this->clock), $this->configService(), $sync, $this->jobList, $this->throttler);

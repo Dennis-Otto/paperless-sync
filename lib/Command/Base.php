@@ -40,6 +40,7 @@ abstract class Base extends Command {
 		'importsSucceeded' => 'Imports succeeded',
 		'importsFailed' => 'Imports failed',
 		'foldersPruned' => 'Folders removed',
+		'tagged' => 'Tags changed',
 		'unchanged' => 'Unchanged',
 		'skipped' => 'Skipped',
 		'errors' => 'Errors',

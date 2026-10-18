@@ -36,6 +36,7 @@ final class SyncReportTest extends TestCase {
 		$report->change(SyncReport::TYPE_MISSING, 5, 'Archiv/_Gelöscht/e.pdf');
 		$report->change(SyncReport::TYPE_DELETE, 6, 'Archiv/_Gelöscht/f.pdf');
 		$report->waiting(7, 'Archiv/g.pdf', 1, 3);
+		$report->tags(1, 'Archiv/a.pdf', ['Steuer 2026', 'Bezahlt'], ['Eingang']);
 		$report->upload('Eingang/h.pdf');
 		$report->newTag('Steuer');
 		$report->upload('Eingang/Steuer/n.pdf', ['scanned', 'Steuer']);
@@ -57,6 +58,7 @@ final class SyncReportTest extends TestCase {
 			'MISSING P5: Archiv/_Gelöscht/e.pdf',
 			'DELETE P6: Archiv/_Gelöscht/f.pdf',
 			'WAIT P7: missing run 1/3',
+			'TAGS P1: +Steuer 2026 +Bezahlt -Eingang',
 			'IMPORT: Eingang/h.pdf',
 			'NEW TAG: Steuer',
 			'IMPORT: Eingang/Steuer/n.pdf (tags: scanned, Steuer)',
@@ -78,6 +80,7 @@ final class SyncReportTest extends TestCase {
 			['type' => 'missing', 'document' => 5, 'path' => 'Archiv/_Gelöscht/e.pdf'],
 			['type' => 'delete', 'document' => 6, 'path' => 'Archiv/_Gelöscht/f.pdf'],
 			['type' => 'wait', 'document' => 7, 'path' => 'Archiv/g.pdf', 'values' => ['scans' => 1, 'limit' => 3]],
+			['type' => 'tags', 'document' => 1, 'path' => 'Archiv/a.pdf', 'values' => ['added' => 'Steuer 2026, Bezahlt', 'removed' => 'Eingang']],
 			['type' => 'import', 'path' => 'Eingang/h.pdf'],
 			['type' => 'new-tag', 'detail' => 'Steuer'],
 			['type' => 'import', 'path' => 'Eingang/Steuer/n.pdf', 'values' => ['tags' => 'scanned, Steuer']],
@@ -93,6 +96,7 @@ final class SyncReportTest extends TestCase {
 		], $report->entries);
 		self::assertSame($report->entries, $report->jsonSerialize()['entries']);
 		self::assertArrayNotHasKey('entries', $report->summary(), 'The summary has the counts alone.');
+		self::assertSame(1, $report->summary()['tagged'], 'It counts the copies whose tags changed.');
 	}
 
 	/** A full report gives up a line and its entry together, so that each line keeps its entry. */

@@ -78,6 +78,7 @@ final class SyncControllerTest extends TestCase {
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService(new TestStorage()),
 		);
 		$this->user = $this->createConfiguredStub(IUser::class, ['getUID' => 'admin']);
 		$session = $this->createStub(IUserSession::class);

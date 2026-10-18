@@ -70,6 +70,7 @@ final class ForgetTest extends TestCase {
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService(new TestStorage()),
 		);
 		$this->forget = new Forget($sync);
 		$this->command = new CommandTester($this->forget);

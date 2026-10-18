@@ -38,6 +38,7 @@ final class SyncService {
 		private ActivityPublisher $activity,
 		private UserTimeZones $timeZones,
 		private NotificationPublisher $notifications,
+		private SystemTagService $systemTags,
 	) {
 	}
 
@@ -286,12 +287,16 @@ final class SyncService {
 			$single ? static function (): void {
 			} : $this->status->heartbeat(...),
 		);
-		$executor = new ExportExecutor($config, $report, $states, $batch, $this->storage, $paperless, $this->logger, $this->timeFactory, $archiveRoot, $sidecars);
+		$archiveTags = $config->nextcloudTags ? $this->systemTags->forRun($config, $report, $tags['names']) : null;
+		$executor = new ExportExecutor($config, $report, $states, $batch, $this->storage, $paperless, $this->logger, $this->timeFactory, $archiveRoot, $sidecars, $archiveTags);
 		foreach ($planner->plan($documentScan->documents, $single ? null : $trashScan->documents, $documentsComplete && $trashComplete) as $action) {
 			$executor->apply($action);
 		}
 		// The metadata of a run of one document ends as well: the state of the export knows every document.
 		$sidecars?->finish($states);
+		// The tags of Nextcloud follow those of Paperless; only a run of the whole archive sees every tag
+		// that a file of the app still has.
+		$archiveTags?->finish(!$single);
 		if (!$single) {
 			$this->checkInvisibleTrash($config, $report, $planner->missingActive(), count($trashScan->documents));
 		}

@@ -73,6 +73,7 @@ final class RunTest extends TestCase {
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService(new TestStorage()),
 		);
 		$this->run = new Run($sync);
 		$this->command = new CommandTester($this->run);

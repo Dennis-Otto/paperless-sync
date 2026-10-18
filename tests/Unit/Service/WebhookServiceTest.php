@@ -146,6 +146,7 @@ final class WebhookServiceTest extends TestCase {
 			'an export' => [['exported' => 1], 'exported'],
 			'a move' => [['moved' => 1], 'moved'],
 			'an excluded copy removed' => [['removedExcluded' => 1, 'skipped' => 1], 'removed'],
+			'a copy whose tags changed' => [['tagged' => 1, 'unchanged' => 1], 'tagged'],
 			'a current copy' => [['unchanged' => 1], 'unchanged'],
 			'an excluded document' => [['skipped' => 1], 'excluded'],
 			'no document' => [[], 'missing'],

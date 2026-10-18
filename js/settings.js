@@ -786,6 +786,8 @@
 			'export-stopped': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'trash-empty': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'tags-unknown': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'tags-taken': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'tags-not-created': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
 			trash: { label: translate('Trash'), tone: 'warning', rank: 2 },
@@ -796,6 +798,7 @@
 			import: { label: translate('Upload'), tone: 'info', rank: 2 },
 			'import-success': { label: translate('Imported'), tone: 'success', rank: 2 },
 			'new-tag': { label: translate('New tag'), tone: 'info', rank: 2 },
+			tags: { label: translate('Tags'), tone: 'info', rank: 2 },
 		}
 
 		// The counts of a report that name a change, with their tone; those that are 0 stay out.
@@ -810,6 +813,7 @@
 			['importsSucceeded', translate('Imports succeeded'), 'success'],
 			['importsFailed', translate('Imports failed'), 'error'],
 			['foldersPruned', translate('Folders removed'), 'neutral'],
+			['tagged', translate('Tags changed'), 'info'],
 		]
 
 		// What an entry says besides its badge, its document and its file, in the language of the
@@ -831,6 +835,25 @@
 				return values.tags ? translate('Tags: {tags}', { tags: values.tags }) : ''
 			case 'new-tag':
 				return translate('The tag {name} is created in Paperless.', { name: entry.detail || '' })
+			case 'tags':
+				return [
+					values.added ? translate('Tags in Nextcloud added: {tags}', { tags: values.added }) : '',
+					values.removed ? translate('Tags in Nextcloud removed: {tags}', { tags: values.removed }) : '',
+				].filter(Boolean).join(' · ')
+			case 'tags-taken':
+				return translatePlural(
+					'Nextcloud has a tag named {names} that Paperless Sync did not make, so the copies go without it. Rename the tag in Nextcloud or in Paperless.',
+					'Nextcloud has tags named {names} that Paperless Sync did not make, so the copies go without them. Rename the tags in Nextcloud or in Paperless.',
+					Number(values.count) || 0,
+					{ names: values.names },
+				)
+			case 'tags-not-created':
+				return translatePlural(
+					'Nextcloud lets only users and the command line create tags, so the copies get the tag {names} with the next run of the background jobs by cron or of occ paperless_sync:run.',
+					'Nextcloud lets only users and the command line create tags, so the copies get the tags {names} with the next run of the background jobs by cron or of occ paperless_sync:run.',
+					Number(values.count) || 0,
+					{ names: values.names },
+				)
 			case 'import-success':
 				return entry.document
 					? translate('Paperless imported it as document {document}.', { document: 'P' + entry.document })
@@ -885,7 +908,7 @@
 			if (['import', 'import-rejected', 'import-error', 'wait'].includes(entry.type)) {
 				return true
 			}
-			return !dryRun && ['export', 'move', 'trash', 'missing'].includes(entry.type)
+			return !dryRun && ['export', 'move', 'trash', 'missing', 'tags'].includes(entry.type)
 		}
 
 		// The administrator who reads the page, as Nextcloud names the user.
@@ -1366,6 +1389,8 @@
 				return translate('Last call, {time}: P{document} moved.', parameters)
 			case 'removed':
 				return translate('Last call, {time}: the copy of P{document} removed, as the settings exclude the document.', parameters)
+			case 'tagged':
+				return translate('Last call, {time}: the tags of P{document} changed.', parameters)
 			case 'unchanged':
 				return translate('Last call, {time}: the copy of P{document} was current already.', parameters)
 			case 'excluded':
