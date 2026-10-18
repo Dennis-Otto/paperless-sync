@@ -1,0 +1,17 @@
+flowchart TB
+    accTitle: Wann ein Dokument als fehlend gilt
+    accDescr: Jeder Lauf liest alle Seiten der Dokumente und des Papierkorbs von Paperless. Kam eine Seite zu kurz oder leer zurück, oder hat sich die Liste während des Scans geändert, meldet der Lauf SCAN INCOMPLETE und zählt kein Dokument als fehlend. Sonst beginnt ein Dokument, das in einer der Listen steht, seine Zählung neu, und eines, das in keiner Liste steht, zählt einen fehlenden Scan mehr; nach N Scans in Folge wandert seine Kopie in den Gelöscht-Ordner oder wird gelöscht, wenn das erlaubt ist, im Rahmen der Batchgröße.
+
+    scan["Ein Lauf liest jede Seite<br>der Dokumente und des Papierkorbs"] --> complete{"Jede Seite voll<br>und die Liste unverändert?"}
+    complete -->|nein| incomplete["SCAN INCOMPLETE:<br>kein Dokument gilt in<br>diesem Lauf als fehlend"]
+    complete -->|ja| listed{"Steht das Dokument<br>in einer der Listen?"}
+    listed -->|ja| reset["Seine Zählung fehlender<br>Scans beginnt neu"]
+    listed -->|nein| scans{"In N Scans<br>in Folge fehlend?"}
+    scans -->|noch nicht| wait["WAIT: ein fehlender<br>Scan mehr"]
+    scans -->|ja| change["Nach _Gelöscht verschoben,<br>oder gelöscht, wenn erlaubt,<br>im Rahmen der Batchgröße"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class scan,complete,listed,scans check
+    class incomplete,reset,wait kept
+    class change changed

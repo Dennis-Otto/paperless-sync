@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wohin das Ergebnis eines Laufs geht
+    accDescr: Ein Lauf, geplant, von Hand oder ein Testlauf, schreibt seinen Bericht. Der Status der App behält den Zustand, die Zeiten und den Bericht des letzten Laufs, die die Einstellungsseite bei jedem Besuch zeigt, die Fehler zuerst. Der Fehler eines Dokuments kommt als Warnung ins Nextcloud-Protokoll, wenn er zum ersten Mal auftritt oder sich ändert. Ein Lauf, der etwas geändert hat, und jeder Import, den Paperless abgeschlossen, nicht geschafft oder abgelehnt hat, fügt dem Aktivitätenstrom des Zielbenutzers einen Eintrag mit Links zu den Dateien hinzu, ein Testlauf aber keinen. Eine Spiegelung, die immer wieder scheitert, und jeder Import, der fehlgeschlagen ist oder abgelehnt wurde, schickt eine Benachrichtigung, ein Testlauf aber keine.
+
+    run(["`⚙️ Lauf<br>*geplant, von Hand<br>oder Testlauf*`"])
+    report["`📋 Bericht<br>*Zahlen, bis zu 100 Zeilen,<br>Fehler zuerst*`"]
+    status["`🗂️ Status<br>*Zustand, Zeiten, Fehler<br>und Bericht des letzten Laufs*`"]
+    page["`🖥️ Einstellungsseite<br>*bei jedem Besuch*`"]
+    log["`📜 Nextcloud-Protokoll<br>*eine Warnung für jeden<br>neuen Fehler eines Dokuments*`"]
+    activity["`📰 Aktivitätenstrom<br>*des Zielbenutzers: Änderungen<br>und Importe, mit Links*`"]
+    notify["`🔔 Benachrichtigungen<br>*der Administratoren für eine<br>scheiternde Spiegelung, des Ziel-<br>benutzers für fehlgeschlagene Importe*`"]
+
+    run --> report --> status --> page
+    run -- "Fehler" --> log
+    run -- "Änderungen, nicht eines Testlaufs" --> activity
+    run -- "Fehlschläge, nicht eines Testlaufs" --> notify
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,report,status,page,activity,notify nextcloud
+    class log warning

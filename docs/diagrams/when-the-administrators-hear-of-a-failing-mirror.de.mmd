@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: Wann die Administratoren von einer scheiternden Spiegelung erfahren
+    accDescr: Nach jedem Lauf, der kein Testlauf ist, zählt Paperless Sync die Läufe in Folge, die fehlgeschlagen oder mit Fehlern abgeschlossen sind. Ein erfolgreicher Lauf beendet die Reihe und entfernt die Benachrichtigung. Nach dem dritten Lauf in Folge, oder sobald der erste von ihnen vor einem Tag geendet hat, bekommt jeder Administrator eine Benachrichtigung mit dem Fehler des letzten Laufs und einem Link zu den Einstellungen, einmal für die ganze Reihe. Die Einrichtungsprüfungen unter Administration, Übersicht und die Status-API zeigen denselben Zustand jederzeit.
+
+    run["Ein Lauf endet,<br>kein Testlauf"] --> success{"Erfolgreich,<br>ohne Fehler?"}
+    success -->|ja| clear["Die Reihe endet, und die<br>Benachrichtigung verschwindet"]
+    success -->|nein| count["Ein Lauf mehr in der Reihe,<br>der nicht erfolgreich war"]
+    count --> enough{"Drei Läufe in Folge,<br>oder ein Tag seit dem ersten?"}
+    enough -->|nein| quiet["Noch erfährt niemand davon:<br>Paperless startet vielleicht neu"]
+    enough -->|ja| sent{"Für diese Reihe<br>schon benachrichtigt?"}
+    sent -->|ja| quiet2["Keine zweite Benachrichtigung"]
+    sent -->|nein| notify["Jeder Administrator bekommt<br>eine Benachrichtigung mit dem Fehler<br>und einem Link zu den Einstellungen"]
+    count -.-> checks["Einrichtungsprüfungen und Status-API<br>zeigen den Zustand jederzeit"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class run,success,count,enough,sent,checks check
+    class clear,quiet,quiet2 kept
+    class notify changed

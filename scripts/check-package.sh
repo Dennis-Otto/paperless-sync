@@ -22,9 +22,10 @@
 set -euo pipefail
 
 APP_ID="paperless_sync"
-# What Nextcloud loads of the app, and the three files that the App Store and the
-# administrators read. Everything else that Git tracks stays out of the package.
-RUNTIME_PATHS=(appinfo css img js l10n lib templates CHANGELOG.md LICENSE README.md)
+# What Nextcloud loads of the app, and the four files that the App Store and the
+# administrators read, the README in English and German. Everything else that Git
+# tracks stays out of the package.
+RUNTIME_PATHS=(appinfo css img js l10n lib templates CHANGELOG.md LICENSE README.md README.de.md)
 # The file that signing adds, which a signed package needs and an unsigned one lacks.
 SIGNATURE="appinfo/signature.json"
 

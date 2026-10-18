@@ -64,6 +64,7 @@ RUNTIME_FILES=(
 	CHANGELOG.md
 	LICENSE
 	README.md
+	README.de.md
 )
 write appinfo/info.xml '<?xml version="1.0"?>' '<info><id>paperless_sync</id><version>1.0.0</version></info>'
 write css/settings.css '.paperless-sync { display: grid; }'
@@ -78,6 +79,7 @@ write templates/settings.php '<?php' '// The settings page.'
 write CHANGELOG.md '# Changelog'
 write LICENSE 'The license of the app.'
 write README.md '# Paperless Sync'
+write README.de.md '# Paperless Sync'
 write composer.json '{}'
 write docs/index.md '# Paperless Sync'
 write tests/Unit/SyncJobTest.php '<?php'
@@ -138,12 +140,12 @@ check_parsed() {
 stage
 pack files krankerl
 check_parsed "the package of krankerl" krankerl unsigned 0 \
-	"Validated unsigned production package with exactly the 12 runtime files of HEAD"
+	"Validated unsigned production package with exactly the 13 runtime files of HEAD"
 pack folders folders
-check_parsed "the package with its folders" folders unsigned 0 "exactly the 12 runtime files of HEAD"
+check_parsed "the package with its folders" folders unsigned 0 "exactly the 13 runtime files of HEAD"
 write templates/settings.php '<?php' '// A change that is not committed.'
 write lib/Untracked.php '<?php'
-check_parsed "a package of HEAD, not of the working tree" krankerl unsigned 0 "exactly the 12 runtime files of HEAD"
+check_parsed "a package of HEAD, not of the working tree" krankerl unsigned 0 "exactly the 13 runtime files of HEAD"
 git -C "${REPO}" checkout --quiet -- templates/settings.php
 rm "${REPO}/lib/Untracked.php"
 
@@ -153,7 +155,7 @@ printf '{"hashes": {}, "signature": "c2lnbmF0dXJl", "certificate": "certificate"
 	"${STAGE}/${APP_ID}/appinfo/signature.json"
 pack folders signed
 check_parsed "a signed package" signed signed 0 \
-	"Validated signed production package with exactly the 12 runtime files of HEAD and their signature"
+	"Validated signed production package with exactly the 13 runtime files of HEAD and their signature"
 check "a signed package checked as unsigned" signed unsigned 1 	"Unsigned package already holds a signature: ${APP_ID}/appinfo/signature.json"
 stage
 pack folders unsigned

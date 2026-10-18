@@ -41,6 +41,58 @@ extra_css:
   - stylesheets/brand.css
 
 plugins:
+  search:
+    lang: [en, de]
+  # English and German. A German page sits next to its English one, named like it with
+  # .de, such as guide.de.md next to guide.md, and takes its snippets from README.de.md;
+  # together they make the German website in de/, with German menus, search, dates and
+  # switches, and a switch between the languages in the header that keeps the page. A
+  # page without a German version shows in English there; when it links to a heading of
+  # a German page, such as guide.md#requirements, the German page has an anchor of that
+  # name above its heading, <a id="requirements"></a>, and the strict build names one
+  # that is missing. scripts/check-project.sh keeps the headings, snippets and diagrams
+  # of each German page in step with its English one.
+  # https://ultrabug.github.io/mkdocs-static-i18n/
+  i18n:
+    enabled: true
+    languages:
+      - locale: en
+        name: English
+        default: true
+        build: true
+      - locale: de
+        name: Deutsch
+        build: true
+        site_description: "Nextcloud-App, die Dokumente von Paperless-ngx in Nextcloud Dateien synchronisiert, nach Korrespondent, Typ und Jahr, und einen Eingangsordner an Paperless schickt. Ohne WebDAV, ohne Nextcloud-Passwort."
+        nav_translations:
+          Home: Start
+          Guide: Anleitung
+          Help: Hilfe
+          Troubleshooting: Fehlerbehebung
+          Compare: Vergleich
+          Architecture: Architektur
+          Security design: Sicherheitsdesign
+          Development: Entwicklung
+          Automation: Automatisierung
+          Changelog: Änderungen
+          Decisions: Entscheidungen
+        # The switch between the light and the dark theme, with German names.
+        theme:
+          palette:
+            - media: "(prefers-color-scheme: light)"
+              scheme: default
+              primary: custom
+              accent: custom
+              toggle:
+                icon: material/weather-night
+                name: Zum dunklen Design wechseln
+            - media: "(prefers-color-scheme: dark)"
+              scheme: slate
+              primary: custom
+              accent: custom
+              toggle:
+                icon: material/weather-sunny
+                name: Zum hellen Design wechseln
   # The preview card of a page, which shows where a link to it is shared, in the dark
   # blue of the social preview of the repository. The home page shows the social
   # preview itself, .github/social-preview.png, with the layout in .github/social-cards.
