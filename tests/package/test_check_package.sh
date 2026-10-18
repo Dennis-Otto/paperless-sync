@@ -140,12 +140,12 @@ check_parsed() {
 stage
 pack files krankerl
 check_parsed "the package of krankerl" krankerl unsigned 0 \
-	"Validated unsigned production package with exactly the 12 runtime files of HEAD"
+	"Validated unsigned production package with exactly the 13 runtime files of HEAD"
 pack folders folders
-check_parsed "the package with its folders" folders unsigned 0 "exactly the 12 runtime files of HEAD"
+check_parsed "the package with its folders" folders unsigned 0 "exactly the 13 runtime files of HEAD"
 write templates/settings.php '<?php' '// A change that is not committed.'
 write lib/Untracked.php '<?php'
-check_parsed "a package of HEAD, not of the working tree" krankerl unsigned 0 "exactly the 12 runtime files of HEAD"
+check_parsed "a package of HEAD, not of the working tree" krankerl unsigned 0 "exactly the 13 runtime files of HEAD"
 git -C "${REPO}" checkout --quiet -- templates/settings.php
 rm "${REPO}/lib/Untracked.php"
 
@@ -155,7 +155,7 @@ printf '{"hashes": {}, "signature": "c2lnbmF0dXJl", "certificate": "certificate"
 	"${STAGE}/${APP_ID}/appinfo/signature.json"
 pack folders signed
 check_parsed "a signed package" signed signed 0 \
-	"Validated signed production package with exactly the 12 runtime files of HEAD and their signature"
+	"Validated signed production package with exactly the 13 runtime files of HEAD and their signature"
 check "a signed package checked as unsigned" signed unsigned 1 	"Unsigned package already holds a signature: ${APP_ID}/appinfo/signature.json"
 stage
 pack folders unsigned
