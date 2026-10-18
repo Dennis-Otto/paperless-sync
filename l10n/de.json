@@ -450,6 +450,7 @@
 		"Last call, {time}: the copy of P{document} removed, as the settings exclude the document.": "Letzter Aufruf, {time}: Die Kopie von P{document} wurde entfernt, weil die Einstellungen das Dokument ausschließen.",
 		"Last call, {time}: the copy of P{document} was current already.": "Letzter Aufruf, {time}: Die Kopie von P{document} war schon aktuell.",
 		"Last call, {time}: the settings exclude P{document}, such as a document in the inbox of Paperless.": "Letzter Aufruf, {time}: Die Einstellungen schließen P{document} aus, etwa als Dokument im Posteingang von Paperless.",
+		"Last call, {time}: the tags of P{document} changed.": "Letzter Aufruf, {time}: Die Schlagworte von P{document} wurden geändert.",
 		"Last call, {time}: Paperless shows no active document P{document}. A scheduled run handles a document in the trash or deleted.": "Letzter Aufruf, {time}: Paperless zeigt kein aktives Dokument P{document}. Ein Dokument im Papierkorb oder ein gelöschtes übernimmt ein geplanter Lauf.",
 		"Last call, {time}: P{document} waits for the next background jobs.": "Letzter Aufruf, {time}: P{document} wartet auf die nächsten Hintergrundjobs.",
 		"Last call, {time}: nothing changed for P{document}, as scheduled synchronization or the export is off.": "Letzter Aufruf, {time}: Für P{document} hat sich nichts geändert, weil die geplante Synchronisation oder der Export ausgeschaltet ist.",

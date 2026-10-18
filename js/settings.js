@@ -1389,6 +1389,8 @@
 				return translate('Last call, {time}: P{document} moved.', parameters)
 			case 'removed':
 				return translate('Last call, {time}: the copy of P{document} removed, as the settings exclude the document.', parameters)
+			case 'tagged':
+				return translate('Last call, {time}: the tags of P{document} changed.', parameters)
 			case 'unchanged':
 				return translate('Last call, {time}: the copy of P{document} was current already.', parameters)
 			case 'excluded':

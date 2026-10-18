@@ -117,7 +117,8 @@ final class WebhookService {
 
 	/**
 	 * What came of the run of one document, in a word: failed when it reported an error, exported,
-	 * moved or removed for the change that it made, unchanged for a copy that was current already,
+	 * moved or removed for the change that it made, tagged for a copy whose Nextcloud tags alone
+	 * changed, unchanged for a copy that was current already,
 	 * excluded for a document that the settings leave out, such as one in the inbox of Paperless,
 	 * and missing for one that Paperless doesn't show to the account.
 	 */
@@ -127,6 +128,7 @@ final class WebhookService {
 			$report->exported > 0 => 'exported',
 			$report->moved > 0 => 'moved',
 			$report->removedExcluded > 0 => 'removed',
+			$report->tagged > 0 => 'tagged',
 			$report->unchanged > 0 => 'unchanged',
 			$report->skipped > 0 => 'excluded',
 			default => 'missing',

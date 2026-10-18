@@ -49,6 +49,8 @@ final class TestSystemTags implements ISystemTagManager, ISystemTagObjectMapper 
 	public ?\Throwable $readException = null;
 	/** @var array<string, \Throwable> the failure of the assignment of tags to one object, by its ID */
 	public array $assignFailures = [];
+	/** @var array<string, \Throwable> the failure of the creation of the tag of one name, such as of a database that holds no emoji */
+	public array $createFailures = [];
 	private int $lastId = 0;
 
 	/** A tag that someone made in Nextcloud, such as a user in Files or an administrator; returns its ID. */
@@ -112,6 +114,9 @@ final class TestSystemTags implements ISystemTagManager, ISystemTagObjectMapper 
 	public function createTag(string $tagName, bool $userVisible, bool $userAssignable): ISystemTag {
 		if ($this->createForbidden) {
 			throw new TagCreationForbiddenException();
+		}
+		if (isset($this->createFailures[$tagName])) {
+			throw $this->createFailures[$tagName];
 		}
 		if (in_array($tagName, $this->createdMeanwhile, true)) {
 			$this->add($tagName);

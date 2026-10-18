@@ -247,6 +247,26 @@ final class SystemTagServiceTest extends TestCase {
 		self::assertSame([1, 1], [$report->errors, $report->tagged]);
 	}
 
+	/**
+	 * A tag that Nextcloud fails to create, or a file that it fails to find, is an error of the
+	 * document of that copy, once per name in a run: the other copies get their tags.
+	 */
+	public function testAFailureForOneTagOrFileIsAnErrorOfItsDocument(): void {
+		$this->tags->createFailures['Eingang'] = new RuntimeException('Incorrect string value');
+
+		$report = $this->runTags([[1, self::FIRST, [1, 2]], [2, self::SECOND, [2, 3]], [4, '', [1]]]);
+
+		self::assertSame([
+			'ERROR: Tags P4: A relative folder path is required.',
+			'ERROR: Tags P1: Incorrect string value',
+			'TAGS P1: +Steuer 2026',
+			'TAGS P2: +Bezahlt',
+		], $report->actions);
+		self::assertSame(['type' => 'error', 'document' => 1, 'path' => self::FIRST, 'detail' => 'Tags P1: Incorrect string value'], $report->entries[1]);
+		self::assertSame([2, 2], [$report->errors, $report->tagged]);
+		self::assertSame(['Steuer 2026', 'Bezahlt'], $this->tags->created);
+	}
+
 	/** A failure for every copy, such as of the database of Nextcloud, is an error of the run, which keeps the tags that it made. */
 	public function testAFailureForEveryCopyIsAnErrorOfTheRun(): void {
 		$this->tags->readException = new RuntimeException('The database is not available');

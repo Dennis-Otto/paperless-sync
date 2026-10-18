@@ -50,6 +50,8 @@ final class ArchiveTags {
 	private array $taken = [];
 	/** @var array<string, string> the names whose tags Nextcloud let the run not create, in lower case */
 	private array $notCreated = [];
+	/** @var array<string, string> the names whose tags failed to be found or created in this run, in lower case */
+	private array $failed = [];
 	private bool $changed = false;
 
 	/** @param array<string, string> $tagNames the names of the tags of Paperless by their IDs */
@@ -77,8 +79,10 @@ final class ArchiveTags {
 	/**
 	 * Gives the copies of the run the tags of their documents, and, at the end of a run of the whole
 	 * archive ($complete), deletes the tags of the app that no tag of Paperless and no file has any
-	 * more. A failure of Nextcloud for one copy is an error of its document, and one for all of them,
-	 * such as of its database, an error of the run, whose copies stay as they are.
+	 * more. A failure of Nextcloud for one copy, such as for its file or for one tag that it would
+	 * create, is an error of its document, once per name of a tag in a run, and the other copies get
+	 * their tags; one for all of them, such as of its database when it asks which tags the files
+	 * have, is an error of the run, whose copies stay as they are.
 	 */
 	public function finish(bool $complete): void {
 		try {
@@ -113,8 +117,15 @@ final class ArchiveTags {
 			$this->ids[self::key($name)] = $id;
 		}
 		$fileIds = [];
+		$broken = [];
 		foreach ($this->copies as $index => $copy) {
-			$fileId = $this->storage->findFileId($this->config->targetUser, $copy['current']);
+			try {
+				$fileId = $this->storage->findFileId($this->config->targetUser, $copy['current']);
+			} catch (\Throwable $exception) {
+				$this->copyError($copy, $exception);
+				$broken[$index] = true;
+				continue;
+			}
 			if ($fileId !== null) {
 				$fileIds[$index] = (string)$fileId;
 			}
@@ -124,12 +135,19 @@ final class ArchiveTags {
 		foreach ($this->copies as $index => $copy) {
 			$fileId = $fileIds[$index] ?? null;
 			// A copy that a run wrote is there; a dry-run finds no file for a copy that it would create.
-			if ($fileId === null && !$this->report->dryRun) {
+			if (isset($broken[$index]) || ($fileId === null && !$this->report->dryRun)) {
 				continue;
 			}
 			$wanted = [];
 			foreach ($copy['names'] as $name) {
-				$id = $this->tagFor($name);
+				try {
+					$id = $this->tagFor($name);
+				} catch (\Throwable $exception) {
+					// The copy goes without that tag, which it doesn't have; the others of the run too.
+					$this->failed[self::key($name)] = $name;
+					$this->copyError($copy, $exception);
+					continue;
+				}
 				if ($id !== null) {
 					$wanted[$id === self::PLANNED ? 'planned:' . self::key($name) : $id] = $name;
 				}
@@ -152,6 +170,15 @@ final class ArchiveTags {
 			++$changes;
 			$this->change($copy['document'], $copy['path'], $fileId, $added, $removed);
 		}
+	}
+
+	/**
+	 * Reports a failure of Nextcloud for one copy as an error of its document.
+	 *
+	 * @param array{document: int, path: string, current: string, names: list<string>} $copy
+	 */
+	private function copyError(array $copy, \Throwable $exception): void {
+		$this->report->error("Tags P{$copy['document']}: " . SyncErrors::message($exception), $copy['document'], $copy['path']);
 	}
 
 	/**
@@ -186,7 +213,7 @@ final class ArchiveTags {
 		if (isset($this->ids[$key])) {
 			return $this->ids[$key];
 		}
-		if (isset($this->taken[$key]) || isset($this->notCreated[$key])) {
+		if (isset($this->taken[$key]) || isset($this->notCreated[$key]) || isset($this->failed[$key])) {
 			return null;
 		}
 		// Nextcloud keeps one tag of a name, whatever its case, and lists those that contain it.

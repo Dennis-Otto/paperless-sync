@@ -62,7 +62,7 @@ Yes, through Nextcloud: the target user shares the folder of the archive with th
 
 ### Can I find the copies by their tags?
 
-Yes, with the [tags in Nextcloud](guide.md#tags-in-nextcloud) on. Each copy then carries the tags of its document as collaborative tags of Nextcloud, so Files filters the archive by them, in its view *Tags*, and the search of Nextcloud finds the copies by them; everyone who can open a copy, also through a share, sees its tags. They follow every change in Paperless with the next run, also of a document whose copy stays as it is, and only administrators can assign them, so that nobody puts them on a copy by mistake. The tags that people make in Nextcloud stay theirs, also on the copies: the runs never change or remove them.
+Yes, with the [tags in Nextcloud](guide.md#tags-in-nextcloud) on. Each copy then carries the tags of its document as collaborative tags of Nextcloud, so Files filters the archive by them, in its view *Tags*, and the search of Nextcloud finds the copies by them; everyone who can open a copy, also through a share, sees its tags. The names of the tags themselves are visible to every user of Nextcloud, also to those who can't open the archive, so turn the setting on only when the names of your Paperless tags may be seen by all of them. They follow every change in Paperless with the next run, also of a document whose copy stays as it is, and only administrators can assign them, so that nobody puts them on a copy by mistake. The tags that people make in Nextcloud stay theirs, also on the copies: the runs never change or remove them.
 
 ### Can I change the target user?
 
