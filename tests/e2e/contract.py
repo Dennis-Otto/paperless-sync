@@ -16,6 +16,9 @@ container of the mock, inside the network of Compose, with Python alone:
     python contract.py content KEY    compares the file on standard input with the document in Paperless
     python contract.py imported NAME ID
                                       checks that the upload NAME of the app became document ID
+    python contract.py id KEY         the ID of a document of the scenario in Paperless
+    python contract.py sidecar KEY TITLE
+                                      checks the sidecar of a document on standard input
     python contract.py status         checks the status of the app on standard input
     python contract.py log            checks the log of Nextcloud on standard input
     python contract.py shapes DIR     compares the shapes of the answers with the fixtures in DIR,
@@ -65,6 +68,8 @@ DOCUMENTS = {
     "inbox": ("unread.pdf", "Unread letter", "Example Insurance", "Letter", "2026-08-28"),
 }
 RENAMED = "Monthly invoice corrected"
+# The note on the invoice, which the metadata next to the archive keeps with its author.
+NOTE = "Paid on 1 September."
 # A file of no type that Paperless takes: the zero bytes first make it application/octet-stream.
 UNSUPPORTED = bytes(16) + b"Synthetic unsupported contract test file.\n"
 
@@ -270,6 +275,22 @@ FIELDS = ",".join(DOCUMENT_FIELDS)
 DOCUMENTS_QUERY = f"ordering=id&fields={FIELDS}&truncate_content=true"
 
 
+def is_list(value):
+    return isinstance(value, list)
+
+
+def is_user(value):
+    return isinstance(value, dict) and is_id(value.get("id")) and is_text(value.get("username"))
+
+
+# A note of a document, as the metadata next to the archive reads it (MetadataSidecars::notes()).
+NOTE_FIELDS = {"note": is_text, "created": is_time, "user": is_user}
+# The fields of a run that writes the metadata next to the archive: those of a run and the
+# notes (PaperlessApiService::documentFields()).
+NOTES_FIELDS = f"{FIELDS},notes"
+NOTES_QUERY = f"ordering=id&fields={NOTES_FIELDS}&truncate_content=true"
+
+
 def expect_fields(what, item, fields):
     check(isinstance(item, dict), f"{what} is no object: {item!r}")
     for key, predicate in fields.items():
@@ -405,6 +426,9 @@ def api(url, line):
             fields["custom_fields"] = [{"field": priority["id"], "value": choices[0]["id"]}]
         _, _, edited = paperless.request("PATCH", f"/api/documents/{ids[key]}/", fields)
         check(edited["tags"] == tags and edited["created"].startswith(created), f"The edit of {key} gave {edited!r}.")
+    # A note on the invoice, as the user writes one in Paperless.
+    status = paperless.request("POST", f"/api/documents/{ids['invoice']}/notes/", {"note": NOTE}, expect=None)[0]
+    check(status in (200, 201), f"Paperless answered HTTP {status} to a new note.")
 
     # The documents, as every run reads them: sorted by ID, with the fields of a run alone.
     documents = paperless.get(f"/api/documents/?{DOCUMENTS_QUERY}&page=1&page_size=1000", record="documents")
@@ -425,6 +449,28 @@ def api(url, line):
     check(set(single) == set(DOCUMENT_FIELDS), f"Paperless ignored the fields of a run for one document: {sorted(single)!r}")
     check(single == listed, f"The document read by its ID is {single!r}, but the list has {listed!r}.")
     check(invoice_fields == [{"field": priority["id"], "value": choices[0]["id"]}], f"The invoice has {invoice_fields!r}.")
+    # The documents with their notes, as a run reads them while it writes the metadata next to
+    # the archive, and one by its ID, as a call of the webhook does then.
+    noted = paperless.get(f"/api/documents/?{NOTES_QUERY}&page=1&page_size=1000", record="documents-notes")
+    expect_page("The documents with their notes", noted, 3)
+    for item in noted["results"]:
+        expect_fields(f"The document {item.get('id')} with its notes", item, {**DOCUMENT_FIELDS, "notes": is_list})
+        check(set(item) == {*DOCUMENT_FIELDS, "notes"}, f"Paperless ignored the fields of a run with notes: {sorted(item)!r}")
+        for note in item["notes"]:
+            expect_fields(f"A note of the document {item['id']}", note, NOTE_FIELDS)
+    noted_invoice = next(item for item in noted["results"] if item["id"] == ids["invoice"])
+    check(
+        [(note["note"], note["user"]["username"]) for note in noted_invoice["notes"]] == [(NOTE, USERNAME)],
+        f"The invoice has the notes {noted_invoice['notes']!r}.",
+    )
+    check(
+        all(item["notes"] == [] for item in noted["results"] if item["id"] != ids["invoice"]),
+        f"A document without a note has notes: {noted!r}",
+    )
+    single = paperless.get(
+        f"/api/documents/{ids['invoice']}/?fields={NOTES_FIELDS}&truncate_content=true", record="document-notes"
+    )
+    check(single == noted_invoice, f"The invoice read by its ID is {single!r}, but the list has {noted_invoice!r}.")
     # The pages of a list that is longer than a page, which the app reads one by one.
     first = paperless.get(f"/api/documents/?{DOCUMENTS_QUERY}&page=1&page_size=2")
     second = paperless.get(f"/api/documents/?{DOCUMENTS_QUERY}&page=2&page_size=2")
@@ -541,6 +587,39 @@ def change(what):
         paperless.request("DELETE", f"/api/documents/{invoice}/", expect=204)
     else:
         paperless.request("POST", "/api/trash/", {"action": "restore", "documents": [invoice]})
+
+
+def sidecar(key, title):
+    """Checks the sidecar of a document in the archive, on standard input, against Paperless."""
+    state, paperless = connect()
+    document = state["ids"][key]
+    metadata = json.load(sys.stdin)
+    _name, _title, correspondent, document_type, created = DOCUMENTS[key]
+    archived = paperless.request("GET", f"/api/documents/{document}/download/?original=false", raw=True)[2]
+    expected = {
+        "version": 1,
+        "id": document,
+        "title": title,
+        "correspondent": correspondent,
+        "document_type": document_type,
+        "tags": ["Contract"],
+        "file": {"version": "archive", "sha256": hashlib.sha256(archived).hexdigest()},
+        "url": f"{state['url']}/documents/{document}/details",
+    }
+    for field, value in expected.items():
+        check(metadata.get(field) == value, f"The sidecar of P{document} has {field}={metadata.get(field)!r}, not {value!r}.")
+    check(str(metadata.get("created")).startswith(created), f"The sidecar of P{document} has created={metadata.get('created')!r}.")
+    notes = metadata.get("notes")
+    check(
+        isinstance(notes, list) and [(note.get("note"), note.get("user")) for note in notes] == [(NOTE, USERNAME)],
+        f"The sidecar of P{document} has the notes {notes!r}.",
+    )
+    check(all(is_time(note.get("created")) for note in notes), f"A note in the sidecar of P{document} has no time: {notes!r}")
+    fields = metadata.get("custom_fields")
+    check(
+        fields == [{"name": "Priority", "type": "select", "value": "High"}],
+        f"The sidecar of P{document} has the custom fields {fields!r}, not the label of the choice.",
+    )
 
 
 def wait():
@@ -753,6 +832,10 @@ def main(arguments):
         content(*rest)
     elif command == "imported":
         imported(rest[0], int(rest[1]))
+    elif command == "id":
+        print(load_state()["ids"][rest[0]])
+    elif command == "sidecar":
+        sidecar(*rest)
     elif command == "status":
         status()
     elif command == "log":

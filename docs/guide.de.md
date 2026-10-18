@@ -50,11 +50,11 @@ Die Einstellungen stehen unter **Administrationseinstellungen → Paperless Sync
   <img alt="Der Abschnitt Zeitplan und Module: Schalter für die geplante Synchronisation, den Archivexport und den Import aus dem Eingang, das Intervall in Minuten und die maximalen Änderungen je Modul und Lauf" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Strukturiertes Archiv:** der Archivordner, die [Dateikonflikt-Regel](guide.de.md#dateikonflikt-regel) für eine Datei im Weg, die [Pfadvorlage](guide.de.md#variablen-der-pfadvorlage) mit einem Knopf für jede ihrer Variablen und den Pfaden der neuesten Dokumente mit ihr, während du tippst, die Archivversion oder das Original, und welche Dokumente draußen bleiben: die im Posteingang von Paperless und die mit einem der [ausgeschlossenen Tags](guide.de.md#zielbenutzer-und-tags), ausgewählt aus den Tags von Paperless.
+**3 · Strukturiertes Archiv:** der Archivordner, die [Dateikonflikt-Regel](guide.de.md#dateikonflikt-regel) für eine Datei im Weg, die [Pfadvorlage](guide.de.md#variablen-der-pfadvorlage) mit einem Knopf für jede ihrer Variablen und den Pfaden der neuesten Dokumente mit ihr, während du tippst, die Archivversion oder das Original, welche Dokumente draußen bleiben: die im Posteingang von Paperless und die mit einem der [ausgeschlossenen Tags](guide.de.md#zielbenutzer-und-tags), ausgewählt aus den Tags von Paperless, und ob die Läufe die [Metadaten neben dem Archiv](guide.de.md#metadaten-neben-dem-archiv) schreiben.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
-  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten und die ausgeschlossenen Tags" src="images/settings-archive-light.png">
+  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten, die ausgeschlossenen Tags und der Schalter Metadaten neben das Archiv schreiben" src="images/settings-archive-light.png">
 </picture>
 
 **4 · Nextcloud-Eingang:** der Eingangsordner, der Fehlerordner, die Unterordner des Eingangs, ob eine importierte Datei den Eingang verlässt, und die [Tags des Eingangs](guide.de.md#tags-des-eingangs): einer für jeden Unterordner, Tags für jeden Import, ausgewählt aus den Tags von Paperless, und ob die App die anlegt, die Paperless fehlen.

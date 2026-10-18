@@ -99,6 +99,8 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public array $documentReads = [];
 	/** The failure of the read of one document, such as a Paperless that can't be reached. */
 	public ?\Throwable $documentException = null;
+	/** @var list<bool> whether each read of the documents, or of one document, asked for their notes */
+	public array $notesAsked = [];
 
 	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
 		$this->connects[] = $connection;
@@ -121,7 +123,8 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		return [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
 	}
 
-	public function documents(): PaperlessScan {
+	public function documents(bool $notes = false): PaperlessScan {
+		$this->notesAsked[] = $notes;
 		return self::scan($this->documents, $this->documentsListed);
 	}
 
@@ -130,8 +133,9 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	}
 
 	/** The active document with the ID, as Paperless answers for /api/documents/<id>/. */
-	public function document(int $documentId): ?array {
+	public function document(int $documentId, bool $notes = false): ?array {
 		$this->documentReads[] = $documentId;
+		$this->notesAsked[] = $notes;
 		if ($this->documentException !== null) {
 			throw $this->documentException;
 		}

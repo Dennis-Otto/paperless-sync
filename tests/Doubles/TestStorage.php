@@ -183,8 +183,9 @@ final class TestStorage implements NextcloudStorageInterface {
 
 	public function writeText(string $userId, string $path, string $content, string $conflictMode = 'replace'): void {
 		$this->record('writeText', $userId, $path);
-		if ($this->writeTextException !== null) {
-			throw $this->writeTextException;
+		$failure = $this->writeFailures[$path] ?? $this->writeTextException;
+		if ($failure !== null) {
+			throw $failure;
 		}
 		$this->write($userId, $path, $content, $conflictMode);
 	}

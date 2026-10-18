@@ -239,6 +239,26 @@ elif mode == "deletion-off":
     expect("errors", 0)
     if any(str(action).startswith(("DELETE ", "MISSING ")) for action in payload.get("actions", [])):
         raise AssertionError(f"With permanent deletion off, a document purged from the trash lost its copy: {payload!r}")
+elif mode == "metadata-run":
+    # The run that turns the metadata next to the archive on changes no copy.
+    expect("unchanged", 1)
+    expect("exported", 0)
+    expect("errors", 0)
+elif mode == "sidecar":
+    # The sidecar of P123 holds what Paperless knows of the document, in names instead of IDs.
+    expect("version", 1)
+    expect("id", 123)
+    expect("title", "Monthly invoice corrected")
+    expect("correspondent", "Example GmbH")
+    expect("document_type", "Invoice")
+    expect("created", "2026-08-26")
+    expect("archive_serial_number", 42)
+    expect("notes", [{"note": "Paid on 1 September.", "created": "2026-09-01T09:00:00+02:00", "user": "e2e-owner"}])
+    expect("custom_fields", [{"name": "Invoice number", "type": "string", "value": "INV-2026-08"}])
+    expect("url", "http://paperless-mock:8080/documents/123/details")
+    file = payload.get("file") or {}
+    if file.get("version") != "archive" or len(file.get("sha256") or "") != 64:
+        raise AssertionError(f"sidecar: the copy is the archive version with its SHA-256: {payload!r}")
 elif mode == "deleted":
     expect("permanentlyDeleted", 1)
     expect("errors", 0)

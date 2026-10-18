@@ -14,8 +14,9 @@
 # every answer that the app reads: the fields of the documents and the trash, the pages
 # of a list, the tasks of an upload, a failed and a refused upload, and the checksums of
 # the metadata against those of the downloads. Then the app runs against it in
-# Nextcloud: the export, a new title, the trash of Paperless and back, and the inbox,
-# with a file that Paperless takes and one that it can't read.
+# Nextcloud: the export, with the metadata next to the archive, a new title, the trash of
+# Paperless and back, and the inbox, with a file that Paperless takes and one that it
+# can't read.
 #
 # The answers of Paperless become the fixtures of the unit tests in
 # tests/fixtures/paperless-ngx-<line>/. The script compares their shapes with those of the
@@ -177,7 +178,7 @@ nextcloud_request --request POST \
 	--data-urlencode 'settings[delete_inbox_after_success]=1' \
 	--data-urlencode 'settings[inbox_tags]=contract, Nextcloud' \
 	--data-urlencode 'settings[inbox_create_tags]=1' \
-	--data-urlencode 'settings[conflict_mode]=replace' \
+	--data-urlencode 'settings[conflict_mode]=replace' 	--data-urlencode 'settings[write_metadata]=1' \
 	--data-urlencode "token=$(contract token)" \
 	--output "${TMP_DIR}/config.json" \
 	"${BASE_URL}/apps/paperless_sync/settings"
@@ -188,6 +189,9 @@ EXPORTED=("${PATHS[@]}")
 assert_content invoice "${EXPORTED[0]}"
 assert_content statement "${EXPORTED[1]}"
 FILE_ID="$(file_id "${EXPORTED[0]}")"
+# The sidecar of the invoice, with its note, its author and the label of its custom field.
+SIDECAR="Documents/Paperless/Archive/.paperless/P$(contract id invoice).json"
+dav_get "${SIDECAR}" | contract sidecar invoice 'Monthly invoice'
 
 # A new title in Paperless moves the file, which keeps its ID in Nextcloud.
 contract rename
@@ -199,6 +203,7 @@ if [[ "$(file_id "${MOVED}")" != "${FILE_ID}" ]]; then
 	echo "The file of the invoice lost its ID ${FILE_ID} when it moved." >&2
 	exit 1
 fi
+dav_get "${SIDECAR}" | contract sidecar invoice 'Monthly invoice corrected'
 
 # The trash of Paperless, and back.
 contract trash

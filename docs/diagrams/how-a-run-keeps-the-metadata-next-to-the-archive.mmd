@@ -1,0 +1,30 @@
+flowchart TB
+    accTitle: How a run keeps the metadata next to the archive
+    accDescr: For each copy that a run exports, moves or finds unchanged, it builds the sidecar from what Paperless knows of the document and compares its SHA-256 with the one in index.csv. Only a sidecar whose content changed is written to .paperless/P123.json. At the end of the run, the sidecar of a document whose copy the run deleted, under the rules of deletion safety, goes with its row; the rows of the other copies follow their paths and states, such as into the deleted folder, and index.csv is written when it changed.
+
+    copy(["A copy that the run exports,<br>moves or finds unchanged"])
+    build["The sidecar from Paperless: title,<br>correspondent, tags, notes, custom<br>fields, dates, SHA-256 and link"]
+    changed{"Its SHA-256 differs<br>from the one in index.csv?"}
+    write["📄 .paperless/P123.json<br>is written"]
+    keep["The sidecar stays<br>as it is"]
+    deleted{"At the end of the run:<br>did the run delete the copy,<br>under deletion safety?"}
+    remove["The sidecar and its<br>row go with the copy"]
+    row["The row follows the copy:<br>its path and the state active,<br>trash or missing"]
+    index["📋 .paperless/index.csv<br>is written when it changed"]
+
+    copy --> build --> changed
+    changed -- "yes" --> write
+    changed -- "no" --> keep
+    write --> deleted
+    keep --> deleted
+    deleted -- "yes" --> remove
+    deleted -- "no" --> row
+    remove --> index
+    row --> index
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class changed,deleted check
+    class write,index kept
+    class remove refused

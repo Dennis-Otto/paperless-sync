@@ -88,6 +88,7 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 - Jede Kopie bleibt in Nextcloud dieselbe Datei: Ein neuer Inhalt ihres Dokuments, etwa eine neue Archivversion, aktualisiert sie an Ort und Stelle, sodass ihre Freigaben, öffentlichen Links, Kommentare, Tags, Favoriten und Versionen bei ihr bleiben
 - Dokumente im Posteingang von Paperless warten, bis sie fertig sind, und ein Dokument, das einen ausgeschlossenen Tag oder wieder den Posteingangs-Tag bekommt, bleibt draußen, seine Kopie wird entfernt
 - Eine feste Markierung wie `[P123]` in jedem Dateinamen, die [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) versteht
+- Auf Wunsch [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv): eine JSON-Datei für jedes Dokument mit seinen Tags, Notizen, benutzerdefinierten Feldern und Daten, und ein Verzeichnis des ganzen Archivs als CSV, sodass sich das Archiv auch ohne Paperless selbst beschreibt
 
 ### Eingang
 
@@ -379,6 +380,75 @@ Nextcloud nimmt Namen mit bis zu 250 Bytes an, und ein kyrillisches Zeichen brau
   <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.de.svg" alt="Wie ein Teil des Pfads entsteht: Die Werte kommen als reiner Text in den Teil der Vorlage, und der Teil wird bereinigt. Solange er mehr Bytes hat, als Nextcloud erlaubt, wird der längste der Freitextwerte gekürzt, sodass der Text der Vorlage, die Daten, die Markierung und die Endung ganz bleiben. Der Dateiname endet dann mit der Endung.">
 </picture>
 
+### Metadaten neben dem Archiv
+
+Mit *Metadaten neben das Archiv schreiben* in *3 · Strukturiertes Archiv*, das von Haus aus aus ist, schreibt jeder Lauf, was Paperless über jedes Dokument weiß, in den Ordner `.paperless` des Archivordners. Dann beschreibt sich das Archiv auch ohne Paperless selbst: wenn du zu einem anderen System wechselst, nur Nextcloud sicherst oder das Archiv jemandem ohne Konto in Paperless gibst. Dateien zeigt den Ordner, sobald *Versteckte Dateien anzeigen* in seinen Einstellungen an ist.
+
+> [!IMPORTANT]
+> Die Notizen und die benutzerdefinierten Felder der Dokumente, etwa eine private Bemerkung, eine IBAN oder eine Vertragsnummer, blieben bisher in Paperless. Mit der Einstellung kann sie in `.paperless` lesen, wer den Archivordner öffnen kann, auch über eine Freigabe oder einen öffentlichen Link des Archivordners oder eines Ordners darüber. Prüfe die Freigaben, bevor du sie einschaltest.
+
+- **Eine Begleitdatei für jede Kopie,** `.paperless/P123.json` für das Dokument 123: sein Titel, sein Korrespondent, Dokumenttyp und Speicherpfad mit ihren Namen, seine Tags, wann es erstellt, hinzugefügt und zuletzt geändert wurde, seine Archivseriennummer, sein ursprünglicher Dateiname, MIME-Typ und seine Seitenzahl, seine Notizen mit ihren Verfassern, seine benutzerdefinierten Felder mit ihren Namen, ein Auswahlfeld mit der Bezeichnung seiner Wahl, ob die Kopie das Original oder die Archivversion ist, mit ihrer SHA-256, und die Adresse des Dokuments in Paperless.
+- **Ein Verzeichnis des Archivs,** `.paperless/index.csv`, mit einer Zeile für jede Begleitdatei: die ID, der Titel, der Korrespondent, der Dokumenttyp, die Tags und die Daten, der Pfad der Kopie unterhalb des Archivordners, der Zustand des Dokuments, `active`, `trash` oder `missing`, die SHA-256 der Kopie, die Adresse in Paperless und die SHA-256 der Begleitdatei. Es ist CSV nach RFC 4180, in UTF-8 mit Byte-Order-Mark, mit Kommas zwischen den Werten: LibreOffice Calc öffnet es mit einem Doppelklick, und Excel, dessen Doppelklick eine CSV-Datei am Trennzeichen seiner Sprache teilt, im Deutschen am Semikolon, mit *Daten* → *Aus Text/CSV*, das das Komma und UTF-8 selbst erkennt. Ein Wert, den eine Tabellenkalkulation für eine Formel halten würde, einer, der mit `=`, `+`, `-` oder `@` beginnt, beginnt im Verzeichnis mit einem Apostroph, und die Begleitdatei hat ihn, wie er ist.
+
+Die Begleitdatei eines Dokuments, hier mit der Archivversion seiner Kopie:
+
+```json
+{
+    "version": 1,
+    "id": 123,
+    "title": "Monthly invoice",
+    "correspondent": "Example GmbH",
+    "document_type": "Invoice",
+    "storage_path": null,
+    "tags": [
+        "Electricity",
+        "Paid"
+    ],
+    "created": "2026-08-26",
+    "added": "2026-08-26T10:00:00+02:00",
+    "modified": "2026-09-01T09:00:00+02:00",
+    "archive_serial_number": 42,
+    "original_file_name": "scan.pdf",
+    "mime_type": "application/pdf",
+    "page_count": 2,
+    "notes": [
+        {
+            "note": "Paid on 1 September.",
+            "created": "2026-09-01T09:00:00+02:00",
+            "user": "anna"
+        }
+    ],
+    "custom_fields": [
+        {
+            "name": "Invoice number",
+            "type": "string",
+            "value": "INV-2026-08"
+        }
+    ],
+    "file": {
+        "version": "archive",
+        "sha256": "9fae5fe3947195044d068993bb1c63bd15029aab64fdc4827ee6d9e08b304d84"
+    },
+    "url": "https://paperless.example.com/documents/123/details"
+}
+```
+
+Und seine Zeile im Verzeichnis, unter den Namen der Spalten, die Prüfsummen hier gekürzt:
+
+```csv
+id,title,correspondent,document_type,tags,created,added,modified,archive_serial_number,path,state,sha256,url,metadata_sha256
+123,Monthly invoice,Example GmbH,Invoice,"Electricity, Paid",2026-08-26,2026-08-26T10:00:00+02:00,2026-09-01T09:00:00+02:00,42,Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice [P123].pdf,active,9fae5fe3…,https://paperless.example.com/documents/123/details,5d41402a…
+```
+
+Ein Lauf schreibt eine Begleitdatei nur, wenn sich ihr Inhalt ändert, etwa nach einer Änderung des Dokuments in Paperless oder des Namens seines Korrespondenten: Das Verzeichnis hält die SHA-256 jeder Begleitdatei, sodass ein Lauf für alle eine Datei liest. Eine Kopie im Gelöscht-Ordner behält ihre Begleitdatei, und ihre Zeile nennt ihren Pfad dort und den Zustand ihres Dokuments. Eine Begleitdatei geht mit ihrer Kopie, nach denselben Regeln der [Löschsicherheit](#löschsicherheit): wenn ein Lauf die Kopie eines Dokuments löscht, das Paperless gelöscht hat, oder die Kopie eines Dokuments mit einem ausgeschlossenen Tag entfernt.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-keeps-the-metadata-next-to-the-archive.de.dark.svg">
+  <img src="docs/images/diagrams/how-a-run-keeps-the-metadata-next-to-the-archive.de.svg" alt="Wie ein Lauf die Metadaten neben dem Archiv pflegt: Für jede Kopie, die ein Lauf exportiert, verschiebt oder unverändert vorfindet, baut er die Begleitdatei aus dem, was Paperless über das Dokument weiß, und vergleicht ihre SHA-256 mit der in index.csv. Nur eine Begleitdatei, deren Inhalt sich geändert hat, wird nach .paperless/P123.json geschrieben. Am Ende des Laufs geht die Begleitdatei eines Dokuments, dessen Kopie der Lauf nach den Regeln der Löschsicherheit gelöscht hat, mit ihrer Zeile; die Zeilen der anderen Kopien folgen ihren Pfaden und Zuständen, etwa in den Gelöscht-Ordner, und index.csv wird geschrieben, wenn es sich geändert hat.">
+</picture>
+
+Ein Probelauf schreibt keine Metadaten, und ein Aufruf des [Webhooks](#änderungen-in-sekunden) schreibt die Begleitdatei und die Zeile seines Dokuments sofort. Paperless schickt die Notizen der Dokumente nur, solange die Einstellung an ist, und das Konto der App braucht die Berechtigung, benutzerdefinierte Felder anzusehen: Ohne sie exportieren die Läufe die Dokumente, schreiben keine Metadaten und melden einen Fehler, `Metadata: Paperless did not list its custom fields …`. Ein Lauf schreibt höchstens so viele Begleitdateien, wie *Maximale Änderungen je Modul und Lauf* erlaubt, also schreibt der erste Lauf nach dem Einschalten die Begleitdateien so vieler Dokumente, und die nächsten Läufe schreiben den Rest. Wenn Nextcloud eine Begleitdatei nicht schreiben kann, etwa eine gesperrte, zeigt der Bericht einen Fehler, `Metadata P123: …`, und der nächste Lauf versucht sie erneut. Wenn es keine schreiben kann, etwa bei vollem Kontingent, meldet der Lauf das einmal, schreibt keine weitere Begleitdatei, behält die Zeilen derer, die er geschrieben hat, und der nächste Lauf holt sie nach; `Metadata index: …` ist ein Fehler des Verzeichnisses. Lösche `index.csv`, damit der nächste Lauf jede Begleitdatei neu schreibt. Die Einstellung auszuschalten lässt den Ordner, wie er ist.
+
 ### Nextcloud-Eingang
 
 Dateien im Eingangsordner, und in seinen Unterordnern, wenn *Unterordner des Eingangs durchsuchen* an ist, gehen zu Paperless, in einem Lauf höchstens so viele, wie die Batchgröße erlaubt. Eine Datei bleibt im Eingang, bis ihre Paperless-Aufgabe Erfolg meldet:
@@ -439,7 +509,7 @@ Nur ein vollständiger Scan zählt. Paperless listet seine Dokumente Seite für 
 
 ### Batchgröße
 
-Die Batchgröße, *Maximale Änderungen je Modul und Lauf*, begrenzt die Änderungen eines Laufs: Exporte, Verschiebungen, das Entfernen ausgeschlossener Kopien, Verschiebungen in den Gelöscht-Ordner und Löschungen. Eine Änderung, die scheitert, nimmt ebenfalls ihren Platz ein, also lädt ein Lauf, der nicht schreiben kann, etwa einer gegen ein volles Kontingent oder einen Dateinamen, den Nextcloud ablehnt, nicht mehr Dokumente herunter, als die Batchgröße erlaubt. Ein Export, der scheitert, nimmt seinen Platz allerdings nur unter den Exporten ein, sodass Dokumente, deren Export immer wieder scheitert, nie die Verschiebungen von Dokumenten im Papierkorb oder von fehlenden Dokumenten aufhalten. Was nicht in einen Lauf passt, wartet auf den nächsten, und der Bericht zählt es als übersprungen. Das Hochladen aus dem Eingang hat einen eigenen Batch derselben Größe, sodass ein Lauf auch höchstens so viele Dateien zu Paperless hochlädt.
+Die Batchgröße, *Maximale Änderungen je Modul und Lauf*, begrenzt die Änderungen eines Laufs: Exporte, Verschiebungen, das Entfernen ausgeschlossener Kopien, Verschiebungen in den Gelöscht-Ordner und Löschungen. Eine Änderung, die scheitert, nimmt ebenfalls ihren Platz ein, also lädt ein Lauf, der nicht schreiben kann, etwa einer gegen ein volles Kontingent oder einen Dateinamen, den Nextcloud ablehnt, nicht mehr Dokumente herunter, als die Batchgröße erlaubt. Ein Export, der scheitert, nimmt seinen Platz allerdings nur unter den Exporten ein, sodass Dokumente, deren Export immer wieder scheitert, nie die Verschiebungen von Dokumenten im Papierkorb oder von fehlenden Dokumenten aufhalten. Was nicht in einen Lauf passt, wartet auf den nächsten, und der Bericht zählt es als übersprungen. Das Hochladen aus dem Eingang hat einen eigenen Batch derselben Größe, sodass ein Lauf auch höchstens so viele Dateien zu Paperless hochlädt. Ebenso die Begleitdateien der [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv): Ein Lauf schreibt höchstens so viele.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-spends-its-batch.de.dark.svg">

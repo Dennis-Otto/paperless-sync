@@ -1,0 +1,30 @@
+flowchart TB
+    accTitle: Wie ein Lauf die Metadaten neben dem Archiv pflegt
+    accDescr: Für jede Kopie, die ein Lauf exportiert, verschiebt oder unverändert vorfindet, baut er die Begleitdatei aus dem, was Paperless über das Dokument weiß, und vergleicht ihre SHA-256 mit der in index.csv. Nur eine Begleitdatei, deren Inhalt sich geändert hat, wird nach .paperless/P123.json geschrieben. Am Ende des Laufs geht die Begleitdatei eines Dokuments, dessen Kopie der Lauf nach den Regeln der Löschsicherheit gelöscht hat, mit ihrer Zeile; die Zeilen der anderen Kopien folgen ihren Pfaden und Zuständen, etwa in den Gelöscht-Ordner, und index.csv wird geschrieben, wenn es sich geändert hat.
+
+    copy(["Eine Kopie, die der Lauf exportiert,<br>verschiebt oder unverändert vorfindet"])
+    build["Die Begleitdatei aus Paperless: Titel,<br>Korrespondent, Tags, Notizen,<br>benutzerdefinierte Felder, Daten,<br>SHA-256 und Link"]
+    changed{"Weicht ihre SHA-256<br>von der in index.csv ab?"}
+    write["📄 .paperless/P123.json<br>wird geschrieben"]
+    keep["Die Begleitdatei<br>bleibt, wie sie ist"]
+    deleted{"Am Ende des Laufs:<br>hat der Lauf die Kopie nach<br>der Löschsicherheit gelöscht?"}
+    remove["Die Begleitdatei und ihre<br>Zeile gehen mit der Kopie"]
+    row["Die Zeile folgt der Kopie:<br>ihrem Pfad und dem Zustand<br>active, trash oder missing"]
+    index["📋 .paperless/index.csv wird<br>geschrieben, wenn es sich geändert hat"]
+
+    copy --> build --> changed
+    changed -- "ja" --> write
+    changed -- "nein" --> keep
+    write --> deleted
+    keep --> deleted
+    deleted -- "ja" --> remove
+    deleted -- "nein" --> row
+    remove --> index
+    row --> index
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class changed,deleted check
+    class write,index kept
+    class remove refused

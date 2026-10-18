@@ -58,6 +58,7 @@ final class ConfigService {
 		'inbox_create_tags' => false,
 		'conflict_mode' => 'replace',
 		'webhook_immediate' => true,
+		'write_metadata' => false,
 	];
 
 	/**
@@ -254,6 +255,7 @@ final class ConfigService {
 			'prune_empty_folders' => 'pruneEmptyFolders', 'delete_inbox_after_success' => 'deleteInboxAfterSuccess',
 			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
+			'write_metadata' => 'writeMetadata',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -492,6 +494,7 @@ final class ConfigService {
 			(string)$values['empty_correspondent'], (string)$values['empty_document_type'], (string)$values['empty_date'],
 			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
+			(bool)$values['write_metadata'],
 		);
 	}
 }

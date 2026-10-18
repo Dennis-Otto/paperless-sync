@@ -215,8 +215,9 @@ final class PaperlessApiServiceTest extends TestCase {
 				$read = [...$read, ...$matches[1]];
 			}
 		}
-		// The trash is read whole: Paperless ignores the list of fields there.
-		$read = array_values(array_diff(array_unique($read), ['deleted_at']));
+		// The trash is read whole: Paperless ignores the list of fields there. The notes are asked for
+		// only for the metadata next to the archive, see testTheMetadataNextToTheArchiveAsksForTheNotes().
+		$read = array_values(array_diff(array_unique($read), ['deleted_at', 'notes']));
 
 		self::assertNotEmpty($read);
 		self::assertSame([], array_values(array_diff($read, PaperlessApiService::DOCUMENT_FIELDS)), 'Every field that the app reads from a document is asked for.');
@@ -616,6 +617,22 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame('Token secret-token', $this->requests[0]['options']['headers']['Authorization']);
 	}
 
+	/**
+	 * The notes of a document, which may be long, reach Nextcloud only for the metadata next to the
+	 * archive: then the scan of a run and the read of one document ask for them as well.
+	 */
+	public function testTheMetadataNextToTheArchiveAsksForTheNotes(): void {
+		$this->responses[] = [200, ['count' => 1, 'results' => self::entries(1, 1)]];
+		$this->responses[] = [200, ['id' => 123, 'title' => 'Strom August', 'notes' => []]];
+
+		$this->service->documents(true);
+		$this->service->document(123, true);
+
+		$fields = implode(',', [...PaperlessApiService::DOCUMENT_FIELDS, 'notes']);
+		self::assertSame(['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 1, 'page_size' => 1000], $this->requests[0]['options']['query']);
+		self::assertSame(['fields' => $fields, 'truncate_content' => 'true'], $this->requests[1]['options']['query']);
+	}
+
 	/** The answer of a real Paperless for one document: the fields of a run, as a scan reads them. */
 	#[DataProvider('paperlessLines')]
 	public function testPaperlessSendsOneDocumentWithTheFieldsOfARun(string $line): void {
@@ -629,6 +646,36 @@ final class PaperlessApiServiceTest extends TestCase {
 		$received = array_keys($document);
 		sort($received);
 		self::assertSame($fields, $received);
+	}
+
+	/**
+	 * The answers of a real Paperless while a run writes the metadata next to the archive: the
+	 * fields of a run and the notes, each with the name of its author, in the list as for one
+	 * document by its ID.
+	 */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessSendsTheNotesWithTheirAuthors(string $line): void {
+		$this->responses[] = self::recorded($line, 'documents-notes');
+		$this->responses[] = self::recorded($line, 'document-notes');
+
+		$scan = $this->service->documents(true);
+		$document = $this->service->document((int)self::recording($line, 'document-notes')['body']['id'], true);
+
+		$fields = [...PaperlessApiService::DOCUMENT_FIELDS, 'notes'];
+		sort($fields);
+		self::assertCount(3, $scan->documents);
+		foreach ([...$scan->documents, $document] as $received) {
+			self::assertIsArray($received);
+			$keys = array_keys($received);
+			sort($keys);
+			self::assertSame($fields, $keys);
+			self::assertIsList($received['notes']);
+		}
+		self::assertNotNull($document);
+		self::assertIsArray($document['notes'][0]);
+		self::assertSame('contract-admin', $document['notes'][0]['user']['username']);
+		self::assertSame(self::recordedQuery($line, 'documents-notes'), self::sentQuery($this->requests[0]), 'The contract tests ask Paperless as the app does.');
+		self::assertSame(self::recordedQuery($line, 'document-notes'), self::sentQuery($this->requests[1]));
 	}
 
 	/** A real Paperless answers 404 for a document in its trash, which a call then leaves to the runs. */

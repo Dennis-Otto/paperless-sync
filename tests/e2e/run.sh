@@ -905,11 +905,30 @@ sync_run false "${TMP_DIR}/re-export.json"
 assert_json export "${TMP_DIR}/re-export.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
 
+# The metadata next to the archive: with the setting on, a run writes the sidecar of P123, with
+# the names of its correspondent and document type, its note and its custom field, and the index
+# of the archive, both in the hidden folder .paperless. The copy in the deleted folder keeps its
+# sidecar in the steps below, and the deletion of the document takes it along.
+SIDECAR_PATH='Documents/Paperless/Archive/.paperless/P123.json'
+INDEX_PATH='Documents/Paperless/Archive/.paperless/index.csv'
+save_settings "${TMP_DIR}/metadata-settings.json" write_metadata=1
+sync_run false "${TMP_DIR}/metadata.json"
+assert_json metadata-run "${TMP_DIR}/metadata.json"
+curl --fail-with-body --silent --show-error \
+	--user "sync-target:${PASSWORD}" \
+	--output "${TMP_DIR}/sidecar.json" \
+	"${DAV_BASE}/sync-target/${SIDECAR_PATH}"
+assert_json sidecar "${TMP_DIR}/sidecar.json"
+assert_dav_file sync-target "${INDEX_PATH}" '123,Monthly invoice corrected,Example GmbH,Invoice,'
+assert_dav_file sync-target "${INDEX_PATH}" ',Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,active,'
+
 control /control/scenario/trash >/dev/null
 sync_run false "${TMP_DIR}/trash.json"
 assert_json trash "${TMP_DIR}/trash.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
 assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+assert_dav_file sync-target "${SIDECAR_PATH}" '"title": "Monthly invoice corrected"'
+assert_dav_file sync-target "${INDEX_PATH}" ',_Deleted/2026-08-27/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,trash,'
 
 # A page that comes back empty while its count still lists the document counts nothing as missing,
 # so the document waits for its first missing run in the next step.
@@ -935,6 +954,14 @@ assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive documen
 sync_run false "${TMP_DIR}/deleted.json"
 assert_json deleted "${TMP_DIR}/deleted.json"
 assert_dav_missing sync-target "${TRASH_PATH}"
+# The sidecar went with the copy, and the index has no row for the document any more.
+assert_dav_missing sync-target "${SIDECAR_PATH}"
+assert_dav_file sync-target "${INDEX_PATH}" 'id,title,correspondent'
+if assert_dav_file sync-target "${INDEX_PATH}" 'Monthly invoice corrected'; then
+	echo 'The index of the metadata still lists the deleted document P123.' >&2
+	exit 1
+fi
+save_settings "${TMP_DIR}/metadata-off-settings.json" write_metadata=0
 
 # The subfolders of a file of the inbox become its tags, with a tag for every import: the
 # mock has a tag insurance, in lower case, and none named Scanned or 2026, which the run

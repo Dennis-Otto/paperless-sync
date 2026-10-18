@@ -158,7 +158,7 @@ final class SyncService {
 			// runs move or delete its copy, after the missing scans that the settings require, and
 			// the report without a change says so (WebhookService::result()).
 			$paperless = $this->clients->connect($connection);
-			$document = $paperless->document($documentId);
+			$document = $paperless->document($documentId, $config->writeMetadata);
 			if ($document !== null) {
 				$this->syncExports($paperless, $config->withBatchSize(1), $report, $document);
 			}
@@ -262,7 +262,9 @@ final class SyncService {
 	 */
 	private function syncExports(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, ?array $document = null): void {
 		$single = $document !== null;
-		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $paperless->documents();
+		// The metadata next to the archive, which a dry-run leaves as it is, holds the notes and names the custom fields.
+		$writesMetadata = $config->writeMetadata && !$report->dryRun;
+		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $paperless->documents($writesMetadata);
 		$trashScan = $single ? new PaperlessScan([], true, 0) : $paperless->trash();
 		$documents = $documentScan->documents;
 		$trash = $trashScan->documents;
@@ -272,7 +274,7 @@ final class SyncService {
 		$documentTypes = $paperless->documentTypes();
 		$storagePaths = $paperless->storagePaths();
 		$tags = $paperless->tags();
-		[$users, $customFields] = $this->templateLists($paperless, $config);
+		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null);
 		$report->activeDocuments = count($documents);
 		$report->trashedDocuments = count($trash);
 
@@ -293,6 +295,7 @@ final class SyncService {
 		// The run reads the state of every export once, and writes only the values that change.
 		$states = new ExportStates($this->state, $config->targetUser);
 		$sharedPaths = $this->sharedPaths($states);
+		$sidecars = $writesMetadata ? $this->sidecars($config, $report, $archiveRoot, $correspondents, $documentTypes, $storagePaths, $tags['names'], $customFields) : null;
 
 		foreach ($this->exportQueue($states, $documents) as [$document, $documentId, $entry]) {
 			if (!$single) {
@@ -397,6 +400,7 @@ final class SyncService {
 							'trash_date' => null,
 							'last_error' => null,
 						]);
+						$sidecars?->describe($document, $documentId, $target, $fingerprint, $useOriginal);
 					}
 					continue;
 				}
@@ -490,6 +494,7 @@ final class SyncService {
 					'trash_date' => null,
 					'last_error' => null,
 				]);
+				$sidecars?->describe($document, $documentId, $target, $fingerprint, $useOriginal);
 				if ($config->pruneEmptyFolders && $removeOldCopy) {
 					$report->foldersPruned += $this->storage->pruneEmptyParents($config->targetUser, $oldPath, $archiveRoot);
 				}
@@ -510,6 +515,7 @@ final class SyncService {
 
 		// The run of one document knows neither the trash nor which documents are gone.
 		if ($single) {
+			$sidecars?->finish($states);
 			return;
 		}
 
@@ -669,7 +675,31 @@ final class SyncService {
 				}
 			}
 		}
+		$sidecars?->finish($states);
 		$this->checkInvisibleTrash($config, $report, $missingActive, count($trash));
+	}
+
+	/**
+	 * The metadata next to the archive for a run. An index that Nextcloud can't read is an error of
+	 * the run, which then leaves the metadata as it is: the next run tries again.
+	 *
+	 * @param array<string, string> $correspondents
+	 * @param array<string, string> $documentTypes
+	 * @param array<string, string> $storagePaths
+	 * @param array<string, string> $tagNames
+	 * @param array<string, array{name: string, type: string, options: array<string, string>}> $customFields
+	 */
+	private function sidecars(SyncConfig $config, SyncReport $report, string $archiveRoot, array $correspondents, array $documentTypes, array $storagePaths, array $tagNames, array $customFields): ?MetadataSidecars {
+		try {
+			return new MetadataSidecars(
+				$this->storage, $config, $report, $archiveRoot, $correspondents, $documentTypes, $storagePaths, $tagNames, $customFields,
+				fn (\Throwable $exception): bool => $this->archiveFailed($config, $archiveRoot, $exception),
+			);
+		} catch (\Throwable $exception) {
+			$report->error('Metadata index: ' . $this->exceptionMessage($exception), null, $this->join($archiveRoot, MetadataSidecars::FOLDER, MetadataSidecars::INDEX));
+
+			return null;
+		}
 	}
 
 	/**
@@ -735,14 +765,18 @@ final class SyncService {
 
 	/**
 	 * The lists of Paperless that only some templates need, so that a run reads them only then: the
-	 * users for {{ owner_username }} and the custom fields for {{ custom_fields.<name> }}. A list
-	 * that Paperless refuses fails the run, with the permission that its token may lack, as does a
-	 * custom field that Paperless doesn't have, before a path changes: the paths of every document
-	 * would change without them.
+	 * users for {{ owner_username }} and the custom fields for {{ custom_fields.<name> }}, which the
+	 * metadata next to the archive names as well, when the run writes it (with the report of the
+	 * run in $metadata). A list that the template needs and Paperless refuses fails the run, with
+	 * the permission that its token may lack, as does a custom field that Paperless doesn't have,
+	 * before a path changes: the paths of every document would change without them. The metadata
+	 * alone doesn't fail the run: it is an error of the run, which exports its documents and
+	 * leaves the metadata to a run with the permission. The third value says whether the run
+	 * writes the metadata.
 	 *
-	 * @return array{array<string, string>, array<string, array{name: string, type: string, options: array<string, string>}>}
+	 * @return array{array<string, string>, array<string, array{name: string, type: string, options: array<string, string>}>, bool}
 	 */
-	private function templateLists(PaperlessClientInterface $paperless, SyncConfig $config): array {
+	private function templateLists(PaperlessClientInterface $paperless, SyncConfig $config, ?SyncReport $metadata = null): array {
 		$users = [];
 		$customFields = [];
 		try {
@@ -752,16 +786,23 @@ final class SyncService {
 		} catch (RuntimeException $exception) {
 			throw new RuntimeException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: ' . $exception->getMessage(), 0, $exception);
 		}
+		$template = $this->pathTemplate->customFieldNames($config->pathTemplate) !== [];
+		$writesMetadata = $metadata !== null;
 		try {
-			if ($this->pathTemplate->customFieldNames($config->pathTemplate) !== []) {
+			if ($template || $writesMetadata) {
 				$customFields = $paperless->customFields();
 			}
 		} catch (RuntimeException $exception) {
-			throw new RuntimeException('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: ' . $exception->getMessage(), 0, $exception);
+			$permission = 'the user of the API token needs the permission to view custom fields: ' . $exception->getMessage();
+			if ($template || $metadata === null) {
+				throw new RuntimeException('Paperless did not list its custom fields, which the archive path template uses; ' . $permission, 0, $exception);
+			}
+			$metadata->error('Metadata: Paperless did not list its custom fields, which the metadata next to the archive names, so the run writes no metadata; ' . $permission);
+			$writesMetadata = false;
 		}
 		$this->pathTemplate->requireCustomFields($config->pathTemplate, $customFields);
 
-		return [$users, $customFields];
+		return [$users, $customFields, $writesMetadata];
 	}
 
 	/**
@@ -819,10 +860,7 @@ final class SyncService {
 	 * logged.
 	 */
 	private function stopsWrites(SyncConfig $config, SyncReport $report, string $archiveRoot, \Throwable $exception, string $error): bool {
-		$archiveFailed = $exception instanceof NotEnoughSpaceException
-			|| $exception instanceof StorageNotAvailableException
-			|| ($exception instanceof NotPermittedException && !$this->archiveWritable($config, $archiveRoot));
-		if (!$archiveFailed) {
+		if (!$this->archiveFailed($config, $archiveRoot, $exception)) {
 			return false;
 		}
 		$report->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.');
@@ -832,6 +870,13 @@ final class SyncService {
 		]);
 
 		return true;
+	}
+
+	/** Whether Nextcloud refused a write for the whole archive, such as against a full quota, not for one file alone. */
+	private function archiveFailed(SyncConfig $config, string $archiveRoot, \Throwable $exception): bool {
+		return $exception instanceof NotEnoughSpaceException
+			|| $exception instanceof StorageNotAvailableException
+			|| ($exception instanceof NotPermittedException && !$this->archiveWritable($config, $archiveRoot));
 	}
 
 	/** Whether the target user may still create files in the archive; a failure of the check counts as no. */

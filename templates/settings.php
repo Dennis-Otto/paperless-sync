@@ -262,6 +262,12 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				$l->t('Excluded tags'),
 				$l->t('Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.'),
 			); ?>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="write_metadata" type="checkbox" aria-describedby="paperless-sync-write-metadata-hint" <?php if ($config->writeMetadata) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Write metadata next to the archive')); ?></span></label>
+			</div>
+			<p id="paperless-sync-write-metadata-hint" class="settings-hint"><?php p($l->t('A JSON file for each document in the hidden folder .paperless of the archive, with its title, correspondent, tags, notes, custom fields and dates, and an index of every document in index.csv, so that the archive describes itself also without Paperless.')); ?> <?php p($l->t('Everyone who can open the archive folder, also through a share or a public link, can read them, the notes and custom fields as well.')); ?> <?php $help('metadata-next-to-the-archive', $l->t('Metadata next to the archive')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">

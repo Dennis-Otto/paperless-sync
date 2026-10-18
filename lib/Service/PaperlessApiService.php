@@ -168,14 +168,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $checks;
 	}
 
-	public function documents(): PaperlessScan {
+	public function documents(bool $notes = false): PaperlessScan {
 		// Ordered by their IDs, a document added during the scan joins the last page instead of
 		// shifting the pages that the run has not read yet. Only the fields that a run reads come
-		// back, without the text of the documents, their notes and permissions. A Paperless that
-		// ignored the list of fields would still cut the text short.
+		// back, without the text of the documents, their permissions, and their notes unless the run
+		// writes the metadata next to the archive. A Paperless that ignored the list of fields would
+		// still cut the text short.
 		return $this->scan('/api/documents/', [
 			'ordering' => 'id',
-			'fields' => implode(',', self::DOCUMENT_FIELDS),
+			'fields' => self::documentFields($notes),
 			'truncate_content' => 'true',
 		]);
 	}
@@ -186,13 +187,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/** @psalm-suppress MixedAssignment */
-	public function document(int $documentId): ?array {
+	public function document(int $documentId, bool $notes = false): ?array {
 		$response = $this->send(
 			'GET',
 			'/api/documents/' . $documentId . '/',
 			[
 				// The fields of the scan of a run, so that the document takes the same path as in a run.
-				'query' => ['fields' => implode(',', self::DOCUMENT_FIELDS), 'truncate_content' => 'true'],
+				'query' => ['fields' => self::documentFields($notes), 'truncate_content' => 'true'],
 				'connect_timeout' => 10,
 				'timeout' => 60,
 				'http_errors' => false,
@@ -217,6 +218,14 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		return $document;
+	}
+
+	/**
+	 * The fields of a document that a run asks for: those that it reads, and the notes of the
+	 * document, which only the metadata next to the archive holds.
+	 */
+	private static function documentFields(bool $notes): string {
+		return implode(',', $notes ? [...self::DOCUMENT_FIELDS, 'notes'] : self::DOCUMENT_FIELDS);
 	}
 
 	public function correspondents(): array {

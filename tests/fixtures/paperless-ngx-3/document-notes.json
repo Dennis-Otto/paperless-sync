@@ -1,0 +1,47 @@
+{
+  "body": {
+    "added": "2026-10-18T02:05:44.779346Z",
+    "archive_serial_number": null,
+    "archived_file_name": "2026-08-26 Example GmbH Monthly invoice.pdf",
+    "correspondent": 1,
+    "created": "2026-08-26",
+    "custom_fields": [
+      {
+        "field": 1,
+        "value": "dzYySCus7d5abcRG"
+      }
+    ],
+    "document_type": 1,
+    "id": 1,
+    "mime_type": "application/pdf",
+    "modified": "2026-10-18T02:05:56.818978Z",
+    "notes": [
+      {
+        "created": "2026-10-18T02:05:56.810231Z",
+        "id": 1,
+        "note": "Paid on 1 September.",
+        "user": {
+          "first_name": "",
+          "id": 2,
+          "last_name": "",
+          "username": "contract-admin"
+        }
+      }
+    ],
+    "original_file_name": "invoice.pdf",
+    "owner": 2,
+    "page_count": 1,
+    "storage_path": null,
+    "tags": [
+      2
+    ],
+    "title": "Monthly invoice"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/1/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,notes&truncate_content=true",
+  "status": 200
+}

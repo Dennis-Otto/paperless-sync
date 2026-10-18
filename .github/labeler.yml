@@ -32,8 +32,10 @@
           - lib/Service/PathTemplateService.php
           - lib/Service/NextcloudStorage*.php
           - lib/Model/DocumentFingerprint.php
+          - lib/Service/MetadataSidecars.php
           - lib/Migration/Version000100Date20260826000000.php
           - tests/Unit/Service/PathTemplate*
+          - tests/Unit/Service/MetadataSidecarsTest.php
           - tests/Unit/Service/NextcloudStorage*
           - tests/Unit/Model/DocumentFingerprintTest.php
           - tests/Unit/Migration/Version000100*
