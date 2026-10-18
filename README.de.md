@@ -99,7 +99,7 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 
 ### Sicherheit
 
-- Die Synchronisation bleibt aus, bis du sie einschaltest, und ein Testlauf listet jede Änderung auf, die ein Lauf machen würde, ohne sie zu machen
+- Die Synchronisation bleibt aus, bis du sie einschaltest, und ein Testlauf listet jede Änderung auf, die ein Lauf machen würde, ohne sie zu machen: Er nimmt den Plan eines Laufs, Änderung für Änderung, in derselben Batchgröße
 - Der Papierkorb von Paperless wird in einen eigenen Ordner gespiegelt; endgültiges Löschen ist standardmäßig aus und wartet, wenn es an ist, auf die eingestellte Zahl vollständiger Scans von Paperless in Folge
 - Eine Konfliktregel für eine Datei im Weg: ersetzen, oder überspringen und den Konflikt melden; die eigenen Kopien der App sind nie im Weg
 - Keine WebDAV-Zugangsdaten und kein Passwort eines Nextcloud-Benutzers: Die App schreibt über die Dateisystem-API von Nextcloud
