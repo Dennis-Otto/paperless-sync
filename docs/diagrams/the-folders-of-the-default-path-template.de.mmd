@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Die Ordner der Standard-Pfadvorlage
+    accDescr: Der Basisordner Dokumente/Paperless enthält drei Ordner: Eingang, den Eingangsordner; Archiv, den Archivordner; und Fehler, den Fehlerordner. Archiv enthält einen Ordner je Korrespondent, etwa Beispiel GmbH, und _Gelöscht, den Gelöscht-Ordner. Im Ordner eines Korrespondenten liegt ein Ordner je Dokumenttyp, etwa Rechnung, mit einem Ordner je Jahr, etwa 2026, und darin die Datei 2026-08-26 - Beispielrechnung [P123].pdf, gebildet aus created, title, der Markierung mit der id und der extension.
+
+    base["`📁 Dokumente/Paperless<br>*Basisordner*`"]
+    inbox["`📁 Eingang<br>*Eingangsordner*`"]
+    archive["`📁 Archiv<br>*Archivordner*`"]
+    errors["`📁 Fehler<br>*Fehlerordner*`"]
+    correspondent["`📁 Beispiel GmbH<br>*{{ correspondent }}*`"]
+    deleted["`📁 _Gelöscht<br>*Gelöscht-Ordner*`"]
+    type["`📁 Rechnung<br>*{{ document_type }}*`"]
+    year["`📁 2026<br>*{{ created_year }}*`"]
+    file["`📄 2026-08-26 -<br>Beispielrechnung<br>[P123].pdf<br>*{{ created }} -<br>{{ title }} [P{{ id }}]<br>{{ extension }}*`"]
+
+    base --> inbox & archive & errors
+    archive --> correspondent & deleted
+    correspondent --> type --> year --> file
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class base,archive,inbox,errors,correspondent,deleted,type,year,file nextcloud

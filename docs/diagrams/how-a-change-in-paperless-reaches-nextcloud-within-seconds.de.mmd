@@ -1,0 +1,21 @@
+flowchart TB
+    accTitle: Wie eine Änderung in Paperless Nextcloud in Sekunden erreicht
+    accDescr: Ein Arbeitsablauf von Paperless mit den Auslösern Dokument hinzugefügt und Dokument aktualisiert ruft den Webhook der App mit der ID des Dokuments und dem Geheimnis auf. Ein Aufruf ohne das Geheimnis wird mit 401 abgelehnt, und Nextcloud verzögert die nächsten Aufrufe von dieser Adresse. Mit dem Geheimnis liest die App dieses Dokument mit ihrem eigenen Token aus Paperless und exportiert, verschiebt oder entfernt seine Kopie nach den Regeln eines Laufs, während Paperless auf die Antwort wartet. Solange ein anderer Lauf aktiv ist, oder wenn die Einstellungen es sagen, wartet das Dokument stattdessen auf die nächsten Hintergrundjobs. Dokumente im Papierkorb und gelöschte bleiben bei den geplanten Läufen.
+
+    workflow["Ein Arbeitsablauf von Paperless:<br>Dokument hinzugefügt oder aktualisiert"] --> post["POST an den Webhook<br>{#quot;document#quot;: 123}<br>Authorization: Bearer Geheimnis"]
+    post --> secret{"Das Geheimnis<br>des Webhooks?"}
+    secret -->|nein| refused["401, und Nextcloud verzögert<br>die nächsten Aufrufe dieser Adresse"]
+    secret -->|ja| switches{"Geplante Synchronisation<br>und Export an?"}
+    switches -->|nein| off["409: Nichts ändert sich"]
+    switches -->|ja| busy{"Ein anderer Lauf aktiv, oder<br>überlassen die Einstellungen es<br>den Hintergrundjobs?"}
+    busy -->|ja| queued["202: Das Dokument wartet auf<br>die nächsten Hintergrundjobs"]
+    busy -->|nein| read["Die App liest dieses Dokument mit<br>ihrem eigenen Token aus Paperless"]
+    queued -->|"mit den nächsten<br>Hintergrundjobs"| read
+    read --> copy["Export, Verschieben oder Entfernen seiner<br>Kopie, nach den Regeln eines Laufs,<br>ein Batch von einem"]
+    copy --> done["Die Kopie hat sich geändert:<br>während des Aufrufs antwortet er 200"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class workflow,post yours
+    class secret,switches,busy,read,copy check
+    class refused,off,queued,done result

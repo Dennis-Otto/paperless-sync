@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: Wohin eine Kopie geht, die Paperless Sync löscht
+    accDescr: Eine Kopie, die Paperless Sync in Nextcloud löscht, ist endgültig weg, wenn die App Gelöschte Dateien von Nextcloud aus ist. Sonst verschiebt der Lauf sie in den Papierkorb des Zielbenutzers, der sie wiederherstellen kann, bis die Aufbewahrungszeit des Papierkorbs endet, gleich ob der Zeitplan, Jetzt synchronisieren oder occ den Lauf gestartet hat.
+
+    deleted(["Die App löscht<br>eine Kopie"])
+    trashbin{"Gelöschte Dateien<br>von Nextcloud an?"}
+    kept["🗑️ Papierkorb des<br>Zielbenutzers, wiederherstellbar<br>bis zum Ende seiner<br>Aufbewahrungszeit"]
+    gone["Endgültig weg"]
+
+    deleted --> trashbin
+    trashbin -- "nein" --> gone
+    trashbin -- "ja: ein Lauf des Zeitplans,<br>von Jetzt synchronisieren oder von occ" --> kept
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class trashbin check
+    class kept kept
+    class gone refused

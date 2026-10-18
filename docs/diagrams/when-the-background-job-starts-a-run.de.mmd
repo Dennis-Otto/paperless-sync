@@ -1,0 +1,17 @@
+flowchart TB
+    accTitle: Wann der Hintergrundjob einen Lauf startet
+    accDescr: Der Cron von Nextcloud startet den Hintergrundjob der App höchstens alle fünf Minuten. Ist die geplante Synchronisation aus, tut er nichts. Sonst nimmt er den Start oder das Ende des letzten Laufs, der synchronisiert hat, eines geplanten oder eines von Hand, je nachdem, was später ist, und einen Testlauf nur, solange er noch läuft. Ist seitdem das Intervall vergangen, startet der Job einen Lauf; sonst wartet er auf den nächsten Hintergrundjob.
+
+    cron["Der Cron von Nextcloud startet den<br>Job höchstens alle 5 Minuten"] --> enabled{"Geplante<br>Synchronisation an?"}
+    enabled -->|nein| off["Nichts zu tun"]
+    enabled -->|ja| last["Start oder Ende des letzten Laufs,<br>der synchronisiert hat, geplant oder<br>von Hand, je nachdem, was später ist"]
+    last --> dryrun["Ein Testlauf zählt nur,<br>solange er noch läuft"]
+    dryrun --> passed{"Ist das Intervall<br>seitdem vergangen?"}
+    passed -->|nein| wait["Auf den nächsten<br>Hintergrundjob warten"]
+    passed -->|ja| run["Einen Lauf starten"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class cron,enabled,last,dryrun,passed check
+    class off,wait kept
+    class run changed

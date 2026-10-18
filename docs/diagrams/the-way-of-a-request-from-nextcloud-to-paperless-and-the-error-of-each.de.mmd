@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Der Weg einer Anfrage von Nextcloud zu Paperless und der Fehler jedes Schritts
+    accDescr: Eine Anfrage von Paperless Sync durchläuft sieben Schritte, bevor Paperless mit den Dokumenten antwortet. Eine Adresse des lokalen Netzwerks braucht die Einstellung Paperless läuft in meinem lokalen Netzwerk, sonst sperrt Nextcloud sie. Der Name muss sich auflösen lassen und Paperless an seinem Port antworten, sonst enthält die Meldung cURL error 6 oder 7. Ein HTTPS-Zertifikat muss eines sein, dem Nextcloud vertraut, sonst enthält die Meldung cURL error 60. Die Adresse muss zur API von Paperless führen, sonst lautet die Antwort 404 Not Found, oder eine Anmeldeseite, die kein JSON ist. Paperless muss Version 9 seiner API bereitstellen, wie es Paperless-ngx 2.16 und neuer tun, sonst lautet die Antwort 406 Not Acceptable. Das Token muss gültig sein, sonst lautet die Antwort 401 Unauthorized. Zuletzt muss das Konto jede Liste sehen, die ein Lauf liest, sonst lautet die Antwort 403 Forbidden: Verbindung testen markiert diese Liste als fehlgeschlagen, mit der Berechtigung, die zu vergeben ist.
+
+    request(["Paperless Sync<br>fragt Paperless"])
+    local["`**Adresse erlaubt?**<br>*sonst: Nextcloud sperrt<br>lokale Adressen*`"]
+    reach["`**Name löst sich auf,<br>Port antwortet?**<br>*sonst: cURL error 6 oder 7*`"]
+    tls["`**Zertifikat vertraut?**<br>*sonst: cURL error 60*`"]
+    api["`**Adresse führt zur API?**<br>*sonst: 404 Not Found<br>oder ungültiges JSON*`"]
+    version["`**API-Version 9<br>bereitgestellt?**<br>*sonst: 406 Not Acceptable,<br>vor Paperless-ngx 2.16*`"]
+    token["`**Token gültig?**<br>*sonst: 401 Unauthorized*`"]
+    lists["`**Konto sieht<br>jede Liste?**<br>*sonst: 403 Forbidden,<br>eine fehlgeschlagene Zeile<br>der Checkliste*`"]
+    done(["Paperless antwortet"])
+
+    request --> local --> reach --> tls --> api --> version --> token --> lists --> done
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class local,reach,tls,api,version,token,lists check
+    class done done

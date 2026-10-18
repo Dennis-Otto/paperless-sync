@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Was das Speichern der Einstellungen prüft
+    accDescr: Das Speichern prüft zuerst jede Einstellung; eine ungültige wird nicht gespeichert. Ist die geplante Synchronisation an oder wurde ein Token eingegeben, führt das Speichern die Verbindungs-Checkliste aus. Ist Paperless nicht erreichbar, lehnt es das Token ab oder lässt das Konto keine Dokumente sehen, oder kann der Zielbenutzer keine Dateien im Basisordner anlegen, werden die Einstellungen nicht gespeichert; die Seite sagt, warum, und, wenn nur der Zeitplan den Test verlangt hat, dass das Ausschalten des Zeitplans die Einstellungen speichert. Fehlt nur eine Berechtigung eines Moduls, etwa die für die Tags, werden die Einstellungen gespeichert, und die Checkliste nennt die Berechtigung, die zu vergeben ist. Ist der Zeitplan aus und kein neues Token eingegeben, werden die Einstellungen ohne Test gespeichert, sodass ein Administrator eine fehlschlagende Synchronisation pausieren kann.
+
+    save(["💾 Verbindung testen<br>und speichern"])
+    check{"Ist jede<br>Einstellung gültig?"}
+    scheduled{"Zeitplan an oder<br>ein Token eingegeben?"}
+    test{"Paperless, seine Dokumente<br>und der Basisordner gehen?"}
+    modules{"Jede Berechtigung<br>der Module?"}
+    tested["✅ Gespeichert und geprüft"]
+    partly["⚠️ Gespeichert; die Checkliste<br>nennt, was zu vergeben ist"]
+    untested["`✅ Ohne Test gespeichert<br>*der Zeitplan pausiert*`"]
+    refused["❌ Nicht gespeichert:<br>die Seite sagt, warum"]
+
+    save --> check
+    check -- "nein" --> refused
+    check -- "ja" --> scheduled
+    scheduled -- "ja" --> test
+    scheduled -- "nein" --> untested
+    test -- "ja" --> modules
+    test -- "nein" --> refused
+    modules -- "ja" --> tested
+    modules -- "nein" --> partly
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef note fill:#d977062e,stroke:#d97706,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class save,check,scheduled,test,modules nextcloud
+    class tested,untested done
+    class partly note
+    class refused refused

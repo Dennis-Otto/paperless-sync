@@ -6,7 +6,9 @@
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the check of its package, and the JavaScript of the settings and the
-# translations, which have no build step.
+# translations, which have no build step, and that the German twins of the documentation,
+# README.de.md and docs/*.de.md, follow their English pages; the versions check covers
+# README.de.md and docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -59,7 +61,8 @@ for path in lib/Service/SyncService.php appinfo/routes.php templates/settings.ph
   tests/e2e/package-lock.json .github/workflows/e2e.yml; do
   expect run "$path"
 done
-for path in README.md CHANGELOG.md docs/guide.md docs/images/dry-run.gif tests/e2e/README.md \
+for path in README.md README.de.md CHANGELOG.md docs/guide.md docs/guide.de.md docs/images/dry-run.gif \
+  docs/diagrams/how-paperless-sync-moves-documents.de.mmd tests/e2e/README.md \
   tests/e2e/MANUAL_ACCEPTANCE_TESTS.md tests/Unit/Service/SyncServiceTest.php scripts/check.sh \
   mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
   .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
@@ -212,10 +215,10 @@ fi
 printf '\n== %s\n' "Versions in the README"
 # The first screen of the README shows the version in the App Store and the versions of
 # Nextcloud in badges that read appinfo/info.xml on main, so that they follow every
-# release and every raise of max-version by the upstream bot without an edit. The
-# fields such as <span data-app="nextcloud">33–35</span> in README.md, docs/index.md and
-# docs/alternatives.md are text on GitHub, which the hook of the website fills with the
-# versions of info.xml. They may lag behind a max-version that the upstream bot raised,
+# release and every raise of max-version by the upstream bot without an edit, and so
+# does that of README.de.md. The fields such as <span data-app="nextcloud">33–35</span>
+# in both READMEs, docs/index.md, docs/index.de.md and docs/alternatives.md are text on
+# GitHub, which the hook of the website fills with the versions of info.xml. They may lag behind a max-version that the upstream bot raised,
 # so that its pull request passes on its own, but they never name another minimum or
 # more than info.xml.
 dash="$(printf '\342\200\223')"
@@ -245,12 +248,16 @@ nextcloud_text="$(info_versions "$nextcloud_min" "$nextcloud_max")"
 php_text="$(info_versions "$php_min" "$(attribute max-version "$php")")"
 problems=0
 info_xml='https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml'
-for query in '%2Finfo%2Fversion' \
-  'concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29'; do
-  if ! grep -qF "https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&" README.md; then
-    echo "README.md has no badge that reads $query from appinfo/info.xml on main: https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&label=..."
-    problems=$((problems + 1))
-  fi
+readmes=(README.md README.de.md)
+version_pages=("${readmes[@]}" docs/index.md docs/index.de.md docs/alternatives.md)
+for readme in "${readmes[@]}"; do
+  for query in '%2Finfo%2Fversion' \
+    'concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29'; do
+    if ! grep -qF "https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&" "$readme"; then
+      echo "$readme has no badge that reads $query from appinfo/info.xml on main: https://img.shields.io/badge/dynamic/xml?url=$info_xml&query=$query&label=..."
+      problems=$((problems + 1))
+    fi
+  done
 done
 fields=0
 while IFS= read -r field; do
@@ -279,15 +286,17 @@ while IFS= read -r field; do
   fi
   echo "$file names $label $text, but appinfo/info.xml says $expected; write $expected."
   problems=$((problems + 1))
-done < <(grep -oE 'data-app="[^"]*">[^<]*<' README.md docs/index.md docs/alternatives.md || true)
-if ! grep -qF 'data-app="nextcloud">' README.md || ! grep -qF 'data-app="php">' README.md; then
-  echo "The requirements in README.md name the versions in the fields <span data-app=\"nextcloud\"> and <span data-app=\"php\">; one of them is missing."
-  problems=$((problems + 1))
-fi
+done < <(grep -oE 'data-app="[^"]*">[^<]*<' "${version_pages[@]}" || true)
+for readme in "${readmes[@]}"; do
+  if ! grep -qF 'data-app="nextcloud">' "$readme" || ! grep -qF 'data-app="php">' "$readme"; then
+    echo "The requirements in $readme name the versions in the fields <span data-app=\"nextcloud\"> and <span data-app=\"php\">; one of them is missing."
+    problems=$((problems + 1))
+  fi
+done
 if ((problems > 0)); then
   exit 1
 fi
-echo "The badges of the README read appinfo/info.xml on main, and the $fields field(s) of versions in README.md, docs/index.md and docs/alternatives.md agree with Nextcloud $nextcloud_text and PHP $php_text."
+echo "The badges of both READMEs read appinfo/info.xml on main, and the $fields field(s) of versions in ${version_pages[*]} agree with Nextcloud $nextcloud_text and PHP $php_text."
 
 printf '\n== %s\n' "Description of the app"
 # GitHub, the website and Composer describe the app in the same words, those that people
@@ -303,6 +312,147 @@ if [[ -z "$description" || "$website" != "$description" || "$composer" != "$desc
   exit 1
 fi
 echo "GitHub, the website and Composer describe the app in the same words."
+
+printf '\n== %s\n' "German documentation"
+# README.de.md and each German page of the website, such as docs/guide.de.md, translate
+# their English twin, README.md or docs/guide.md, which the language switches of GitHub
+# and of the website lead between. So both have the same outline: the same headings at
+# the same levels in the same order, the same snippets of the README for the website,
+# README.de.md in place of README.md, and the same diagrams, the German one NAME.de for
+# each NAME. A section that a change adds to one of them, moves or drops shows here, with
+# the place in both files; the words are for the translator, not for this check.
+#
+# The outline of a page, one entry per line: what it is, a tab, and its line. A heading
+# is its level, a snippet its marker or its include, and a diagram its source. Front
+# matter and code blocks have no entries. With "twin" as the second argument, the outline
+# that the German twin of the page must have: README.de.md for README.md in an include,
+# and docs/diagrams/NAME.de.mmd for NAME.mmd.
+outline() {
+  awk -v twin="${2:-}" '
+    FNR == 1 && /^---[ \t]*$/ { front = 1; next }
+    front { if (/^---[ \t]*$/) front = 0; next }
+    /^[ \t]*(```|~~~)/ { fenced = !fenced; next }
+    fenced { next }
+    match($0, /^#+[ \t]/) && RLENGTH <= 7 {
+      printf "heading of level %d (\"%s\")\t%d\n", RLENGTH - 1, $0, FNR
+    }
+    match($0, /<!-- --8<-- \[(start|end):[^]]+\] -->/) {
+      printf "snippet marker %s\t%d\n", substr($0, RSTART + 12, RLENGTH - 16), FNR
+    }
+    /^--8<-- "/ {
+      text = $0
+      if (twin != "") sub(/"README\.md/, "\"README.de.md", text)
+      printf "snippet include %s\t%d\n", text, FNR
+    }
+    match($0, / src="[^"]*images\/diagrams\/[^"\/]+\.svg"/) {
+      name = substr($0, RSTART, RLENGTH)
+      sub(/.*\//, "", name)
+      sub(/\.svg"$/, "", name)
+      printf "diagram docs/diagrams/%s%s.mmd\t%d\n", name, (twin != "" ? ".de" : ""), FNR
+    }
+    match($0, /srcset="[^"]*images\/diagrams\/[^"\/]+\.dark\.svg"/) {
+      name = substr($0, RSTART, RLENGTH)
+      sub(/.*\//, "", name)
+      sub(/\.dark\.svg"$/, "", name)
+      printf "dark diagram docs/diagrams/%s%s.mmd\t%d\n", name, (twin != "" ? ".de" : ""), FNR
+    }
+  ' "$1"
+}
+# Compares the outline of the German page $2 with the one that its English twin $1 asks
+# for. A heading compares by its level alone, as its words differ, so the message names
+# the first entry where they part and the last two that agree, around the change. A
+# heading added or removed among others of its level shows only at the end of their run,
+# so for a heading the message also names the entry before that run: the change is
+# somewhere between the two.
+german_twin() {
+  local english="$1" german="$2"
+  awk -F '\t' -v english="$english" -v german="$german" '
+    function kind(entry) { sub(/ \(.*/, "", entry); return entry }
+    function level(entry) { return entry ~ /^heading of level / ? substr(entry, 18, 1) + 0 : 0 }
+    NR == FNR { want[FNR] = $1; wline[FNR] = $2; wanted = FNR; next }
+    { have[FNR] = $1; hline[FNR] = $2; had = FNR }
+    END {
+      for (i = 1; i <= wanted || i <= had; i++) {
+        if (kind(want[i]) != kind(have[i])) break
+      }
+      if (i > wanted && i > had) exit 0
+      printf "%s doesn'\''t follow the outline of %s: ", german, english
+      if (i > had) {
+        printf "it ends where line %d of %s asks for the %s.", wline[i], english, want[i]
+      } else if (i > wanted) {
+        printf "line %d has the %s, which %s lacks.", hline[i], have[i], english
+      } else {
+        printf "line %d has the %s where line %d of %s asks for the %s.", hline[i], have[i], wline[i], english, want[i]
+      }
+      if (i > 1) {
+        printf " Before it, both agree up to line %d, the %s, and line %d of %s, the %s.", hline[i - 1], have[i - 1], wline[i - 1], english, want[i - 1]
+      }
+      depth = level(want[i]) > level(have[i]) ? level(want[i]) : level(have[i])
+      for (j = i - 1; depth && j >= 1 && level(have[j]) >= depth; j--) {}
+      if (depth && j < i - 1) {
+        printf " A heading of level %d was added or removed somewhere between there and ", depth
+        if (j < 1) printf "the start of both files."
+        else printf "line %d, the %s, and line %d of %s, the %s.", hline[j], have[j], wline[j], english, want[j]
+      }
+      printf "\n"
+      exit 1
+    }
+  ' <(outline "$english" twin) <(outline "$german")
+}
+problems=0
+pages=0
+if [[ ! -f README.de.md ]]; then
+  echo "README.md switches to its German twin, README.de.md, which is missing; translate README.md into it."
+  problems=$((problems + 1))
+fi
+while IFS= read -r -d '' german; do
+  english="${german%.de.md}.md"
+  pages=$((pages + 1))
+  if [[ ! -f "$english" ]]; then
+    echo "$german is the German twin of $english, which doesn't exist; rename it after the page it translates."
+    problems=$((problems + 1))
+  elif ! german_twin "$english" "$german"; then
+    problems=$((problems + 1))
+  fi
+done < <(git ls-files -z --cached --others --exclude-standard -- '*.de.md')
+if ((problems > 0)); then
+  echo "A German page has the headings, the snippets and the diagrams of its English twin, in the same order; translate the change of the English page into the German one, a German diagram into docs/diagrams/NAME.de.mmd (bash scripts/diagrams.sh draws it)."
+  exit 1
+fi
+echo "The $pages German page(s) follow the headings, snippets and diagrams of their English twins."
+
+# And the check finds what it must in broken German twins: a heading that is gone, one of
+# another level, one too many, one gone among others of its level, an English diagram,
+# light or dark, a snippet of README.md in a German page, and a German page that ends
+# early.
+twin_copy="$(mktemp -d)"
+trap 'rm -rf "$twin_copy"' EXIT
+broken_twin() {
+  local english="$1" expected="$2" output
+  shift 2
+  sed "$@" "${english%.md}.de.md" >"$twin_copy/twin.de.md"
+  if output="$(german_twin "$english" "$twin_copy/twin.de.md")" || [[ "$output" != *"$expected"* ]]; then
+    echo "The check of the German twins should report \"$expected\" for a broken copy of ${english%.md}.de.md, but says: ${output:-nothing}"
+    exit 1
+  fi
+}
+broken_twin README.md 'of README.md asks for the heading of level 3 ("### Operations")' -e '/^### Eingang$/d'
+broken_twin README.md 'has the heading of level 4 ("#### Archiv") where line' -e 's/^### Archiv$/#### Archiv/'
+# shellcheck disable=SC2016 # The $ of sed, the last line, which the shell must not expand.
+broken_twin docs/faq.md 'has the heading of level 2 ("## Mehr"), which docs/faq.md lacks' -e '$a ## Mehr'
+broken_twin README.md 'has the diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
+  -e 's/how-paperless-sync-moves-documents\.de\.svg/how-paperless-sync-moves-documents.svg/'
+broken_twin README.md 'has the dark diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
+  -e 's/how-paperless-sync-moves-documents\.de\.dark\.svg/how-paperless-sync-moves-documents.dark.svg/'
+broken_twin docs/faq.md 'removed somewhere between there and line 74, the heading of level 2 ("## Einrichtung und Betrieb"), and line' \
+  -e '/^### Wie oft läuft es?$/d'
+broken_twin docs/guide.md 'has the snippet include --8<-- "README.md:features" where line' \
+  -e 's/README\.de\.md:features/README.md:features/'
+# shellcheck disable=SC2016 # The $ of sed, the last line, which the shell must not expand.
+broken_twin docs/faq.md 'it ends where line' -e '/^### Wie deinstalliere ich Paperless Sync?$/,$d'
+rm -rf "$twin_copy"
+trap - EXIT
+echo "The check of the German twins reports a heading that is gone, of another level, too many or gone among others, an English diagram, light or dark, an English snippet and a page that ends early."
 
 printf '\n== %s\n' "Area labels of pull requests"
 # The labeler bot of .github/workflows/area-labels.yml gives a pull request the area

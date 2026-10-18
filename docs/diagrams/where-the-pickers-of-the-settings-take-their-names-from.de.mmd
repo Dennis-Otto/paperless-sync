@@ -1,0 +1,24 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Woher die Auswahlfelder der Einstellungen ihre Namen nehmen
+    accDescr: Das Feld des Zielbenutzers fragt die Provisioning-API von Nextcloud nach den Benutzern, deren ID, Name oder E-Mail-Adresse das Getippte enthält, und nach der Benutzer-ID im Feld, die es markiert, wenn Nextcloud keinen solchen Benutzer hat. Die Felder der ausgeschlossenen Tags und der Tags für jeden Import fragen Paperless Sync, das die Tags mit der gespeicherten Adresse und dem gespeicherten API-Token aus Paperless-ngx liest, wie ein Lauf es tut; das Token bleibt auf dem Server. Ein Name, zu dem Paperless keinen Tag hat, lässt sich ebenfalls hinzufügen und wird als nicht in Paperless markiert.
+
+    page(["Einstellungsseite im<br>Browser eines Administrators"])
+    subgraph nextcloud ["Nextcloud-Server"]
+        users["Provisioning-API:<br>die Benutzer von Nextcloud"]
+        app["Paperless Sync:<br>die Tags von Paperless"]
+    end
+    paperless[("Paperless-ngx")]
+
+    page -- "`Zielbenutzer:<br>passende Benutzer,<br>*eine unbekannte ID<br>wird markiert*`" --> users
+    page -- "`ausgeschlossene Tags und<br>Tags für jeden Import:<br>Namen zur Auswahl,<br>*ein neuer Name<br>wird markiert*`" --> app
+    app -- "`gespeicherte Adresse und Token,<br>wie ein Lauf sie liest;<br>*das Token bleibt<br>auf dem Server*`" --> paperless
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class paperless paperless
+    class users,app nextcloud

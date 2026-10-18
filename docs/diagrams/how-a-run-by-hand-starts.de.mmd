@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie ein Lauf von Hand startet
+    accDescr: Testlauf starten auf der Einstellungsseite läuft in der Anfrage, ändert nichts, macht höchstens einen Batch an Änderungen und antwortet mit seinem Bericht. Jetzt synchronisieren reiht einen Hintergrundjob ein und antwortet sofort; die Hintergrundjobs von Nextcloud führen ihn aus, innerhalb von fünf Minuten mit dem System-Cron oder sofort mit einem Worker für den Job, so wie sie den geplanten Job ausführen. occ paperless_sync:run läuft in der Shell, so lange es dauert, und gibt seinen Bericht mit einem Exit-Code aus. Jeder Lauf nimmt dieselbe Sperre und schreibt den Status, dem die Einstellungsseite folgt.
+
+    dry(["🔍 Testlauf starten"])
+    now(["▶️ Jetzt synchronisieren"])
+    schedule(["⏰ Der Zeitplan"])
+    occ(["⌨️ occ paperless_sync:run"])
+    request["`In der Anfrage<br>*ändert nichts,<br>höchstens ein Batch*`"]
+    queued["`⏳ In der Warteschlange<br>*die Seite bekommt<br>sofort ihre Antwort*`"]
+    jobs["`Hintergrundjobs von Nextcloud<br>*innerhalb von 5 Minuten mit Cron,<br>sofort mit einem Worker*`"]
+    shell["`In der Shell<br>*so lange es dauert*`"]
+    status["`🗂️ Status<br>*die Seite folgt ihm*`"]
+    output["📋 Bericht und<br>Exit-Code"]
+
+    dry --> request --> status
+    now --> queued --> jobs
+    schedule --> jobs --> status
+    occ --> shell --> status
+    shell --> output
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef waits fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef shell fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    class request,jobs,status nextcloud
+    class queued waits
+    class shell,output shell

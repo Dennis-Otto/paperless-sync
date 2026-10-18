@@ -1,0 +1,33 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How the German documentation stays in step
+    accDescr: README.md and README.de.md link to each other. The English pages of the website, such as guide.md, take their snippets from README.md, and the German ones, such as guide.de.md, from README.de.md; an English page shows the diagram NAME.mmd, its German twin NAME.de.mmd. scripts/check-project.sh compares the outline of each German page with that of its English twin. MkDocs builds the English website and, with the plugin i18n, the German one in de/, with a language switch in the header. The English sources are blue, the German ones orange, the check and the website green.
+
+    readme["README.md"]
+    readmede["README.de.md"]
+    guide["`docs/guide.md<br>*and the other pages*`"]
+    guidede["`docs/guide.de.md<br>*and the other German pages*`"]
+    diagram["docs/diagrams/NAME.mmd"]
+    diagramde["docs/diagrams/NAME.de.mmd"]
+    check{"`scripts/check-project.sh<br>*the same headings, snippets<br>and diagrams, in order?*`"}
+    site(["`Website<br>*English in /, German in de/,<br>a language switch in the header*`"])
+
+    readme <-- "language switch" --> readmede
+    readme -- "snippets" --> guide
+    readmede -- "snippets" --> guidede
+    diagram --> guide
+    diagramde --> guidede
+    guide --> check
+    guidede --> check
+    check -- "yes" --> site
+
+    classDef english fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef german fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class readme,guide,diagram english
+    class readmede,guidede,diagramde german
+    class check,site done

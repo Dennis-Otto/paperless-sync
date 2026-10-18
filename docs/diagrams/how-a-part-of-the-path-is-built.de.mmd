@@ -1,0 +1,16 @@
+flowchart TB
+    accTitle: Wie ein Teil des Pfads entsteht
+    accDescr: Die Werte kommen als reiner Text in den Teil der Vorlage, und der Teil wird bereinigt. Solange er mehr Bytes hat, als Nextcloud erlaubt, wird der längste der Freitextwerte gekürzt, sodass der Text der Vorlage, die Daten, die Markierung und die Endung ganz bleiben. Der Dateiname endet dann mit der Endung.
+
+    part["Ein Teil der Vorlage<br>{{ created }} -<br>{{ title }}<br>[P{{ id }}]"]
+    values["Die Werte als reiner Text,<br>bereinigt für Nextcloud,<br>macOS und Windows"]
+    fits{"Höchstens 200 Bytes<br>für einen Ordner, 217<br>für den Dateinamen?"}
+    shorten["Den längsten Freitext<br>kürzen: Titel,<br>Korrespondent,<br>Dokumenttyp,<br>Speicherpfad,<br>ursprünglicher Dateiname"]
+    name["📄 2026-08-26 -<br>Beispielrechnung<br>[P123].pdf"]
+
+    part --> values --> fits
+    fits -- "nein" --> shorten --> fits
+    fits -- "ja" --> name
+
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class name done

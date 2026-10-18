@@ -5,3 +5,10 @@ WCAG
 Kuma
 setupchecks
 Webcron
+Aktivitätenstrom
+Batchgröße
+taggt
+ungespeichert
+ungespeicherte
+ungespeicherten
+ungespeicherter

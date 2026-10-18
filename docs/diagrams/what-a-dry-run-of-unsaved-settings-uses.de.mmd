@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Was ein Testlauf ungespeicherter Einstellungen verwendet
+    accDescr: Mit ungespeicherten Änderungen im Formular sendet Testlauf starten die Einstellungen des Formulars. Weichen ihre Paperless-Adresse, die Einstellung zum lokalen Netzwerk oder der Zielbenutzer von den gespeicherten ab, wird der Testlauf abgelehnt, und die Seite setzt den Fokus auf die Einstellung, die zuerst zu speichern ist. Eine ungültige Einstellung wird abgelehnt, wie es auch das Speichern täte. Sonst liest der Testlauf Paperless mit der gespeicherten Verbindung und dem gespeicherten Token und listet auf, was ein Lauf mit den Einstellungen des Formulars ändern würde, ohne die Einstellungen zu speichern oder eine Datei zu ändern; sein Bericht sagt Testlauf ungespeicherter Einstellungen.
+
+    dryrun(["🧪 Testlauf starten<br>mit ungespeicherten Änderungen"])
+    connection{"Gleiche Paperless-Adresse,<br>gleiches lokales Netzwerk<br>und gleicher Zielbenutzer?"}
+    valid{"Ist jede<br>Einstellung gültig?"}
+    run["`🔍 Testlauf mit dem Formular<br>*gespeicherte Verbindung<br>und gespeichertes Token*`"]
+    report["`✅ Bericht eines *Testlaufs<br>ungespeicherter Einstellungen*:<br>nichts gespeichert`"]
+    first["❌ Zuerst speichern:<br>die Seite springt<br>zur Einstellung"]
+    refused["❌ Abgelehnt:<br>die Seite sagt, warum"]
+
+    dryrun --> connection
+    connection -- "nein" --> first
+    connection -- "ja" --> valid
+    valid -- "nein" --> refused
+    valid -- "ja" --> run
+    run --> report
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class dryrun,connection,valid,run nextcloud
+    class report done
+    class first,refused refused

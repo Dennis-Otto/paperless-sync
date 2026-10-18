@@ -15,13 +15,18 @@ can't read fails the build.
 The hook also shows an alert of GitHub as an admonition of Material: a quote that
 begins with [!NOTE], [!TIP], [!IMPORTANT], [!WARNING] or [!CAUTION], such as the
 warning about edits of the archive that the guide takes from the README. Without it,
-the website would show the marker as text in a plain quote. An alert with a quote
+the website would show the marker as text in a plain quote. The admonition of a German
+page, such as guide.de.md, has a German title, such as Warnung. An alert with a quote
 inside fails the build, since the end of the inner quote would end the admonition.
+
+And it leads the path of a picture of HTML, such as a <picture> of a screenshot, to its
+file, on the German pages in de/ and in the snippets of the README alike.
 tests/website/test_mkdocs_project.py tests the hook.
 """
 
 from __future__ import annotations
 
+import posixpath
 import re
 from pathlib import Path
 from typing import Any
@@ -49,6 +54,19 @@ ADMONITIONS = {
     "WARNING": "warning",
     "CAUTION": "danger",
 }
+# The title of each kind of alert on a German page, whose source ends with .de.md, such
+# as guide.de.md; any other page, also an English one that the German website shows for
+# want of a German version, has the kind itself as its title, such as Warning.
+GERMAN_TITLES = {
+    "NOTE": "Hinweis",
+    "TIP": "Tipp",
+    "IMPORTANT": "Wichtig",
+    "WARNING": "Warnung",
+    "CAUTION": "Vorsicht",
+}
+# The path of a picture in HTML, a single one without a scheme, a query or a size: the
+# attribute and the path.
+PICTURE = re.compile(r'\b(src|srcset)="([^":?#\s,/][^":?#\s,]*)"')
 # The versions for the fields, by name, read at the start of the last build.
 VALUES: dict[str, str] = {}
 
@@ -78,10 +96,12 @@ def on_config(config: Any) -> None:
     VALUES["php"] = versions(dependencies.find("php"), "PHP")
 
 
-def on_page_content(html: str, *, page: Any, **_: Any) -> str:
+def on_page_content(html: str, *, page: Any, config: Any = None, **_: Any) -> str:
     """Write the versions into the fields of a page, those of its snippets included,
-    and show its alerts of GitHub as admonitions."""
+    lead its pictures to their files, and show its alerts of GitHub as admonitions."""
     source = page.file.src_uri
+    if config is not None:
+        html = pictures(html, page, Path(config.docs_dir))
 
     def fill(field: re.Match[str]) -> str:
         name = field[1]
@@ -97,9 +117,37 @@ def on_page_content(html: str, *, page: Any, **_: Any) -> str:
     return ALERT.sub(lambda alert: admonition(alert, source), html)
 
 
+def pictures(html: str, page: Any, docs: Path) -> str:
+    """Lead the path of each picture of HTML, such as a <picture> of a screenshot, to its
+    file from the address of the page.
+
+    MkDocs fixes the path of a picture of Markdown, but leaves that of HTML as it is,
+    a path from the source of the page. That breaks on the German website, whose pages
+    are in de/ but show the pictures of docs/images, and for a snippet of the README,
+    which writes its paths from the root of the repository, such as
+    docs/images/report-light.png. A path that leads to no file of docs/ from the source,
+    such as one that MkDocs already fixed or one of another server, stays as it is.
+    """
+    folder = posixpath.dirname(page.file.src_uri)
+    here = posixpath.dirname(page.url) or "."
+
+    def lead(attribute: re.Match[str]) -> str:
+        path = attribute[2]
+        target = posixpath.normpath(posixpath.join(folder, path))
+        if path.startswith("docs/") and not (docs / target).is_file():
+            target = path.removeprefix("docs/")
+        if target.startswith("../") or not (docs / target).is_file():
+            return attribute[0]
+        return f'{attribute[1]}="{posixpath.relpath(target, here)}"'
+
+    return PICTURE.sub(lead, html)
+
+
 def admonition(alert: re.Match[str], source: str) -> str:
-    """The admonition of Material for an alert of GitHub, titled with its kind."""
+    """The admonition of Material for an alert of GitHub, titled with its kind in the
+    language of the page."""
     kind = alert[1].upper()
+    title = GERMAN_TITLES[kind] if source.endswith(".de.md") else kind.title()
     body = alert[2].strip()
     if "<blockquote" in body:
         raise PluginError(f"{source} has a quote inside the alert [!{kind}].")
@@ -108,6 +156,6 @@ def admonition(alert: re.Match[str], source: str) -> str:
     body = body.removeprefix("</p>").lstrip() if body.startswith("</p>") else f"<p>{body}"
     return (
         f'<div class="admonition {ADMONITIONS[kind]}">\n'
-        f'<p class="admonition-title">{kind.title()}</p>\n'
+        f'<p class="admonition-title">{title}</p>\n'
         f"{body}\n</div>"
     )
