@@ -55,16 +55,16 @@ async function control(path) {
 	}
 }
 
-// Puts a file into the folders of the owner of the archive, as a person would through
-// a client of Nextcloud.
-async function upload(path, content) {
-	const authorization = `Basic ${Buffer.from(`${OWNER}:${PASSWORD}`).toString('base64')}`
+// Puts a file into the folders of the owner of the archive, or of another user, as a person
+// would through a client of Nextcloud.
+async function upload(path, content, user = OWNER) {
+	const authorization = `Basic ${Buffer.from(`${user}:${PASSWORD}`).toString('base64')}`
 	const parts = path.split('/')
 	for (let depth = 1; depth < parts.length; depth++) {
 		const folder = parts.slice(0, depth).map(encodeURIComponent).join('/')
-		await fetch(`${BASE_URL}/remote.php/dav/files/${OWNER}/${folder}`, { method: 'MKCOL', headers: { authorization } })
+		await fetch(`${BASE_URL}/remote.php/dav/files/${user}/${folder}`, { method: 'MKCOL', headers: { authorization } })
 	}
-	const response = await fetch(`${BASE_URL}/remote.php/dav/files/${OWNER}/${parts.map(encodeURIComponent).join('/')}`, {
+	const response = await fetch(`${BASE_URL}/remote.php/dav/files/${user}/${parts.map(encodeURIComponent).join('/')}`, {
 		method: 'PUT',
 		headers: { authorization },
 		body: content,
@@ -440,6 +440,41 @@ try {
 		await context.close()
 	}
 
+
+	// The menu of a file in Files: the administrator, a member of the group that may send
+	// files, sends a scanned letter to Paperless, and a copy of the archive opens its
+	// document there. A right click opens the menu at the pointer, which the picture leaves
+	// out; it shows the row of the file and the menu below it.
+	await upload('Scans/Letter from the bank.pdf', '%PDF-1.4 Synthetic letter of the screenshots.\n', ADMIN)
+	const menuOf = async (page, row, action) => {
+		await row.waitFor()
+		await settle(page)
+		const box = await row.boundingBox()
+		await row.click({ button: 'right', position: { x: Math.min(420, box.width / 2), y: box.height / 2 } })
+		await page.getByRole('menuitem', { name: action }).waitFor()
+		await settle(page)
+		const menu = await page.getByRole('menuitem', { name: action }).locator('xpath=ancestor::*[@role="menu"][1]').boundingBox()
+		const x = Math.max(0, Math.min(box.x, menu.x) - 16)
+		const y = Math.max(0, box.y - 16)
+		return page.screenshot({
+			clip: {
+				x,
+				y,
+				width: Math.min(VIEWPORT.width - x, Math.max(box.x + box.width, menu.x + menu.width) - x + 16),
+				height: Math.min(VIEWPORT.height - y, menu.y + menu.height + 16 - y),
+			},
+		})
+	}
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, files('/Scans'))
+		save(`docs/images/files-send-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name="Letter from the bank.pdf"]'), 'Send to Paperless'))
+		await context.close()
+	}
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
+		save(`docs/images/files-open-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]'), 'Open in Paperless'))
+		await context.close()
+	}
 
 	// A few days later: a new title, the trash, an excluded tag, new documents and a
 	// finished import, all in the report of a dry-run.

@@ -496,6 +496,11 @@ Jeder, der in den Eingangsordner schreiben darf, kann seine Ordner benennen, als
 Eine Datei muss nicht über den Eingang gehen: **An Paperless senden** im Menü einer Datei oder eines Ordners in Dateien, oder einer Auswahl davon, sendet sie an Paperless, und die Datei bleibt, wo sie ist. Die Mitglieder der Gruppe in *Gruppe, die Dateien senden darf*, in *4 · Nextcloud-Eingang*, bekommen die Aktion: standardmäßig die Administratoren, die Gruppe `admin`. Die Uploads nutzen das API-Token der App, also das Paperless-Konto, das du für sie eingerichtet hast, nicht ein Konto der Person, die sendet; wähle also eine Gruppe von Menschen, denen du dieses Konto anvertraust, etwa eine für die Menschen, die die Post scannen, und lass das Feld leer, um die Aktion auszuschalten. Das Konto braucht die Berechtigungen **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben, die die Verbindungs-Checkliste prüft, solange das Feld eine Gruppe nennt.
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-send-dark.png">
+  <img alt="Nextcloud-Dateien mit der Datei Letter from the bank.pdf im Ordner Scans und ihrem geöffneten Menü, das unter den Aktionen von Dateien Send to Paperless anbietet, auf Deutsch An Paperless senden" src="docs/images/files-send-light.png">
+</picture>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.de.dark.svg">
   <img src="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.de.svg" alt="Wie eine Datei aus Dateien zu Paperless kommt: Ein Mitglied der Gruppe der Einstellung klickt auf An Paperless senden im Menü einer Datei oder eines Ordners in Dateien. Nextcloud prüft die Gruppe, dass die Person jede Datei lesen darf und dass keine im Ordner von Paperless Sync liegt, und reiht die Datei ein, oder die Dateien unterhalb des Ordners, höchstens einen Batch; Dateien mit einer Markierung wie [P123], die Paperless hat, bleiben außen vor. Mit dem nächsten Cron-Lauf fragt der Hintergrundjob Paperless nach einem Dokument mit dem Inhalt jeder Datei, und der Absender erfährt das Dokument, wenn Paperless eines hat. Sonst lädt er die Datei mit den Tags des Eingangs hoch: Paperless lehnt sie ab, oder das Hochladen scheitert und wartet 15 Minuten, dann jedes Mal doppelt so lange, bis zu sechs Uploads, oder Paperless nimmt sie an. Die nächsten Cron-Läufe verfolgen die Aufgabe des Uploads. Jedes Ende, ein neues Dokument, eines, das Paperless hatte, ein Fehler oder eine Ablehnung, erreicht den Absender als Benachrichtigung, mit einem Link zum Dokument in Paperless, wenn es eines gibt. Die Datei bleibt, wo sie ist.">
 </picture>
@@ -507,6 +512,11 @@ Eine Datei muss nicht über den Eingang gehen: **An Paperless senden** im Menü 
 - **Kann Paperless eine Datei gerade nicht annehmen,** wartet das Hochladen 15 Minuten, dann jedes Mal doppelt so lange, und gibt nach dem sechsten auf, mit einer Benachrichtigung; eine Datei, die Paperless ablehnt, etwa eine eines Typs, den es nicht nimmt, wird nicht noch einmal hochgeladen. Eine Aufgabe, die Paperless einen Tag nach dem Upload nicht beendet hat, beendet den Import mit einer Benachrichtigung, da Paperless das Dokument noch anlegen kann.
 
 **In Paperless öffnen** steht im Menü jeder Datei, deren Name eine Markierung wie `[P123]` trägt, etwa jeder Kopie des Archivs, für alle, die die Datei sehen, auch über eine Freigabe: Es öffnet das Dokument in Paperless, unter der Paperless-URL der Einstellungen, wo Paperless nach seiner eigenen Anmeldung fragt und das Dokument nur denen zeigt, denen es das erlaubt. So erfährt jeder Benutzer von Dateien diese Adresse; die [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) nennen sie auch.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-open-dark.png">
+  <img alt="Nextcloud-Dateien mit der Kopie 2026-06-30 - Electricity bill June des Archivs und ihrem geöffneten Menü, das Open in Paperless anbietet, auf Deutsch In Paperless öffnen" src="docs/images/files-open-light.png">
+</picture>
 
 ### Löschsicherheit
 

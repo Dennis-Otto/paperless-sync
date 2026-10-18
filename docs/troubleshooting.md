@@ -125,7 +125,7 @@ The entries go to the target user alone, so another account, such as the adminis
 
 ### The link to a new document in Paperless doesn't open
 
-The link of an imported file in the Activity app starts with the saved Paperless URL, which is the address under which the Nextcloud server reaches Paperless. A name or an address that only the server knows, such as `http://paperless:8000` in a Docker network, leads the browser nowhere. Open the document in Paperless by its number instead, such as *P123*, or save a URL that both the server and the browsers reach, such as the public address of Paperless behind its reverse proxy.
+The link of an imported file in the Activity app, the notification of a file sent from Files and *Open in Paperless* in Files start with the saved Paperless URL, which is the address under which the Nextcloud server reaches Paperless. A name or an address that only the server knows, such as `http://paperless:8000` in a Docker network, leads the browser nowhere. Open the document in Paperless by its number instead, such as *P123*, or save a URL that both the server and the browsers reach, such as the public address of Paperless behind its reverse proxy.
 
 ### Documents of the trash come late
 
@@ -161,6 +161,10 @@ The archive is in the files of the target user alone; the app gives nobody else 
 ### Deleted copies are not in the trash bin
 
 A copy that a run deletes, and a file in the way of a copy that moves, go to the trash bin of the target user, *Deleted files* in *Files*, where only the target user sees and restores it: an administrator who started the run doesn't find it in a trash bin of their own. That holds for a scheduled run, a run of *Synchronize now* and one of `occ paperless_sync:run`; in earlier versions, a run of *Synchronize now* ran in the request of the administrator and deleted such files for good. [#119](https://github.com/Dennis-Otto/paperless-sync/issues/119) tracks a run whose process set up the files of another user first, which deletes them for good still: try a change with a dry-run first. Without the app *Deleted files* of Nextcloud, every deletion is for good. A copy whose document gets a new content is no deletion: it stays the same file, with the previous content as a version.
+
+### Send to Paperless is missing from the menu of a file
+
+Files offers *Send to Paperless* to the members of the group in *Group that may send files*, in *4 · Nextcloud inbox*, the administrators by default, while the app has its API token: an empty field or *Disconnect* takes the action away, and so does a group that you aren't a member of. Reload Files after a change. The menu leaves the action out for a file whose name has a marker such as `[P123]`, a copy of a document that Paperless has, for a file that you may not read and in the trash bin; a click on a file of the base folder of the app, such as its inbox, answers that the runs look after it: move a file into the inbox to send it from there. After the click, the file goes with the next run of the background jobs of Nextcloud, so it waits while cron doesn't run, as [No run starts](#no-run-starts) describes.
 
 ### A file is back after I deleted or renamed it
 

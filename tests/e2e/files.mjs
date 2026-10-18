@@ -64,7 +64,8 @@ try {
 	expect(own.includes(SEND), `A member of the group must find "${SEND}" for a file of their own: ${own.join(', ')}`)
 	expect(!own.includes(OPEN), `A file without a marker has no "${OPEN}": ${own.join(', ')}`)
 	await admin.page.getByRole('menuitem', { name: SEND }).click()
-	const toast = admin.page.getByText('Paperless Sync sends 1 file to Paperless.', { exact: false })
+	// The toast, which Nextcloud 34 and newer also announce in a list of their own.
+	const toast = admin.page.getByText('Paperless Sync sends 1 file to Paperless.', { exact: false }).first()
 	await toast.waitFor()
 	console.log('Files: a member of the group sends a file of their own, and a message says so.')
 

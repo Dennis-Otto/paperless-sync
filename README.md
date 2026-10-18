@@ -489,6 +489,11 @@ Everyone who may write to the inbox folder can name its folders, so with *Create
 A file needn't go through the inbox: **Send to Paperless** in the menu of a file or a folder in Files, or of a selection of them, sends it to Paperless, and the file stays where it is. The members of the group in *Group that may send files*, in *4 · Nextcloud inbox*, get the action: the administrators, the group `admin`, by default. The uploads use the API token of the app, the account of Paperless that you set up for it, not an account of the person who sends, so choose a group of people whom you trust with that account, such as one for the people who scan the mail, and leave the field empty to turn the action off. The account needs the permissions **Add** for Documents and **View** for Paperless Tasks, which the connection checklist tests while the field names a group.
 
 <picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-send-dark.png">
+  <img alt="Nextcloud Files with the file Letter from the bank.pdf in the folder Scans and its menu open, which offers Send to Paperless among the actions of Files" src="docs/images/files-send-light.png">
+</picture>
+
+<picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.dark.svg">
   <img src="docs/images/diagrams/how-a-file-goes-from-files-to-paperless.svg" alt="How a file goes from Files to Paperless: A member of the group of the setting clicks Send to Paperless in the menu of a file or a folder in Files. Nextcloud checks the group, that the user may read each file and that none is in the folder of Paperless Sync, and queues the file, or the files below the folder, at most a batch; files with a marker such as [P123], which Paperless has, stay out. With the next run of cron, the background job asks Paperless for a document with the content of each file, and the sender learns the document if Paperless has one. Otherwise it uploads the file with the tags of the inbox: Paperless refuses it, or the upload fails and waits 15 minutes, then twice as long each time, up to six uploads, or Paperless accepts it. The next runs of cron follow the task of the upload. Every end, a new document, one that Paperless had, a failure or a refusal, reaches the sender as a notification, with a link to the document in Paperless when there is one. The file stays where it is.">
 </picture>
@@ -500,6 +505,11 @@ A file needn't go through the inbox: **Send to Paperless** in the menu of a file
 - **When Paperless can't take a file now,** the upload waits 15 minutes, then twice as long each time, and gives up after the sixth, with a notification; a file that Paperless refuses, such as one of a type that it doesn't take, isn't uploaded again. A task that Paperless has not finished a day after the upload ends the import with a notification, as Paperless may still create the document.
 
 **Open in Paperless** is in the menu of every file whose name has a marker such as `[P123]`, such as every copy of the archive, for everyone who can see the file, also through a share: it opens the document in Paperless, at the Paperless URL of the settings, where Paperless asks for its own login and shows the document only to whom it allows. So every user of Files learns that address; the [metadata next to the archive](#metadata-next-to-the-archive) names it too.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-open-dark.png">
+  <img alt="Nextcloud Files with the copy 2026-06-30 - Electricity bill June of the archive and its menu open, which offers Open in Paperless" src="docs/images/files-open-light.png">
+</picture>
 
 ### Deletion safety
 

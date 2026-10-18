@@ -195,6 +195,11 @@
 	gap: 16px 20px;
 }
 
+/* The fields below a tag picker, such as the group that may send files, keep the gap of a grid from its hint. */
+.paperless-sync-tags + .paperless-sync-grid {
+	margin-top: 16px;
+}
+
 .paperless-sync-field {
 	display: flex;
 	flex-direction: column;
