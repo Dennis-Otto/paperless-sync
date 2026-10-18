@@ -86,6 +86,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 - Documents in the Paperless inbox wait until they are finished, and a document that gets a tag you exclude, or the inbox tag again, stays out, its copy removed; or the archive [mirrors only the documents with the tags that you choose](#which-documents-the-archive-mirrors), such as `Nextcloud`
 - A stable marker such as `[P123]` in every file name, which [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) understands
 - Optional [metadata next to the archive](#metadata-next-to-the-archive): a JSON file for each document with its tags, notes, custom fields and dates, and an index of the whole archive as CSV, so that the archive describes itself also without Paperless
+- Optional [tags of Paperless as tags of Nextcloud](#tags-in-nextcloud) on the copies, which follow every change in Paperless, so that Files filters and searches the archive by them; the tags that people make in Nextcloud stay theirs
 
 ### Inbox
 
@@ -141,7 +142,7 @@ The archive in Files, one folder per correspondent, document type and year, with
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/archive-dark.png">
-  <img alt="Nextcloud Files with the folder tree of the archive open down to City Utilities, Invoice, 2026, which holds two electricity bills named by date, title and Paperless ID" src="docs/images/archive-light.png">
+  <img alt="Nextcloud Files with the folder tree of the archive open down to City Utilities, Invoice, 2026, which holds two electricity bills named by date, title and Paperless ID, with their tags of Paperless, Electricity and Paid, as tags of Nextcloud" src="docs/images/archive-light.png">
 </picture>
 
 The settings of the app in the administration settings of Nextcloud:
@@ -469,6 +470,23 @@ A run writes a sidecar only when its content changes, such as after a change of 
 
 A dry-run writes no metadata, and a call of the [webhook](#changes-within-seconds) writes the sidecar and the row of its document at once. Paperless sends the notes of the documents only while the setting is on, and the account of the app needs the permission to view custom fields: without it, the runs export the documents, write no metadata and report an error, `Metadata: Paperless did not list its custom fields …`. A run writes at most as many sidecars as *Maximum changes per module and run* allows, so the first run after you turn the setting on writes the sidecars of that many documents, and the next runs write the rest. When Nextcloud can't write a sidecar, such as one that is locked, the report shows an error, `Metadata P123: …`, and the next run tries it again. When it can't write any, such as with a full quota, the run reports it once and writes no further sidecar, keeps the rows of those it wrote, and the next run catches up; `Metadata index: …` is an error of the index. Delete `index.csv` to have the next run write every sidecar again. Turning the setting off leaves the folder as it is.
 
+### Tags in Nextcloud
+
+With *Show Paperless tags as Nextcloud tags* in *3 · Structured archive*, which is off by default, every run gives each copy the tags of its document as collaborative tags of Nextcloud. Files then filters the archive by them, in its view *Tags* and with the filter of a folder, and the search of Nextcloud finds the copies by them, without a visit to Paperless.
+
+- **One tag of the app for each tag of Paperless,** of the same name: every user sees it, and only administrators can assign it, so that it stays in step with Paperless. A run makes a tag the first time that a copy needs it, and the app keeps the IDs of its tags, so it finds them also after an administrator renamed one.
+- **They follow Paperless:** each run compares the tags of every copy that it exports, moves or finds unchanged with those of its document, adds the new ones and removes those that the document lost, also when the copy itself stays as it is. A tag that you rename in Paperless becomes a tag of its new name, and the tag of the old name, like that of a tag that you delete in Paperless, goes at the end of a run of the whole archive, once no file has it. A copy in the deleted folder keeps the tags that it had.
+- **The tags of others stay theirs:** a run never assigns, removes, renames or deletes a tag that someone else made, also none that a user put on a copy. Nextcloud keeps one tag of a name, whatever its case, so when someone made a tag with the name of a tag of Paperless already, such as `Invoice`, the copies go without it, and the report says so: *Nextcloud has a tag named Invoice that Paperless Sync did not make*. Rename the tag in Nextcloud or in Paperless, and the next run gives the copies theirs.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-copy-gets-the-tags-of-its-document.dark.svg">
+  <img src="docs/images/diagrams/how-a-copy-gets-the-tags-of-its-document.svg" alt="How a copy gets the tags of its document: For each copy that a run exports, moves or finds unchanged, it takes the names of the tags of its document in Paperless. For a name without a tag of the app, the run creates one, visible to every user and assignable by administrators alone, unless someone else made a tag of that name, whatever its case: then the copies go without it, and the report says so. The run then adds the tags of the app that the copy lacks and removes those that its document lost; tags that someone else put on the copy stay. At the end of a run of the whole archive, a tag of the app whose tag of Paperless is gone goes once no file has it.">
+</picture>
+
+The report lists each copy whose tags change, such as `TAGS P123: +Tax 2026 -Inbox`, and a dry-run shows the same before you save. A run changes the tags of at most as many copies as *Maximum changes per module and run* allows, so the first run after you turn the setting on tags that many copies, and the next runs tag the rest. The Activity stream of everyone who can open a copy shows each tag that a run adds or removes, as Nextcloud shows every change of a tag; *System tags for a file have been modified* in the personal settings of Activity turns these entries off.
+
+Nextcloud lets only users and the command line create tags: the background jobs by cron and `occ paperless_sync:run` create them, a call of the [webhook](#changes-within-seconds) and background jobs by AJAX or Webcron can't. Such a run gives the copies the tags that exist already, and the report names those that wait for the next run by cron: *Nextcloud lets only users and the command line create tags*. Turning the setting off leaves the tags of the copies as they are; an administrator deletes the tags of the app, and with them their places on the copies, under *Administration settings* → *Basic settings* → *Collaborative tags*.
+
 ### Nextcloud inbox
 
 Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is on, go to Paperless, at most as many in one run as the batch size allows. A file stays in the inbox until its Paperless task reports success:
@@ -580,7 +598,7 @@ Only a complete scan counts. Paperless lists its documents page by page, and a p
 
 ### Batch size
 
-The batch size limits the changes of one run: exports, moves, removals of excluded copies, moves to the deleted folder and deletions. A change that fails takes its place as well, so a run that can't write, such as one against a full quota or a file name that Nextcloud refuses, downloads no more documents than the batch size allows. An export that fails takes its place only among the exports, though, so documents whose export keeps failing never hold up the moves of trashed or missing documents. What doesn't fit into a run waits for the next one, and the report counts it as skipped. Uploads from the inbox have a batch of the same size of their own, so a run uploads at most that many files to Paperless as well. So do the sidecars of the [metadata next to the archive](#metadata-next-to-the-archive): a run writes at most that many.
+The batch size limits the changes of one run: exports, moves, removals of excluded copies, moves to the deleted folder and deletions. A change that fails takes its place as well, so a run that can't write, such as one against a full quota or a file name that Nextcloud refuses, downloads no more documents than the batch size allows. An export that fails takes its place only among the exports, though, so documents whose export keeps failing never hold up the moves of trashed or missing documents. What doesn't fit into a run waits for the next one, and the report counts it as skipped. Uploads from the inbox have a batch of the same size of their own, so a run uploads at most that many files to Paperless as well. So do the sidecars of the [metadata next to the archive](#metadata-next-to-the-archive): a run writes at most that many, and the [tags in Nextcloud](#tags-in-nextcloud): a run changes the tags of at most that many copies.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-spends-its-batch.dark.svg">

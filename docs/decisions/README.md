@@ -29,3 +29,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0021](0021-metadata-next-to-the-archive-in-sidecars-and-an-index.md) | The metadata of Paperless goes next to the archive, as a sidecar for each copy and one index | accepted |
 | [0022](0022-a-dry-run-takes-the-plan-of-a-run.md) | A dry-run takes the plan of a run: planners decide, executors apply or only report | accepted |
 | [0023](0023-file-actions-in-files-without-a-build.md) | Actions in the menu of Files, without a build, and uploads in the background | accepted |
+| [0024](0024-the-tags-of-paperless-as-tags-of-nextcloud-that-the-app-alone-changes.md) | The tags of Paperless become tags of Nextcloud that the app alone changes | accepted |

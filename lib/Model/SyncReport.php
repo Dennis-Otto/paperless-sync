@@ -43,6 +43,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_UPLOAD_REJECTED = 'import-rejected';
 	/** A tag that the run creates in Paperless, for the folder of a file of the inbox. */
 	public const TYPE_NEW_TAG = 'new-tag';
+	/** The tags of Nextcloud of a copy follow the tags of its document in Paperless. */
+	public const TYPE_TAGS = 'tags';
 	/** An error of a single document or file. */
 	public const TYPE_ERROR = 'error';
 	/** A notice: a list of Paperless came back incomplete, so no document counts as missing. */
@@ -53,6 +55,10 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_TRASH_EMPTY = 'trash-empty';
 	/** A notice: Paperless lacks tags of the inbox, so its files went to Paperless without them. */
 	public const TYPE_TAGS_UNKNOWN = 'tags-unknown';
+	/** A notice: Nextcloud has tags with the names of tags of Paperless that the app did not make, so the copies don't get them. */
+	public const TYPE_TAGS_TAKEN = 'tags-taken';
+	/** A notice: Nextcloud let the run create no tag, so the copies get these tags with a later run. */
+	public const TYPE_TAGS_NOT_CREATED = 'tags-not-created';
 
 	/**
 	 * The priority of a line by its type, 1 the highest. A full report gives up its last line of
@@ -92,6 +98,8 @@ final class SyncReport implements \JsonSerializable {
 	public int $importsSucceeded = 0;
 	public int $importsFailed = 0;
 	public int $foldersPruned = 0;
+	/** The copies whose tags of Nextcloud changed. */
+	public int $tagged = 0;
 	public int $unchanged = 0;
 	public int $skipped = 0;
 	public int $errors = 0;
@@ -171,6 +179,27 @@ final class SyncReport implements \JsonSerializable {
 		$this->action("NEW TAG: {$name}", ['type' => self::TYPE_NEW_TAG, 'detail' => $name]);
 	}
 
+	/**
+	 * The tags of Nextcloud that the copy of a document at $path gets and loses, by their names, as
+	 * its document in Paperless has them.
+	 *
+	 * @param list<string> $added
+	 * @param list<string> $removed
+	 */
+	public function tags(int $document, string $path, array $added, array $removed): void {
+		++$this->tagged;
+		$changes = array_merge(
+			array_map(static fn (string $name): string => '+' . $name, $added),
+			array_map(static fn (string $name): string => '-' . $name, $removed),
+		);
+		$entry = ['type' => self::TYPE_TAGS, 'document' => $document, 'path' => $path];
+		$values = array_filter(['added' => implode(', ', $added), 'removed' => implode(', ', $removed)], static fn (string $names): bool => $names !== '');
+		if ($values !== []) {
+			$entry['values'] = $values;
+		}
+		$this->action("TAGS P{$document}: " . implode(' ', $changes), $entry);
+	}
+
 	/** A file of the inbox that Paperless imported, as the document $document when Paperless names it. */
 	public function uploadSucceeded(string $path, ?int $document): void {
 		$entry = ['type' => self::TYPE_UPLOAD_SUCCEEDED, 'path' => $path];
@@ -196,7 +225,7 @@ final class SyncReport implements \JsonSerializable {
 	 * line in English, $values the numbers and names that the settings page puts into its
 	 * translation.
 	 *
-	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN $type
+	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN|self::TYPE_TAGS_TAKEN|self::TYPE_TAGS_NOT_CREATED $type
 	 * @param array<string, int|string> $values
 	 */
 	public function notice(string $type, string $message, array $values = []): void {

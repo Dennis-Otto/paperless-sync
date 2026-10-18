@@ -87,7 +87,7 @@ REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised
 LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
-    "active", "renamed", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
+    "active", "renamed", "tagged", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
 }
 # The versions of Paperless-ngx that the mock plays, with the versions of the API that each serves
 # and its default (src/paperless/settings.py, REST_FRAMEWORK): 2.15 is the last before version 9,
@@ -333,10 +333,11 @@ def scenario_documents():
         return showcase.documents(scenario)
     if scenario == "active":
         return [document()], []
-    if scenario == "renamed":
-        # A new content is a new revision of the document.
+    if scenario in ("renamed", "tagged"):
+        # A new content is a new revision of the document. Tagged is the same revision with the
+        # tags insurance and "Tax, 2026", which leave its copy as it is.
         modified = "2026-08-26T12:00:00+02:00" if STATE["content"] == "revised" else "2026-08-26T11:00:00+02:00"
-        return [document("Monthly invoice corrected", modified)], []
+        return [document("Monthly invoice corrected", modified, [11, 13] if scenario == "tagged" else None)], []
     if scenario == "excluded":
         return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00", [9])], []
     if scenario == "trash":

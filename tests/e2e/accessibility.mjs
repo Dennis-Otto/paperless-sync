@@ -49,6 +49,8 @@ const EVERY_KIND = [
 	['IMPORT REJECTED: Documents/Paperless/Inbox/notes.bin: File type not supported', { type: 'import-rejected', path: 'Documents/Paperless/Inbox/notes.bin', detail: 'File type not supported' }],
 	['EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.', { type: 'export-stopped' }],
 	['TAGS UNKNOWN: Paperless shows the account no tag named 2026, so the files of the inbox go to Paperless without it. Create the tags in Paperless or share them with the account, or turn on "Create missing tags".', { type: 'tags-unknown', values: { names: '2026', count: 1 } }],
+	['TAGS TAKEN: Nextcloud has tags named Invoice that Paperless Sync did not make, so the copies go without them. Rename the tag in Nextcloud or in Paperless.', { type: 'tags-taken', values: { names: 'Invoice', count: 1 } }],
+	['TAGS NOT CREATED: Nextcloud lets only users and the command line create tags, so the copies get the tags named Paid, Tax 2026 with the next run of the background jobs by cron or of occ paperless_sync:run.', { type: 'tags-not-created', values: { names: 'Paid, Tax 2026', count: 2 } }],
 	['NEW TAG: Insurance', { type: 'new-tag', detail: 'Insurance' }],
 	['IMPORT: Documents/Paperless/Inbox/Insurance/policy.pdf (tags: Insurance)', { type: 'import', path: 'Documents/Paperless/Inbox/Insurance/policy.pdf', values: { tags: 'Insurance' } }],
 	['EXPORT P1: Documents/Paperless/Archive/invoice.pdf', { type: 'export', document: 1, path: 'Documents/Paperless/Archive/invoice.pdf' }],
@@ -57,6 +59,7 @@ const EVERY_KIND = [
 	['DELETE P4: Documents/Paperless/Deleted/older.pdf', { type: 'delete', document: 4, path: 'Documents/Paperless/Deleted/older.pdf' }],
 	['WAIT P5: missing run 1/3', { type: 'wait', document: 5, path: 'Documents/Paperless/Archive/gone.pdf', values: { scans: 1, limit: 3 } }],
 	['IMPORT SUCCESS: Documents/Paperless/Inbox/scan.pdf -> P456', { type: 'import-success', path: 'Documents/Paperless/Inbox/scan.pdf', document: 456 }],
+	['TAGS P1: +Tax 2026 -Inbox', { type: 'tags', document: 1, path: 'Documents/Paperless/Archive/invoice.pdf', values: { added: 'Tax 2026', removed: 'Inbox' } }],
 ]
 const REPORT_STATUS = {
 	...FAILED_STATUS,
@@ -73,6 +76,7 @@ const REPORT_STATUS = {
 		importsSubmitted: 1,
 		importsSucceeded: 1,
 		importsFailed: 2,
+		tagged: 1,
 		unchanged: 11,
 		skipped: 1,
 		omittedActions: 0,

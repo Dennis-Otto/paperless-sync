@@ -69,6 +69,12 @@ final class SyncConfig implements \JsonSerializable {
 		 * document. Excluded tags and the inbox of Paperless still leave a document out.
 		 */
 		public readonly string $includedTags = '',
+		/**
+		 * Whether a run gives each copy of the archive the tags of its document as tags of Nextcloud,
+		 * which the app makes visible to every user and assignable by administrators alone, and keeps
+		 * them in step with Paperless.
+		 */
+		public readonly bool $nextcloudTags = false,
 	) {
 	}
 

@@ -20,7 +20,7 @@ Das Archiv in Dateien, ein Ordner je Korrespondent, Dokumenttyp und Jahr:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/archive-dark.png">
-  <img alt="Nextcloud Dateien mit dem Ordnerbaum des Archivs, geöffnet bis City Utilities, Invoice, 2026, mit zwei Stromrechnungen, benannt nach Datum, Titel und Paperless-ID" src="images/archive-light.png">
+  <img alt="Nextcloud Dateien mit dem Ordnerbaum des Archivs, geöffnet bis City Utilities, Invoice, 2026, mit zwei Stromrechnungen, benannt nach Datum, Titel und Paperless-ID, mit ihren Tags von Paperless, Electricity und Paid, als Tags von Nextcloud" src="images/archive-light.png">
 </picture>
 
 --8<-- "README.de.md:configuration"
@@ -50,11 +50,11 @@ Die Einstellungen stehen unter **Administrationseinstellungen → Paperless Sync
   <img alt="Der Abschnitt Zeitplan und Module: Schalter für die geplante Synchronisation, den Archivexport und den Import aus dem Eingang, das Intervall in Minuten und die maximalen Änderungen je Modul und Lauf" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Strukturiertes Archiv:** der Archivordner, die [Dateikonflikt-Regel](guide.de.md#dateikonflikt-regel) für eine Datei im Weg, die [Pfadvorlage](guide.de.md#variablen-der-pfadvorlage) mit einem Knopf für jede ihrer Variablen und den Pfaden der neuesten Dokumente mit ihr, während du tippst, die Archivversion oder das Original, welche Dokumente draußen bleiben: die im Posteingang von Paperless, die mit einem der [ausgeschlossenen Tags](guide.de.md#zielbenutzer-und-tags), ausgewählt aus den Tags von Paperless, und, mit [Tags zum Spiegeln](guide.de.md#welche-dokumente-das-archiv-spiegelt), die ohne jeden davon, und ob die Läufe die [Metadaten neben dem Archiv](guide.de.md#metadaten-neben-dem-archiv) schreiben.
+**3 · Strukturiertes Archiv:** der Archivordner, die [Dateikonflikt-Regel](guide.de.md#dateikonflikt-regel) für eine Datei im Weg, die [Pfadvorlage](guide.de.md#variablen-der-pfadvorlage) mit einem Knopf für jede ihrer Variablen und den Pfaden der neuesten Dokumente mit ihr, während du tippst, die Archivversion oder das Original, welche Dokumente draußen bleiben: die im Posteingang von Paperless, die mit einem der [ausgeschlossenen Tags](guide.de.md#zielbenutzer-und-tags), ausgewählt aus den Tags von Paperless, und, mit [Tags zum Spiegeln](guide.de.md#welche-dokumente-das-archiv-spiegelt), die ohne jeden davon, ob die Läufe die [Metadaten neben dem Archiv](guide.de.md#metadaten-neben-dem-archiv) schreiben und ob die Kopien die [Tags von Paperless als Tags von Nextcloud](guide.de.md#tags-in-nextcloud) tragen.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
-  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten, die ausgeschlossenen Tags und der Schalter Metadaten neben das Archiv schreiben" src="images/settings-archive-light.png">
+  <img alt="Der Abschnitt Strukturiertes Archiv: Archivordner, Dateikonflikt-Regel, Archiv-Pfadvorlage, die Wahl der Archivversion, das Überspringen von Posteingangsdokumenten, die ausgeschlossenen Tags, die Tags zum Spiegeln und die Schalter Metadaten neben das Archiv schreiben und Paperless-Tags als Nextcloud-Tags zeigen" src="images/settings-archive-light.png">
 </picture>
 
 **4 · Nextcloud-Eingang:** der Eingangsordner, der Fehlerordner, die Unterordner des Eingangs, ob eine importierte Datei den Eingang verlässt, und die [Tags des Eingangs](guide.de.md#tags-des-eingangs): einer für jeden Unterordner, Tags für jeden Import, ausgewählt aus den Tags von Paperless, und ob die App die anlegt, die Paperless fehlen; darunter die Gruppe, deren Mitglieder [Dateien aus Dateien an Paperless senden](guide.de.md#aus-dateien-senden) dürfen, ausgewählt aus den Gruppen von Nextcloud.

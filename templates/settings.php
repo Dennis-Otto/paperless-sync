@@ -278,6 +278,12 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				} ?>> <span><?php p($l->t('Write metadata next to the archive')); ?></span></label>
 			</div>
 			<p id="paperless-sync-write-metadata-hint" class="settings-hint"><?php p($l->t('A JSON file for each document in the hidden folder .paperless of the archive, with its title, correspondent, tags, notes, custom fields and dates, and an index of every document in index.csv, so that the archive describes itself also without Paperless.')); ?> <?php p($l->t('Everyone who can open the archive folder, also through a share or a public link, can read them, the notes and custom fields as well.')); ?> <?php $help('metadata-next-to-the-archive', $l->t('Metadata next to the archive')); ?></p>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="nextcloud_tags" type="checkbox" aria-describedby="paperless-sync-nextcloud-tags-hint" <?php if ($config->nextcloudTags) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Show Paperless tags as Nextcloud tags')); ?></span></label>
+			</div>
+			<p id="paperless-sync-nextcloud-tags-hint" class="settings-hint"><?php p($l->t('Each copy gets the tags of its document as collaborative tags, which every user sees and only administrators assign, so that Files filters and searches the archive by them; they follow every change in Paperless.')); ?> <?php p($l->t('A tag that someone made in Nextcloud stays as it is, also one with the name of a tag of Paperless.')); ?> <?php $help('tags-in-nextcloud', $l->t('Tags in Nextcloud')); ?></p>
 		</section>
 
 		<section class="paperless-sync-card">

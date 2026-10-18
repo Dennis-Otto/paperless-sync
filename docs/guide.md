@@ -20,7 +20,7 @@ The archive in Files, one folder per correspondent, document type and year:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/archive-dark.png">
-  <img alt="Nextcloud Files with the folder tree of the archive open down to City Utilities, Invoice, 2026, which holds two electricity bills named by date, title and Paperless ID" src="images/archive-light.png">
+  <img alt="Nextcloud Files with the folder tree of the archive open down to City Utilities, Invoice, 2026, which holds two electricity bills named by date, title and Paperless ID, with their tags of Paperless, Electricity and Paid, as tags of Nextcloud" src="images/archive-light.png">
 </picture>
 
 --8<-- "README.md:configuration"
@@ -50,11 +50,11 @@ The settings are in **Administration settings → Paperless Sync**. Above the se
   <img alt="The section Schedule and modules: switches for the scheduled synchronization, the archive export and the inbox import, the interval in minutes and the maximum changes per module and run" src="images/settings-schedule-light.png">
 </picture>
 
-**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the [path template](guide.md#path-template-variables) with a button for each of its variables and the paths of the newest documents with it while you type, the archive version or the original, which documents stay out: those in the inbox of Paperless, those with one of the [excluded tags](guide.md#target-user-and-tags), picked from the tags of Paperless, and, with [tags to mirror](guide.md#which-documents-the-archive-mirrors), those without any of them, and whether the runs write the [metadata next to the archive](guide.md#metadata-next-to-the-archive).
+**3 · Structured archive:** the archive folder, the [conflict policy](guide.md#conflict-policy) for a file in the way, the [path template](guide.md#path-template-variables) with a button for each of its variables and the paths of the newest documents with it while you type, the archive version or the original, which documents stay out: those in the inbox of Paperless, those with one of the [excluded tags](guide.md#target-user-and-tags), picked from the tags of Paperless, and, with [tags to mirror](guide.md#which-documents-the-archive-mirrors), those without any of them, whether the runs write the [metadata next to the archive](guide.md#metadata-next-to-the-archive), and whether the copies carry the [tags of Paperless as tags of Nextcloud](guide.md#tags-in-nextcloud).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/settings-archive-dark.png">
-  <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents, the excluded tags and the switch Write metadata next to the archive" src="images/settings-archive-light.png">
+  <img alt="The section Structured archive: archive folder, file conflict policy, archive path template, the choice of the archive version, skipping inbox documents, the excluded tags, the tags to mirror and the switches Write metadata next to the archive and Show Paperless tags as Nextcloud tags" src="images/settings-archive-light.png">
 </picture>
 
 **4 · Nextcloud inbox:** the inbox folder, the error folder, the subfolders of the inbox, whether an imported file leaves the inbox, and the [tags of the inbox](guide.md#tags-of-the-inbox): one for each subfolder, tags for every import, picked from the tags of Paperless, and whether the app creates those that Paperless lacks; below them, the group whose members may [send files to Paperless from Files](guide.md#send-from-files), picked from the groups of Nextcloud.

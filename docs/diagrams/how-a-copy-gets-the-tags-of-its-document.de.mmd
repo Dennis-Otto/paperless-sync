@@ -1,0 +1,30 @@
+flowchart TB
+    accTitle: Wie eine Kopie die Tags ihres Dokuments bekommt
+    accDescr: Für jede Kopie, die ein Lauf exportiert, verschiebt oder unverändert vorfindet, nimmt er die Namen der Tags ihres Dokuments in Paperless. Für einen Namen ohne Tag der App legt der Lauf einen an, sichtbar für alle Benutzer und nur von Administratoren zuweisbar, es sei denn, jemand anderes hat einen Tag dieses Namens angelegt, gleich in welcher Schreibweise: Dann bleiben die Kopien ohne ihn, und der Bericht sagt es. Danach fügt der Lauf die Tags der App hinzu, die der Kopie fehlen, und entfernt die, die ihr Dokument verloren hat; Tags, die jemand anderes an die Kopie gehängt hat, bleiben. Am Ende eines Laufs über das ganze Archiv geht ein Tag der App, dessen Tag in Paperless weg ist, sobald keine Datei ihn mehr hat.
+
+    copy(["Eine Kopie, die der Lauf exportiert,<br>verschiebt oder unverändert vorfindet"])
+    names["Die Namen der Tags<br>ihres Dokuments in Paperless"]
+    own{"Hat die App einen Tag<br>des Namens?"}
+    other{"Hat jemand anderes einen<br>Tag des Namens angelegt,<br>gleich in welcher Schreibweise?"}
+    create["Der Lauf legt ihn an:<br>sichtbar für alle Benutzer,<br>zugewiesen von Administratoren"]
+    taken["Die Kopien bleiben ohne ihn,<br>und der Bericht sagt es"]
+    sync["🏷️ Die Kopie bekommt die Tags der App,<br>die ihr fehlen, und verliert die, die ihr<br>Dokument verloren hat; fremde Tags bleiben"]
+    gone{"Am Ende eines Laufs über das<br>ganze Archiv: Ist der Tag in<br>Paperless weg, und hat ihn keine Datei?"}
+    delete["Der Tag der App geht"]
+    stay["Der Tag bleibt"]
+
+    copy --> names --> own
+    own -- "ja" --> sync
+    own -- "nein" --> other
+    other -- "nein" --> create --> sync
+    other -- "ja" --> taken
+    sync --> gone
+    gone -- "ja" --> delete
+    gone -- "nein" --> stay
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class own,other,gone check
+    class create,sync kept
+    class taken,delete refused

@@ -791,6 +791,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, $this->storage, $clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService($this->storage),
 		);
 
 		return new SettingsController(

@@ -35,6 +35,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use OCA\PaperlessSync\Tests\Doubles\TestSystemTags;
 use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\Config\IUserConfig;
 use OCP\Files\NotEnoughSpaceException;
@@ -102,6 +103,7 @@ final class SyncServiceTest extends TestCase {
 			$this->activityPublisher($this->storage, $this->logger),
 			new UserTimeZones($this->userConfig(), $this->timeZones),
 			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
+			$this->systemTagService($this->storage),
 		);
 	}
 
@@ -141,6 +143,7 @@ final class SyncServiceTest extends TestCase {
 			$this->activityPublisher($this->storage, $this->logger),
 			new UserTimeZones($this->userConfig(), $this->timeZones),
 			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
+			$this->systemTagService($this->storage),
 		);
 	}
 
@@ -1174,6 +1177,7 @@ final class SyncServiceTest extends TestCase {
 			$this->activityPublisher($storage, $this->logger),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($this->status, $storage, $this->clock, $this->logger),
+			$this->systemTagService($storage),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();
@@ -4727,6 +4731,88 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayNotHasKey(self::ARCHIVE . '/.paperless/index.csv', $this->storage->files);
 	}
 
+	/**
+	 * With the tags of Paperless as tags of Nextcloud, each copy carries the tags of its document: a
+	 * dry-run shows them, a run gives them, also to a copy that stays as it is, and they follow
+	 * every change of the document, through a move as well. A tag of the app that Paperless no
+	 * longer has goes once no file has it.
+	 */
+	public function testTheCopiesCarryTheTagsOfTheirDocumentsAsTagsOfNextcloud(): void {
+		$this->configService->save(['nextcloud_tags' => true]);
+		$this->paperless->documents = [['tags' => [9, 10]] + $this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Strom', '10' => 'Steuer 2026'], 'inbox' => []];
+
+		$dryRun = $this->service->run(true);
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH, 'TAGS P123: +Strom +Steuer 2026'], $dryRun->actions);
+		self::assertSame([], $this->nextcloudTags()->tags, 'A dry-run creates no tag.');
+
+		$report = $this->service->run();
+		self::assertSame([1, 1], [$report->exported, $report->tagged]);
+		self::assertSame(['type' => 'tags', 'document' => 123, 'path' => self::EXPORTED_PATH, 'values' => ['added' => 'Strom, Steuer 2026']], $report->entries[1]);
+		self::assertSame(['Steuer 2026', 'Strom'], $this->tagsOfTheCopy(self::EXPORTED_PATH));
+		$unchanged = $this->service->run();
+		self::assertSame([1, 0, []], [$unchanged->unchanged, $unchanged->tagged, $unchanged->actions]);
+
+		// A new tag in Paperless reaches the copy, which stays as it is.
+		$this->paperless->documents[0]['tags'] = [10, 11];
+		$this->paperless->tagInfo['names']['11'] = 'Bezahlt';
+		$changed = $this->service->run();
+		self::assertSame([1, ['TAGS P123: +Bezahlt -Strom']], [$changed->unchanged, $changed->actions]);
+		self::assertSame(['Bezahlt', 'Steuer 2026'], $this->tagsOfTheCopy(self::EXPORTED_PATH));
+		self::assertSame(1, $this->paperless->downloads);
+
+		// A new title and other tags at once: a dry-run reads the tags of the copy at its old path.
+		$this->paperless->documents[0]['title'] = 'Strom August korrigiert';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->documents[0]['tags'] = [10];
+		$renamedPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August korrigiert [P123].pdf';
+		self::assertSame(['MOVE P123: ' . $renamedPath, 'TAGS P123: -Bezahlt'], $this->service->run(true)->actions);
+		self::assertSame(['MOVE P123: ' . $renamedPath, 'TAGS P123: -Bezahlt'], $this->service->run()->actions);
+		self::assertSame(['Steuer 2026'], $this->tagsOfTheCopy($renamedPath), 'The copy keeps its file, and its tags, through the move.');
+
+		// Paperless deleted the tag Strom, which no file has any more: the tag of the app goes.
+		unset($this->paperless->tagInfo['names']['9']);
+		$this->service->run();
+		self::assertNull($this->nextcloudTags()->idOf('Strom'));
+		self::assertNotNull($this->nextcloudTags()->idOf('Bezahlt'), 'Paperless still has the tag Bezahlt.');
+	}
+
+	/** A call of the webhook gives the copy of its document its tags at once, and leaves the tags of the app to a run of the whole archive. */
+	public function testTheRunOfOneDocumentGivesItsCopyItsTags(): void {
+		$this->configService->save(['enabled' => true, 'nextcloud_tags' => true] + self::validSettings());
+		$this->paperless->documents = [['tags' => [9]] + $this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Strom'], 'inbox' => []];
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH, 'TAGS P123: +Strom'], $this->service->syncDocument(123)->actions);
+		self::assertSame(['Strom'], $this->tagsOfTheCopy(self::EXPORTED_PATH));
+
+		// Paperless renamed the tag: the copy gets one of the new name, and the old one waits for a run of the whole archive.
+		$this->paperless->tagInfo['names']['9'] = 'Energie';
+		self::assertSame(['TAGS P123: +Energie -Strom'], $this->service->syncDocument(123)->actions);
+		self::assertNotNull($this->nextcloudTags()->idOf('Strom'), 'A run of one document deletes no tag.');
+		$this->service->run();
+		self::assertNull($this->nextcloudTags()->idOf('Strom'));
+		self::assertSame(['Energie'], $this->tagsOfTheCopy(self::EXPORTED_PATH));
+	}
+
+	/** While the setting is off, as it is by default, a run leaves the tags of Nextcloud alone. */
+	public function testTheTagsOfNextcloudStayAsTheyAreWhileTheSettingIsOff(): void {
+		$this->paperless->documents = [['tags' => [9]] + $this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->paperless->tagInfo = ['names' => ['9' => 'Strom'], 'inbox' => []];
+
+		$report = $this->service->run();
+
+		self::assertSame([1, 0], [$report->exported, $report->tagged]);
+		self::assertSame([], $this->nextcloudTags()->tags);
+	}
+
 	/** A document that the settings exclude loses its copy, as in a run. */
 	public function testTheRunOfOneDocumentRemovesTheCopyOfAnExcludedDocument(): void {
 		$this->configService->save(['enabled' => true, 'excluded_tags' => 'Privat'] + self::validSettings());
@@ -4932,6 +5018,20 @@ final class SyncServiceTest extends TestCase {
 				];
 				$this->storage->files['Dokumente/Paperless/Eingang/new.pdf'] = '%PDF-3';
 		}
+	}
+
+	/** The collaborative tags of Nextcloud of the runs of the service. */
+	private function nextcloudTags(): TestSystemTags {
+		return $this->nextcloudTags ?? throw new LogicException('The service has the tags of Nextcloud of setUp().');
+	}
+
+	/**
+	 * The names of the tags of Nextcloud of the copy at the path.
+	 *
+	 * @return list<string>
+	 */
+	private function tagsOfTheCopy(string $path): array {
+		return $this->nextcloudTags()->namesOf($this->storage->findFileId(TestStorage::USER, $path) ?? 0);
 	}
 
 	/** @return array<string, bool|int> the counts of a report, without those of the kind of run and the pruned folders, which a dry-run doesn't prune */

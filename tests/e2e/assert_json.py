@@ -248,6 +248,26 @@ elif mode == "deletion-off":
     expect("errors", 0)
     if any(str(action).startswith(("DELETE ", "MISSING ")) for action in payload.get("actions", [])):
         raise AssertionError(f"With permanent deletion off, a document purged from the trash lost its copy: {payload!r}")
+elif mode == "tags-dry-run":
+    # A dry-run shows the tag of Paperless that the copy gets, and that a user of Nextcloud made a
+    # tag of the name of the other one already, so the copy goes without it.
+    expect("dryRun", True)
+    expect("tagged", 1)
+    expect("errors", 0)
+    if "TAGS P123: +insurance" not in payload.get("actions", []):
+        raise AssertionError(f"The dry-run lists no tags of the copy: {payload!r}")
+    if {"type": "tags-taken", "values": {"names": "Tax, 2026", "count": 1}} not in payload.get("entries", []):
+        raise AssertionError(f"The dry-run does not say that a user made the tag Tax, 2026: {payload!r}")
+elif mode == "tags-run":
+    # The run gives the copy, which stays as it is, its tags.
+    expect("unchanged", 1)
+    expect("tagged", 1)
+    expect("exported", 0)
+elif mode == "tags-removed":
+    # Without the tags in Paperless, the copy loses the tag of the app.
+    expect("tagged", 1)
+    if "TAGS P123: -insurance" not in payload.get("actions", []):
+        raise AssertionError(f"The run lists no removed tag: {payload!r}")
 elif mode == "metadata-run":
     # The run that turns the metadata next to the archive on changes no copy.
     expect("unchanged", 1)

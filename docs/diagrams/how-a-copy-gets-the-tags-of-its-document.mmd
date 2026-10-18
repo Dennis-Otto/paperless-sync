@@ -1,0 +1,30 @@
+flowchart TB
+    accTitle: How a copy gets the tags of its document
+    accDescr: For each copy that a run exports, moves or finds unchanged, it takes the names of the tags of its document in Paperless. For a name without a tag of the app, the run creates one, visible to every user and assignable by administrators alone, unless someone else made a tag of that name, whatever its case: then the copies go without it, and the report says so. The run then adds the tags of the app that the copy lacks and removes those that its document lost; tags that someone else put on the copy stay. At the end of a run of the whole archive, a tag of the app whose tag of Paperless is gone goes once no file has it.
+
+    copy(["A copy that the run exports,<br>moves or finds unchanged"])
+    names["The names of the tags<br>of its document in Paperless"]
+    own{"Has the app a tag<br>of the name?"}
+    other{"Has someone else made<br>a tag of the name,<br>whatever its case?"}
+    create["The run creates it:<br>visible to every user,<br>assigned by administrators"]
+    taken["The copies go without it,<br>and the report says so"]
+    sync["🏷️ The copy gets the tags of the app<br>that it lacks and loses those that<br>its document lost; the tags of others stay"]
+    gone{"At the end of a run of the<br>whole archive: is the tag of<br>Paperless gone, and no file has it?"}
+    delete["The tag of the app goes"]
+    stay["The tag stays"]
+
+    copy --> names --> own
+    own -- "yes" --> sync
+    own -- "no" --> other
+    other -- "no" --> create --> sync
+    other -- "yes" --> taken
+    sync --> gone
+    gone -- "yes" --> delete
+    gone -- "no" --> stay
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class own,other,gone check
+    class create,sync kept
+    class taken,delete refused

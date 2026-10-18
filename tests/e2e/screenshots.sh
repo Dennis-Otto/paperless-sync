@@ -75,7 +75,8 @@ occ --detach nextcloud php occ background-job:worker --interval=1 'OCA\Paperless
 
 # The configuration of the quick start, before the first dry-run: Paperless in the
 # same Compose project and synchronization still off, with the subfolders of the inbox
-# as tags, so that the receipt in Inbox/Receipts gets the tag Receipts. Every setting
+# as tags, so that the receipt in Inbox/Receipts gets the tag Receipts, and the tags of
+# Paperless as tags of Nextcloud, which the electricity bills show in Files. Every setting
 # that the request leaves out keeps its default, in the default language of Nextcloud,
 # English, such as the folders Documents/Paperless, Archive, Inbox, Failed imports and
 # _Deleted.
@@ -89,6 +90,7 @@ curl --fail-with-body --silent --show-error \
 	--data-urlencode "settings[target_user]=${TARGET_USER}" \
 	--data-urlencode 'settings[excluded_tags]=Private' \
 	--data-urlencode 'settings[inbox_folder_tags]=1' \
+	--data-urlencode 'settings[nextcloud_tags]=1' \
 	--data-urlencode 'token=e2e-only-token' \
 	--output /dev/null \
 	"${BASE_URL}/apps/paperless_sync/settings"

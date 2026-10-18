@@ -416,6 +416,53 @@ assert_dav_file() {
 	grep --fixed-strings "${needle}" "${output}" >/dev/null
 }
 
+# A collaborative tag that a user makes in Files, which every user may assign; prints its ID.
+create_tag() {
+	user="$1"
+	name="$2"
+	curl --fail-with-body --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--request POST \
+		--header 'Content-Type: application/json' \
+		--data "{\"name\": \"${name}\", \"userVisible\": true, \"userAssignable\": true}" \
+		--dump-header - --output /dev/null \
+		"${BASE_URL}/remote.php/dav/systemtags/" \
+		| tr -d '\r' | sed -n 's|^[Cc]ontent-[Ll]ocation: .*/systemtags/\([0-9][0-9]*\)$|\1|p'
+}
+
+# The collaborative tags of a file as Files shows them to the user, each as its name and
+# whether users may assign it, such as insurance:false, one per line in the order of the names.
+file_tags() {
+	user="$1"
+	file="$2"
+	curl --fail-with-body --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		--header 'Content-Type: application/xml' \
+		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:display-name/><oc:user-assignable/></d:prop></d:propfind>' \
+		"${BASE_URL}/remote.php/dav/systemtags-relations/files/${file}" \
+		| "${COMPOSE[@]}" exec -T paperless-mock python -c '
+import sys, xml.etree.ElementTree as tree
+ns = {"d": "DAV:", "oc": "http://owncloud.org/ns"}
+tags = []
+for prop in tree.parse(sys.stdin).getroot().iterfind("d:response/d:propstat/d:prop", ns):
+    name = prop.find("oc:display-name", ns)
+    if name is not None and name.text:
+        tags.append(name.text + ":" + str(prop.findtext("oc:user-assignable", namespaces=ns)))
+print("\n".join(sorted(tags)))'
+}
+
+# The tags of the copy of P123 at its renamed path are those that a step expects.
+assert_file_tags() {
+	expected="$1"
+	actual="$(file_tags sync-target "$(file_id sync-target "${RENAMED_PATH}")")"
+	if [[ "${actual}" != "${expected}" ]]; then
+		echo "The copy of P123 has the tags $(printf '%q' "${actual}") instead of $(printf '%q' "${expected}")." >&2
+		exit 1
+	fi
+}
+
 # The ID of a file in Nextcloud, to which its shares, comments, tags, favorites and versions belong.
 file_id() {
 	user="$1"
@@ -919,6 +966,29 @@ sync_run false "${TMP_DIR}/re-export.json"
 assert_json export "${TMP_DIR}/re-export.json"
 assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
 
+# The tags of Paperless as tags of Nextcloud: with the setting on, the copy of P123 gets the tag
+# insurance of its document, which every user sees and only administrators assign, and keeps the
+# tag Holiday that its user put on it. A user made the tag TAX, 2026 already, which Nextcloud
+# holds once whatever the case, so the copy goes without the other tag of its document, and the
+# dry-run says so. Without the tags in Paperless, the copy loses insurance and keeps Holiday.
+HOLIDAY_TAG="$(create_tag sync-target Holiday)"
+create_tag sync-target 'TAX, 2026' >/dev/null
+curl --fail-with-body --silent --show-error --user "sync-target:${PASSWORD}" --request PUT \
+	"${BASE_URL}/remote.php/dav/systemtags-relations/files/$(file_id sync-target "${RENAMED_PATH}")/${HOLIDAY_TAG}" >/dev/null
+save_settings "${TMP_DIR}/tags-settings.json" nextcloud_tags=1
+control /control/scenario/tagged >/dev/null
+sync_run true "${TMP_DIR}/tags-dry-run.json"
+assert_json tags-dry-run "${TMP_DIR}/tags-dry-run.json"
+assert_file_tags 'Holiday:true'
+sync_run false "${TMP_DIR}/tags-run.json"
+assert_json tags-run "${TMP_DIR}/tags-run.json"
+assert_file_tags $'Holiday:true\ninsurance:false'
+control /control/scenario/renamed >/dev/null
+sync_run false "${TMP_DIR}/tags-removed.json"
+assert_json tags-removed "${TMP_DIR}/tags-removed.json"
+assert_file_tags 'Holiday:true'
+save_settings "${TMP_DIR}/tags-off-settings.json" nextcloud_tags=0
+
 # The metadata next to the archive: with the setting on, a run writes the sidecar of P123, with
 # the names of its correspondent and document type, its note and its custom field, and the index
 # of the archive, both in the hidden folder .paperless. The copy in the deleted folder keeps its
@@ -1385,7 +1455,7 @@ notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

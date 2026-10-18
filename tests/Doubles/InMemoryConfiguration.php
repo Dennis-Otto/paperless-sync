@@ -10,8 +10,10 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\SystemTagService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IConfig;
@@ -46,6 +48,16 @@ trait InMemoryConfiguration {
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
 		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud());
+	}
+
+	/** The collaborative tags of Nextcloud, which the runs give the copies with the tags of Paperless as tags of Nextcloud. */
+	private ?TestSystemTags $nextcloudTags = null;
+
+	/** The tags of Nextcloud of the runs, in $nextcloudTags, with the tags of the app in the config of the app. */
+	private function systemTagService(NextcloudStorageInterface $storage): SystemTagService {
+		$this->nextcloudTags ??= new TestSystemTags();
+
+		return new SystemTagService($this->nextcloudTags, $this->nextcloudTags, $this->appConfig(), $storage);
 	}
 
 	/** The groups of Nextcloud, which the setting of the group that may send files names, by the IDs of $groupsOfNextcloud. */

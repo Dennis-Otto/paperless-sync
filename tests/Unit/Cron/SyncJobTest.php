@@ -74,6 +74,7 @@ final class SyncJobTest extends TestCase {
 			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $this->clock, $this->createMock(LoggerInterface::class)),
+			$this->systemTagService(new TestStorage()),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);

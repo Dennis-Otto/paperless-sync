@@ -44,6 +44,9 @@ TAGS = [
     {"id": 4, "name": "Draft", "is_inbox_tag": False},
     {"id": 5, "name": "Tax return", "is_inbox_tag": False},
     {"id": 6, "name": "Warranty", "is_inbox_tag": False},
+    # Tags of the electricity bills, which their copies carry in Files as tags of Nextcloud.
+    {"id": 7, "name": "Electricity", "is_inbox_tag": False},
+    {"id": 8, "name": "Paid", "is_inbox_tag": False},
 ]
 
 # The ID, the title, the correspondent, the document type and the date of every
@@ -75,6 +78,9 @@ LATER = [
 # Listed by Paperless, but without a file: its download fails.
 UNAVAILABLE = (191, "Annual statement 2026", 4, 4, "2026-10-08")
 RENAMED = {132: "Premium adjustment 2026"}
+# The tags of the electricity bills; the bill of June is paid a few days later.
+TAGGED = {140: [7, 8], 141: [7], 143: [7]}
+PAID_LATER = {141: [7, 8]}
 TRASHED = {142: "2026-10-06T09:30:00+02:00"}
 PRIVATE = {125}
 
@@ -100,7 +106,7 @@ def _document(entry, title=None, tags=None):
 def documents(scenario):
     """The active documents and the trash of a scenario."""
     if scenario == "showcase":
-        return [_document(entry) for entry in ARCHIVE] + [_document(UNFINISHED, tags=[1])], []
+        return [_document(entry, tags=TAGGED.get(entry[0])) for entry in ARCHIVE] + [_document(UNFINISHED, tags=[1])], []
     active, trash = [], []
     for entry in ARCHIVE + LATER:
         document_id = entry[0]
@@ -109,7 +115,8 @@ def documents(scenario):
             trashed["deleted_at"] = TRASHED[document_id]
             trash.append(trashed)
         else:
-            active.append(_document(entry, RENAMED.get(document_id), [2] if document_id in PRIVATE else None))
+            tags = [2] if document_id in PRIVATE else PAID_LATER.get(document_id, TAGGED.get(document_id))
+            active.append(_document(entry, RENAMED.get(document_id), tags))
     if scenario == "showcase-error":
         active.append(_document(UNAVAILABLE))
     return active, trash

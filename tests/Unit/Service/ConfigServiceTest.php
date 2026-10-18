@@ -227,6 +227,17 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('', $this->service->save(['send_group' => ''] + self::validSettings())->sendGroup, 'An empty group turns the action off.');
 	}
 
+	/** The tags of Paperless reach Nextcloud only once an administrator turns them on. */
+	public function testTheTagsInNextcloudAreOffUntilTurnedOn(): void {
+		self::assertFalse($this->service->get()->nextcloudTags);
+
+		$config = $this->service->save(['nextcloud_tags' => true] + self::validSettings(), 'secret-token');
+
+		self::assertTrue($config->nextcloudTags);
+		self::assertTrue($this->settings['nextcloud_tags']);
+		self::assertTrue($this->service->get()->nextcloudTags);
+	}
+
 	/** Nextcloud loads the settings when the app asks for them, not with every request of every user. */
 	public function testEverySettingIsStoredAndReadLazily(): void {
 		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
@@ -237,7 +248,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(36, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(37, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

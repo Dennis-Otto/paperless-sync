@@ -251,6 +251,10 @@ OC.L10N.register(
 		"A JSON file for each document in the hidden folder .paperless of the archive, with its title, correspondent, tags, notes, custom fields and dates, and an index of every document in index.csv, so that the archive describes itself also without Paperless.": "Eine JSON-Datei für jedes Dokument im versteckten Ordner .paperless des Archivs, mit seinem Titel, Korrespondenten, Tags, Notizen, benutzerdefinierten Feldern und Daten, und ein Verzeichnis aller Dokumente in index.csv, damit sich das Archiv auch ohne Paperless selbst beschreibt.",
 		"Everyone who can open the archive folder, also through a share or a public link, can read them, the notes and custom fields as well.": "Alle, die den Archivordner öffnen können, auch über eine Freigabe oder einen öffentlichen Link, können sie lesen, auch die Notizen und benutzerdefinierten Felder.",
 		"Metadata next to the archive": "Metadaten neben dem Archiv",
+		"Show Paperless tags as Nextcloud tags": "Paperless-Tags als Nextcloud-Tags zeigen",
+		"Each copy gets the tags of its document as collaborative tags, which every user sees and only administrators assign, so that Files filters and searches the archive by them; they follow every change in Paperless.": "Jede Kopie bekommt die Tags ihres Dokuments als kollaborative Schlagworte, die alle Benutzer sehen und nur Administratoren zuweisen, damit Dateien das Archiv nach ihnen filtert und durchsucht; sie folgen jeder Änderung in Paperless.",
+		"A tag that someone made in Nextcloud stays as it is, also one with the name of a tag of Paperless.": "Ein Tag, den jemand in Nextcloud angelegt hat, bleibt, wie er ist, auch einer mit dem Namen eines Tags von Paperless.",
+		"Tags in Nextcloud": "Tags in Nextcloud",
 		"Save the connection to Paperless first; then its tags appear here.": "Speichere zuerst die Verbindung zu Paperless; dann erscheinen seine Tags hier.",
 		"Paperless did not list its tags: %s": "Paperless hat seine Tags nicht aufgelistet: %s",
 		"Paperless has no tags yet.": "Paperless hat noch keine Tags.",
@@ -341,6 +345,16 @@ OC.L10N.register(
 		"New tag": "Neuer Tag",
 		"Tags: {tags}": "Tags: {tags}",
 		"The tag {name} is created in Paperless.": "Der Tag {name} wird in Paperless angelegt.",
+		"Tags in Nextcloud added: {tags}": "Tags in Nextcloud hinzugefügt: {tags}",
+		"Tags in Nextcloud removed: {tags}": "Tags in Nextcloud entfernt: {tags}",
+		"_Nextcloud has a tag named {names} that Paperless Sync did not make, so the copies go without it. Rename the tag in Nextcloud or in Paperless._::_Nextcloud has tags named {names} that Paperless Sync did not make, so the copies go without them. Rename the tags in Nextcloud or in Paperless._": [
+			"Nextcloud hat einen Tag namens {names}, den Paperless Sync nicht angelegt hat, daher bleiben die Kopien ohne ihn. Benenne den Tag in Nextcloud oder in Paperless um.",
+			"Nextcloud hat Tags namens {names}, die Paperless Sync nicht angelegt hat, daher bleiben die Kopien ohne sie. Benenne die Tags in Nextcloud oder in Paperless um."
+		],
+		"_Nextcloud lets only users and the command line create tags, so the copies get the tag {names} with the next run of the background jobs by cron or of occ paperless_sync:run._::_Nextcloud lets only users and the command line create tags, so the copies get the tags {names} with the next run of the background jobs by cron or of occ paperless_sync:run._": [
+			"Nextcloud lässt nur Benutzer und die Kommandozeile Tags anlegen, daher bekommen die Kopien den Tag {names} mit dem nächsten Lauf der Hintergrundjobs per Cron oder von occ paperless_sync:run.",
+			"Nextcloud lässt nur Benutzer und die Kommandozeile Tags anlegen, daher bekommen die Kopien die Tags {names} mit dem nächsten Lauf der Hintergrundjobs per Cron oder von occ paperless_sync:run."
+		],
 		"_Paperless shows the account no tag named {names}, so the files of the inbox go to Paperless without it. Create the tag in Paperless or share it with the account, or turn on \"Create missing tags\"._::_Paperless shows the account no tags named {names}, so the files of the inbox go to Paperless without them. Create the tags in Paperless or share them with the account, or turn on \"Create missing tags\"._": [
 			"Paperless zeigt dem Konto keinen Tag namens {names}, daher gehen die Dateien des Eingangs ohne ihn an Paperless. Lege den Tag in Paperless an oder teile ihn mit dem Konto, oder schalte „Fehlende Tags anlegen“ ein.",
 			"Paperless zeigt dem Konto keine Tags namens {names}, daher gehen die Dateien des Eingangs ohne sie an Paperless. Lege die Tags in Paperless an oder teile sie mit dem Konto, oder schalte „Fehlende Tags anlegen“ ein."
@@ -367,6 +381,7 @@ OC.L10N.register(
 		"Imports succeeded": "Importe erfolgreich",
 		"Imports failed": "Importe fehlgeschlagen",
 		"Folders removed": "Ordner entfernt",
+		"Tags changed": "Tags geändert",
 		"Errors": "Fehler",
 		"No file changes were required.": "Es waren keine Dateiänderungen erforderlich.",
 		"Calculating synchronization changes…": "Synchronisationsänderungen werden berechnet …",
