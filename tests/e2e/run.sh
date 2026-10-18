@@ -124,7 +124,8 @@ mock_state() {
 # connection with the token of an account with too few permissions, disconnects and
 # connects again with the token, and checks what the page says about unsaved changes,
 # results and errors, also in German. files.mjs checks the actions of the app in the
-# menu of Files for a member of the group of the setting and for another user. The files
+# menu of Files for a member of the group of the setting and for another user, and flow.mjs
+# the form of a rule of "Send to Paperless" in the settings of Flow. The files
 # of the checks reach the browser through standard input, so that npm leaves nothing in
 # the checkout.
 accessibility() {
@@ -132,7 +133,7 @@ accessibility() {
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs flow.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -141,7 +142,7 @@ accessibility() {
 			--env E2E_TOKEN=e2e-only-token \
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
-			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs'
+			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs && node flow.mjs'
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -1185,6 +1186,47 @@ assert_json notifications-sent "${TMP_DIR}/notifications-sent.json"
 assert_dav_file e2e-admin 'receipt.pdf' 'Synthetic inbox PDF receipt.'
 echo "Send to Paperless passes after ${SECONDS} s."
 
+# "Send to Paperless" in Flow: e2e-admin saves a rule through the API of Flow that sends every
+# file whose name starts with scan- when it is created, with the tags Private and insurance of
+# the rule; a rule with a tag that Paperless Sync can't send is refused. e2e-other, who may not
+# send from Files, uploads a file that the rule matches and one that it doesn't. The background
+# job uploads the first with the tags of the rule, the file stays where it is, and its owner
+# hears nothing of an import that worked. flow.mjs then edits the rule in the settings of Flow.
+flow_rule() {
+	# The rule as the settings of Flow save it, with the operation of the argument, a JSON string.
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'Content-Type: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data '{"class": "OCA\\PaperlessSync\\Operation\\SendToPaperless", "name": "Scans", "checks": [{"class": "OCA\\WorkflowEngine\\Check\\FileName", "operator": "matches", "value": "/^scan-/i"}], "operation": '"$2"', "entity": "OCA\\WorkflowEngine\\Entity\\File", "events": ["\\OCP\\Files::postCreate"]}' \
+		--output "$1" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/ocs/v2.php/apps/workflowengine/api/v1/workflows/global"
+}
+FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow-comma.json" '"{\"tags\": [\"Tax, 2026\"]}"')"
+if [[ "${FLOW_STATUS}" != "400" ]] || ! grep --fixed-strings 'hold a comma or a line break: Tax, 2026' "${TMP_DIR}/flow-comma.json" >/dev/null; then
+	echo "Flow saved a rule with a tag that Paperless Sync can't send: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow-comma.json")" >&2
+	exit 1
+fi
+FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow.json" '"{\"tags\": [\"Private\", \"insurance\"]}"')"
+if [[ "${FLOW_STATUS}" != "200" ]]; then
+	echo "Flow did not save the rule of Send to Paperless: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow.json")" >&2
+	exit 1
+fi
+dav_upload e2e-other 'scan-insurance.pdf' '%PDF-1.4 Synthetic inbox PDF scan of an insurance letter.'
+dav_upload e2e-other 'holiday.pdf' '%PDF-1.4 Synthetic holiday plan.'
+occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+mock_state > "${TMP_DIR}/mock-flow.json"
+assert_json mock-flow "${TMP_DIR}/mock-flow.json"
+control /control/task-of/scan-insurance.pdf/success >/dev/null
+occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+notifications e2e-other "${TMP_DIR}/notifications-flow.json"
+assert_json notifications-flow "${TMP_DIR}/notifications-flow.json"
+assert_dav_file e2e-other 'scan-insurance.pdf' 'Synthetic inbox PDF scan'
+echo "Send to Paperless in Flow passes after ${SECONDS} s."
+
 # The administration settings and the report of a dry-run over a larger archive meet
 # WCAG 2.1 AA.
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
@@ -1343,7 +1385,7 @@ notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

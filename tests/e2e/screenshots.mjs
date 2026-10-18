@@ -476,6 +476,51 @@ try {
 		await context.close()
 	}
 
+	// A rule of Flow that sends every PDF that someone uploads into a folder with the tag
+	// "To Paperless" to Paperless, with the tags Letters and Bank, saved as the settings of
+	// Flow save it; the picture shows the rule with the form of Paperless Sync.
+	{
+		const { context, page } = await open(browser, admin, 'light', `${BASE_URL}/index.php/settings/admin/workflow`)
+		const saved = await page.evaluate(async () => {
+			const headers = { 'Content-Type': 'application/json', 'OCS-APIRequest': 'true', requesttoken: window.OC.requestToken }
+			const tag = await fetch('/remote.php/dav/systemtags/', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', requesttoken: window.OC.requestToken },
+				body: JSON.stringify({ name: 'To Paperless', userVisible: true, userAssignable: true }),
+			})
+			const tagId = tag.headers.get('Content-Location')?.split('/').pop() ?? ''
+			const rule = await fetch('/ocs/v2.php/apps/workflowengine/api/v1/workflows/global?format=json', {
+				method: 'POST',
+				headers,
+				body: JSON.stringify({
+					class: 'OCA\\PaperlessSync\\Operation\\SendToPaperless',
+					name: '',
+					checks: [
+						{ class: 'OCA\\WorkflowEngine\\Check\\FileMimeType', operator: 'is', value: 'application/pdf' },
+						{ class: 'OCA\\WorkflowEngine\\Check\\FileSystemTags', operator: 'is', value: tagId },
+					],
+					operation: JSON.stringify({ tags: ['Letters', 'Bank'] }),
+					entity: 'OCA\\WorkflowEngine\\Entity\\File',
+					events: ['\\OCP\\Files::postCreate'],
+				}),
+			})
+			return `${tag.status} ${rule.status}`
+		})
+		if (saved !== '201 200') {
+			throw new Error(`The rule of Flow for the pictures was not saved: ${saved}`)
+		}
+		await context.close()
+	}
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, `${BASE_URL}/index.php/settings/admin/workflow`)
+		const rule = page.locator('.rule', { has: page.locator('oca-paperless_sync-send-to-paperless') })
+		await rule.waitFor()
+		await page.locator('oca-paperless_sync-send-to-paperless input').evaluate((input) => input.blur())
+		await settle(page)
+		save(`docs/images/flow-rule-${theme}.png`, await shot(page, rule))
+		await context.close()
+	}
+
 	// A few days later: a new title, the trash, an excluded tag, new documents and a
 	// finished import, all in the report of a dry-run.
 	await control('scenario/showcase-update')

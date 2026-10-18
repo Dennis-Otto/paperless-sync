@@ -97,6 +97,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 ### Files
 
 - [Send to Paperless](#send-from-files) in the menu of a file or a folder in Files: the members of a group that you choose, the administrators by default, send it with the tags of the inbox, it stays where it is, and a notification tells them when Paperless has it, with a link to the new document
+- [Rules of Flow](#send-by-a-rule-of-flow) that send files on their own, such as every PDF that a member of a group uploads, with tags of their own; only the administrators make them
 - *Open in Paperless* in the menu of every copy of the archive opens its document in Paperless
 - A file whose content Paperless has already isn't uploaded again, so Paperless-ngx 3.x makes no duplicate; the sender learns the document that has it
 
@@ -529,6 +530,30 @@ A file needn't go through the inbox: **Send to Paperless** in the menu of a file
   <img alt="Nextcloud Files with the copy 2026-06-30 - Electricity bill June of the archive and its menu open, which offers Open in Paperless" src="docs/images/files-open-light.png">
 </picture>
 
+### Send by a rule of Flow
+
+Files can also go to Paperless on their own: **Send to Paperless** is an operation of Flow, the rules of Nextcloud in *Administration → Flow*, so that a rule of the administrators sends every file that matches its conditions, such as every PDF that a member of the group *Family* uploads, or every file of a folder that has the tag *To Paperless*. The file goes to Paperless as one sent from Files, with the *Tags for every import* of the [inbox](#tags-of-the-inbox) and the tags of the rule, and stays where it is.
+
+1. In *Administration → Flow*, choose **Send to Paperless** among the *Available flows*.
+2. Choose when the rule runs, such as *File created*, and its conditions, such as *File MIME type* is *PDF documents* and *Group membership* is *Family*, or *File system tag* is *To Paperless*, which also counts for the tag of a folder above the file; Flow asks for at least one.
+3. Type the tags of Paperless for the files of the rule into *Tags in Paperless*, separated by commas, as the field suggests them from Paperless, and save the rule.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-rule-dark.png">
+  <img alt="A rule of Flow in Administration → Flow: when a file is created, its File MIME type is PDF documents and its File system tag is To Paperless, Send to Paperless sends it with the tags Letters and Bank of the field Tags in Paperless" src="docs/images/flow-rule-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-rule-of-flow-sends-a-file-to-paperless.dark.svg">
+  <img src="docs/images/diagrams/how-a-rule-of-flow-sends-a-file-to-paperless.svg" alt="How a rule of Flow sends a file to Paperless: Someone uploads, changes, moves, copies or tags a file in Nextcloud. Flow checks the conditions of the rules of the administrators with the operation Send to Paperless, such as the type of the file, a tag of its folder or the group of the user. When a rule matches, Paperless Sync queues the file for its owner with the tags of every matching rule, unless the app is not connected, the file is in the folder of Paperless Sync, has a marker such as [P123] or waits already. With the next run of cron, the background job uploads it as a file sent from Files, with the tags for every import of the inbox and those of the rule, and follows its task. The owner hears of an import that Paperless refused or that failed; one that worked stays in the log. The file stays where it is.">
+</picture>
+
+- **Only administrators make such rules,** as the uploads use the API token of the app, as from Files. *Group that may send files* is the group of the action in Files and doesn't limit a rule: its conditions choose whose files it sends. The background job sends them with the next run of cron, for the owner of each file; a file without one, as in a group folder, for the user who wrote it. While the app isn't connected to Paperless, a rule sends nothing.
+- **When the rule runs:** *File created* and *File updated* send a new or a changed file, *File renamed* and *File copied* a file that comes to where the rule matches, and *Tag assigned* a file the moment that someone gives it a tag. A file that waits for its upload or for its task isn't queued again, not by a second event and not by a second rule; the tags of every rule that matches the event go with it.
+- **The tags of the rule** follow the settings of the [inbox](#tags-of-the-inbox): a tag that Paperless lacks is created with *Create missing tags* and else left out. Flow refuses to save a name with a comma or a line break, which separate the names, or one longer than the 128 characters that Paperless keeps.
+- **Files of the archive stay out,** as from Files: the files of the base folder, which the runs write, such as the copies of the archive and the files of the inbox, and every file whose name has a marker such as `[P123]`, so that a rule for every new PDF doesn't send the archive back to Paperless. A file whose content Paperless has already, by its checksum, isn't uploaded again.
+- **The owner hears of what needs them:** a notification for an import that Paperless refused or that failed, after the same retries as from Files. A rule may send many files, so an import that worked, a content that Paperless had and a file that its owner deleted before its upload go into the log of Nextcloud alone, at the level *info*.
+
 ### Deletion safety
 
 Moving Paperless documents to its trash can be mirrored into the configured `_Deleted` folder, below the date on which the document went to the trash, in the time zone of the target user from the personal settings of Nextcloud, or else in that of Nextcloud, such as `_Deleted/2026-08-27/Example GmbH/Invoice/2026/…`; when the trash behavior keeps archive files in place, the copy stays where it is. Deleting the copy of a document that Paperless deleted is disabled by default. When enabled, a document must be absent from both the active Paperless API and its trash for the configured number of consecutive complete scans.
@@ -680,7 +705,7 @@ A mirror that stops is the worst failure of a backup, and nobody looks at the se
   <img src="docs/images/diagrams/when-the-administrators-hear-of-a-failing-mirror.svg" alt="When the administrators hear of a failing mirror: After every run that is no dry-run, Paperless Sync counts the runs in a row that failed or completed with errors. A successful run ends the row and removes the notification. After the third run in a row, or once the first of them ended a day ago, every administrator gets one notification with the error of the last run and a link to the settings, once for the whole row. The setup checks under Administration, Overview and the status API show the same state at any time.">
 </picture>
 
-- **Notifications.** Three runs in a row that failed or completed with errors, or fewer once the first of them ended a day ago, as with an interval of a day, send every administrator one notification, with the first 200 characters of the error and a link to the settings: *Paperless Sync failed 3 times in a row*. It comes once for the whole row, also by mail or as a push notification of the Nextcloud apps where the user has turned those on, and the next successful run removes it. Two failed runs, such as during a restart of Paperless, notify nobody. The target user gets a notification for each file of the inbox that Paperless could not import or refused, with its reason. A dry-run notifies nobody.
+- **Notifications.** Three runs in a row that failed or completed with errors, or fewer once the first of them ended a day ago, as with an interval of a day, send every administrator one notification, with the first 200 characters of the error and a link to the settings: *Paperless Sync failed 3 times in a row*. It comes once for the whole row, also by mail or as a push notification of the Nextcloud apps where the user has turned those on, and the next successful run removes it. Two failed runs, such as during a restart of Paperless, notify nobody. The target user gets a notification for each file of the inbox that Paperless could not import or refused, with its reason, and so does the owner of a file that a [rule of Flow](#send-by-a-rule-of-flow) sent. A dry-run notifies nobody.
 - **Setup checks.** *Administration → Overview* and `occ setupchecks` show two checks of the app. *Paperless Sync* is an error when the last run failed, a warning when it completed with errors or when no run succeeded for three intervals, at least an hour, as when the background jobs stopped. *Paperless Sync background job* warns when scheduled runs are on but Nextcloud runs its background jobs with AJAX or Webcron, which start them only while someone uses Nextcloud. The settings page shows their warnings on top.
 - **The status API** gives a monitor, such as Uptime Kuma or Home Assistant, the health of the mirror. Only administrators may read it; give the monitor an app password of an administrator, from *Personal settings → Security*, here in the variable `APP_PASSWORD`:
 

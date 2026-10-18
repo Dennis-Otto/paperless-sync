@@ -222,6 +222,72 @@ final class FileActionsTest extends TestCase {
 		self::assertSame('', $this->state->findSend(self::SENDER, $file)['folder'] ?? null);
 	}
 
+	/** A rule of Flow queues a file of its owner with the tags of the rule, and names itself. */
+	public function testARuleQueuesAFileWithItsTags(): void {
+		$id = $this->file('Scans/receipt.pdf');
+
+		self::assertSame(FileActions::RULE_QUEUED, $this->actions->sendByRule($this->configService->get(), self::SENDER, $id, ['Scans', 'Family'], 7));
+
+		self::assertSame(
+			['path' => 'Scans/receipt.pdf', 'folder' => '', 'tags' => 'Scans,Family', 'rule_id' => 7, 'status' => 'queued'],
+			array_intersect_key($this->state->findSend(self::SENDER, $id) ?? [], array_flip(['path', 'folder', 'tags', 'rule_id', 'status'])),
+		);
+	}
+
+	/** The group of the setting is for Files: the administrators chose whose files a rule sends. */
+	public function testARuleSendsTheFilesOfEveryone(): void {
+		$this->storage->filesOfOthers['bob']['letter.pdf'] = 'Synthetic letter';
+		$id = $this->storage->fileId('letter.pdf', 'bob');
+
+		self::assertSame(FileActions::RULE_QUEUED, $this->actions->sendByRule($this->configService->get(), 'bob', $id, [], 1));
+		self::assertSame('', $this->state->findSend('bob', $id)['tags'] ?? null);
+	}
+
+	/** A second event of the same file, such as "File updated" after "File created", keeps the first. */
+	public function testAFileThatWaitsAlreadyWaitsOnWithItsTags(): void {
+		$id = $this->file('Scans/receipt.pdf');
+		$this->actions->sendByRule($this->configService->get(), self::SENDER, $id, ['Scans'], 7);
+
+		self::assertSame(FileActions::RULE_WAITING, $this->actions->sendByRule($this->configService->get(), self::SENDER, $id, ['Other'], 8));
+		self::assertSame(['Scans', 7], [$this->state->findSend(self::SENDER, $id)['tags'] ?? null, $this->state->findSend(self::SENDER, $id)['rule_id'] ?? null]);
+	}
+
+	public function testARuleQueuesNothingWhileTheAppIsNotConnected(): void {
+		$id = $this->file('Scans/receipt.pdf');
+		$this->configService->reset();
+
+		self::assertSame(FileActions::RULE_NOT_CONNECTED, $this->actions->sendByRule($this->configService->get(), self::SENDER, $id, [], 7));
+		self::assertSame([], $this->state->sends);
+	}
+
+	public function testARuleSkipsAFileThatIsGoneUnreadableOrAFolder(): void {
+		$config = $this->configService->get();
+		$unreadable = $this->file('Shared/view-only.pdf');
+		$this->storage->unreadable[] = 'Shared/view-only.pdf';
+		$folder = $this->storage->folderId('Scans', self::SENDER);
+
+		self::assertSame(FileActions::RULE_MISSING, $this->actions->sendByRule($config, self::SENDER, 999, [], 7));
+		self::assertSame(FileActions::RULE_MISSING, $this->actions->sendByRule($config, self::SENDER, $unreadable, [], 7));
+		self::assertSame(FileActions::RULE_MISSING, $this->actions->sendByRule($config, self::SENDER, $folder, [], 7));
+		self::assertSame([], $this->state->sends);
+	}
+
+	/** A run writes the copies of the archive, which a rule for every new PDF would send back to Paperless. */
+	public function testARuleSkipsTheFilesOfTheFolderOfTheApp(): void {
+		$this->storage->files['Documents/Paperless/Archive/2026-03-01 - Invoice.pdf'] = 'Synthetic copy';
+		$id = $this->storage->fileId('Documents/Paperless/Archive/2026-03-01 - Invoice.pdf');
+
+		self::assertSame(FileActions::RULE_APP_FOLDER, $this->actions->sendByRule($this->configService->get(), TestStorage::USER, $id, [], 7));
+		self::assertSame([], $this->state->sends);
+	}
+
+	public function testARuleSkipsAFileThatPaperlessHas(): void {
+		$copy = $this->file('Downloads/Invoice [P123].pdf');
+
+		self::assertSame(FileActions::RULE_IN_PAPERLESS, $this->actions->sendByRule($this->configService->get(), self::SENDER, $copy, [], 7));
+		self::assertSame([], $this->state->sends);
+	}
+
 	/** @param list<int> $ids */
 	private function send(array $ids): array {
 		return $this->actions->send($this->configService->get(), self::SENDER, $ids);

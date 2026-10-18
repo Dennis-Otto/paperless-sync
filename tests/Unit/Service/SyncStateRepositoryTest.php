@@ -253,6 +253,8 @@ final class SyncStateRepositoryTest extends TestCase {
 			'file_id' => 42,
 			'path' => 'Scans/receipt.pdf',
 			'folder' => '2026',
+			'tags' => null,
+			'rule_id' => 0,
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,
@@ -264,6 +266,13 @@ final class SyncStateRepositoryTest extends TestCase {
 		], $this->repository->findSend('alice', 42));
 		self::assertNull($this->repository->findSend('bob', 42));
 		self::assertNull($this->repository->findSend('alice', 43));
+	}
+
+	/** A rule of Flow names itself and its tags, which a run reads as the list of the setting. */
+	public function testASendOfARuleKeepsItsTagsAndTheIdOfTheRule(): void {
+		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf', 'tags' => 'Scans,Family', 'rule_id' => 7]);
+
+		self::assertSame(['tags' => 'Scans,Family', 'rule_id' => 7], array_intersect_key($this->repository->findSend('alice', 42) ?? [], ['tags' => 0, 'rule_id' => 0]));
 	}
 
 	public function testSavingAnExistingSendChangesOnlyTheGivenColumns(): void {

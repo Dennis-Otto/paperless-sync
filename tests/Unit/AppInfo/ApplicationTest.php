@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Command\Run;
 use OCA\PaperlessSync\Command\Status;
 use OCA\PaperlessSync\Cron\SendJob;
 use OCA\PaperlessSync\Cron\SyncJob;
+use OCA\PaperlessSync\Listener\FlowListener;
 use OCA\PaperlessSync\Listener\LoadAdditionalScriptsListener;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
@@ -35,6 +36,8 @@ use OCP\EventDispatcher\IEventListener;
 use OCP\IConfig;
 use OCP\Notification\INotifier;
 use OCP\SetupCheck\ISetupCheck;
+use OCP\WorkflowEngine\Events\LoadSettingsScriptsEvent;
+use OCP\WorkflowEngine\Events\RegisterOperationsEvent;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use SimpleXMLElement;
@@ -131,8 +134,11 @@ final class ApplicationTest extends TestCase {
 		self::assertTrue(is_subclass_of(BackgroundJobMode::class, ISetupCheck::class));
 	}
 
-	/** Files loads the script of the actions of the app through the event that loads the scripts of other apps. */
-	public function testTheAppBringsItsActionsIntoFiles(): void {
+	/**
+	 * Files loads the script of the actions of the app through the event that loads the scripts of
+	 * other apps, and Flow asks for the operations of the apps and loads the scripts of their forms.
+	 */
+	public function testTheAppBringsItsActionsIntoFilesAndFlow(): void {
 		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
 		$listeners = [];
 		$registration = $this->createMock(IRegistrationContext::class);
@@ -142,8 +148,13 @@ final class ApplicationTest extends TestCase {
 
 		$application->register($registration);
 
-		self::assertSame([['OCA\Files\Event\LoadAdditionalScriptsEvent', LoadAdditionalScriptsListener::class]], $listeners);
+		self::assertSame([
+			['OCA\Files\Event\LoadAdditionalScriptsEvent', LoadAdditionalScriptsListener::class],
+			[RegisterOperationsEvent::class, FlowListener::class],
+			[LoadSettingsScriptsEvent::class, FlowListener::class],
+		], $listeners);
 		self::assertTrue(is_subclass_of(LoadAdditionalScriptsListener::class, IEventListener::class));
+		self::assertTrue(is_subclass_of(FlowListener::class, IEventListener::class));
 	}
 
 	/** The Activity app reads its setting, filter and provider from the app info, by their classes. */
