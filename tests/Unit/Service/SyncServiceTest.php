@@ -12,11 +12,13 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use LogicException;
 use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessApiService;
+use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -37,8 +39,13 @@ use OCP\Config\IUserConfig;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotPermittedException;
 use OCP\Files\StorageNotAvailableException;
+use OCP\Http\Client\IClient;
+use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
+use OCP\ITempManager;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use OCP\Security\IRemoteHostValidator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -87,6 +94,45 @@ final class SyncServiceTest extends TestCase {
 			$this->storage,
 			$this->state,
 			$paths,
+			$this->status,
+			$this->locking,
+			$this->logger,
+			$this->clock,
+			$this->activityPublisher($this->storage, $this->logger),
+			new UserTimeZones($this->userConfig(), $this->timeZones),
+			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
+		);
+	}
+
+	/**
+	 * The service with the client of Paperless that a run takes in Nextcloud, whose HTTP client
+	 * passes the URL and the header Authorization of each request to $request and answers it with
+	 * an empty list, as an empty Paperless does.
+	 *
+	 * @param callable(string, string): void $request
+	 */
+	private function serviceWithHttp(callable $request): SyncService {
+		$answer = $this->createStub(IResponse::class);
+		$answer->method('getStatusCode')->willReturn(200);
+		$answer->method('getBody')->willReturn('{"count": 0, "next": null, "previous": null, "results": []}');
+		$answer->method('getHeader')->willReturn('');
+		$client = $this->createMock(IClient::class);
+		$client->expects(self::never())->method('post');
+		$client->method('get')->willReturnCallback(static function (string $url, array $options) use ($request, $answer): IResponse {
+			/** @var array{headers: array{Authorization: string}} $options */
+			$request($url, $options['headers']['Authorization']);
+
+			return $answer;
+		});
+		$clientService = $this->createStub(IClientService::class);
+		$clientService->method('newClient')->willReturn($client);
+
+		return new SyncService(
+			$this->configService,
+			new PaperlessClientFactory($clientService, $this->createStub(ITempManager::class), $this->createStub(IRemoteHostValidator::class)),
+			$this->storage,
+			$this->state,
+			new PathTemplateService(),
 			$this->status,
 			$this->locking,
 			$this->logger,
@@ -558,6 +604,64 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 
 		self::assertSame([['http://paperless:8000', 'test-token', true]], $this->paperless->connections);
+	}
+
+	/**
+	 * A run keeps the connection that it started with. An administrator who connects another
+	 * Paperless while a run is busy changes the next run: every request of this one still goes to
+	 * the Paperless that it started with, with its token, so that it records no ID of one Paperless
+	 * as that of another, and sends no token to a URL that it wasn't saved for.
+	 */
+	public function testASaveDuringARunReachesTheNextRunNotTheRestOfThisOne(): void {
+		$requests = [];
+		$saved = false;
+		$service = $this->serviceWithHttp(function (string $url, string $authorization) use (&$requests, &$saved): void {
+			$requests[] = [(string)parse_url($url, PHP_URL_HOST), $authorization];
+			if (!$saved) {
+				$saved = true;
+				$this->configService->save(['paperless_url' => 'https://other.example.test'] + self::validSettings(), 'other-token');
+			}
+		});
+
+		$report = $service->run();
+
+		self::assertSame(0, $report->errors);
+		self::assertSame('https://other.example.test', $this->configService->get()->paperlessUrl, 'The save took effect during the run.');
+		self::assertCount(7, $requests, 'The test of the connection, the documents, the trash and four lists.');
+		self::assertSame([['paperless.example.test', 'Token test-token']], array_values(array_unique($requests, SORT_REGULAR)));
+
+		$requests = [];
+		$service->run();
+
+		self::assertSame([['other.example.test', 'Token other-token']], array_values(array_unique($requests, SORT_REGULAR)), 'The next run takes the new connection.');
+	}
+
+	/**
+	 * Every read of the token is a query of Nextcloud's credentials store and a decryption: a run
+	 * reads it once, at its start, not with each of its requests to Paperless.
+	 */
+	public function testARunDecryptsTheTokenOnce(): void {
+		$requests = 0;
+		$service = $this->serviceWithHttp(static function () use (&$requests): void {
+			++$requests;
+		});
+		$this->credentialReads = 0;
+
+		$service->run();
+
+		self::assertSame(7, $requests);
+		self::assertSame(1, $this->credentialReads);
+	}
+
+	/** A dry-run of settings that are not saved reaches the saved Paperless, through one connection. */
+	public function testADryRunOfUnsavedSettingsTakesOneConnection(): void {
+		$settings = $this->configService->validateForDryRun(['batch_size' => 1]);
+		$this->credentialReads = 0;
+
+		$this->service->run(true, $settings);
+
+		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'test-token', false)], $this->paperless->connects);
+		self::assertSame(1, $this->credentialReads);
 	}
 
 	/**
@@ -4428,6 +4532,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame($before, array_intersect_key($this->settings, $keys));
 		self::assertSame('interrupted', $this->status->get()['state']);
 		self::assertSame([], $this->paperless->connections, 'The read of the document is the test of the connection.');
+		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'test-token', false)], $this->paperless->connects, 'It reads the document and its lists through one connection.');
 		self::assertCount(1, $this->activities, 'The Activity stream of the target user shows the export.');
 	}
 

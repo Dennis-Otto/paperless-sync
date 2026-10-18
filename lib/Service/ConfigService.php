@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
@@ -107,6 +108,31 @@ final class ConfigService {
 	}
 
 	/**
+	 * The saved settings and the connection to Paperless that they name, from one read of the
+	 * settings and one decryption of the token, so that the two agree: a run takes both at its
+	 * start and keeps them to its end. The token joins the connection only for the URL that it was
+	 * stored with, as in getToken().
+	 *
+	 * @return array{SyncConfig, PaperlessConnection}
+	 */
+	public function snapshot(): array {
+		$values = $this->readValues();
+		$token = $this->tokenFor((string)$values['paperless_url']);
+		$config = $this->fromValues($values, $token !== '');
+
+		return [$config, PaperlessConnection::of($config, $token)];
+	}
+
+	/**
+	 * The connection to Paperless that $config names, such as the settings of a dry-run that are
+	 * not saved: their URL and local network, which validateForDryRun() keeps as saved, with the
+	 * stored token, but only for the URL that it was stored with.
+	 */
+	public function connection(SyncConfig $config): PaperlessConnection {
+		return PaperlessConnection::of($config, $this->tokenFor($config->paperlessUrl));
+	}
+
+	/**
 	 * The stored token, but only while the configured URL is the one that it was saved with. The
 	 * URL may change without the settings page and its check in resolveToken(): through occ, or
 	 * through the provisioning API of Nextcloud, which may set any value of the app configuration.
@@ -114,9 +140,14 @@ final class ConfigService {
 	 * the next run.
 	 */
 	public function getToken(): string {
+		return $this->tokenFor($this->configuredUrl());
+	}
+
+	/** The stored token, but only for $url, the URL that it was stored with. */
+	private function tokenFor(string $url): string {
 		$stored = $this->storedToken();
 
-		return $stored !== null && $stored['url'] === $this->configuredUrl() ? $stored['token'] : '';
+		return $stored !== null && $stored['url'] === rtrim(trim($url), '/') ? $stored['token'] : '';
 	}
 
 	/**

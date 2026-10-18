@@ -42,7 +42,7 @@ final class SyncService {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private ConfigService $configService,
-		private PaperlessClientInterface $paperless,
+		private PaperlessClientFactoryInterface $clients,
 		private NextcloudStorageInterface $storage,
 		private SyncStateRepositoryInterface $state,
 		private PathTemplateService $pathTemplate,
@@ -65,6 +65,10 @@ final class SyncService {
 	 * as a run on the command line that imports a large archive at once. $author is the user who
 	 * started a run by hand in a background job, whom its entries in the Activity stream name.
 	 *
+	 * A run reaches Paperless through one connection, which it takes with its settings at its
+	 * start: settings that an administrator saves during the run reach the next run, not the rest
+	 * of this one, so that no run records the IDs of one Paperless as those of another.
+	 *
 	 * @throws InvalidArgumentException when a run that is no dry-run comes with settings, or for a batch size below 1
 	 * @throws LockedException while another run is active
 	 */
@@ -80,23 +84,26 @@ final class SyncService {
 		$this->status->started($dryRun);
 		$config = null;
 		try {
-			$config = $settings ?? $this->configService->get();
+			[$config, $connection] = $settings === null
+				? $this->configService->snapshot()
+				: [$settings, $this->configService->connection($settings)];
 			if (!$config->complete()) {
 				throw new InvalidSettingException('Paperless Sync is not completely configured.');
 			}
 			if ($batchSize !== null) {
 				$config = $config->withBatchSize($batchSize);
 			}
-			$this->status->connected($this->paperless->testConnection($config->paperlessUrl, $this->configService->getToken(), $config->paperlessLocalNetwork));
+			$paperless = $this->clients->connect($connection);
+			$this->status->connected($paperless->testConnection());
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {
 				$this->storage->prepare($config);
 			}
 			if ($config->inboxEnabled) {
-				$this->syncInbox($config, $report);
+				$this->syncInbox($paperless, $config, $report);
 			}
 			if ($config->exportEnabled) {
-				$this->syncExports($config, $report);
+				$this->syncExports($paperless, $config, $report);
 			}
 			$report->completedAt = $this->now();
 			$this->status->completed($report);
@@ -131,7 +138,8 @@ final class SyncService {
 	 * run, and the schedule counts from it, so that calls of the webhook never hold back the
 	 * scheduled run that finds the trashed and deleted documents. Nor does it write signs of life,
 	 * which would make an interrupted run look active. The Activity stream of the target user shows
-	 * its changes, as it does those of a run.
+	 * its changes, as it does those of a run, and it keeps its connection to Paperless from its
+	 * start to its end, as a run does.
 	 *
 	 * @throws LockedException while another run is active
 	 * @throws InvalidSettingException while the app is not completely configured, or scheduled synchronization or the export is off
@@ -139,7 +147,7 @@ final class SyncService {
 	public function syncDocument(int $documentId): SyncReport {
 		// Runs that are off are no failure: a document that was queued before an administrator
 		// turned them off ends without an error in the log, and without taking the lock.
-		$config = $this->configService->get();
+		[$config, $connection] = $this->configService->snapshot();
 		$this->requireDocumentRuns($config);
 		$this->lock();
 		$report = new SyncReport(false, $this->now());
@@ -149,9 +157,10 @@ final class SyncService {
 			// Paperless shows no document in its trash, deleted or of another owner: the scheduled
 			// runs move or delete its copy, after the missing scans that the settings require, and
 			// the report without a change says so (WebhookService::result()).
-			$document = $this->paperless->document($documentId);
+			$paperless = $this->clients->connect($connection);
+			$document = $paperless->document($documentId);
 			if ($document !== null) {
-				$this->syncExports($config->withBatchSize(1), $report, $document);
+				$this->syncExports($paperless, $config->withBatchSize(1), $report, $document);
 			}
 			$report->completedAt = $this->now();
 			$this->logger->info('Paperless synchronization of document {document} completed', ['document' => $documentId] + $report->summary());
@@ -245,25 +254,25 @@ final class SyncService {
 	}
 
 	/**
-	 * The export of a run: the active documents, then the trash, then the documents that Paperless
-	 * no longer lists. With $document, the run of that document alone takes its way through the
-	 * export, and only that.
+	 * The export of a run, from the Paperless of the run: the active documents, then the trash, then
+	 * the documents that Paperless no longer lists. With $document, the run of that document alone
+	 * takes its way through the export, and only that.
 	 *
 	 * @param array<string, mixed>|null $document
 	 */
-	private function syncExports(SyncConfig $config, SyncReport $report, ?array $document = null): void {
+	private function syncExports(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, ?array $document = null): void {
 		$single = $document !== null;
-		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $this->paperless->documents();
-		$trashScan = $single ? new PaperlessScan([], true, 0) : $this->paperless->trash();
+		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $paperless->documents();
+		$trashScan = $single ? new PaperlessScan([], true, 0) : $paperless->trash();
 		$documents = $documentScan->documents;
 		$trash = $trashScan->documents;
 		$documentsComplete = $this->checkScan($report, 'documents', $documentScan);
 		$trashComplete = $this->checkScan($report, 'trashed documents', $trashScan);
-		$correspondents = $this->paperless->correspondents();
-		$documentTypes = $this->paperless->documentTypes();
-		$storagePaths = $this->paperless->storagePaths();
-		$tags = $this->paperless->tags();
-		[$users, $customFields] = $this->templateLists($config);
+		$correspondents = $paperless->correspondents();
+		$documentTypes = $paperless->documentTypes();
+		$storagePaths = $paperless->storagePaths();
+		$tags = $paperless->tags();
+		[$users, $customFields] = $this->templateLists($paperless, $config);
 		$report->activeDocuments = count($documents);
 		$report->trashedDocuments = count($trash);
 
@@ -360,7 +369,7 @@ final class SyncService {
 						// with its revision, for a document that waits for a later run or whose change fails.
 						$checksum = $this->knownChecksum($entry, $sourceRevision);
 						if ($checksum === null) {
-							$checksum = $this->paperless->documentChecksum($documentId, $useOriginal);
+							$checksum = $paperless->documentChecksum($documentId, $useOriginal);
 							$checksumValues = ['remote_checksum' => $checksum, 'remote_revision' => $sourceRevision];
 						}
 						$fingerprint = $this->completedFingerprint($config, $oldPath, $fingerprint, $checksum);
@@ -447,7 +456,7 @@ final class SyncService {
 					$writeMode = $ownTarget ? 'replace' : $config->conflictMode;
 					// The download goes to Nextcloud in chunks, so that a document of any size fits
 					// into the memory of PHP.
-					$fingerprint = $this->paperless->downloadDocument(
+					$fingerprint = $paperless->downloadDocument(
 						$documentId,
 						$useOriginal,
 						/** @param resource $download */
@@ -690,18 +699,20 @@ final class SyncService {
 	 * The paths that the newest documents of Paperless would have in the archive with $config, such
 	 * as the settings of the page before they are saved, relative to the archive folder, for the
 	 * preview of the path template; skipped is whether a run leaves the document out, as one of
-	 * the inbox or with an excluded tag. It reads Paperless and nothing else, and changes nothing.
+	 * the inbox or with an excluded tag. It reads Paperless, through the connection of $config, and
+	 * nothing else, and changes nothing.
 	 *
 	 * @return list<array{id: int, title: string, path: string, skipped: bool}>
 	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template
 	 */
 	public function previewPaths(SyncConfig $config, int $count): array {
-		$documents = $this->paperless->newestDocuments($count);
-		$correspondents = $this->paperless->correspondents();
-		$documentTypes = $this->paperless->documentTypes();
-		$storagePaths = $this->paperless->storagePaths();
-		$tags = $this->paperless->tags();
-		[$users, $customFields] = $this->templateLists($config);
+		$paperless = $this->clients->connect($this->configService->connection($config));
+		$documents = $paperless->newestDocuments($count);
+		$correspondents = $paperless->correspondents();
+		$documentTypes = $paperless->documentTypes();
+		$storagePaths = $paperless->storagePaths();
+		$tags = $paperless->tags();
+		[$users, $customFields] = $this->templateLists($paperless, $config);
 		/** @var list<string> $excludedNames */
 		$excludedNames = array_values(array_map('mb_strtolower', array_filter(array_map('trim', explode(',', $config->excludedTags)))));
 		$paths = [];
@@ -731,19 +742,19 @@ final class SyncService {
 	 *
 	 * @return array{array<string, string>, array<string, array{name: string, type: string, options: array<string, string>}>}
 	 */
-	private function templateLists(SyncConfig $config): array {
+	private function templateLists(PaperlessClientInterface $paperless, SyncConfig $config): array {
 		$users = [];
 		$customFields = [];
 		try {
 			if ($this->pathTemplate->usesOwner($config->pathTemplate)) {
-				$users = $this->paperless->users();
+				$users = $paperless->users();
 			}
 		} catch (RuntimeException $exception) {
 			throw new RuntimeException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: ' . $exception->getMessage(), 0, $exception);
 		}
 		try {
 			if ($this->pathTemplate->customFieldNames($config->pathTemplate) !== []) {
-				$customFields = $this->paperless->customFields();
+				$customFields = $paperless->customFields();
 			}
 		} catch (RuntimeException $exception) {
 			throw new RuntimeException('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: ' . $exception->getMessage(), 0, $exception);
@@ -911,7 +922,7 @@ final class SyncService {
 		}
 	}
 
-	private function syncInbox(SyncConfig $config, SyncReport $report): void {
+	private function syncInbox(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report): void {
 		$inboxRoot = $this->join($config->basePath, $config->inboxFolder);
 		$errorRoot = $this->join($config->basePath, $config->errorFolder);
 		$files = $this->storage->listFiles($config->targetUser, $inboxRoot, $config->recursiveInbox);
@@ -960,14 +971,14 @@ final class SyncService {
 
 			try {
 				$taskId = (string)($pending['task_id'] ?? '');
-				$task = $this->paperless->taskStatus($taskId);
+				$task = $paperless->taskStatus($taskId);
 				if (in_array($task['status'], self::TASK_SUCCEEDED, true)) {
 					$this->importSucceeded($config, $report, $path, $file['etag'], $unchangedFile, $task['documentId'], $inboxRoot);
 				} elseif (in_array($task['status'], self::TASK_FAILED, true)) {
 					$reason = $this->importFailureReason($task);
 					$this->importFailed($config, $report, $path, $reason, $this->importDiagnostic($taskId, $reason), $inboxRoot, $errorRoot);
 				} elseif ($now - (int)($pending['submitted_at'] ?? 0) >= self::TASK_TIMEOUT) {
-					$this->endUnfinishedImport($config, $report, $path, $file['etag'], $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task, $inboxRoot, $errorRoot);
+					$this->endUnfinishedImport($paperless, $config, $report, $path, $file['etag'], $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task, $inboxRoot, $errorRoot);
 				}
 			} catch (\Throwable $exception) {
 				$error = $this->exceptionMessage($exception);
@@ -988,7 +999,7 @@ final class SyncService {
 
 		$submitted = 0;
 		$paperlessFailed = false;
-		$inboxTags = new InboxTags($this->paperless, $config, $report);
+		$inboxTags = new InboxTags($paperless, $config, $report);
 		foreach ($byPath as $path => $file) {
 			$this->status->heartbeat();
 			// Every upload takes its place in the batch, also one that fails. After a failure that may
@@ -1022,7 +1033,7 @@ final class SyncService {
 			$stream = null;
 			try {
 				$stream = $this->storage->openRead($config->targetUser, $path);
-				$taskId = $this->paperless->uploadDocument($stream, $file['name'], $tags['ids']);
+				$taskId = $paperless->uploadDocument($stream, $file['name'], $tags['ids']);
 				$this->state->saveImport($config->targetUser, $path, [
 					'etag' => $file['etag'],
 					'task_id' => $taskId,
@@ -1190,9 +1201,9 @@ final class SyncService {
 	 *
 	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
 	 */
-	private function endUnfinishedImport(SyncConfig $config, SyncReport $report, string $path, string $etag, bool $unchangedFile, int $attempts, string $taskId, array $task, string $inboxRoot, string $errorRoot): void {
+	private function endUnfinishedImport(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, string $path, string $etag, bool $unchangedFile, int $attempts, string $taskId, array $task, string $inboxRoot, string $errorRoot): void {
 		$content = $this->mirroredFingerprint($config, $path);
-		$documentId = $content !== null ? $this->paperless->findDocument($content) : null;
+		$documentId = $content !== null ? $paperless->findDocument($content) : null;
 		if ($documentId !== null) {
 			$this->importSucceeded($config, $report, $path, $etag, true, $documentId, $inboxRoot);
 			return;

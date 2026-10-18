@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use InvalidArgumentException;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -300,6 +301,53 @@ final class ConfigServiceTest extends TestCase {
 		$this->settings['paperless_url'] = 'https://paperless.example.test/';
 		self::assertSame('secret-token', $this->service->getToken());
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+	}
+
+	/**
+	 * A run takes the saved settings and its connection to Paperless together, from one read of
+	 * the token, which is a query of the credentials store and a decryption.
+	 */
+	public function testTheSnapshotHoldsTheSettingsAndTheirConnection(): void {
+		$this->service->save(['paperless_local_network' => true] + self::validSettings(), 'secret-token');
+		$this->credentialReads = 0;
+
+		[$config, $connection] = $this->service->snapshot();
+
+		self::assertSame(1, $this->credentialReads);
+		self::assertEquals($this->service->get(), $config);
+		self::assertTrue($config->tokenConfigured);
+		self::assertEquals(new PaperlessConnection('https://paperless.example.test', 'secret-token', true), $connection);
+	}
+
+	/** The snapshot keeps the token from a URL that was changed elsewhere, as getToken() does. */
+	public function testTheSnapshotOfAUrlChangedElsewhereHasNoToken(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->settings['paperless_url'] = 'https://attacker.example.test';
+
+		[$config, $connection] = $this->service->snapshot();
+
+		self::assertFalse($config->tokenConfigured);
+		self::assertFalse($config->complete());
+		self::assertEquals(new PaperlessConnection('https://attacker.example.test', '', false), $connection);
+
+		$this->settings['paperless_url'] = ' https://paperless.example.test/ ';
+		self::assertSame('secret-token', $this->service->snapshot()[1]->token(), 'The URL that the token was saved with still gets it, however it is written.');
+	}
+
+	/**
+	 * The connection of settings that are not saved, such as those of a dry-run: their URL and local
+	 * network, with the stored token only for the URL that it was saved with.
+	 */
+	public function testTheConnectionOfSettingsHasTheTokenOnlyForItsUrl(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->credentialReads = 0;
+
+		$connection = $this->service->connection($this->service->validateForDryRun(['batch_size' => 5]));
+
+		self::assertEquals(new PaperlessConnection('https://paperless.example.test', 'secret-token', false), $connection);
+		self::assertSame(2, $this->credentialReads, 'One read to check the settings, one for the connection.');
+		$other = $this->service->validate(['paperless_url' => 'https://other.example.test'], 'other-token');
+		self::assertSame('', $this->service->connection($other)->token(), 'The stored token stays with the URL that it was saved with.');
 	}
 
 	/** A token that an earlier version stored without its URL waits for the update to bind it to one. */

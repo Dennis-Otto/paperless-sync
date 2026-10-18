@@ -13,7 +13,10 @@ use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Service\PaperlessApiService;
+use OCA\PaperlessSync\Service\PaperlessClientFactory;
+use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -68,16 +71,17 @@ final class PaperlessApiServiceTest extends TestCase {
 	private ITempManager $tempManager;
 	/** @var list<string> */
 	private array $temporaryFiles = [];
-	private PaperlessApiService $service;
+	private IClientService $clientService;
+	private IRemoteHostValidator $remoteHostValidator;
+	/** The client of the Paperless of the tests, at self::URL with the token secret-token. */
+	private PaperlessClientInterface $service;
 
 	protected function setUp(): void {
-		$configService = $this->configService();
-		$configService->save(self::validSettings(), 'secret-token');
 		$client = $this->createMock(IClient::class);
 		$client->method('get')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('GET', $url, $options));
 		$client->method('post')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('POST', $url, $options));
-		$clientService = $this->createMock(IClientService::class);
-		$clientService->method('newClient')->willReturn($client);
+		$this->clientService = $this->createMock(IClientService::class);
+		$this->clientService->method('newClient')->willReturn($client);
 		$this->tempManager = $this->createMock(ITempManager::class);
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = tempnam(sys_get_temp_dir(), 'paperless-sync-test-');
@@ -87,9 +91,18 @@ final class PaperlessApiServiceTest extends TestCase {
 			return $path;
 		});
 		// Nextcloud's check of an address against the local network, for two of its addresses.
-		$remoteHostValidator = $this->createMock(IRemoteHostValidator::class);
-		$remoteHostValidator->method('isValid')->willReturnCallback(static fn (string $host): bool => !in_array($host, ['paperless', '192.168.1.20'], true));
-		$this->service = new PaperlessApiService($configService, $clientService, $this->tempManager, $remoteHostValidator);
+		$this->remoteHostValidator = $this->createMock(IRemoteHostValidator::class);
+		$this->remoteHostValidator->method('isValid')->willReturnCallback(static fn (string $host): bool => !in_array($host, ['paperless', '192.168.1.20'], true));
+		$this->service = $this->client();
+	}
+
+	/**
+	 * A client of the connection with $url, $token and $localNetwork, as PaperlessClientFactory
+	 * makes it for a run, by default that of the Paperless of the tests.
+	 */
+	private function client(string $url = self::URL, string $token = 'secret-token', bool $localNetwork = false): PaperlessClientInterface {
+		return (new PaperlessClientFactory($this->clientService, $this->tempManager, $this->remoteHostValidator))
+			->connect(new PaperlessConnection($url, $token, $localNetwork));
 	}
 
 	protected function tearDown(): void {
@@ -103,7 +116,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testConnectionTestRequestsOneDocumentWithTheGivenCredentials(): void {
 		$this->responses[] = [200, ['count' => 0, 'results' => []], ['X-Version' => '3.3.0', 'X-Api-Version' => '10']];
 
-		$server = $this->service->testConnection('https://other.example.test/', 'other-token', false);
+		$server = $this->client('https://other.example.test/', 'other-token')->testConnection();
 
 		self::assertSame('https://other.example.test/api/documents/', $this->requests[0]['url']);
 		self::assertSame(['page' => 1, 'page_size' => 1], $this->requests[0]['options']['query']);
@@ -134,13 +147,38 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testConnectionTestNamesTheVersionOfPaperless(string $header, string $version): void {
 		$this->responses[] = [200, ['count' => 0, 'results' => []], ['X-Version' => $header]];
 
-		self::assertSame(['version' => $version, 'apiVersion' => '9'], $this->service->testConnection(self::URL, 'secret-token', false));
+		self::assertSame(['version' => $version, 'apiVersion' => '9'], $this->service->testConnection());
 	}
 
-	public function testConnectionTestNeedsAUrlAndAToken(): void {
+	/** @return array<string, array{string, string}> the URL and the token of a connection that is not complete */
+	public static function incompleteConnections(): array {
+		return [
+			'without a token' => [self::URL, ''],
+			'without a URL' => ['', 'secret-token'],
+		];
+	}
+
+	#[DataProvider('incompleteConnections')]
+	public function testConnectionTestNeedsAUrlAndAToken(string $url, string $token): void {
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage('Paperless is not configured.');
-		$this->service->testConnection(self::URL, '', false);
+		$this->client($url, $token)->testConnection();
+	}
+
+	/**
+	 * Each client goes to the Paperless of its own connection, with its token, whatever another
+	 * client of the same factory does, and whatever the settings say meanwhile.
+	 */
+	public function testEveryClientKeepsToItsConnection(): void {
+		$this->responses[] = [200, self::page(0)];
+		$this->responses[] = [200, self::page(0)];
+		$other = $this->client('https://other.example.test', 'other-token');
+
+		$this->service->tags();
+		$other->tags();
+
+		self::assertSame([self::URL . '/api/tags/', 'https://other.example.test/api/tags/'], array_column($this->requests, 'url'));
+		self::assertSame(['Token secret-token', 'Token other-token'], array_map(static fn (array $request): mixed => $request['options']['headers']['Authorization'] ?? null, $this->requests));
 	}
 
 	public function testDocumentsAreReadFromEveryPageInTheOrderOfTheirIds(): void {
@@ -495,10 +533,9 @@ final class PaperlessApiServiceTest extends TestCase {
 
 	/** With the setting, Nextcloud allows the local network for the redirects of a download too. */
 	public function testDownloadInTheLocalNetworkLeavesItsRedirectsToNextcloud(): void {
-		$this->settings['paperless_local_network'] = true;
 		$this->responses[] = [200, null];
 
-		$this->service->downloadDocument(123, true, self::discard());
+		$this->client(localNetwork: true)->downloadDocument(123, true, self::discard());
 
 		self::assertSame(['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']], $this->requests[0]['options']['allow_redirects']);
 		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
@@ -525,7 +562,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn(false);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
+		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Could not create a temporary Paperless download file.');
@@ -712,10 +749,9 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testCreatesATagAlsoInAPaperlessOfTheLocalNetwork(): void {
-		$this->configService()->save(['paperless_local_network' => true] + self::validSettings(), 'secret-token');
 		$this->responses[] = [201, ['id' => '42']];
 
-		self::assertSame(42, $this->service->createTag('2026'));
+		self::assertSame(42, $this->client(localNetwork: true)->createTag('2026'));
 
 		self::assertSame(['allow_local_address' => true], $this->requests[0]['options']['nextcloud']);
 	}
@@ -790,7 +826,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn(false);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
+		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
 		$this->expectExceptionMessage('Could not create a temporary Paperless upload file.');
@@ -804,7 +840,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$tempManager->method('getTemporaryFile')->willReturn($directory);
 		$clientService = $this->createMock(IClientService::class);
 		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
-		$service = new PaperlessApiService($this->configService(), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
+		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 		$warnings = [];
 		set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
 			$warnings[] = $message;
@@ -1019,13 +1055,13 @@ final class PaperlessApiServiceTest extends TestCase {
 	 */
 	#[DataProvider('requestsInTheLocalNetwork')]
 	public function testRequestsAllowTheLocalNetworkOnlyWithTheSetting(string $operation, bool $localNetwork): void {
-		$this->settings['paperless_local_network'] = $localNetwork;
+		$this->service = $this->client(localNetwork: $localNetwork);
 		$this->responses[] = static function (): array {
 			throw new RuntimeException('cURL error 7: Failed to connect to paperless.example.test');
 		};
 
 		try {
-			$this->call($operation, $localNetwork);
+			$this->call($operation);
 		} catch (\Throwable) {
 			// The options of the request are what counts, not its failure.
 		}
@@ -1115,14 +1151,15 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->service->documents();
 	}
 
-	public function testConnectionTestAllowsTheLocalNetworkAsAskedAndNotAsSaved(): void {
-		$this->settings['paperless_local_network'] = true;
+	/** Each client allows the local network as its connection does, whatever another one allows. */
+	public function testConnectionTestAllowsTheLocalNetworkAsItsConnectionDoes(): void {
 		$this->responses[] = [200, ['count' => 0, 'results' => []]];
 		$this->responses[] = [200, ['count' => 0, 'results' => []]];
+		$closed = $this->client('http://paperless:8000', 'other-token', false);
+		$open = $this->client('http://paperless:8000', 'other-token', true);
 
-		$this->service->testConnection('http://paperless:8000', 'other-token', false);
-		$this->settings['paperless_local_network'] = false;
-		$this->service->testConnection('http://paperless:8000', 'other-token', true);
+		$closed->testConnection();
+		$open->testConnection();
 
 		self::assertArrayNotHasKey('nextcloud', $this->requests[0]['options']);
 		self::assertSame(['allow_local_address' => true], $this->requests[1]['options']['nextcloud']);
@@ -1203,13 +1240,12 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testNameWithoutAnAddressIsNoQuestionOfTheLocalNetworkWithTheSettingOn(): void {
-		$this->settings['paperless_local_network'] = true;
 		$this->responses[] = static function (): array {
 			throw new LocalServerException('No DNS record found for paperless.example.test');
 		};
 
 		try {
-			$this->service->documents();
+			$this->client(localNetwork: true)->documents();
 			self::fail('A name without an address must be reported.');
 		} catch (PaperlessRequestException $exception) {
 			self::assertNotInstanceOf(PaperlessLocalNetworkException::class, $exception);
@@ -1418,12 +1454,19 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame([['id' => 1]], $this->service->documents()->documents);
 	}
 
-	public function testUnconfiguredAppDoesNotCallPaperless(): void {
-		$this->settings = [];
+	/** No request of a connection without a token leaves Nextcloud, not even with an empty header. */
+	#[DataProvider('requestsWithTheToken')]
+	public function testUnconfiguredAppDoesNotCallPaperless(string $operation): void {
+		$this->service = $this->client(self::URL, '');
 
-		$this->expectException(UnexpectedValueException::class);
-		$this->expectExceptionMessage('Paperless is not configured.');
-		$this->service->documents();
+		try {
+			$this->call($operation);
+			self::fail('A connection without a token must not reach Paperless.');
+		} catch (UnexpectedValueException $exception) {
+			self::assertSame('Paperless is not configured.', $exception->getMessage());
+		}
+		self::assertSame([], $this->requests);
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
 	}
 
 	/**
@@ -1993,7 +2036,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testTheConnectionTestNamesTheVersionThatPaperlessSends(string $line): void {
 		$this->responses[] = self::recorded($line, 'connection');
 
-		$server = $this->service->testConnection(self::URL, 'secret-token', false);
+		$server = $this->service->testConnection();
 
 		self::assertSame(['version' => self::recording($line, 'connection')['headers']['X-Version'], 'apiVersion' => '9'], $server);
 		self::assertStringStartsWith("{$line}.", $server['version']);
@@ -2226,13 +2269,10 @@ final class PaperlessApiServiceTest extends TestCase {
 		return array_map('strval', $query);
 	}
 
-	/**
-	 * Calls an operation of the client that sends the token, with arguments that work; the test of
-	 * the connection allows the local network as $localNetwork says, the others as the settings do.
-	 */
-	private function call(string $operation, bool $localNetwork = false): void {
+	/** Calls an operation of the client that sends the token, with arguments that work. */
+	private function call(string $operation): void {
 		match ($operation) {
-			'testConnection' => $this->service->testConnection(self::URL, 'secret-token', $localNetwork),
+			'testConnection' => $this->service->testConnection(),
 			'documents' => $this->service->documents(),
 			'trash' => $this->service->trash(),
 			'document' => $this->service->document(123),
@@ -2262,7 +2302,8 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	/**
-	 * The checklist of Paperless for the valid settings with $settings, with the token of the tests.
+	 * The checklist of Paperless for the valid settings with $settings, through a client of their
+	 * URL and local network with the token of the tests, as the settings page makes it.
 	 *
 	 * @param array<string, mixed> $settings
 	 * @return list<ConnectionCheck>
@@ -2270,7 +2311,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	private function preflight(array $settings = []): array {
 		$config = $this->configService()->validate($settings + self::validSettings(), 'secret-token');
 
-		return $this->service->preflight($config, 'secret-token');
+		return $this->client($config->paperlessUrl, 'secret-token', $config->paperlessLocalNetwork)->preflight($config);
 	}
 
 	/** @return array<string, mixed> the first page of a list of Paperless with one entry, that counts $count */

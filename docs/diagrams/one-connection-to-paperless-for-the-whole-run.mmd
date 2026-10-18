@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: One connection to Paperless for the whole run
+    accDescr: At its start, a run reads its settings and its connection to Paperless together from the app configuration and the credentials manager, with one decryption of the API token, which joins the connection only for the URL that it was saved with. The client factory makes a client of Paperless for that connection alone, and every request of the run, the test of the connection, the inbox and the export, goes through that client to the URL of the connection with its token. Settings that an administrator saves during the run reach the next run, which reads them at its start.
+
+    admin(["Administrator"])
+    subgraph nextcloud ["Nextcloud server"]
+        store[("App configuration and<br>credentials manager")]
+        subgraph run ["One run"]
+            snapshot["`Settings and connection
+            *URL, token, local network*`"]
+            factory["Client factory"]
+            client["`Client of
+            *this connection alone*`"]
+        end
+    end
+    paperless[("Paperless-ngx")]
+
+    admin -- "saves settings,<br>also during a run" --> store
+    store -- "once, at its start:<br>one decryption<br>of the token" --> snapshot
+    snapshot -- "connection" --> factory
+    factory -- "connect" --> client
+    client -- "every request of the run:<br>test, inbox and export,<br>to the URL with the token<br>of the connection" --> paperless
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    class paperless paperless
+    class store,client nextcloud
