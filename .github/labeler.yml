@@ -57,6 +57,12 @@
           - lib/Listener/**
           - lib/Migration/Version000140Date20261018000000.php
           - js/files.js
+          - js/flow.js
+          - img/flow.svg
+          - lib/Operation/**
+          - lib/Migration/Version000150Date20261018120000.php
+          - tests/Unit/Operation/**
+          - tests/Unit/Migration/Version000150*
           - tests/Unit/Service/FileActionsTest.php
           - tests/Unit/Service/SendServiceTest.php
           - tests/Unit/Controller/FileActionControllerTest.php

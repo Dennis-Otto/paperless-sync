@@ -495,7 +495,15 @@
 		"Groups of Nextcloud": "Gruppen von Nextcloud",
 		"Its members find \"Send to Paperless\" in the menu of a file or a folder in Files. A file goes to Paperless with the tags above, those of its subfolders below a sent folder included, and stays where it is; a notification tells the sender when Paperless has it. The uploads use the API token of the app, so choose people whom you trust with its account of Paperless, or leave the field empty to turn the action off. \"Open in Paperless\" opens the document of a copy of the archive for everyone.": "Ihre Mitglieder finden „An Paperless senden“ im Menü einer Datei oder eines Ordners in Dateien. Eine Datei geht mit den Tags oben an Paperless, auch denen ihrer Unterordner unterhalb eines gesendeten Ordners, und bleibt, wo sie ist; eine Benachrichtigung sagt dem Absender, sobald Paperless sie hat. Die Uploads nutzen das API-Token der App, wähle also Menschen, denen du ihr Konto in Paperless anvertraust, oder lass das Feld leer, um die Aktion auszuschalten. „In Paperless öffnen“ öffnet das Dokument einer Kopie des Archivs für alle.",
 		"Send from Files": "Aus Dateien senden",
-		"Could not search the groups of Nextcloud: {error}": "Die Gruppen von Nextcloud konnten nicht gesucht werden: {error}"
+		"Could not search the groups of Nextcloud: {error}": "Die Gruppen von Nextcloud konnten nicht gesucht werden: {error}",
+		"Sends the files to Paperless with the tags for every import of the inbox and those of the rule. The files stay where they are.": "Sendet die Dateien mit den Tags für jeden Import des Eingangs und denen der Regel an Paperless. Die Dateien bleiben, wo sie sind.",
+		"The name of a tag can't hold a comma or a line break: %s": "Der Name eines Tags darf kein Komma und keinen Zeilenumbruch enthalten: %s",
+		"Paperless keeps names of tags of at most %1$d characters: %2$s": "Paperless speichert Namen von Tags mit höchstens %1$d Zeichen: %2$s",
+		"The tags of the rule are no list of names.": "Die Tags der Regel sind keine Liste von Namen.",
+		"Paperless Sync could not list the tags of Paperless.": "Paperless Sync konnte die Tags von Paperless nicht auflisten.",
+		"Tags in Paperless": "Tags in Paperless",
+		"Scans, Family": "Scans, Familie",
+		"Separate the tags with commas. The files get the tags for every import of the inbox as well. A tag that Paperless lacks is created with \"Create missing tags\" in the settings of Paperless Sync, and else left out.": "Trenne die Tags durch Kommas. Die Dateien bekommen auch die Tags für jeden Import des Eingangs. Einen Tag, den Paperless nicht hat, legt „Fehlende Tags anlegen“ in den Einstellungen von Paperless Sync an, sonst bleibt er weg."
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

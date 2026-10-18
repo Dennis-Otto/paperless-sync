@@ -21,6 +21,7 @@ use OCP\IGroupManager;
  * names; SendService uploads them in the background and notifies the sender of each result.
  * The files stay where they are. Files that Paperless has already, whose names carry a marker
  * such as [P123], and the files of the folder of the app, which the runs look after, stay out.
+ * A rule of Flow, "Send to Paperless" of the administrators, queues its files here as well.
  */
 final class FileActions {
 	/** A file or folder that the user doesn't see, or may not read. */
@@ -29,6 +30,18 @@ final class FileActions {
 	public const REFUSED_APP_FOLDER = 'app_folder';
 	/** More files than the batch size, which a click may send at most. */
 	public const REFUSED_TOO_MANY = 'too_many';
+
+	/** What became of a file that a rule of Flow sends: queued, or waiting already. */
+	public const RULE_QUEUED = 'queued';
+	public const RULE_WAITING = 'waiting';
+	/** It stays out: the app is not connected to Paperless. */
+	public const RULE_NOT_CONNECTED = 'not_connected';
+	/** It stays out: the user doesn't see it as a file, or may not read it. */
+	public const RULE_MISSING = 'missing';
+	/** It stays out: it is in the folder of the app, such as a copy that a run wrote. */
+	public const RULE_APP_FOLDER = 'app_folder';
+	/** It stays out: Paperless has it, by the marker in its name. */
+	public const RULE_IN_PAPERLESS = 'in_paperless';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -133,6 +146,46 @@ final class FileActions {
 		}
 
 		return ['refused' => '', 'name' => '', 'limit' => $config->batchSize, 'queued' => $queued, 'waiting' => $waiting, 'skipped' => $skipped];
+	}
+
+	/**
+	 * Queues a file that a rule of Flow sends to Paperless, as the user sees it, with the tags of
+	 * the rule, for SendService, unless the app is not connected to Paperless, or the file is a
+	 * folder, gone or one that the user may not read, is in the folder of the app, which a run
+	 * writes into, or is one that Paperless has already by the marker in its name. A file that
+	 * waits already waits on, with the tags that it has. The group of "Group that may send files"
+	 * doesn't matter: the administrators chose whose files the rule sends. The answer is what
+	 * became of the file, for the log.
+	 *
+	 * @param list<string> $tags the names of the tags of the rule
+	 * @return self::RULE_*
+	 */
+	public function sendByRule(SyncConfig $config, string $userId, int $fileId, array $tags, int $ruleId): string {
+		if (!$config->complete()) {
+			return self::RULE_NOT_CONNECTED;
+		}
+		$node = $this->storage->nodeById($userId, $fileId);
+		if ($node === null || $node['folder'] || !$node['readable']) {
+			return self::RULE_MISSING;
+		}
+		if ($this->inAppFolder($config, $userId, $fileId, $node['path'])) {
+			return self::RULE_APP_FOLDER;
+		}
+		if (self::documentId($node['name']) !== null) {
+			return self::RULE_IN_PAPERLESS;
+		}
+		if ($this->state->findSend($userId, $fileId) !== null) {
+			return self::RULE_WAITING;
+		}
+		$this->state->saveSend($userId, $fileId, [
+			'path' => $node['path'],
+			'folder' => '',
+			'tags' => implode(',', $tags),
+			'rule_id' => $ruleId,
+			'status' => SendService::QUEUED,
+		]);
+
+		return self::RULE_QUEUED;
 	}
 
 	/**

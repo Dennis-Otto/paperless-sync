@@ -18,10 +18,13 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
 /**
- * Sends the files that people queued with "Send to Paperless" in Files, in the background, as a
- * run sends the files of the inbox: with the tags for every import, the tags of its subfolders
- * below the sent folder when subfolders become tags, and its name. It follows the task of each
- * upload and tells the sender how the import ended. The files stay where they are.
+ * Sends the files that people queued with "Send to Paperless" in Files, and those of the rules of
+ * Flow, in the background, as a run sends the files of the inbox: with the tags for every import,
+ * the tags of its subfolders below the sent folder when subfolders become tags, those of its rule,
+ * and its name. It follows the task of each upload and tells the sender how the import ended; the
+ * owner of a file of a rule hears of an import that Paperless refused or that failed alone, as a
+ * rule may send many files.
+ * The files stay where they are.
  *
  * - A file whose content Paperless has already isn't uploaded again, as Paperless-ngx 3.x would
  *   import it a second time: the sender learns the document that has it.
@@ -42,6 +45,8 @@ final class SendService {
 	public const PENDING = 'pending';
 	/** The uploads of a file at most, of which all but the last failed for a reason that may pass. */
 	public const MAX_ATTEMPTS = 6;
+	/** The ends of an import that the owner of a file of a rule of Flow doesn't hear of. */
+	private const QUIET_FOR_RULES = [NotificationPublisher::SUBJECT_SEND_IMPORTED, NotificationPublisher::SUBJECT_SEND_KNOWN, NotificationPublisher::SUBJECT_SEND_GONE];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -106,7 +111,7 @@ final class SendService {
 		}
 		$path = $node['path'];
 		try {
-			$tagIds = $tags->forFolder((string)$send['folder'])['ids'];
+			$tagIds = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')))['ids'];
 			$known = $paperless->findDocument($this->fingerprint($userId, $path));
 			if ($known !== null) {
 				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_KNOWN, $known);
@@ -227,7 +232,10 @@ final class SendService {
 	}
 
 	/**
-	 * The import of a sent file ended: the sender learns how, and the file is no longer sent.
+	 * The import of a sent file ended: the sender learns how, and the file is no longer sent. The
+	 * owner of a file that a rule of Flow sent learns of an import that Paperless refused or that
+	 * failed alone, which needs them; the log keeps the others, as a rule may send many files, and
+	 * a file that its owner deleted before its upload is no news to them.
 	 *
 	 * @param array<string, int|string|null> $send
 	 * @param NotificationPublisher::SUBJECT_SEND_* $subject
@@ -236,6 +244,17 @@ final class SendService {
 		$userId = (string)$send['user_id'];
 		$fileId = (int)$send['file_id'];
 		$this->state->deleteSend($userId, $fileId);
+		$ruleId = (int)($send['rule_id'] ?? 0);
+		if ($ruleId > 0 && in_array($subject, self::QUIET_FOR_RULES, true)) {
+			$this->logger->info('The import of {path} of {user}, which the rule {rule} of Flow sent to Paperless, ended: {subject}, document {document}.', [
+				'path' => $path,
+				'user' => $userId,
+				'rule' => $ruleId,
+				'subject' => $subject,
+				'document' => $documentId,
+			]);
+			return;
+		}
 		$this->notifications->sendEnded($userId, $fileId, $path, $subject, $documentId, $reason, $config->paperlessUrl);
 	}
 }

@@ -28,7 +28,7 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 
 | | [Paperless Sync](#paperless-sync) | [Paperless integration](#nextclouds-paperless-integration) | [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) | [rclone script](#an-rclone-or-webdav-script) | [Mount](#an-external-storage-mount-of-the-media-folder) | [Paperless itself](#paperlesss-own-ways-in) |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Direction** | Paperless → Nextcloud, and an inbox folder or a click in Files → Paperless | Nextcloud → Paperless | Paperless → Nextcloud | Paperless → Nextcloud | Paperless's own files, shown in Nextcloud | into Paperless |
+| **Direction** | Paperless → Nextcloud, and an inbox folder, a click in Files or a rule of Flow → Paperless | Nextcloud → Paperless | Paperless → Nextcloud | Paperless → Nextcloud | Paperless's own files, shown in Nextcloud | into Paperless |
 | **Runs** | inside Nextcloud, as a background job, or in the shell with `occ` | inside Nextcloud, when a user clicks | in a privileged container next to Paperless | as a scheduled job on the Paperless server | inside Nextcloud | inside Paperless |
 | **Reads Paperless through** | its REST API, with a token | its REST API, with a token | its media folder, read-only | its media folder | its media folder, local or over SMB or SFTP | — |
 | **Nextcloud password stored** | none | none | a password or app password of an account | an app password, in `rclone.conf` | none for a local folder | — |

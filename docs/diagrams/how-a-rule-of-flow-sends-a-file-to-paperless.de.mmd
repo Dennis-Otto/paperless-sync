@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie eine Regel von Flow eine Datei an Paperless sendet
+    accDescr: Jemand lädt eine Datei in Nextcloud hoch, ändert, verschiebt, kopiert oder taggt sie. Flow prüft die Bedingungen der Regeln der Administratoren mit der Aktion An Paperless senden, etwa den Typ der Datei, einen Tag ihres Ordners oder die Gruppe der Person. Passt eine Regel, reiht Paperless Sync die Datei für ihren Eigentümer mit den Tags jeder passenden Regel ein, außer die App ist nicht verbunden, die Datei liegt im Ordner von Paperless Sync, hat eine Markierung wie [P123] oder wartet schon. Mit dem nächsten Cron-Lauf lädt der Hintergrundjob sie wie eine Datei aus Dateien hoch, mit den Tags für jeden Import des Eingangs und denen der Regel, und verfolgt ihre Aufgabe. Der Eigentümer erfährt von einem Import, den Paperless abgelehnt hat oder der gescheitert ist; einer, der geklappt hat, steht im Protokoll. Die Datei bleibt, wo sie ist.
+
+    event["📄 Eine Datei wird angelegt,<br>geändert, verschoben,<br>kopiert oder getaggt"]
+    rule{"Passt eine<br>Regel von<br>Flow?"}
+    check{"Verbunden, außerhalb<br>des Ordners der App,<br>keine Markierung wie<br>[P123], wartet nicht?"}
+    stays["Nichts wird gesendet"]
+    queue["Eingereiht für ihren<br>Eigentümer, mit den<br>Tags jeder passenden<br>Regel"]
+    upload{"Upload mit den Tags<br>des Eingangs und<br>der Regel"}
+    log["📝 Das Protokoll: ein<br>neues Dokument, oder<br>eines, das Paperless hatte"]
+    notified["🔔 Eine Benachrichtigung<br>an den Eigentümer: eine<br>Ablehnung oder ein<br>gescheiterter Import"]
+
+    event --> rule
+    rule -- "nein" --> stays
+    rule -- "ja" --> check
+    check -- "nein" --> stays
+    check -- "ja" --> queue
+    queue -- "nächster<br>Cron-Lauf" --> upload
+    upload -- "importiert<br>oder bekannt" --> log
+    upload -- "abgelehnt oder<br>gescheitert" --> notified
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    class event,rule,check,stays,queue,log,notified nextcloud
+    class upload paperless
