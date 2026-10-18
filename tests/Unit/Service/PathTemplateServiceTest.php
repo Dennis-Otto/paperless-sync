@@ -122,6 +122,13 @@ final class PathTemplateServiceTest extends TestCase {
 		$this->service->normalizeRelativePath('Dokumente//Paperless');
 	}
 
+	public function testRelativePathsEndTheTaintOfAFilePath(): void {
+		// The taint analysis trusts the check of the path only while it says so.
+		$comment = (new \ReflectionMethod(PathTemplateService::class, 'normalizeRelativePath'))->getDocComment();
+		self::assertIsString($comment);
+		self::assertStringContainsString('@psalm-taint-escape file', $comment);
+	}
+
 	public function testFolderNameIsOneCleanComponent(): void {
 		self::assertSame('Archiv_ 2026', $this->service->normalizeFolderName(' Archiv: 2026 '));
 
