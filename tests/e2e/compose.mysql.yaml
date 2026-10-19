@@ -6,7 +6,7 @@
 
 services:
   mariadb:
-    image: mariadb:11.4.13@sha256:1292844148b311e4ed4300022a996d39083f415a963e970cf47cad1b3b18e3a6
+    image: mariadb:11.8.8@sha256:24e76fcec8c003a0362d0dd53f4806e7e79458d7fdeaf47437760e19496f5a9c
     # The settings that Nextcloud asks of MySQL and MariaDB:
     # https://docs.nextcloud.com/server/latest/admin_manual/configuration_database/linux_database_configuration.html
     command: ["--transaction-isolation=READ-COMMITTED", "--binlog-format=ROW"]
