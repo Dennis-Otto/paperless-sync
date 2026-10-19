@@ -12,9 +12,11 @@ namespace OCA\PaperlessSync\Tests\Unit\Migration;
 use OCA\PaperlessSync\Migration\Version000140Date20261018000000;
 use OCP\DB\ISchemaWrapper;
 use OCP\Migration\IOutput;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 final class Version000140Date20261018000000Test extends TestCase {
 	/** @var array<string, object> the tables the migration created, by name */
 	private array $created = [];
@@ -68,7 +70,7 @@ final class Version000140Date20261018000000Test extends TestCase {
 	}
 
 	private function migrate(ISchemaWrapper $schema): ?ISchemaWrapper {
-		return (new Version000140Date20261018000000())->changeSchema($this->createMock(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
+		return (new Version000140Date20261018000000())->changeSchema($this->createStub(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
 	}
 
 	/** @return ISchemaWrapper&MockObject */

@@ -41,7 +41,7 @@ final class SyncStateRepositoryTest extends TestCase {
 	private SyncStateRepository $repository;
 
 	protected function setUp(): void {
-		$connection = $this->createMock(IDBConnection::class);
+		$connection = $this->createStub(IDBConnection::class);
 		$connection->method('getQueryBuilder')->willReturnCallback(fn (): IQueryBuilder => $this->queryBuilder());
 		$this->clock = new TestClock();
 		$this->repository = new SyncStateRepository($connection, $this->clock);
@@ -324,8 +324,8 @@ final class SyncStateRepositoryTest extends TestCase {
 	private function queryBuilder(): IQueryBuilder {
 		$query = ['type' => '', 'table' => '', 'values' => [], 'where' => []];
 		$parameters = [];
-		$builder = $this->createMock(IQueryBuilder::class);
-		$expression = $this->createMock(IExpressionBuilder::class);
+		$builder = $this->createStub(IQueryBuilder::class);
+		$expression = $this->createStub(IExpressionBuilder::class);
 		$expression->method('eq')->willReturnCallback(static fn (string $column, string $parameter): string => $column . ' = ' . $parameter);
 		$builder->method('expr')->willReturn($expression);
 		$builder->method('createNamedParameter')->willReturnCallback(function (mixed $value) use (&$parameters): string {

@@ -32,7 +32,7 @@ final class StatusServiceTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->clock = new TestClock();
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$this->locking->method('isLocked')->willReturnCallback(fn (string $path, int $type): bool => $this->locked
 			&& $path === 'paperless_sync::synchronization'
 			&& $type === ILockingProvider::LOCK_EXCLUSIVE);

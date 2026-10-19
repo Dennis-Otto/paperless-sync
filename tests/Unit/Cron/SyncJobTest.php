@@ -29,6 +29,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -38,6 +39,7 @@ use RuntimeException;
 /**
  * The background job, started the way Nextcloud's cron starts it.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class SyncJobTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;
@@ -57,7 +59,7 @@ final class SyncJobTest extends TestCase {
 		$this->clock = new TestClock();
 		$this->configService = $this->configService();
 		$this->configService->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$status = $this->statusService($this->clock, $this->locking);
 		$this->paperless = new TestPaperlessClient();
@@ -69,11 +71,11 @@ final class SyncJobTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$this->clock,
-			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher(new TestStorage(), $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, new TestStorage(), $this->clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, new TestStorage(), $this->clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
 		);
 		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
@@ -221,6 +223,6 @@ final class SyncJobTest extends TestCase {
 	}
 
 	private function start(): void {
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 	}
 }

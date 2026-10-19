@@ -22,7 +22,7 @@ trait GermanTranslations {
 		$catalog = json_decode((string)file_get_contents(__DIR__ . '/../../l10n/de.json'), true, 512, JSON_THROW_ON_ERROR);
 		/** @var array<string, string> $translations */
 		$translations = $catalog['translations'];
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static function (string $text, array|string $parameters = []) use ($translations): string {
 			self::assertArrayHasKey($text, $translations, 'l10n/de.json has no translation of this text.');
 

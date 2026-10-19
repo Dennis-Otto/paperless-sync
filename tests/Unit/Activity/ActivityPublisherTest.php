@@ -17,11 +17,13 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
 use OCA\PaperlessSync\Tests\Doubles\TestActivityEvent;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class ActivityPublisherTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;

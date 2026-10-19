@@ -57,7 +57,7 @@ final class RunTest extends TestCase {
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
 		$this->paperless->documentTypes = ['7' => 'Rechnung'];
 		$this->storage = new TestStorage();
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$clock = new TestClock();
 		$status = $this->statusService($clock, $this->locking);
 		$sync = new SyncService(
@@ -68,11 +68,11 @@ final class RunTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$clock,
-			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher(new TestStorage(), $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
 		);
 		$this->run = new Run($sync);

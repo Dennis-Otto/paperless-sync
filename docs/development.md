@@ -9,7 +9,7 @@ How to build, check and test Paperless Sync, where the pictures and the look of 
 
 ## Set-up
 
-You need PHP 8.2+, Composer, Node.js and Docker; the dev container in `.devcontainer/` has them ready, for VS Code and for GitHub Codespaces.
+You need PHP 8.3+ for the tools (the app itself runs on the PHP that `appinfo/info.xml` names), Composer, Node.js and Docker; the dev container in `.devcontainer/` has them ready, for VS Code and for GitHub Codespaces.
 
 ```bash
 composer install

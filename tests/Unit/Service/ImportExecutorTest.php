@@ -30,6 +30,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestConfig;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -42,6 +43,7 @@ use RuntimeException;
  * uploads, moves and deletes the files and saves the states of their uploads, and a dry-run
  * reports the same, in the same batch, and changes nothing.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class ImportExecutorTest extends TestCase {
 	private const FILE = TestConfig::INBOX . '/Steuern/a.pdf';
 	private const ERROR = TestConfig::ERRORS . '/Steuern/a.pdf';

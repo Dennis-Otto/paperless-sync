@@ -62,10 +62,10 @@ final class NextcloudStorageServiceTest extends TestCase {
 	protected function setUp(): void {
 		// A German instance, as the documents of the tests: the folders have their German names.
 		$this->defaultLanguage = 'de';
-		$rootFolder = $this->createMock(IRootFolder::class);
+		$rootFolder = $this->createStub(IRootFolder::class);
 		$rootFolder->method('getUserFolder')->willReturnCallback(fn (string $userId): Folder => $this->folder('/' . $userId . '/files'));
-		$userManager = $this->createMock(IUserManager::class);
-		$userManager->method('get')->willReturnCallback(fn (string $userId): ?IUser => $userId === self::USER ? $this->createMock(IUser::class) : null);
+		$userManager = $this->createStub(IUserManager::class);
+		$userManager->method('get')->willReturnCallback(fn (string $userId): ?IUser => $userId === self::USER ? $this->createStub(IUser::class) : null);
 		$this->service = new NextcloudStorageService($rootFolder, $userManager, new PathTemplateService());
 	}
 
@@ -593,7 +593,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	}
 
 	private function folder(string $path): Folder {
-		$folder = $this->createMock(Folder::class);
+		$folder = $this->createStub(Folder::class);
 		$this->describe($folder, $path);
 		$folder->method('nodeExists')->willReturnCallback(fn (string $relative): bool => array_key_exists($this->resolve($path, $relative), $this->nodes));
 		$folder->method('get')->willReturnCallback(fn (string $relative): Node => $this->node($this->resolve($path, $relative)));
@@ -636,7 +636,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	}
 
 	private function file(string $path): File {
-		$file = $this->createMock(File::class);
+		$file = $this->createStub(File::class);
 		$this->describe($file, $path);
 		$file->method('getEtag')->willReturnCallback(fn (): string => md5((string)$this->nodes[$path]));
 		$file->method('putContent')->willReturnCallback(function (mixed $content) use ($path): void {

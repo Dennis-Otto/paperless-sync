@@ -25,7 +25,7 @@ trait RecordedActivities {
 	private ?\Throwable $activityFailure = null;
 
 	private function activityPublisher(NextcloudStorageInterface $storage, LoggerInterface $logger): ActivityPublisher {
-		$manager = $this->createMock(IManager::class);
+		$manager = $this->createStub(IManager::class);
 		$manager->method('generateEvent')->willReturnCallback(static fn (): IEvent => new TestActivityEvent());
 		$manager->method('publish')->willReturnCallback(function (IEvent $event): void {
 			if ($this->activityFailure !== null) {

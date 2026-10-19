@@ -80,9 +80,9 @@ final class ApplicationTest extends TestCase {
 	}
 
 	public function testTheAppUsesTheContainerNextcloudRegisteredForIt(): void {
-		$config = $this->createMock(IConfig::class);
+		$config = $this->createStub(IConfig::class);
 		$config->method('getSystemValueBool')->willReturn(false);
-		$container = $this->createMock(IAppContainer::class);
+		$container = $this->createStub(IAppContainer::class);
 		$server = new TestServer([IConfig::class => $config], $container);
 		OC::$server = $server;
 
@@ -95,7 +95,7 @@ final class ApplicationTest extends TestCase {
 	public function testTheServiceInterfacesResolveToTheirImplementations(): void {
 		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
 		$aliases = [];
-		$registration = $this->createMock(IRegistrationContext::class);
+		$registration = $this->createStub(IRegistrationContext::class);
 		$registration->method('registerServiceAlias')->willReturnCallback(function (string $alias, string $target) use (&$aliases): void {
 			$aliases[$alias] = $target;
 		});
@@ -117,7 +117,7 @@ final class ApplicationTest extends TestCase {
 		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
 		$notifiers = [];
 		$checks = [];
-		$registration = $this->createMock(IRegistrationContext::class);
+		$registration = $this->createStub(IRegistrationContext::class);
 		$registration->method('registerNotifierService')->willReturnCallback(function (string $notifier) use (&$notifiers): void {
 			$notifiers[] = $notifier;
 		});
@@ -141,7 +141,7 @@ final class ApplicationTest extends TestCase {
 	public function testTheAppBringsItsActionsIntoFilesAndFlow(): void {
 		$application = (new ReflectionClass(Application::class))->newInstanceWithoutConstructor();
 		$listeners = [];
-		$registration = $this->createMock(IRegistrationContext::class);
+		$registration = $this->createStub(IRegistrationContext::class);
 		$registration->method('registerEventListener')->willReturnCallback(function (string $event, string $listener) use (&$listeners): void {
 			$listeners[] = [$event, $listener];
 		});
