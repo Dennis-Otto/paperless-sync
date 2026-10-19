@@ -205,7 +205,9 @@ printf '\n== %s\n' "Downloads that a script runs"
 # also when the program only reads the download as data. This check finds such a pipe in
 # the shell scripts before a pull request merges, in the lines that a backslash or a pipe
 # at their end continues, without comments and the text in single quotes, which the shell
-# hands on as it is, and first tests itself with samples.
+# hands on as it is. Scorecard parses the code of sh -c '…' (and of exec, su, bash, …)
+# again as a script, so the check also looks into the text in single quotes after a -c
+# word. It first tests itself with samples.
 # Prints FILE:LINE: COMMAND for each such pipe in the files.
 download_runs() {
   local s='[[:space:]]' path='([^[:space:]|;&]*/)?' assignment='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*'
@@ -227,7 +229,14 @@ download_runs() {
       if (text ~ /(^|[^|])[|][[:space:]]*$/) { text = text " "; next }
       plain = text
       gsub(quoted, q q, plain)
-      if (plain ~ ENVIRON["PATTERN"]) print FILENAME ":" start ": " substr(text, 1, 160)
+      found = plain ~ ENVIRON["PATTERN"]
+      rest = text
+      while (!found && match(rest, quoted)) {
+        code = substr(rest, RSTART + 1, RLENGTH - 2)
+        found = substr(rest, 1, RSTART - 1) ~ /(^|[[:space:]])-c[[:space:]]+$/ && code ~ ENVIRON["PATTERN"]
+        rest = substr(rest, RSTART + RLENGTH)
+      }
+      if (found) print FILENAME ":" start ": " substr(text, 1, 160)
       text = ""
     }' "$@"
 }
@@ -248,6 +257,8 @@ expect_download_runs() {
   expect_download_runs 1 'answer="$(curl --silent "${URL}" | python3 -c "import sys; print(sys.stdin.read())")"'
   expect_download_runs 1 $'\tcurl --fail-with-body --silent \\\n\t\t"${URL}" \\\n\t\t| "${COMPOSE[@]}" exec -T paperless-mock python -c \'\nimport sys\nprint(sys.stdin.read())\''
   expect_download_runs 1 $'if curl --silent "${URL}" 2>&1 |\n\t/usr/bin/node -; then'
+  expect_download_runs 1 $'"${COMPOSE[@]}" exec -T nextcloud sh -c \'curl -s "$U" | sh\''
+  expect_download_runs 0 $'"${COMPOSE[@]}" exec -T nextcloud sh -c \'echo "curl -s $U | sh" > notes\''
   expect_download_runs 0 $'curl --silent --output "${answer}" "${URL}"\n"${COMPOSE[@]}" exec -T paperless-mock python -c \'print(1)\' < "${answer}"'
   expect_download_runs 0 $'printf \'%s\\n\' "${content}" | curl --upload-file - "${URL}"'
   expect_download_runs 0 $'curl --dump-header - "${URL}" | tr -d \'\\r\' | sed -n \'s|^Location: ||p\''
