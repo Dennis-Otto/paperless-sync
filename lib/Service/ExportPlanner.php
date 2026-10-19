@@ -48,6 +48,15 @@ final class ExportPlanner {
 	private array $seen = [];
 	/** The exported documents that the plan counts as missing without having seen them in the trash. */
 	private int $missingActive = 0;
+	/**
+	 * The questions to Paperless that confirm a missing scan, for copies to move or delete and for
+	 * states alone, each at most the batch size per run.
+	 *
+	 * @var array{copy: int, state: int}
+	 */
+	private array $questions = ['copy' => 0, 'state' => 0];
+	/** Whether a question to Paperless failed, which leaves the other missing documents for a later run. */
+	private bool $unanswered = false;
 
 	/**
 	 * @param \Closure(array<string, mixed>): string $pathOf the path of a document below the archive folder, from the path template
@@ -311,49 +320,117 @@ final class ExportPlanner {
 	 * An exported document. Paperless listed it, so its count of missing scans starts anew, also
 	 * when its export failed or waits for the next run; or the plan counts it as missing.
 	 *
-	 * Only a copy that is still there is moved or deleted, and only that counts as a change, also
-	 * when it fails. When the batch is full, or Nextcloud cannot store files in the archive, the
-	 * copy and its state stay as they are, so the next run moves or deletes it.
+	 * Pages that shift while a scan reads them, as when one document is deleted and another one is
+	 * added, keep the count of Paperless and may leave out a document that still exists, so a
+	 * complete scan is not proof enough (decision 0004). Before a missing scan counts, the plan
+	 * asks Paperless for the document itself: when Paperless has it, its count starts anew as if
+	 * the scan had listed it; when Paperless answers with an error, it counts nothing in this run
+	 * and the report names it. A scan that would change nothing costs no question (confirms()).
+	 * The questions stop after the first error, and at the batch size, once for copies to move or
+	 * delete and once for states alone, so that a mass vanish or a
+	 * Paperless that hangs keeps a run short; the documents left over count nothing in this run.
 	 *
 	 * @param array<string, int|string|null> $entry
 	 * @return list<ExportAction>
 	 */
 	private function missing(int $documentId, array $entry, bool $complete): array {
 		if (isset($this->seen[$documentId])) {
-			return (int)($entry['missing_runs'] ?? 0) > 0 ? [new SaveState($documentId, ['missing_runs' => 0])] : [];
+			return self::listed($documentId, $entry);
 		}
 		if ($documentId < 1 || !$complete) {
 			return [];
 		}
-		$missingRuns = (int)($entry['missing_runs'] ?? 0) + 1;
-		$state = (string)($entry['state'] ?? 'active');
-		$path = (string)($entry['path'] ?? '');
-		if ($state === 'active') {
-			++$this->missingActive;
-		}
-		if ($missingRuns < $this->config->missingGraceRuns) {
-			return [new WaitForMissing($documentId, $path, $missingRuns, $this->config->missingGraceRuns)];
-		}
 		$context = DocumentContext::missing($documentId, $entry);
 		try {
-			if ($this->config->permanentDelete && ($state === 'trash' || $this->config->allowDirectDelete)) {
-				if (!$this->files->exists($path)) {
-					return [new ForgetState($documentId, $context)];
-				}
-
-				return $this->batch->fits(SyncBatch::DELETE) ? [new RemoveCopy($context, $path, SyncReport::TYPE_DELETE)] : [new Skipped()];
-			}
-			$values = ['state' => 'missing', 'missing_runs' => $missingRuns, 'last_error' => null];
-			if ($state === 'active' && $this->config->trashMode === 'move' && $this->files->exists($path)) {
-				return $this->batch->fits(SyncBatch::WRITE)
-					? [new MoveToDeleted($context, $path, $this->deletedPath($path, $this->now()), SyncReport::TYPE_MISSING, $values)]
-					: [new Skipped()];
-			}
-
-			return [new SaveState($documentId, $values, $context)];
+			$action = $this->missingScan($documentId, $entry, $context);
 		} catch (\Throwable $exception) {
 			return [new Failed($context, $exception)];
 		}
+		if (self::confirms($action, $entry)) {
+			// After a failed question, or past the batch size, a document counts nothing in this
+			// run, as one that waits for room in the batch. A change of a state alone takes no
+			// place in the batch, so its questions have a budget of their own.
+			$kind = $action instanceof MoveToDeleted || $action instanceof RemoveCopy ? 'copy' : 'state';
+			if ($this->unanswered || $this->questions[$kind] >= $this->config->batchSize) {
+				return [];
+			}
+			++$this->questions[$kind];
+			try {
+				// Paperless answers 404 for a document that it no longer shows the account; any
+				// other answer than the document throws.
+				if ($this->paperless->document($documentId) !== null) {
+					return self::listed($documentId, $entry);
+				}
+			} catch (\Throwable $exception) {
+				$this->unanswered = true;
+
+				return [new Failed($context, $exception)];
+			}
+		}
+		if (($entry['state'] ?? 'active') === 'active') {
+			++$this->missingActive;
+		}
+
+		return [$action];
+	}
+
+	/**
+	 * What one more missing scan does with an exported document that Paperless no longer lists.
+	 *
+	 * Only a copy that is still there is moved or deleted, and only that counts as a change, also
+	 * when it fails. When the batch is full, or Nextcloud cannot store files in the archive, the
+	 * copy and its state stay as they are, so the next run moves or deletes it.
+	 *
+	 * @param array<string, int|string|null> $entry
+	 */
+	private function missingScan(int $documentId, array $entry, DocumentContext $context): ExportAction {
+		$missingRuns = (int)($entry['missing_runs'] ?? 0) + 1;
+		$state = (string)($entry['state'] ?? 'active');
+		$path = (string)($entry['path'] ?? '');
+		if ($missingRuns < $this->config->missingGraceRuns) {
+			return new WaitForMissing($documentId, $path, $missingRuns, $this->config->missingGraceRuns);
+		}
+		if ($this->config->permanentDelete && ($state === 'trash' || $this->config->allowDirectDelete)) {
+			if (!$this->files->exists($path)) {
+				return new ForgetState($documentId, $context);
+			}
+
+			return $this->batch->fits(SyncBatch::DELETE) ? new RemoveCopy($context, $path, SyncReport::TYPE_DELETE) : new Skipped();
+		}
+		$values = ['state' => 'missing', 'missing_runs' => $missingRuns, 'last_error' => null];
+		if ($state === 'active' && $this->config->trashMode === 'move' && $this->files->exists($path)) {
+			return $this->batch->fits(SyncBatch::WRITE)
+				? new MoveToDeleted($context, $path, $this->deletedPath($path, $this->now()), SyncReport::TYPE_MISSING, $values)
+				: new Skipped();
+		}
+
+		return new SaveState($documentId, $values, $context);
+	}
+
+	/**
+	 * Whether Paperless confirms a missing scan before it counts. A document whose move or deletion
+	 * waits for room in the batch counts nothing in this run, and one that is marked missing already
+	 * only counts on, as its copy has moved or stays where it is, until a deletion would remove the
+	 * copy or forget the state; neither costs a request to Paperless.
+	 *
+	 * @param array<string, int|string|null> $entry
+	 */
+	private static function confirms(ExportAction $action, array $entry): bool {
+		return match (true) {
+			$action instanceof Skipped => false,
+			($entry['state'] ?? 'active') === 'missing' => $action instanceof RemoveCopy || $action instanceof ForgetState,
+			default => true,
+		};
+	}
+
+	/**
+	 * A document that Paperless has: its count of missing scans starts anew.
+	 *
+	 * @param array<string, int|string|null> $entry
+	 * @return list<ExportAction>
+	 */
+	private static function listed(int $documentId, array $entry): array {
+		return (int)($entry['missing_runs'] ?? 0) > 0 ? [new SaveState($documentId, ['missing_runs' => 0])] : [];
 	}
 
 	/**

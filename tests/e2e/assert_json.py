@@ -392,6 +392,19 @@ elif mode == "conflict-replaced":
     expect("unchanged", 1)
     expect("errors", 0)
     expect_action(f"EXPORT P124: {ARCHIVE}/2026-08-26 - Annual statement [P124].pdf")
+elif mode == "left-out":
+    # The scan left out P123, which Paperless still serves alone: no missing scan counts.
+    expect("movedToTrash", 0)
+    expect("permanentlyDeleted", 0)
+    expect("unchanged", 1)
+    expect("errors", 0)
+    actions = [str(action) for action in payload.get("actions", [])]
+    if any(action.startswith(("WAIT ", "MISSING ", "DELETE ")) for action in actions):
+        raise AssertionError(f"left-out: a document that Paperless still has counted as missing: {payload!r}")
+elif mode == "mock-left-out":
+    # The run asked Paperless once for the document that the scan left out.
+    if payload.get("leftOutReads") != [123]:
+        raise AssertionError(f"mock-left-out: the run did not ask Paperless for P123 alone: {payload.get('leftOutReads')!r}")
 elif mode == "vanished-wait":
     expect("movedToTrash", 0)
     expect("permanentlyDeleted", 0)

@@ -3743,6 +3743,47 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(0, $report->permanentlyDeleted);
 	}
 
+	/**
+	 * One document deleted and another one added while a scan reads the pages keep the count of
+	 * Paperless, so a complete scan may leave out a document that still exists. The run asks
+	 * Paperless for it before the scan counts, so its copy stays, also with one required scan and
+	 * direct deletion, in a dry-run as in a run.
+	 */
+	public function testDocumentThatACompleteScanLeftOutButPaperlessStillHasKeepsItsCopy(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
+		$this->exportDocuments([$this->document(), $this->document(124)]);
+		$files = $this->storage->files;
+		$this->paperless->leftOut = [123];
+
+		$dryRun = $this->service->run(true);
+		$report = $this->service->run();
+
+		self::assertSame([[], []], [$dryRun->actions, $report->actions]);
+		self::assertSame([0, 0, 0], [$report->permanentlyDeleted, $report->movedToTrash, $report->errors]);
+		self::assertSame($files, $this->storage->files);
+		self::assertSame(['active', 0], [$this->state->exports[123]['state'], $this->state->exports[123]['missing_runs']]);
+		self::assertSame([123, 123], $this->paperless->documentReads);
+	}
+
+	/**
+	 * When Paperless answers the question for a document that a scan left out with an error, the
+	 * document counts nothing in this run, and the report names it.
+	 */
+	public function testFailedQuestionForADocumentThatAScanLeftOutCountsNothing(): void {
+		$this->configService->save(['missing_grace_runs' => 1, 'permanent_delete' => true, 'allow_direct_delete' => true]);
+		$this->exportDocument();
+		$files = $this->storage->files;
+		$this->paperless->documents = [];
+		$this->paperless->documentException = new PaperlessRequestException('cURL error 28: Operation timed out');
+
+		$report = $this->service->run();
+
+		self::assertSame([1, 0, 0], [$report->errors, $report->permanentlyDeleted, $report->movedToTrash]);
+		self::assertSame(['Missing P123: cURL error 28: Operation timed out'], $report->errorMessages);
+		self::assertSame($files, $this->storage->files);
+		self::assertSame(['active', 0], [$this->state->exports[123]['state'], $this->state->exports[123]['missing_runs']]);
+	}
+
 	public function testCompleteScanAfterAnIncompleteOneCountsTheMissingDocument(): void {
 		$this->configService->save(['missing_grace_runs' => 1]);
 		$this->exportDocuments([$this->document(), $this->document(124)]);

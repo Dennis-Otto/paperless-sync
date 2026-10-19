@@ -1,17 +1,20 @@
 flowchart TB
     accTitle: When a document counts as missing
-    accDescr: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew, and one in neither list counts one more missing scan; after N scans in a row, its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.
+    accDescr: Every run reads all pages of the documents and of the trash of Paperless. When a page came back short or empty, or the list changed during the scan, the run reports SCAN INCOMPLETE and counts no document as missing. Otherwise, a document in one of the lists starts its count anew. For a document in neither list, the run asks Paperless for it alone: when Paperless still has it, its count starts anew; an error counts nothing in this run; when Paperless answers 404, it counts one more missing scan, and after N scans in a row its copy moves to the deleted folder, or is deleted when that is allowed, within the batch size.
 
     scan["A run reads every page<br>of the documents and the trash"] --> complete{"Every page full<br>and the list unchanged?"}
     complete -->|no| incomplete["SCAN INCOMPLETE:<br>no document counts<br>as missing in this run"]
     complete -->|yes| listed{"Is the document<br>in one of the lists?"}
     listed -->|yes| reset["Its count of missing<br>scans starts anew"]
-    listed -->|no| scans{"Missing in N<br>scans in a row?"}
+    listed -->|no| asked{"Does Paperless have<br>the document alone?"}
+    asked -->|yes| reset
+    asked -->|error| error["Reported as an error:<br>no missing scan<br>in this run"]
+    asked -->|"no, 404"| scans{"Missing in N<br>scans in a row?"}
     scans -->|not yet| wait["WAIT: one more<br>missing scan"]
     scans -->|yes| change["Moved to _Deleted,<br>or deleted when allowed,<br>within the batch size"]
     classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class scan,complete,listed,scans check
-    class incomplete,reset,wait kept
+    class scan,complete,listed,asked,scans check
+    class incomplete,reset,error,wait kept
     class change changed

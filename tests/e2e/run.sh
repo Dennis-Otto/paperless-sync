@@ -1181,6 +1181,18 @@ sync_run false "${TMP_DIR}/conflict-replaced.json"
 assert_json conflict-replaced "${TMP_DIR}/conflict-replaced.json"
 assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic Paperless archive document P124.'
 
+# Pages that shift while a run reads them, one document deleted and another one added, keep
+# the count of Paperless, so a scan looks complete without a document that Paperless still
+# has. The run asks Paperless for it before it counts a missing scan, and the copy stays
+# without one.
+control /control/left-out/123 >/dev/null
+sync_run false "${TMP_DIR}/left-out.json"
+control /control/left-out/none >/dev/null
+assert_json left-out "${TMP_DIR}/left-out.json"
+assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+mock_state > "${TMP_DIR}/mock-left-out.json"
+assert_json mock-left-out "${TMP_DIR}/mock-left-out.json"
+
 # A document that vanishes from Paperless without passing through its trash keeps its
 # copy for the grace runs, then the copy moves to the deleted folder of that day. As
 # direct deletion is not allowed, the runs after it leave the copy there.

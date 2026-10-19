@@ -272,6 +272,46 @@ final class ExportPlannerTest extends TestCase {
 				[],
 				0,
 			],
+			'a document that the scan left out but Paperless still has counts no missing scan' => [
+				['exported' => [[1, 'A']], 'unlisted' => [1]],
+				[],
+				0,
+			],
+			'a document that Paperless still has keeps its copy, and its count starts anew' => [
+				['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]]], 'unlisted' => [1]],
+				['save P1: missing_runs=0'],
+				0,
+			],
+			'a document that Paperless still has is not deleted, also when direct deletion is allowed' => [
+				['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]]], 'unlisted' => [1], 'settings' => ['permanentDelete' => true, 'allowDirectDelete' => true]],
+				['save P1: missing_runs=0'],
+				0,
+			],
+			'a document restored from the trash that the scan left out keeps its copy' => [
+				['exported' => [[1, 'A', 'm1', ['state' => 'trash', 'missing_runs' => 2]]], 'unlisted' => [1], 'settings' => ['permanentDelete' => true]],
+				['save P1: missing_runs=0'],
+				0,
+			],
+			'with one required scan, a document that Paperless still has keeps its copy' => [
+				['exported' => [[1, 'A']], 'unlisted' => [1], 'settings' => ['missingGraceRuns' => 1]],
+				[],
+				0,
+			],
+			'with one required scan, the copy of a document that Paperless no longer has moves at once' => [
+				['exported' => [[1, 'A']], 'settings' => ['missingGraceRuns' => 1]],
+				['missing P1: ' . self::path('A', 1) . ' -> ' . $deleted],
+				1,
+			],
+			'with one required scan and direct deletion, the copy of a document that Paperless no longer has is deleted' => [
+				['exported' => [[1, 'A']], 'settings' => ['missingGraceRuns' => 1, 'permanentDelete' => true, 'allowDirectDelete' => true]],
+				['delete P1: ' . self::path('A', 1)],
+				1,
+			],
+			'a document marked missing whose copy moved already counts on' => [
+				['exported' => [[1, 'A', 'm1', ['state' => 'missing', 'missing_runs' => 3]]]],
+				['save P1: state=missing, missing_runs=4'],
+				0,
+			],
 		];
 	}
 
@@ -287,6 +327,85 @@ final class ExportPlannerTest extends TestCase {
 
 		self::assertSame(str_replace('DAY', $this->clock->today(), $expected), $plan);
 		self::assertSame($missingActive, $this->missingActive, 'The dry-run warns of a trash that it cannot see by this count.');
+	}
+
+	/**
+	 * Paperless is asked for each document that a scan would count as missing, and answers 404 for
+	 * one that it no longer has: the copy then waits, moves or is deleted, as without the question.
+	 */
+	public function testPaperlessIsAskedForEachDocumentThatAScanWouldCountAsMissing(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A'], [2, 'B', 'm1', ['missing_runs' => 2]], [3, 'C', 'm1', ['state' => 'trash', 'missing_runs' => 2]], [4, 'D']], 'documents' => [[4, 'D']]]);
+
+		$plan = $this->plan($documents, [], true, ['permanentDelete' => true]);
+
+		self::assertSame([
+			'unchanged P4',
+			'wait P1: 1/3',
+			'missing P2: ' . self::path('B', 2) . ' -> ' . self::ARCHIVE . '/_Gelöscht/' . $this->clock->today() . '/B [P2].pdf',
+			'delete P3: ' . self::path('C', 3),
+		], $plan);
+		self::assertSame([1, 2, 3], $this->paperless->documentReads, 'A listed document needs no question.');
+	}
+
+	/**
+	 * A question that changes nothing costs no request: an incomplete scan counts no document as
+	 * missing, a document whose move waits for room in the batch counts nothing in this run, and
+	 * one that is marked missing already only counts on, as its copy has moved or stays.
+	 */
+	public function testAMissingScanThatChangesNothingCostsNoQuestionToPaperless(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B', 'm1', ['state' => 'missing', 'missing_runs' => 3]]], 'documents' => [[3, 'C']]]);
+
+		self::assertSame(['export P3: ' . self::path('C', 3)], $this->plan($documents, [], false));
+		self::assertSame(['export P3: ' . self::path('C', 3), 'skipped', 'save P2: state=missing, missing_runs=4'], $this->plan($documents, [], true, ['batchSize' => 1]));
+		self::assertSame([], $this->paperless->documentReads);
+	}
+
+	/** A copy that is marked missing already is deleted only after Paperless has confirmed its document gone. */
+	public function testTheDeletionOfACopyMarkedMissingAsksPaperlessFirst(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['state' => 'missing', 'missing_runs' => 3]], [2, 'B', 'm1', ['state' => 'missing', 'missing_runs' => 3]]], 'gone' => [self::path('B', 2)], 'unlisted' => [1]]);
+
+		self::assertSame(['save P1: missing_runs=0', 'forget P2'], $this->plan($documents, [], true, ['permanentDelete' => true, 'allowDirectDelete' => true]));
+		self::assertSame([1, 2], $this->paperless->documentReads);
+	}
+
+	/**
+	 * When Paperless answers the question with an error, the document counts nothing in this run,
+	 * and the report names it; the plan asks no more questions, so the other missing documents
+	 * count nothing in this run either, while the listed ones carry on.
+	 */
+	public function testAFailedQuestionToPaperlessCountsNothingForItsDocument(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B'], [3, 'C']], 'documents' => [[3, 'C']]]);
+		$this->paperless->documentException = new RuntimeException('Paperless answered HTTP 502 to query document');
+
+		$plan = $this->plan($documents, [], true, ['permanentDelete' => true, 'allowDirectDelete' => true]);
+
+		self::assertSame(['unchanged P3', 'failed Missing P1: Paperless answered HTTP 502 to query document'], $plan);
+		self::assertSame(0, $this->missingActive, 'A document that Paperless may still have counts as missing for no warning.');
+		self::assertSame([1], $this->paperless->documentReads, 'A Paperless that hangs costs one timeout per run, not one per document.');
+	}
+
+	/**
+	 * A run asks Paperless about at most as many missing documents as the batch size allows for
+	 * states alone, so a mass vanish keeps a run short; the others count nothing in this run and
+	 * wait for the next.
+	 */
+	public function testTheQuestionsToPaperlessForStatesStopAtTheBatchSize(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A'], [2, 'B'], [3, 'C']]]);
+
+		self::assertSame(['wait P1: 1/3', 'wait P2: 1/3'], $this->plan($documents, [], true, ['batchSize' => 2]));
+		self::assertSame([1, 2], $this->paperless->documentReads);
+		self::assertSame(2, $this->missingActive);
+	}
+
+	/**
+	 * A copy that Paperless confirms present takes no place in the batch, so the questions for
+	 * copies to move have a limit of their own, also when Paperless still has every document.
+	 */
+	public function testTheQuestionsToPaperlessForCopiesStopAtTheBatchSize(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B', 'm1', ['missing_runs' => 2]], [3, 'C', 'm1', ['missing_runs' => 2]]], 'unlisted' => [1, 2, 3]]);
+
+		self::assertSame(['save P1: missing_runs=0'], $this->plan($documents, [], true, ['batchSize' => 1]));
+		self::assertSame([1], $this->paperless->documentReads);
 	}
 
 	/**
@@ -441,6 +560,13 @@ final class ExportPlannerTest extends TestCase {
 		}
 		foreach ($case['files'] ?? [] as $path => $content) {
 			$this->storage->files[$path] = $content;
+		}
+		// Documents that Paperless still has, though the scan of the test leaves them out, as pages
+		// that shift while a run reads them can.
+		/** @var list<int> $unlisted */
+		$unlisted = $case['unlisted'] ?? [];
+		foreach ($unlisted as $id) {
+			$this->paperless->documents[] = self::document($id, 'A');
 		}
 		$documents = [];
 		/** @var list<array{0: int, 1: string, 2?: string, 3?: list<mixed>}> $active */
