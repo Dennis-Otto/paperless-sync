@@ -56,7 +56,7 @@ point release of Nextcloud, which the image of the version brings, changed what 
 relies on: adapt the app to it in a pull request of its own."""
 commands = [
   "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache bash tests/e2e/run.sh  # one version, as the log names it",
-  "bash tests/e2e/run-all.sh  # every supported version side by side, as the check does",
+  "E2E_VARIANTS=none bash tests/e2e/run-all.sh  # every supported version side by side, as the check does",
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
 ]
 docs = "tests/e2e/README.md#every-supported-version-at-once"
@@ -78,8 +78,8 @@ fix = """Run the variant that failed on your machine with Docker, fix what its o
 shows, such as a query that only SQLite accepts or a file that the app reads as if its
 size were known, and push."""
 commands = [
-  "E2E_DATABASE=pgsql bash tests/e2e/run.sh  # PostgreSQL",
-  "E2E_DATABASE=mysql E2E_OBJECTSTORE=s3 bash tests/e2e/run.sh  # MariaDB with S3",
+  "E2E_VERSIONS=none E2E_VARIANTS=pgsql bash tests/e2e/run-all.sh  # PostgreSQL on the newest version",
+  "E2E_VERSIONS=none E2E_VARIANTS=mysql+s3 bash tests/e2e/run-all.sh  # MariaDB with S3 on the newest version",
   "E2E_VERSIONS=none bash tests/e2e/run-all.sh  # both side by side, as the check does",
 ]
 docs = "tests/e2e/README.md#databases-and-object-storage"
