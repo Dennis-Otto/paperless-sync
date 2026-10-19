@@ -1,4 +1,5 @@
 # What krankerl leaves out of the app package of a release.
+/.bestpractices.json
 .copier-answers.yml
 /.devcontainer
 .editorconfig
@@ -19,6 +20,7 @@
 /composer.json
 /composer.lock
 /docs
+/infection.json5
 /krankerl.toml
 /LICENSES
 /lychee.toml
