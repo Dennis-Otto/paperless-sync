@@ -68,6 +68,7 @@ final class PerUserOwnershipTest extends TestCase {
 		$this->clock = new TestClock();
 		$this->paperless = new TestPaperlessClient();
 		$this->paperless->users = [(string)self::ALICE => 'alice', (string)self::BOB => 'Bob', (string)self::DAVE => 'dave', (string)self::ACCOUNT => 'paperless-sync'];
+		$this->paperless->accountId = self::ACCOUNT;
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
 		$this->paperless->documentTypes = ['7' => 'Rechnung'];
 		$this->storage = new TestStorage();
@@ -286,6 +287,90 @@ final class PerUserOwnershipTest extends TestCase {
 		self::assertSame([], $this->filesOf('alice'));
 	}
 
+	/**
+	 * Paperless makes the account of the app the owner of every upload until the app gives the
+	 * document its owner: while Paperless refuses, the document of alice's upload stays out of the
+	 * archive of the target user, and of every other, and goes to alice once it is hers.
+	 */
+	public function testTheDocumentOfAnUploadWaitsForItsOwner(): void {
+		$this->sync([$this->document(5, self::ACCOUNT)]);
+		self::assertSame([$this->path(5)], array_keys($this->storage->files), 'Without a waiting upload, a document of the account goes to the target user.');
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->sync([$this->document(5, self::ACCOUNT)]);
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 77];
+		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 1 the owner of the document 77: HTTP 403.');
+
+		$refused = $this->sync([$this->document(5, self::ACCOUNT), $this->document(77, self::ACCOUNT)]);
+
+		self::assertSame([$this->path(5)], array_keys($this->storage->files), 'The document of the upload of alice never reaches the target user.');
+		self::assertSame([], array_filter(array_keys($this->filesOf('alice')), static fn (string $path): bool => str_starts_with($path, self::ARCHIVE)));
+		self::assertSame(0, $refused->exported);
+		self::assertSame([], $this->archiveDeletions());
+		$this->paperless->ownerException = null;
+
+		// The run gives the document its owner first, then exports it.
+		$report = $this->sync([$this->document(5, self::ACCOUNT), $this->document(77, self::ACCOUNT)]);
+
+		self::assertSame([$this->path(77)], array_keys($this->filesOf('alice')));
+		self::assertSame([$this->path(5)], array_keys($this->storage->files));
+		self::assertContains('[alice] EXPORT P77: ' . $this->path(77), $report->actions);
+	}
+
+	/** The webhook calls for a new document of an upload before the app has given it its owner: the call leaves it to a later run. */
+	public function testTheWebhookLeavesTheDocumentOfAWaitingUploadAlone(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings() + ['ownership' => SyncConfig::PER_USER]);
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->sync([]);
+		$this->paperless->documents = [$this->document(77, self::ACCOUNT)];
+		$this->paperless->contents[77] = '%PDF-content';
+
+		$report = $this->service->syncDocument(77);
+
+		self::assertSame([[], [], []], [$report->actions, $this->storage->files, $this->archiveDeletions()]);
+	}
+
+	/** A file that alice sent to Paperless waits for its owner in the same way. */
+	public function testTheDocumentOfASentFileWaitsForItsOwner(): void {
+		$this->state->saveSend('alice', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+
+		$report = $this->sync([$this->document(77, self::ACCOUNT), $this->document(2, self::BOB)]);
+
+		self::assertSame(['[bob] EXPORT P2: ' . $this->path(2)], $report->actions);
+	}
+
+	/** An upload that keeps the account as the owner, such as one of the target user without a user of Paperless, holds nothing. */
+	public function testAnUploadWithoutAnotherOwnerHoldsNothing(): void {
+		$this->state->saveSend('paperless', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+		$this->state->saveSend('alice', 13, ['path' => 'Scans/letter.pdf', 'status' => 'imported', 'task_id' => 'task-8']);
+
+		$report = $this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertSame(['[paperless] EXPORT P5: ' . $this->path(5)], $report->actions);
+		self::assertSame(0, $this->paperless->accountReads, 'Without a waiting upload, the run does not ask for the account.');
+	}
+
+	/** Without the ID of the account, the run can't tell the document of a waiting upload, so the export waits. */
+	public function testTheExportWaitsWhilePaperlessDoesNotNameItsAccount(): void {
+		$this->paperless->accountId = null;
+		$this->state->saveSend('alice', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+
+		$report = $this->sync([$this->document(77, self::ACCOUNT), $this->document(2, self::BOB)]);
+
+		self::assertSame([0, []], [$report->exported, $this->filesOf('bob')]);
+		self::assertSame(['Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'], $report->errorMessages);
+	}
+
+	/** Two users of Paperless for one user of Nextcloud: the run does not guess whose they are, and their copies stay where they are. */
+	public function testTheDocumentsOfTwoUsersOfPaperlessForOneUserOfNextcloudStayWhereTheyAre(): void {
+		$this->sync([$this->document(1, self::ALICE)]);
+		$this->paperless->users['6'] = 'Alice';
+
+		$report = $this->sync([$this->document(1, self::ALICE), $this->document(6, 6)]);
+
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('alice')));
+		self::assertSame([[], []], [$report->actions, $this->storage->files]);
+	}
+
 	/** A failed import is news for the user whose inbox held the file, not for the target user. */
 	public function testAUserHearsOfTheFailedImportsOfTheirInbox(): void {
 		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
@@ -426,6 +511,11 @@ final class PerUserOwnershipTest extends TestCase {
 	/** @return array<string, string> */
 	private function filesOf(string $user): array {
 		return $this->storage->filesOfOthers[$user] ?? [];
+	}
+
+	/** @return list<array<array-key, mixed>> the deletions of files of an archive, of every user */
+	private function archiveDeletions(): array {
+		return array_values(array_filter($this->storage->calls, static fn (array $call): bool => $call[0] === 'delete' && str_starts_with((string)($call[2] ?? ''), self::ARCHIVE)));
 	}
 
 	/** @return array<string, int> the number of the files that the entry of each user's run names */

@@ -283,6 +283,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $this->requestPage('/api/documents/', ['page' => 1, 'page_size' => 1] + $filter)['count'];
 	}
 
+	public function accountId(): ?int {
+		$account = $this->account();
+
+		return is_array($account) ? $account['id'] : null;
+	}
+
 	public function setOwner(int $documentId, int $owner): void {
 		$response = $this->send(
 			'PATCH',
@@ -296,6 +302,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			],
 		);
 		$status = $response->getStatusCode();
+		// Paperless-ngx 2.x saves the owner and then reads the document again as the account, which
+		// no longer sees a document that it gave away without keeping the permission View on it:
+		// the answer is 404, but the document has its new owner. The task of the upload named the
+		// document, so a 404 means it was given away, or deleted, and has nothing more to change.
+		if ($status === 404) {
+			return;
+		}
 		if ($status < 200 || $status >= 300) {
 			$reason = $this->errorReason($response->getBody());
 			throw new RuntimeException("Paperless did not make the user {$owner} the owner of the document {$documentId}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'));

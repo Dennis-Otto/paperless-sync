@@ -22,10 +22,11 @@ use OCP\IUserManager;
  * OpenID Connect gives both the same; with a group in the settings, only a member of it.
  *
  * Nothing is guessed: two users of Paperless with the same user of Nextcloud, such as Alice and
- * alice, get neither, and a user of Nextcloud that the table names but that no longer exists gets
- * nothing either. Their documents, and those of every user of Paperless without a user of
- * Nextcloud, go to the target user, as every document did before per-user ownership, and the
- * connection checklist names each of them.
+ * alice, get neither, and the runs hold their documents, whose copies stay where they are, until
+ * each has a user of Nextcloud of its own. A user of Nextcloud that the table names but that no
+ * longer exists gets nothing either: those documents, and those of every user of Paperless without
+ * a user of Nextcloud, go to the target user, as every document did before per-user ownership.
+ * The connection checklist names each of them.
  *
  * @psalm-import-type Route from Owners
  */
@@ -106,8 +107,9 @@ final class OwnerMapping {
 	 * documents of each user of Paperless, with their number, those without an owner, the lines
 	 * of the table that name no user of Paperless, and whether each user of Nextcloud may create
 	 * files in their base folder. A user of Paperless whom the run would give to the target user
-	 * for a mistake of the settings, such as a typo in the table or two users of Paperless for
-	 * one user of Nextcloud, is a warning that names the setting to change. Without the list of
+	 * for a mistake of the settings, such as a typo in the table, or whose documents it holds, as
+	 * for two users of Paperless for one user of Nextcloud, is a warning that names the setting to
+	 * change. Without the list of
 	 * the users of Paperless, per-user ownership can't route a document, so the line of the users
 	 * fails then.
 	 *
@@ -159,7 +161,7 @@ final class OwnerMapping {
 			Owners::NONE => ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s → %2$s, the target user, as Nextcloud has no user with this ID; documents: %3$s', [$route['name'], $targetUser, $documents]),
 			Owners::OUTSIDE_GROUP => ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s → %2$s, the target user, as %3$s is no member of the group; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents]),
 			Owners::UNKNOWN => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as Nextcloud has no user %3$s; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents], 'Correct the line of the user in "Paperless users with another Nextcloud ID".', [], false, 'user_map'),
-			default => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as other users of Paperless have the user of Nextcloud %3$s as well; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents], 'Give each user of Paperless a user of Nextcloud of its own in "Paperless users with another Nextcloud ID".', [], false, 'user_map'),
+			default => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → nobody, as other users of Paperless have the user of Nextcloud %2$s as well, so their documents stay where their copies are; documents: %3$s', [$route['name'], $route['detail'], $documents], 'Give each user of Paperless a user of Nextcloud of its own in "Paperless users with another Nextcloud ID".', [], false, 'user_map'),
 		};
 	}
 

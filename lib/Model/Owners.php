@@ -16,7 +16,9 @@ namespace OCA\PaperlessSync\Model;
  *
  * A document whose owner Paperless didn't list among its users goes to nobody: the run can't tell
  * whose it is, so it holds the document, and its copy stays where it is, rather than handing it to
- * the target user, who may not be allowed to see it.
+ * the target user, who may not be allowed to see it. So does a document of a user of Paperless
+ * whose user of Nextcloud another user of Paperless has as well: the mapping isn't clear, and the
+ * run doesn't guess, until the administrator gives each one a user of Nextcloud of its own.
  *
  * @psalm-type Route = array{id: int, name: string, user: string|null, reason: self::*, detail: string}
  */
@@ -31,7 +33,7 @@ final class Owners {
 	public const UNKNOWN = 'unknown';
 	/** The user of Nextcloud is no member of the group of the setting. */
 	public const OUTSIDE_GROUP = 'group';
-	/** Another user of Paperless has the same user of Nextcloud, so neither gets it. */
+	/** Another user of Paperless has the same user of Nextcloud, so neither gets it, and the run holds their documents. */
 	public const SHARED = 'shared';
 
 	/** @var array<string, int> the user of Paperless of each user of Nextcloud that has one */
@@ -39,7 +41,7 @@ final class Owners {
 
 	/**
 	 * @param string $fallback the target user, who gets the documents without an owner and those whose owner has no user of Nextcloud
-	 * @param array<int, Route> $routes every user of Paperless, by its ID, with the user of Nextcloud that gets its documents, or null for the target user, and why
+	 * @param array<int, Route> $routes every user of Paperless, by its ID, with the user of Nextcloud that gets its documents, or null for the target user or, for Owners::SHARED, for nobody, and why
 	 * @param list<string> $unmatched the users of Paperless that the table names but Paperless doesn't have
 	 */
 	public function __construct(
@@ -57,15 +59,15 @@ final class Owners {
 	/**
 	 * The user of Nextcloud whose archive gets a document with this owner, as Paperless names it in
 	 * the field owner of the document: the target user without an owner or for an owner without a
-	 * user of Nextcloud, and null for an owner that Paperless didn't list, whose document the run
-	 * holds.
+	 * user of Nextcloud, and null for an owner that Paperless didn't list or whose user of Nextcloud
+	 * another user of Paperless has as well, whose document the run holds.
 	 */
 	public function userOf(mixed $owner): ?string {
 		if ($owner === null) {
 			return $this->fallback;
 		}
 		$id = is_int($owner) || (is_string($owner) && ctype_digit($owner)) ? (int)$owner : 0;
-		if (!isset($this->routes[$id])) {
+		if (!isset($this->routes[$id]) || $this->routes[$id]['reason'] === self::SHARED) {
 			return null;
 		}
 

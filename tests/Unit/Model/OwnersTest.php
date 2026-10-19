@@ -22,6 +22,7 @@ final class OwnersTest extends TestCase {
 			2 => ['id' => 2, 'name' => 'Bob', 'user' => 'bob.smith', 'reason' => Owners::TABLE, 'detail' => 'bob.smith'],
 			3 => ['id' => 3, 'name' => 'carol', 'user' => null, 'reason' => Owners::NONE, 'detail' => ''],
 			4 => ['id' => 4, 'name' => 'admin', 'user' => 'paperless', 'reason' => Owners::TABLE, 'detail' => 'paperless'],
+			5 => ['id' => 5, 'name' => 'dave', 'user' => null, 'reason' => Owners::SHARED, 'detail' => 'erin (Erin)'],
 		], ['nobody']);
 	}
 
@@ -33,6 +34,7 @@ final class OwnersTest extends TestCase {
 			'a user without a user of Nextcloud' => [3, 'paperless'],
 			'no owner' => [null, 'paperless'],
 			'an owner that Paperless did not list' => [42, null],
+			'an owner whose user of Nextcloud another one has as well' => [5, null],
 			'an owner that is no ID' => ['alice', null],
 			'an owner of another type' => [1.5, null],
 		];
@@ -61,6 +63,6 @@ final class OwnersTest extends TestCase {
 	}
 
 	public function testListsTheUsersOfPaperlessByTheirNames(): void {
-		self::assertSame(['admin', 'alice', 'Bob', 'carol'], array_column($this->owners->routes(), 'name'));
+		self::assertSame(['admin', 'alice', 'Bob', 'carol', 'dave'], array_column($this->owners->routes(), 'name'));
 	}
 }

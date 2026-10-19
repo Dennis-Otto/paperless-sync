@@ -47,11 +47,11 @@ final class OwnerMappingTest extends TestCase {
 		self::assertSame(['id' => 2, 'name' => 'Bob', 'user' => 'bob.smith', 'reason' => Owners::TABLE, 'detail' => 'bob.smith'], $owners->routes()[1]);
 	}
 
-	/** Which of the two is meant is not for the app to guess: both go to the target user, who got every document before. */
+	/** Which of the two is meant is not for the app to guess: the runs hold the documents of both, whose copies stay where they are. */
 	public function testTwoUsersOfPaperlessForOneUserOfNextcloudGetNeither(): void {
 		$owners = $this->owners([], ['1' => 'alice', '2' => 'Alice', '3' => 'bob']);
 
-		self::assertSame(['paperless', 'paperless', 'bob'], [$owners->userOf(1), $owners->userOf(2), $owners->userOf(3)]);
+		self::assertSame([null, null, 'bob'], [$owners->userOf(1), $owners->userOf(2), $owners->userOf(3)]);
 		self::assertSame([
 			['id' => 1, 'name' => 'alice', 'user' => null, 'reason' => Owners::SHARED, 'detail' => 'alice (Alice)'],
 			['id' => 2, 'name' => 'Alice', 'user' => null, 'reason' => Owners::SHARED, 'detail' => 'alice (alice)'],
@@ -62,7 +62,7 @@ final class OwnerMappingTest extends TestCase {
 	public function testATableThatGivesTwoUsersOfPaperlessOneUserOfNextcloudGivesItNeither(): void {
 		$owners = $this->owners(['user_map' => 'carol = alice'], ['1' => 'alice', '3' => 'carol']);
 
-		self::assertSame(['paperless', 'paperless'], [$owners->userOf(1), $owners->userOf(3)]);
+		self::assertSame([null, null], [$owners->userOf(1), $owners->userOf(3)]);
 		self::assertSame(['paperless'], $owners->users());
 	}
 
@@ -158,8 +158,8 @@ final class OwnerMappingTest extends TestCase {
 			[ConnectionCheck::OWNERS, ConnectionCheck::PASSED, '%1$s → %2$s, documents: %3$s', ['alice', 'alice', '2'], ''],
 			[ConnectionCheck::OWNERS, ConnectionCheck::PASSED, '%1$s → %2$s, documents: %3$s', ['bob', 'bob', '0'], ''],
 			[ConnectionCheck::OWNERS, ConnectionCheck::PASSED, '%1$s → %2$s, the target user, as Nextcloud has no user with this ID; documents: %3$s', ['carol', 'paperless', '1'], ''],
-			[ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as other users of Paperless have the user of Nextcloud %3$s as well; documents: %4$s', ['dave', 'paperless', 'bob.smith (erin)', '0'], 'user_map'],
-			[ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as other users of Paperless have the user of Nextcloud %3$s as well; documents: %4$s', ['erin', 'paperless', 'bob.smith (dave)', '0'], 'user_map'],
+			[ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → nobody, as other users of Paperless have the user of Nextcloud %2$s as well, so their documents stay where their copies are; documents: %3$s', ['dave', 'bob.smith (erin)', '0'], 'user_map'],
+			[ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → nobody, as other users of Paperless have the user of Nextcloud %2$s as well, so their documents stay where their copies are; documents: %3$s', ['erin', 'bob.smith (dave)', '0'], 'user_map'],
 			[ConnectionCheck::OWNERS, ConnectionCheck::PASSED, '%1$s → %2$s, the target user, as %3$s is no member of the group; documents: %4$s', ['frank', 'paperless', 'frank', '0'], ''],
 			[ConnectionCheck::OWNERS, ConnectionCheck::PASSED, 'Without an owner → %1$s, the target user, documents: %2$s', ['paperless', '1'], ''],
 			[ConnectionCheck::OWNERS, ConnectionCheck::WARNING, 'The table names %s, but Paperless has no user of that name.', ['nobody'], 'user_map'],

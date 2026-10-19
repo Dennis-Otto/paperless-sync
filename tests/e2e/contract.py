@@ -569,8 +569,51 @@ def api(url, line):
     restored = paperless.get(f"/api/documents/{letter}/")
     check(restored["deleted_at"] is None, f"The restored document has {restored['deleted_at']!r}.")
 
+    per_user(paperless, url)
+
     save_state({"url": url, "line": line, "token": paperless.token, "version": version, "ids": ids})
     print(f"Paperless-ngx {version} answers as the app reads it.")
+
+
+def per_user(paperless, url):
+    """Per-user ownership: an account of the app that is no superuser uploads a file, owns its
+    document, as Paperless makes the uploading account the owner, and gives it to its user, as the
+    app does with PATCH. Paperless-ngx 2.x reads the document again as the account after the
+    change and answers 404 when the account no longer sees it, though the owner changed, which the
+    app takes as a success; 3.x answers 200. The counts of the documents of an owner and of those
+    without one are those of the connection checklist. The document goes again, so that the runs of
+    the app see the documents of the scenario alone."""
+    permissions = ["view_document", "add_document", "change_document", "view_paperlesstask", "view_uisettings"]
+    _, _, app_user = paperless.request(
+        "POST",
+        "/api/users/",
+        {"username": "contract-app", "password": PASSWORD, "is_superuser": False, "user_permissions": permissions},
+        expect=201,
+    )
+    _, _, owner = paperless.request("POST", "/api/users/", {"username": "contract-alice", "password": PASSWORD}, expect=201)
+    app = Paperless(url)
+    _, _, answer = app.request("POST", "/api/token/", {"username": "contract-app", "password": PASSWORD})
+    app.token = answer["token"]
+    settings = app.get("/api/ui_settings/")
+    check(settings["user"]["id"] == app_user["id"], f"/api/ui_settings/ names another account: {settings['user']!r}")
+    _, _, task_id = app.upload("per-user.pdf", pdf("Synthetic per-user contract test letter"))
+    task = paperless.task(task_id)
+    check(task["status"] == "SUCCESS", f"Paperless didn't consume the upload of the account: {task!r}")
+    document = int(task["related_document"])
+    uploaded = paperless.get(f"/api/documents/{document}/?fields=id,owner")
+    check(uploaded["owner"] == app_user["id"], f"The upload of the account belongs to {uploaded['owner']!r}, not to it.")
+    status, _, body = app.request("PATCH", f"/api/documents/{document}/", {"owner": owner["id"]}, expect=None, record="set-owner")
+    check(status in (200, 404), f"The change of the owner answered HTTP {status}: {body!r}")
+    changed = paperless.get(f"/api/documents/{document}/?fields=id,owner")
+    check(changed["owner"] == owner["id"], f"After HTTP {status}, the document belongs to {changed['owner']!r}, not to {owner['id']}.")
+    owned = paperless.get(f"/api/documents/?page=1&page_size=1&owner__id={owner['id']}", record="owned-documents")
+    expect_page("The documents of an owner", owned, 1)
+    check([item["id"] for item in owned["results"]] == [document], f"The documents of the owner are {owned!r}.")
+    unowned = paperless.get("/api/documents/?page=1&page_size=1&owner__isnull=1")
+    check(is_count(unowned.get("count")), f"The count of the documents without an owner is {unowned!r}.")
+    check(document not in [item["id"] for item in unowned["results"]], f"A document with an owner counts as without one: {unowned!r}")
+    paperless.request("DELETE", f"/api/documents/{document}/", expect=204)
+    paperless.request("POST", "/api/trash/", {"action": "empty", "documents": [document]})
 
 
 def connect():

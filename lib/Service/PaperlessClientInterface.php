@@ -93,9 +93,18 @@ interface PaperlessClientInterface {
 	public function ownedDocuments(?int $owner): int;
 
 	/**
+	 * The ID of the user of Paperless of the account of the token, which Paperless makes the owner
+	 * of every document that the app uploads, or null when Paperless doesn't say, as for an
+	 * account without the permission View for UI Settings.
+	 */
+	public function accountId(): ?int;
+
+	/**
 	 * Makes the user of Paperless with the ID $owner the owner of a document, as per-user ownership
 	 * does with the document of a file that a user of Nextcloud sent: Paperless makes the account
 	 * that uploads a file the owner of its document. Only the owner changes, not the permissions.
+	 * A document that Paperless doesn't show the account after the change, such as one that it gave
+	 * away without keeping the permission View, counts as changed.
 	 *
 	 * @throws PaperlessRequestException when Paperless can't be reached
 	 * @throws \RuntimeException when Paperless doesn't change the owner, such as for an account that may not change the document

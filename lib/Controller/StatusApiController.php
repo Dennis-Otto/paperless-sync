@@ -40,9 +40,10 @@ final class StatusApiController extends OCSController {
 	 * The health of the mirror, as the setup check of Administration → Overview names it, the last
 	 * run, also a dry-run: its state, when it started and ended, its counts and the Paperless that it
 	 * reached, and of the runs that are no dry-runs: when one last succeeded, how many in a row did
-	 * not since, and the error of the last of them.
+	 * not since, and the error of the last of them. In per-user ownership, users has the counts of
+	 * the last run for each user of Nextcloud, by their IDs; it is empty otherwise.
 	 *
-	 * @return DataResponse<Http::STATUS_OK, array{healthy: bool, health: string, enabled: bool, state: string, lastStarted: int, lastEnded: int, lastSuccess: int, nextRun: int|null, error: string, failedRuns: int, failingSince: int, summary: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}, array{}>
+	 * @return DataResponse<Http::STATUS_OK, array{healthy: bool, health: string, enabled: bool, state: string, lastStarted: int, lastEnded: int, lastSuccess: int, nextRun: int|null, error: string, failedRuns: int, failingSince: int, summary: array<string, mixed>, users: array<array-key, mixed>, paperlessVersion: string, paperlessApiVersion: string}, array{}>
 	 */
 	#[ApiRoute(verb: 'GET', url: '/api/v1/status')]
 	public function status(): DataResponse {
@@ -64,6 +65,7 @@ final class StatusApiController extends OCSController {
 			'failedRuns' => $failures['runs'],
 			'failingSince' => $failures['since'],
 			'summary' => $status['summary'],
+			'users' => isset($status['report']['users']) && is_array($status['report']['users']) ? $status['report']['users'] : [],
 			'paperlessVersion' => $status['paperlessVersion'],
 			'paperlessApiVersion' => $status['paperlessApiVersion'],
 		]);

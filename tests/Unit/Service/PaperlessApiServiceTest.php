@@ -791,6 +791,27 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
 	}
 
+	/**
+	 * Paperless-ngx 2.x saves the owner, then reads the document again as the account, which no
+	 * longer sees a document that it gave away without the permission View: the 404 is a success.
+	 */
+	public function testADocumentThatTheAccountNoLongerSeesHasItsOwner(): void {
+		$this->responses[] = [404, ['detail' => 'No Document matches the given query.']];
+
+		$this->service->setOwner(77, 5);
+
+		self::assertCount(1, $this->requests);
+	}
+
+	/** The ID of the account, which per-user ownership needs to tell the uploads of the app from the documents of the users. */
+	public function testNamesTheIdOfTheAccount(): void {
+		$this->responses[] = [200, ['user' => ['id' => 9, 'is_superuser' => false], 'permissions' => ['view_document']]];
+		$this->responses[] = [403, ['detail' => 'You do not have permission to perform this action.']];
+
+		self::assertSame([9, null], [$this->service->accountId(), $this->service->accountId()]);
+		self::assertSame(self::URL . '/api/ui_settings/', $this->requests[0]['url']);
+	}
+
 	/** @return array<string, array{int, mixed, string}> the answer of Paperless and the message of the failure */
 	public static function refusedOwners(): array {
 		return [

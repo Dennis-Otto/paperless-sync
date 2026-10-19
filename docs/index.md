@@ -38,7 +38,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 
     ---
 
-    Documents appear in folders of the configured Nextcloud user, by correspondent first by default, built from a configurable path template, as archive PDF or original file.
+    Documents appear in folders of the configured Nextcloud user, or of each user with the documents they own in Paperless, by correspondent first by default, built from a configurable path template, as archive PDF or original file.
 
 - :material-file-move-outline:{ .lg .middle } **Follows changes in Paperless**
 

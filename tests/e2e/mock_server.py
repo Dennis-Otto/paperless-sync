@@ -364,11 +364,18 @@ def scenario_documents():
         return [named_document(document_id) for document_id in NAMED_DOCUMENTS], []
     if scenario == "per-user":
         # Per-user ownership: P123 of e2e-owner, P124 of E2E-Other, whose user of Nextcloud is
-        # e2e-other, whatever the case, and the documents that the inbox of e2e-owner sent.
+        # e2e-other, whatever the case, and the documents that the inbox of e2e-owner sent. As in
+        # Paperless, the account of the app owns the document of an upload until the app gives it
+        # its owner, so the runs must hold it until then.
         other = statement()
         other["owner"] = 4
         with LOCK:
-            owners = {change["document"]: change["owner"] for change in STATE["ownerChanges"]}
+            owners = {
+                task["result_data"]["document_id"]: OWNER_ID
+                for task in STATE["tasks"].values()
+                if task["status"] == "success" and "document_id" in (task["result_data"] or {})
+            }
+            owners.update({change["document"]: change["owner"] for change in STATE["ownerChanges"]})
         sent = []
         for document_id, owner in owners.items():
             letter = document(f"Sent letter {document_id}")

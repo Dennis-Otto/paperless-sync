@@ -107,6 +107,10 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public ?\Throwable $ownerException = null;
 	/** The failure of the count of the documents of an owner. */
 	public ?\Throwable $ownedException = null;
+	/** The ID of the user of Paperless of the account of the token, or null when Paperless doesn't say. */
+	public ?int $accountId = null;
+	/** How often a run asked for the ID of the account. */
+	public int $accountReads = 0;
 
 	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
 		$this->connects[] = $connection;
@@ -202,6 +206,12 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		}
 
 		return count(array_filter($this->documents, static fn (array $document): bool => ($document['owner'] ?? null) === $owner));
+	}
+
+	public function accountId(): ?int {
+		++$this->accountReads;
+
+		return $this->accountId;
 	}
 
 	/** Changes the owner of the document, as a PATCH of /api/documents/<id>/ does, and records it. */

@@ -416,7 +416,12 @@ final class SyncService {
 				}
 			}
 			if ($config->exportEnabled) {
-				$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports);
+				$held = $this->heldOwner($paperless, $config, $owners);
+				if ($held === false) {
+					$report->error('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.');
+				} else {
+					$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports, $held);
+				}
 			}
 		} finally {
 			foreach ($reports as $user => $userReport) {
@@ -432,18 +437,25 @@ final class SyncService {
 	 * The export of per-user ownership into each archive that the run reaches: the documents that
 	 * the user gets, and the others, of which those that another archive takes leave it.
 	 *
+	 * The documents of the user of Paperless $held, the account of the app while an upload waits
+	 * for its owner, stay where their copies are, as heldOwner() explains.
+	 *
 	 * @param ExportRead $read
 	 * @param array<string, SyncConfig> $archives
 	 * @param array<string, SyncReport> $reports
 	 */
-	private function exportArchives(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, array $read, Owners $owners, array $archives, array $reports): void {
+	private function exportArchives(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, array $read, Owners $owners, array $archives, array $reports, ?int $held): void {
 		/** @var array<int, string|null> $routes the user of each document, or null for one that the run holds */
 		$routes = [];
 		$mine = array_fill_keys(array_keys($archives), []);
 		foreach ($read['documents'] as $document) {
 			$documentId = is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
 			// A document without a valid ID fails the export of the target user, as in single ownership.
-			$user = $documentId > 0 ? self::ownerOf($owners, $document) : $config->targetUser;
+			$user = match (true) {
+				$documentId <= 0 => $config->targetUser,
+				$held !== null && is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => null,
+				default => self::ownerOf($owners, $document),
+			};
 			if ($documentId > 0) {
 				$routes[$documentId] = $user;
 			}
@@ -464,6 +476,44 @@ final class SyncService {
 		if ($read['trash'] !== null) {
 			$this->checkInvisibleTrash($config, $report, $missing, count($read['trash']));
 		}
+	}
+
+	/**
+	 * The user of Paperless whose documents a run of per-user ownership holds: the account of the
+	 * app, while an upload of the inbox or of Send to Paperless waits for its owner. Paperless
+	 * makes the account that uploads a file the owner of its document, and the app gives the
+	 * document the owner of its file only once the task of the upload has ended, or in a later run
+	 * when Paperless refused the change. Until then, the document of Alice's upload looks like a
+	 * document of the account, which would go to the target user, or to the user of the account,
+	 * so the runs hold every document of the account while an upload waits, and their copies stay
+	 * where they are. Null holds nothing, as when no upload waits or each would keep the account as
+	 * its owner; false holds every document, when Paperless doesn't name its account.
+	 */
+	private function heldOwner(PaperlessClientInterface $paperless, SyncConfig $config, Owners $owners): int|false|null {
+		$waiting = [];
+		if ($config->inboxEnabled) {
+			foreach ($owners->users() as $user) {
+				$owner = $owners->paperlessUserOf($user);
+				if ($owner !== null && in_array('pending', array_map(static fn (array $import): string => (string)($import['status'] ?? ''), $this->state->allImports($user)), true)) {
+					$waiting[$owner] = true;
+				}
+			}
+		}
+		foreach ($this->state->allSends() as $send) {
+			$owner = $owners->paperlessUserOf((string)($send['user_id'] ?? ''));
+			if ($owner !== null && ($send['status'] ?? '') === SendService::PENDING) {
+				$waiting[$owner] = true;
+			}
+		}
+		if ($waiting === []) {
+			return null;
+		}
+		$account = $paperless->accountId();
+		if ($account === null) {
+			return false;
+		}
+
+		return array_diff_key($waiting, [$account => true]) === [] ? null : $account;
 	}
 
 	/**
