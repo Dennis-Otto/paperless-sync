@@ -35,11 +35,13 @@ use OCP\IUser;
 use OCP\IUserSession;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SyncControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
@@ -73,17 +75,17 @@ final class SyncControllerTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$clock,
-			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher(new TestStorage(), $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
 		);
 		$this->user = $this->createConfiguredStub(IUser::class, ['getUID' => 'admin']);
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturnCallback(fn (): ?IUser => $this->user);
-		$this->controller = new SyncController(AppConstants::APP_ID, $this->createMock(IRequest::class), $sync, $status, $this->germanL10n(), $configService, $this->jobList, $session);
+		$this->controller = new SyncController(AppConstants::APP_ID, $this->createStub(IRequest::class), $sync, $status, $this->germanL10n(), $configService, $this->jobList, $session);
 	}
 
 	public function testDryRunReturnsTheReport(): void {

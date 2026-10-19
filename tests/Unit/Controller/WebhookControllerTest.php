@@ -39,6 +39,7 @@ use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use OCP\Security\Bruteforce\IThrottler;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -49,6 +50,7 @@ use ReflectionMethod;
  * The webhook that a workflow of Paperless calls, with the run of one document behind it, as
  * Nextcloud dispatches a call: the secret in the header Authorization, the document as a parameter.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class WebhookControllerTest extends TestCase {
 	use InMemoryConfiguration;
 	use InMemoryWebhook;
@@ -379,7 +381,7 @@ final class WebhookControllerTest extends TestCase {
 	}
 
 	private function controller(): WebhookController {
-		$request = $this->createMock(IRequest::class);
+		$request = $this->createStub(IRequest::class);
 		$request->method('getHeader')->willReturnCallback(fn (string $name): string => $name === 'Authorization' ? $this->authorization : '');
 		$request->method('getRemoteAddress')->willReturn('192.0.2.10');
 		$status = $this->statusService($this->clock, $this->locking);
@@ -391,11 +393,11 @@ final class WebhookControllerTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$this->clock,
-			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher($this->storage, $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService($this->storage),
 		);
 

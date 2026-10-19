@@ -77,12 +77,12 @@ final class PaperlessApiServiceTest extends TestCase {
 	private PaperlessClientInterface $service;
 
 	protected function setUp(): void {
-		$client = $this->createMock(IClient::class);
+		$client = $this->createStub(IClient::class);
 		$client->method('get')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('GET', $url, $options));
 		$client->method('post')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('POST', $url, $options));
-		$this->clientService = $this->createMock(IClientService::class);
+		$this->clientService = $this->createStub(IClientService::class);
 		$this->clientService->method('newClient')->willReturn($client);
-		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->tempManager = $this->createStub(ITempManager::class);
 		$this->tempManager->method('getTemporaryFile')->willReturnCallback(function (): string {
 			$path = tempnam(sys_get_temp_dir(), 'paperless-sync-test-');
 			self::assertIsString($path);
@@ -91,7 +91,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			return $path;
 		});
 		// Nextcloud's check of an address against the local network, for two of its addresses.
-		$this->remoteHostValidator = $this->createMock(IRemoteHostValidator::class);
+		$this->remoteHostValidator = $this->createStub(IRemoteHostValidator::class);
 		$this->remoteHostValidator->method('isValid')->willReturnCallback(static fn (string $host): bool => !in_array($host, ['paperless', '192.168.1.20'], true));
 		$this->service = $this->client();
 	}
@@ -559,10 +559,10 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testDownloadNeedsATemporaryFile(): void {
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturn(false);
-		$clientService = $this->createMock(IClientService::class);
-		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
+		$clientService = $this->createStub(IClientService::class);
+		$clientService->method('newClient')->willReturn($this->createStub(IClient::class));
 		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
@@ -869,10 +869,10 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testUploadNeedsATemporaryFile(): void {
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturn(false);
-		$clientService = $this->createMock(IClientService::class);
-		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
+		$clientService = $this->createStub(IClientService::class);
+		$clientService->method('newClient')->willReturn($this->createStub(IClient::class));
 		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 
 		$this->expectException(RuntimeException::class);
@@ -883,10 +883,10 @@ final class PaperlessApiServiceTest extends TestCase {
 	public function testUploadThatCannotBeCopiedIsReported(): void {
 		$directory = sys_get_temp_dir() . '/paperless-sync-test-' . bin2hex(random_bytes(4));
 		mkdir($directory);
-		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager = $this->createStub(ITempManager::class);
 		$tempManager->method('getTemporaryFile')->willReturn($directory);
-		$clientService = $this->createMock(IClientService::class);
-		$clientService->method('newClient')->willReturn($this->createMock(IClient::class));
+		$clientService = $this->createStub(IClientService::class);
+		$clientService->method('newClient')->willReturn($this->createStub(IClient::class));
 		$service = new PaperlessApiService(new PaperlessConnection(self::URL, 'secret-token', false), $clientService, $tempManager, $this->createStub(IRemoteHostValidator::class));
 		$warnings = [];
 		set_error_handler(static function (int $level, string $message) use (&$warnings): bool {
@@ -2415,7 +2415,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		if (is_array($body)) {
 			$body = json_encode($body, JSON_THROW_ON_ERROR);
 		}
-		$response = $this->createMock(IResponse::class);
+		$response = $this->createStub(IResponse::class);
 		$response->method('getStatusCode')->willReturn($status);
 		$response->method('getBody')->willReturn($body);
 		$response->method('getHeader')->willReturnCallback(static fn (string $name): string => $headers[strtolower($name)] ?? '');

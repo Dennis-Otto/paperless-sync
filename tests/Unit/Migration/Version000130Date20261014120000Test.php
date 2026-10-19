@@ -111,7 +111,7 @@ final class Version000130Date20261014120000Test extends TestCase {
 		}
 		$step = new Version000130Date20261014120000($this->configService(), $this->connection());
 
-		$step->postSchemaChange($output, fn (): ISchemaWrapper => $this->createMock(ISchemaWrapper::class), []);
+		$step->postSchemaChange($output, fn (): ISchemaWrapper => $this->createStub(ISchemaWrapper::class), []);
 	}
 
 	/** @return array<string, string> the names that the app uses, by their setting */
@@ -128,7 +128,7 @@ final class Version000130Date20261014120000Test extends TestCase {
 
 	/** A database that has $rows in the tables of the state, and answers a query for the first of them. */
 	private function connection(): IDBConnection {
-		$connection = $this->createMock(IDBConnection::class);
+		$connection = $this->createStub(IDBConnection::class);
 		$connection->method('getQueryBuilder')->willReturnCallback(function (): IQueryBuilder {
 			$table = '';
 			$query = $this->createMock(IQueryBuilder::class);

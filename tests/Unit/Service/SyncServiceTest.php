@@ -48,6 +48,7 @@ use OCP\ITempManager;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
 use OCP\Security\IRemoteHostValidator;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -55,6 +56,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SyncServiceTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;

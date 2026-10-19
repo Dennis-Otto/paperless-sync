@@ -30,5 +30,14 @@
       groupName: "Paperless-ngx",
       platformAutomerge: false,
     },
+    {
+      // tests/e2e/compose.mysql.yaml tests a MariaDB that every Nextcloud of
+      // appinfo/info.xml supports: Nextcloud 33 stops at MariaDB 11.8, 12.3 comes with
+      // Nextcloud 35. Raise the bound once the min-version reaches a Nextcloud with 12:
+      // https://docs.nextcloud.com/server/latest/admin_manual/installation/system_requirements.html
+      matchFileNames: ["tests/e2e/compose.mysql.yaml"],
+      matchPackageNames: ["mariadb"],
+      allowedVersions: "<12",
+    },
   ],
 }

@@ -39,9 +39,9 @@ final class NotifierTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->status = $this->statusService(new TestClock());
-		$factory = $this->createMock(IFactory::class);
+		$factory = $this->createStub(IFactory::class);
 		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => $language === 'de' ? $this->germanL10n() : $this->englishL10n());
-		$urls = $this->createMock(IURLGenerator::class);
+		$urls = $this->createStub(IURLGenerator::class);
 		$urls->method('imagePath')->willReturnCallback(static fn (string $app, string $image): string => "/apps/{$app}/img/{$image}");
 		$urls->method('getAbsoluteURL')->willReturnCallback(static fn (string $url): string => 'https://cloud.example.test' . $url);
 		$urls->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route, array $parameters): string => "https://cloud.example.test/{$route}?" . http_build_query($parameters));
@@ -223,7 +223,7 @@ final class NotifierTest extends TestCase {
 
 	/** Nextcloud's translation of a text that has none: the text, with its parameters and the count. */
 	private function englishL10n(): IL10N {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static fn (string $text, array|string $parameters = []): string => vsprintf($text, (array)$parameters));
 		$l10n->method('n')->willReturnCallback(static fn (string $singular, string $plural, int $count, array $parameters = []): string => vsprintf(str_replace('%n', (string)$count, $count === 1 ? $singular : $plural), $parameters));
 

@@ -42,6 +42,7 @@ use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -49,6 +50,7 @@ use Psr\Log\LoggerInterface;
 use ReflectionMethod;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SettingsControllerTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
@@ -93,7 +95,7 @@ final class SettingsControllerTest extends TestCase {
 
 			return $this->checks;
 		});
-		$this->clients = $this->createMock(PaperlessClientFactoryInterface::class);
+		$this->clients = $this->createStub(PaperlessClientFactoryInterface::class);
 		$this->clients->method('connect')->willReturnCallback(function (PaperlessConnection $connection): PaperlessClientInterface {
 			$this->connects[] = $connection;
 
@@ -286,7 +288,7 @@ final class SettingsControllerTest extends TestCase {
 	 */
 	public function testASaveThatFailsAfterTheTestsDoesNotPointToTheSchedule(): void {
 		$this->configService()->save(self::validSettings() + ['enabled' => true], 'secret-token');
-		$credentials = $this->createMock(ICredentialsManager::class);
+		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(fn (): mixed => $this->credential);
 		$credentials->method('store')->willThrowException(new RuntimeException('Unavailable.'));
 		$controller = $this->controller($this->configService(credentials: $credentials));
@@ -785,18 +787,18 @@ final class SettingsControllerTest extends TestCase {
 			new TestStateRepository(),
 			$paths,
 			$status,
-			$this->createMock(ILockingProvider::class),
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(ILockingProvider::class),
+			$this->createStub(LoggerInterface::class),
 			$clock,
-			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher($this->storage, $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, $this->storage, $clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, $this->storage, $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService($this->storage),
 		);
 
 		return new SettingsController(
 			AppConstants::APP_ID,
-			$this->createMock(IRequest::class),
+			$this->createStub(IRequest::class),
 			$configService,
 			$this->clients,
 			$this->storage,
