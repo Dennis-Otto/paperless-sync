@@ -184,7 +184,7 @@ CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3
 
 In the CI, the jobs *Paperless-ngx 2.x* and *Paperless-ngx 3.x* of `.github/workflows/e2e.yml` run every Monday with the canary, when started by hand, and in a pull request that changes how the app talks to Paperless: its client (`lib/Service/Paperless*`, `lib/Model/DocumentFingerprint.php`), the mock, the fixtures, the contract tests or the workflow (`affected.sh` with `E2E_QUESTION=contract`). Each keeps the answers of Paperless as an artifact of the run, so new fixtures need no Docker. They are no required checks ([decision 0015](../../docs/decisions/0015-check-the-mock-against-a-real-paperless.md)); when they fail on Monday, they open the issue *The contract tests against Paperless-ngx fail*, add every further failed run to it, and close it once they pass again. The contract tests also read the paths, reports, settings and status of the app, so a change there can fail them too; the log of the run says which answer differed.
 
-On Paperless-ngx 2.x, a task that has just failed first reports `<traceback object at 0x…>` as its result and its reason a moment later; the contract tests wait for the reason, and [issue #161](https://github.com/Dennis-Otto/paperless-sync/issues/161) tracks the same wait in the app.
+On Paperless-ngx 2.x, a task that has just failed first reports `<traceback object at 0x…>` as its result and its reason a moment later; the contract tests wait for the reason, as the app does ([issue #161](https://github.com/Dennis-Otto/paperless-sync/issues/161)).
 
 Optional environment variables:
 
