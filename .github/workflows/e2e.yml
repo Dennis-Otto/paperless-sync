@@ -39,6 +39,11 @@ name: Docker E2E
 # fixtures of the unit tests (tests/fixtures/). They are no required check either; a
 # failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
 # or adds the run to it, and closes it once they pass again.
+#
+# A job that fails says what failed, why that matters and how to fix it, from
+# .github/checks.project.toml: in its summary, as its annotation and, after the checks,
+# in the comment of the PR coach on the pull request, also on one from a fork.
+# tests/coach/test_checks_project.py checks that every job that runs the code does.
 
 on:
   push:
@@ -89,6 +94,16 @@ jobs:
           # The job variants runs the other databases and S3.
           E2E_VARIANTS: none
         run: bash tests/e2e/run-all.sh
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: nextcloud
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
 
   variants:
     name: nextcloud on PostgreSQL, MariaDB and S3
@@ -117,6 +132,16 @@ jobs:
         env:
           E2E_VERSIONS: none
         run: bash tests/e2e/run-all.sh
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: nextcloud on PostgreSQL, MariaDB and S3
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
 
   coming:
     name: coming Nextcloud
@@ -138,6 +163,16 @@ jobs:
       - name: Run the Paperless Sync end-to-end tests against the coming Nextcloud
         id: canary
         run: bash tests/e2e/canary.sh
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: coming Nextcloud
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
 
   # The only job that may write issues, and it runs no code of the repository. A run
   # started by hand on another branch than main reports nothing.
