@@ -48,6 +48,15 @@ final class ExportPlanner {
 	private array $seen = [];
 	/** The exported documents that the plan counts as missing without having seen them in the trash. */
 	private int $missingActive = 0;
+	/**
+	 * The questions to Paperless that confirm a missing scan, for copies to move or delete and for
+	 * states alone, each at most the batch size per run.
+	 *
+	 * @var array{copy: int, state: int}
+	 */
+	private array $questions = ['copy' => 0, 'state' => 0];
+	/** Whether a question to Paperless failed, which leaves the other missing documents for a later run. */
+	private bool $unanswered = false;
 
 	/**
 	 * @param \Closure(array<string, mixed>): string $pathOf the path of a document below the archive folder, from the path template
@@ -303,6 +312,9 @@ final class ExportPlanner {
 	 * asks Paperless for the document itself: when Paperless has it, its count starts anew as if
 	 * the scan had listed it; when Paperless answers with an error, it counts nothing in this run
 	 * and the report names it. A scan that would change nothing costs no question (confirms()).
+	 * The questions stop after the first error, and at the batch size, once for copies to move or
+	 * delete and once for states alone, so that a mass vanish or a
+	 * Paperless that hangs keeps a run short; the documents left over count nothing in this run.
 	 *
 	 * @param array<string, int|string|null> $entry
 	 * @return list<ExportAction>
@@ -317,13 +329,29 @@ final class ExportPlanner {
 		$context = DocumentContext::missing($documentId, $entry);
 		try {
 			$action = $this->missingScan($documentId, $entry, $context);
-			// Paperless answers 404 for a document that it no longer shows the account; any other
-			// answer than the document throws.
-			if (self::confirms($action, $entry) && $this->paperless->document($documentId) !== null) {
-				return self::listed($documentId, $entry);
-			}
 		} catch (\Throwable $exception) {
 			return [new Failed($context, $exception)];
+		}
+		if (self::confirms($action, $entry)) {
+			// After a failed question, or past the batch size, a document counts nothing in this
+			// run, as one that waits for room in the batch. A change of a state alone takes no
+			// place in the batch, so its questions have a budget of their own.
+			$kind = $action instanceof MoveToDeleted || $action instanceof RemoveCopy ? 'copy' : 'state';
+			if ($this->unanswered || $this->questions[$kind] >= $this->config->batchSize) {
+				return [];
+			}
+			++$this->questions[$kind];
+			try {
+				// Paperless answers 404 for a document that it no longer shows the account; any
+				// other answer than the document throws.
+				if ($this->paperless->document($documentId) !== null) {
+					return self::listed($documentId, $entry);
+				}
+			} catch (\Throwable $exception) {
+				$this->unanswered = true;
+
+				return [new Failed($context, $exception)];
+			}
 		}
 		if (($entry['state'] ?? 'active') === 'active') {
 			++$this->missingActive;

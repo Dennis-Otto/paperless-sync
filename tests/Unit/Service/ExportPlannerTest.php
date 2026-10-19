@@ -370,17 +370,42 @@ final class ExportPlannerTest extends TestCase {
 
 	/**
 	 * When Paperless answers the question with an error, the document counts nothing in this run,
-	 * and the report names it; the other documents carry on.
+	 * and the report names it; the plan asks no more questions, so the other missing documents
+	 * count nothing in this run either, while the listed ones carry on.
 	 */
 	public function testAFailedQuestionToPaperlessCountsNothingForItsDocument(): void {
-		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B']]]);
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B'], [3, 'C']], 'documents' => [[3, 'C']]]);
 		$this->paperless->documentException = new RuntimeException('Paperless answered HTTP 502 to query document');
 
 		$plan = $this->plan($documents, [], true, ['permanentDelete' => true, 'allowDirectDelete' => true]);
 
-		self::assertSame(['failed Missing P1: Paperless answered HTTP 502 to query document', 'failed Missing P2: Paperless answered HTTP 502 to query document'], $plan);
+		self::assertSame(['unchanged P3', 'failed Missing P1: Paperless answered HTTP 502 to query document'], $plan);
 		self::assertSame(0, $this->missingActive, 'A document that Paperless may still have counts as missing for no warning.');
+		self::assertSame([1], $this->paperless->documentReads, 'A Paperless that hangs costs one timeout per run, not one per document.');
+	}
+
+	/**
+	 * A run asks Paperless about at most as many missing documents as the batch size allows for
+	 * states alone, so a mass vanish keeps a run short; the others count nothing in this run and
+	 * wait for the next.
+	 */
+	public function testTheQuestionsToPaperlessForStatesStopAtTheBatchSize(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A'], [2, 'B'], [3, 'C']]]);
+
+		self::assertSame(['wait P1: 1/3', 'wait P2: 1/3'], $this->plan($documents, [], true, ['batchSize' => 2]));
 		self::assertSame([1, 2], $this->paperless->documentReads);
+		self::assertSame(2, $this->missingActive);
+	}
+
+	/**
+	 * A copy that Paperless confirms present takes no place in the batch, so the questions for
+	 * copies to move have a limit of their own, also when Paperless still has every document.
+	 */
+	public function testTheQuestionsToPaperlessForCopiesStopAtTheBatchSize(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A', 'm1', ['missing_runs' => 2]], [2, 'B', 'm1', ['missing_runs' => 2]], [3, 'C', 'm1', ['missing_runs' => 2]]], 'unlisted' => [1, 2, 3]]);
+
+		self::assertSame(['save P1: missing_runs=0'], $this->plan($documents, [], true, ['batchSize' => 1]));
+		self::assertSame([1], $this->paperless->documentReads);
 	}
 
 	/**
