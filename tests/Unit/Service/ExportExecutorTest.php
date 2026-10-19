@@ -35,6 +35,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCP\Files\NotEnoughSpaceException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -45,6 +46,7 @@ use RuntimeException;
  * The executor of the export is the one place where a dry-run and a run differ: a run makes the
  * changes of the plan, and a dry-run reports the same changes, in the same batch, and makes none.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class ExportExecutorTest extends TestCase {
 	private const ARCHIVE = TestConfig::ARCHIVE;
 	private const OLD = self::ARCHIVE . '/Alt/A [P1].pdf';

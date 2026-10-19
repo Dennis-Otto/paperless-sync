@@ -38,7 +38,7 @@ final class AdminSettingsTest extends TestCase {
 	private array $initialState = [];
 
 	protected function setUp(): void {
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
+		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRoute')->willReturnCallback(static fn (string $route): string => '/route/' . $route);
 		$this->urlGenerator->method('getWebroot')->willReturn('/cloud');
 		$this->urlGenerator->method('imagePath')->willReturnCallback(static fn (string $app, string $file): string => "/apps/{$app}/img/{$file}");
@@ -204,7 +204,7 @@ final class AdminSettingsTest extends TestCase {
 
 	public function testFormBelongsToTheSectionOfTheApp(): void {
 		$settings = $this->adminSettings();
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static fn (string $text): string => $text === 'Paperless Sync' ? 'Paperless-Synchronisation' : $text);
 		$section = new AdminSection($l10n, $this->urlGenerator);
 
@@ -217,13 +217,13 @@ final class AdminSettingsTest extends TestCase {
 	}
 
 	private function adminSettings(): AdminSettings {
-		$initialState = $this->createMock(IInitialState::class);
+		$initialState = $this->createStub(IInitialState::class);
 		$initialState->method('provideInitialState')->willReturnCallback(function (string $key, mixed $data): void {
 			$this->initialState[$key] = $data;
 		});
 
 		$status = $this->statusService(new TestClock());
-		$formatter = $this->createMock(IDateTimeFormatter::class);
+		$formatter = $this->createStub(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturn('vor 2 Stunden');
 
 		return new AdminSettings(

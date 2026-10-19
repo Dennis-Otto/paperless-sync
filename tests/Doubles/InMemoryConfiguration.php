@@ -94,7 +94,7 @@ trait InMemoryConfiguration {
 	 * @return IAppConfig&MockObject
 	 */
 	private function appConfig(): IAppConfig {
-		$mock = $this->createMock(IAppConfig::class);
+		$mock = $this->createStub(IAppConfig::class);
 		$read = function (string $key, bool|int|string $default, bool $lazy): bool|int|string {
 			if ($lazy) {
 				$this->lazyReads[$key] = true;
@@ -151,7 +151,7 @@ trait InMemoryConfiguration {
 		$catalog = json_decode((string)file_get_contents(__DIR__ . '/../../l10n/de.json'), true, 512, JSON_THROW_ON_ERROR);
 		/** @var array<string, string> $german */
 		$german = $catalog['translations'];
-		$factory = $this->createMock(IFactory::class);
+		$factory = $this->createStub(IFactory::class);
 		// Like Nextcloud, findGenericLanguage() of the app gives English for a language without a
 		// catalog of the app, even when its generic language has one, which the app must not rely on.
 		$factory->method('findGenericLanguage')->willReturnCallback(fn (?string $app = null): string => $app === null || in_array($this->defaultLanguage, ['en', 'de'], true) ? $this->defaultLanguage : 'en');
@@ -159,7 +159,7 @@ trait InMemoryConfiguration {
 		$factory->method('get')->willReturnCallback(function (string $app, ?string $language = null) use ($german): IL10N {
 			// Nextcloud would take the language of whoever reads instead of one without a catalog.
 			self::assertContains($language, ['en', 'de'], 'The app has no catalog for this language.');
-			$l10n = $this->createMock(IL10N::class);
+			$l10n = $this->createStub(IL10N::class);
 			$l10n->method('t')->willReturnCallback(static function (string $text, array|string $parameters = []) use ($language, $german): string {
 				if ($language === 'de') {
 					self::assertArrayHasKey($text, $german, 'l10n/de.json has no translation of this text.');
@@ -182,7 +182,7 @@ trait InMemoryConfiguration {
 	 * @return IConfig&MockObject
 	 */
 	private function systemConfig(): IConfig {
-		$config = $this->createMock(IConfig::class);
+		$config = $this->createStub(IConfig::class);
 		// Nextcloud casts the value to a string, so true reads as '1' and false as ''.
 		$config->method('getSystemValueString')->willReturnCallback(fn (string $key, string $default = ''): string => match ($key) {
 			'force_language' => (string)$this->forcedLanguage,
@@ -195,7 +195,7 @@ trait InMemoryConfiguration {
 
 	/** @return ICredentialsManager&MockObject */
 	private function credentialsManager(): ICredentialsManager {
-		$credentials = $this->createMock(ICredentialsManager::class);
+		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(function (): mixed {
 			++$this->credentialReads;
 

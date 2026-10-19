@@ -21,12 +21,14 @@ use OCA\PaperlessSync\Tests\Doubles\TestServer;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use OCP\BackgroundJob\IJobList;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SendJobTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedNotifications;
@@ -66,7 +68,7 @@ final class SendJobTest extends TestCase {
 		$id = $this->storage->fileId('Scans/receipt.pdf', 'alice');
 		$this->state->saveSend('alice', $id, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
 
-		$this->job()->start($this->createMock(IJobList::class));
+		$this->job()->start($this->createStub(IJobList::class));
 
 		self::assertSame(['receipt.pdf'], array_keys($this->paperless->uploads));
 	}
@@ -74,18 +76,18 @@ final class SendJobTest extends TestCase {
 	/** A failure of the whole round is logged, and the files wait for the next one. */
 	public function testAFailedRoundIsLogged(): void {
 		$failure = new RuntimeException('The database is gone.');
-		$state = $this->createMock(SyncStateRepositoryInterface::class);
+		$state = $this->createStub(SyncStateRepositoryInterface::class);
 		$state->method('allSends')->willThrowException($failure);
 		$this->logger->expects(self::once())->method('error')->with(self::stringContains('could not send the files queued in Files'), self::callback(
 			static fn (array $context): bool => $context['error'] === 'The database is gone.' && $context['exception'] === $failure,
 		));
 
-		$this->job($state)->start($this->createMock(IJobList::class));
+		$this->job($state)->start($this->createStub(IJobList::class));
 	}
 
 	private function job(?SyncStateRepositoryInterface $state = null): SendJob {
-		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createMock(LoggerInterface::class));
-		$service = new SendService($this->configService(), $this->paperless, $state ?? $this->state, $this->storage, $publisher, $this->clock, $this->createMock(LoggerInterface::class));
+		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
+		$service = new SendService($this->configService(), $this->paperless, $state ?? $this->state, $this->storage, $publisher, $this->clock, $this->createStub(LoggerInterface::class));
 
 		return new SendJob($this->clock, $service, $this->logger);
 	}

@@ -36,7 +36,7 @@ final class SettingAndFilterTest extends TestCase {
 	}
 
 	public function testFilterShowsTheEntriesOfTheAppAlone(): void {
-		$urls = $this->createMock(IURLGenerator::class);
+		$urls = $this->createStub(IURLGenerator::class);
 		$urls->method('imagePath')->willReturnCallback(static fn (string $app, string $image): string => "/apps/{$app}/img/{$image}");
 		$urls->method('getAbsoluteURL')->willReturnCallback(static fn (string $url): string => 'https://cloud.example.test' . $url);
 		$filter = new Filter($this->germanL10n(), $urls);

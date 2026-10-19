@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestNotification;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
 use OCA\PaperlessSync\Tests\Doubles\TestStateRepository;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -29,6 +30,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SendServiceTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedNotifications;
@@ -52,7 +54,7 @@ final class SendServiceTest extends TestCase {
 		$this->state = new TestStateRepository();
 		$this->paperless = new TestPaperlessClient();
 		$this->logger = $this->createMock(LoggerInterface::class);
-		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createMock(LoggerInterface::class));
+		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
 		$this->service = new SendService($this->configService, $this->paperless, $this->state, $this->storage, $publisher, $this->clock, $this->logger);
 	}
 
@@ -186,9 +188,9 @@ final class SendServiceTest extends TestCase {
 
 	/** A sender whose account was deleted has no files left. */
 	public function testTheFilesOfAUserThatIsGoneAreGone(): void {
-		$storage = $this->createMock(NextcloudStorageInterface::class);
+		$storage = $this->createStub(NextcloudStorageInterface::class);
 		$storage->method('nodeById')->willThrowException(new RuntimeException('Backends provided no user object for alice'));
-		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createMock(LoggerInterface::class));
+		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
 		$this->state->saveSend(self::SENDER, 5, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
 
 		(new SendService($this->configService, $this->paperless, $this->state, $storage, $publisher, $this->clock, $this->logger))->process();

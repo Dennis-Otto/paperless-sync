@@ -54,7 +54,7 @@ final class ForgetTest extends TestCase {
 		foreach ([123, 124, 125] as $documentId) {
 			$this->state->saveExport('paperless', $documentId, ['path' => "Archiv/P{$documentId}.pdf", 'fingerprint' => self::FINGERPRINT]);
 		}
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$clock = new TestClock();
 		$status = $this->statusService($clock, $this->locking);
 		$sync = new SyncService(
@@ -65,11 +65,11 @@ final class ForgetTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$clock,
-			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher(new TestStorage(), $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
 		);
 		$this->forget = new Forget($sync);

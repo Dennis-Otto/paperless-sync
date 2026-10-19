@@ -238,7 +238,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 						<?php foreach (PathTemplateService::VARIABLES as $variable) { ?>
 							<button type="button" class="paperless-sync-code" data-variable="<?php p($variable); ?>" aria-label="<?php p($l->t('Insert %s', ['{{ ' . $variable . ' }}'])); ?>"><?php p($variable); ?></button>
 						<?php } ?>
-						<button type="button" class="paperless-sync-code" data-variable="custom_fields.<?php p($l->t('Name')); ?>" data-select="<?php p($l->t('Name')); ?>" aria-label="<?php p($l->t('Insert a custom field, then type its name')); ?>">custom_fields.…</button>
+						<button type="button" class="paperless-sync-code" data-variable="custom_fields.<?php p($l->t('Name')); ?>" data-select="<?php p($l->t('Name')); ?>" title="<?php p($l->t('Insert a custom field, then type its name')); ?>">custom_fields.…</button>
 					</div>
 					<p id="paperless-sync-path-template-hint" class="settings-hint"><?php p($l->t('Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.')); ?> <?php p($l->t('Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.')); ?></p>
 					<div id="paperless-sync-path-preview" class="paperless-sync-path-preview">

@@ -28,6 +28,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -36,6 +37,7 @@ use Psr\Log\NullLogger;
 /**
  * The background job of "Synchronize now", started the way Nextcloud's cron starts it.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class ManualSyncJobTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedActivities;
@@ -53,7 +55,7 @@ final class ManualSyncJobTest extends TestCase {
 	protected function setUp(): void {
 		// Scheduled runs are off: a run by hand runs all the same.
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->paperless = new TestPaperlessClient();
 		$clock = new TestClock();
@@ -66,15 +68,15 @@ final class ManualSyncJobTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$clock,
-			$this->activityPublisher(new TestStorage(), $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher(new TestStorage(), $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
 		);
 		$this->jobList = $this->createMock(IJobList::class);
-		$this->job = new ManualSyncJob($this->createMock(ITimeFactory::class), $sync, $this->jobList, $this->logger);
+		$this->job = new ManualSyncJob($this->createStub(ITimeFactory::class), $sync, $this->jobList, $this->logger);
 		$this->job->setId('42');
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
 	}
@@ -101,7 +103,7 @@ final class ManualSyncJobTest extends TestCase {
 		$this->paperless->contents = [5 => '%PDF-5'];
 		$this->job->setArgument(['author' => 'admin']);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertCount(1, $this->activities);
 		self::assertSame('admin', $this->activities[0]->getAuthor());
@@ -112,7 +114,7 @@ final class ManualSyncJobTest extends TestCase {
 		$this->paperless->contents = [5 => '%PDF-5'];
 		$this->job->setArgument(['author' => 42]);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertCount(1, $this->activities);
 		self::assertSame('', $this->activities[0]->getAuthor());
@@ -129,7 +131,7 @@ final class ManualSyncJobTest extends TestCase {
 		$this->logger->expects(self::never())->method('error');
 		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization by hand postponed: another run is active.');
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame([], $this->paperless->connections);
 	}
@@ -137,7 +139,7 @@ final class ManualSyncJobTest extends TestCase {
 	public function testCompletedRunIsNotQueuedAgain(): void {
 		$this->jobList->expects(self::never())->method('add');
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 	}
 
 	/** Only the message: the synchronization logs a failed run with its trace already. */
@@ -148,7 +150,7 @@ final class ManualSyncJobTest extends TestCase {
 			['error' => 'Paperless Sync is not completely configured.'],
 		);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame('failed', $this->settings['status_last_state']);
 	}

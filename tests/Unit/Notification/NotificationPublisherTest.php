@@ -18,11 +18,13 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class NotificationPublisherTest extends TestCase {
 	use InMemoryConfiguration;
 	use RecordedNotifications;

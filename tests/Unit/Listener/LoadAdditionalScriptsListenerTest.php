@@ -51,7 +51,7 @@ final class LoadAdditionalScriptsListenerTest extends TestCase {
 
 			return $user;
 		});
-		$initialState = $this->createMock(IInitialState::class);
+		$initialState = $this->createStub(IInitialState::class);
 		$initialState->method('provideInitialState')->willReturnCallback(function (string $key, mixed $data): void {
 			$this->states[$key] = $data;
 		});

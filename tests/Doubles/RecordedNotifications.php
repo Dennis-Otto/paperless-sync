@@ -40,7 +40,7 @@ trait RecordedNotifications {
 	}
 
 	private function notificationManager(): IManager {
-		$manager = $this->createMock(IManager::class);
+		$manager = $this->createStub(IManager::class);
 		$manager->method('createNotification')->willReturnCallback(static fn (): INotification => new TestNotification());
 		$manager->method('notify')->willReturnCallback(function (INotification $notification): void {
 			if ($this->notificationFailure !== null) {
@@ -66,19 +66,19 @@ trait RecordedNotifications {
 	}
 
 	private function groupManager(): IGroupManager {
-		$groups = $this->createMock(IGroupManager::class);
+		$groups = $this->createStub(IGroupManager::class);
 		$groups->method('get')->willReturnCallback(function (string $groupId): ?IGroup {
 			if (!isset($this->groupMembers[$groupId])) {
 				return null;
 			}
 			$users = [];
 			foreach ($this->groupMembers[$groupId] as $userId => $enabled) {
-				$user = $this->createMock(IUser::class);
+				$user = $this->createStub(IUser::class);
 				$user->method('getUID')->willReturn($userId);
 				$user->method('isEnabled')->willReturn($enabled);
 				$users[] = $user;
 			}
-			$group = $this->createMock(IGroup::class);
+			$group = $this->createStub(IGroup::class);
 			$group->method('getUsers')->willReturn($users);
 
 			return $group;
