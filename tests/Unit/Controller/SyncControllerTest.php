@@ -81,6 +81,7 @@ final class SyncControllerTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
+			$this->ownerMapping(),
 		);
 		$this->user = $this->createConfiguredStub(IUser::class, ['getUID' => 'admin']);
 		$session = $this->createStub(IUserSession::class);
@@ -251,6 +252,10 @@ final class SyncControllerTest extends TestCase {
 			'another Paperless' => ['paperless_url', 'https://other.example.test'],
 			'the local network' => ['paperless_local_network', true],
 			'another target user' => ['target_user', 'someone-else'],
+			// Who gets the documents decides whose files a run reads, as the target user does.
+			'per-user ownership' => ['ownership', 'per-user'],
+			'another table of users' => ['user_map', 'jdoe = paperless'],
+			'another group of users' => ['user_group', 'scanners'],
 		];
 	}
 
@@ -266,7 +271,7 @@ final class SyncControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
 		self::assertSame([
-			'message' => 'Ein Testlauf ungespeicherter Einstellungen verwendet die gespeicherte Verbindung zu Paperless und den gespeicherten Zielbenutzer. Speichere die Einstellungen, um eine andere Verbindung oder einen anderen Zielbenutzer auszuprobieren.',
+			'message' => 'Ein Testlauf ungespeicherter Einstellungen verwendet die gespeicherte Verbindung zu Paperless und die gespeicherten Benutzer, die die Dokumente erhalten. Speichere die Einstellungen, um andere auszuprobieren.',
 			'setting' => $setting,
 		], $response->getData());
 		self::assertSame([], $this->paperless->connections);

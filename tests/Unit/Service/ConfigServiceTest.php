@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\PaperlessConnection;
+use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -227,6 +228,30 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('', $this->service->save(['send_group' => ''] + self::validSettings())->sendGroup, 'An empty group turns the action off.');
 	}
 
+	/**
+	 * Single ownership stays the default, as before per-user ownership; per-user ownership keeps
+	 * the table with the IDs of the users as Nextcloud spells them, so that a run finds them.
+	 */
+	public function testOwnershipIsSingleUntilAnAdministratorChoosesPerUser(): void {
+		$config = $this->service->get();
+		self::assertSame([SyncConfig::SINGLE, false, '', ''], [$config->ownership, $config->perUser(), $config->userMap, $config->userGroup]);
+
+		$config = $this->service->save(['ownership' => 'per-user', 'user_map' => " jdoe=ADMIN \n\n Max Muster = paperless", 'user_group' => ' scanners '] + self::validSettings(), 'secret-token');
+
+		self::assertSame([true, "jdoe = admin\nMax Muster = paperless", 'scanners'], [$config->perUser(), $config->userMap, $config->userGroup]);
+		self::assertSame(['per-user', "jdoe = admin\nMax Muster = paperless", 'scanners'], [$this->settings['ownership'], $this->settings['user_map'], $this->settings['user_group']]);
+		$alice = $config->withTargetUser('alice');
+		self::assertSame(['alice', 'paperless'], [$alice->targetUser, $config->targetUser]);
+		self::assertSame(array_diff_key($config->jsonSerialize(), ['targetUser' => true]), array_diff_key($alice->jsonSerialize(), ['targetUser' => true]), 'The archive of another user has the same settings.');
+	}
+
+	/** The table and the group count only in per-user ownership, so single ownership keeps them unchecked, as typed. */
+	public function testSingleOwnershipKeepsTheTableAndTheGroupAsTheyAre(): void {
+		$config = $this->service->save(['ownership' => 'single', 'user_map' => " half a line \n", 'user_group' => 'nobody'] + self::validSettings(), 'secret-token');
+
+		self::assertSame([false, 'half a line', 'nobody'], [$config->perUser(), $config->userMap, $config->userGroup]);
+	}
+
 	/** The tags of Paperless reach Nextcloud only once an administrator turns them on. */
 	public function testTheTagsInNextcloudAreOffUntilTurnedOn(): void {
 		self::assertFalse($this->service->get()->nextcloudTags);
@@ -248,7 +273,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(37, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(40, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 
@@ -567,6 +592,12 @@ final class ConfigServiceTest extends TestCase {
 			'unknown conflict policy' => [['conflict_mode' => 'rename'], 'Choose one of the options of "File conflict policy".', 'conflict_mode', 'Wähle eine der Optionen von „Dateikonflikt-Regel“.'],
 			// A group that someone creates later under the name must not get the action unasked.
 			'a group that does not exist' => [['send_group' => 'scaners'], 'Nextcloud group scaners does not exist.', 'send_group', 'Die Nextcloud-Gruppe scaners gibt es nicht.'],
+			'unknown ownership' => [['ownership' => 'shared'], 'Choose one of the options of "Who gets the documents".', 'ownership', 'Wähle eine der Optionen von „Wer die Dokumente erhält“.'],
+			'a line of the table that is no mapping' => [['ownership' => 'per-user', 'user_map' => "jdoe = admin\njdoe"], '"Paperless users with another Nextcloud ID", line 2: write the user of Paperless, an equals sign and the user ID of Nextcloud, such as jdoe = john.doe.', 'user_map', '„Paperless-Benutzer mit einer anderen Nextcloud-ID“, Zeile 2: Schreibe den Benutzer von Paperless, ein Gleichheitszeichen und die Benutzer-ID von Nextcloud, etwa jdoe = john.doe.'],
+			'a user of Paperless twice in the table' => [['ownership' => 'per-user', 'user_map' => "jdoe = admin\nJDoe = paperless"], '"Paperless users with another Nextcloud ID", line 2: the user JDoe of Paperless has a line already.', 'user_map', '„Paperless-Benutzer mit einer anderen Nextcloud-ID“, Zeile 2: Der Benutzer JDoe von Paperless hat schon eine Zeile.'],
+			// A user whom someone creates later under the ID must not get the documents unasked.
+			'a user of Nextcloud in the table that does not exist' => [['ownership' => 'per-user', 'user_map' => 'jdoe = john.doe'], '"Paperless users with another Nextcloud ID", line 1: Nextcloud has no user with the ID john.doe.', 'user_map', '„Paperless-Benutzer mit einer anderen Nextcloud-ID“, Zeile 1: Nextcloud hat keinen Benutzer mit der ID john.doe.'],
+			'a group of the users that does not exist' => [['ownership' => 'per-user', 'user_group' => 'scaners'], 'Nextcloud group scaners does not exist.', 'user_group', 'Die Nextcloud-Gruppe scaners gibt es nicht.'],
 		];
 	}
 

@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\OwnerMapping;
 use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -48,6 +49,7 @@ final class SettingsController extends Controller {
 		private IL10N $l10n,
 		private SyncService $syncService,
 		private PathTemplateService $pathTemplate,
+		private OwnerMapping $ownerMapping,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -256,13 +258,18 @@ final class SettingsController extends Controller {
 
 	/**
 	 * The connection checklist: the checks of Paperless, with $token to the URL of $config and its
-	 * local network, then whether the target user may create files in the base folder, which every
+	 * local network, in per-user ownership who gets the documents of whom, once Paperless
+	 * answered, then whether the target user may create files in the base folder, which every
 	 * run needs, whatever Paperless answered.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
 	private function checks(SyncConfig $config, #[\SensitiveParameter] string $token): array {
-		$checks = $this->clients->connect(PaperlessConnection::of($config, $token))->preflight($config);
+		$paperless = $this->clients->connect(PaperlessConnection::of($config, $token));
+		$checks = $paperless->preflight($config);
+		if ($config->perUser() && array_filter($checks, static fn (ConnectionCheck $check): bool => $check->blocks()) === []) {
+			array_push($checks, ...$this->ownerMapping->checks($config, $paperless, $this->storage));
+		}
 		try {
 			$this->storage->test($config->targetUser, $config->basePath);
 			$checks[] = ConnectionCheck::passed(ConnectionCheck::FOLDER, '%s may create files in %s.', [$config->targetUser, $config->basePath]);

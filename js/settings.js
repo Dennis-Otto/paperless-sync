@@ -301,6 +301,9 @@
 		const reportEntries = element('report-entries')
 		const reportMeta = element('report-meta')
 		const reportOmitted = element('report-omitted')
+		const reportUsers = element('report-users')
+		const reportUsersList = element('report-users-list')
+		const ownership = element('ownership')
 		const lastState = element('last-state')
 		const running = element('running')
 		const lastEnded = element('last-ended')
@@ -325,7 +328,7 @@
 		const webhookSecret = element('webhook-secret')
 		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group']
 		// While a run is queued or active, the page asks for its status: after a change of the state
 		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
 		// once, then every five seconds, and after five minutes in the same state every thirty
@@ -494,7 +497,16 @@
 			return schedule.checked || token.value.trim() !== ''
 		}
 
+		// The fields of per-user ownership show only while "Who gets the documents" asks for it.
+		function showOwnership() {
+			const perUser = ownership.value === 'per-user'
+			root.querySelectorAll('[data-per-user]').forEach(function(field) {
+				field.hidden = !perUser
+			})
+		}
+
 		function updateForm() {
+			showOwnership()
 			updateToken()
 			updateButtons()
 			setText(save, willTest() ? translate('Test connection and save') : translate('Save'))
@@ -790,6 +802,7 @@
 			'tags-not-created': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
+			'remove-reassigned': { label: translate('Other user'), tone: 'warning', rank: 2 },
 			trash: { label: translate('Trash'), tone: 'warning', rank: 2 },
 			missing: { label: translate('Missing'), tone: 'warning', rank: 2 },
 			wait: { label: translate('Waiting'), tone: 'neutral', rank: 2 },
@@ -809,6 +822,7 @@
 			['movedToTrash', translate('Moved to trash'), 'warning'],
 			['permanentlyDeleted', translate('Deleted'), 'warning'],
 			['removedExcluded', translate('Excluded copies removed'), 'warning'],
+			['removedReassigned', translate('Copies of another user now'), 'warning'],
 			['importsSubmitted', translate('Imports submitted'), 'info'],
 			['importsSucceeded', translate('Imports succeeded'), 'success'],
 			['importsFailed', translate('Imports failed'), 'error'],
@@ -829,6 +843,8 @@
 				return translate('The copy is deleted for good.')
 			case 'remove-excluded':
 				return translate('The settings leave the document out, with an excluded tag or without a tag to mirror: its copy is removed.')
+			case 'remove-reassigned':
+				return translate('The document goes to another user now, as its owner in Paperless or the settings changed: this copy is removed.')
 			case 'wait':
 				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
 			case 'import':
@@ -933,7 +949,10 @@
 			return file
 		}
 
-		function entryItem(entry, dryRun, owner) {
+		// The user of an entry of per-user ownership, whose files the entry names, or else the target
+		// user, owns its file: the report opens the folder of the file for that user alone.
+		function entryItem(entry, dryRun, reader) {
+			const owner = reader !== '' && reader === (typeof entry.user === 'string' ? entry.user : savedTargetUser)
 			const kind = entryKinds[entry.type]
 			const item = document.createElement('li')
 			item.className = 'paperless-sync-entry'
@@ -954,6 +973,13 @@
 			const path = entryFile(entry, dryRun)
 			if (path !== '' && entry.type !== 'error') {
 				head.append(fileElement(path, owner && fileIsThere(entry, dryRun)))
+			}
+			if (typeof entry.user === 'string') {
+				const user = document.createElement('span')
+				user.className = 'paperless-sync-entry-user'
+				user.title = translate('User of Nextcloud')
+				user.textContent = entry.user
+				head.append(user)
 			}
 			item.append(head)
 			const text = entryText(entry)
@@ -1072,6 +1098,7 @@
 			reportSummary.hidden = reportSummary.children.length === 0
 			setText(reportRest, restOf(result))
 			reportRest.hidden = reportRest.textContent === ''
+			showUsers(result)
 			const ended = result.completedAt ? formatTime(result.completedAt) : ''
 			if (result.dryRun && result.unsavedSettings === true) {
 				setText(reportMeta, ended ? translate('Dry-run of unsaved settings, finished {time}', { time: ended }) : translate('Dry-run of unsaved settings, stopped before its end'))
@@ -1082,11 +1109,11 @@
 			}
 			const lines = Array.isArray(result.actions) ? result.actions : []
 			const entries = sortedEntries(result)
-			const owner = savedTargetUser !== '' && viewer() === savedTargetUser
+			const reader = savedTargetUser !== '' ? viewer() : ''
 			const items = entries === null
 				? lines.map(lineItem)
 				: entries.map(function(entry) {
-					return entryItem(entry, result.dryRun === true, owner)
+					return entryItem(entry, result.dryRun === true, reader)
 				})
 			if (items.length === 0) {
 				const empty = document.createElement('li')
@@ -1104,6 +1131,28 @@
 			if (reveal) {
 				report.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 			}
+		}
+
+		// The counts of each user of per-user ownership: a line for each user with the counts of the
+		// changes that are not 0, and the documents that stayed as they were.
+		function showUsers(result) {
+			const users = result.users && typeof result.users === 'object' && !Array.isArray(result.users) ? Object.entries(result.users) : []
+			reportUsersList.replaceChildren(...users.map(function([user, counts]) {
+				const item = document.createElement('li')
+				const name = document.createElement('strong')
+				name.textContent = user
+				const changes = reportCounts.filter(function([key]) {
+					return Number(counts[key]) > 0
+				}).map(function([key, label]) {
+					return label + ' ' + Number(counts[key])
+				})
+				const rest = restOf(counts)
+				const text = document.createElement('span')
+				text.textContent = [...changes, ...(rest !== '' ? [rest] : [])].join(' · ') || translate('No file changes were required.')
+				item.append(name, text)
+				return item
+			}))
+			reportUsers.hidden = users.length === 0
 		}
 
 		// The documents that a run left as they were, and those that it skipped, in a sentence below
@@ -1133,6 +1182,9 @@
 			if (!reportRest.hidden) {
 				lines.push(reportRest.textContent)
 			}
+			Array.from(reportUsersList.children, function(item) {
+				lines.push(item.firstChild.textContent + ': ' + item.lastChild.textContent)
+			})
 			lines.push('', ...(Array.isArray(result.actions) ? result.actions : []))
 			if (!reportOmitted.hidden) {
 				lines.push(reportOmitted.textContent)
@@ -1389,6 +1441,8 @@
 				return translate('Last call, {time}: P{document} moved.', parameters)
 			case 'removed':
 				return translate('Last call, {time}: the copy of P{document} removed, as the settings exclude the document.', parameters)
+			case 'reassigned':
+				return translate('Last call, {time}: the copy of P{document} removed, as the document goes to another user now.', parameters)
 			case 'tagged':
 				return translate('Last call, {time}: the tags of P{document} changed.', parameters)
 			case 'unchanged':
@@ -1560,16 +1614,20 @@
 		})
 		targetUser.addEventListener('change', checkTargetUser)
 
-		// The group that may send files from Files: the groups of Nextcloud whose ID or name holds
-		// what is typed, from the same provisioning API. The save checks that the group exists.
+		// The group that may send files from Files, and the one whose members alone get their documents
+		// in per-user ownership: the groups of Nextcloud whose ID or name holds what is typed, from the
+		// same provisioning API, with the problem of a search below its field. The save checks that
+		// the group exists.
 		const sendGroup = element('send-group')
 		const sendGroupProblem = element('send-group-problem')
+		const userGroup = element('user-group')
+		const userGroupProblem = element('user-group-problem')
 
-		async function searchGroups(text) {
+		async function searchGroups(text, problem = sendGroupProblem) {
 			try {
 				const query = new URLSearchParams({ search: text, limit: '10' })
 				const answer = await request(root.dataset.groupsUrl + '/details?' + query, 'GET', undefined, ocs)
-				setText(sendGroupProblem, '')
+				setText(problem, '')
 				const groups = answer.ocs && answer.ocs.data && Array.isArray(answer.ocs.data.groups) ? answer.ocs.data.groups : []
 				return groups.filter(function(group) {
 					return group !== null && typeof group === 'object' && typeof group.id === 'string'
@@ -1578,7 +1636,7 @@
 					return { value: group.id, label: name, note: name === group.id ? '' : group.id }
 				})
 			} catch (error) {
-				setText(sendGroupProblem, translate('Could not search the groups of Nextcloud: {error}', { error: error.message }))
+				setText(problem, translate('Could not search the groups of Nextcloud: {error}', { error: error.message }))
 				return []
 			}
 		}
@@ -1588,6 +1646,14 @@
 			setText(sendGroupProblem, '')
 			sendGroup.dispatchEvent(new Event('change', { bubbles: true }))
 		})
+		combobox(userGroup, element('user-group-options'), function(text) {
+			return searchGroups(text, userGroupProblem)
+		}, function(option) {
+			userGroup.value = option.value
+			setText(userGroupProblem, '')
+			userGroup.dispatchEvent(new Event('change', { bubbles: true }))
+		})
+		ownership.addEventListener('change', showOwnership)
 
 		// The tags of Paperless, which every tag picker offers: their names, or null while the page
 		// doesn't know them. The page reads them with the saved connection, as a run does, and anew

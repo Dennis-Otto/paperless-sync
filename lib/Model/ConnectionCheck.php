@@ -39,6 +39,8 @@ final class ConnectionCheck {
 	public const UPLOAD = 'upload';
 	public const INBOX_TAGS = 'inbox_tags';
 	public const FOLDER = 'folder';
+	/** Which user of Nextcloud gets the documents of each user of Paperless, in per-user ownership. */
+	public const OWNERS = 'owners';
 
 	/**
 	 * @param self::PASSED|self::FAILED|self::WARNING $status
@@ -134,6 +136,7 @@ final class ConnectionCheck {
 			self::UPLOAD => $l10n->t('Upload from the inbox'),
 			self::INBOX_TAGS => $l10n->t('Tags of the inbox'),
 			self::FOLDER => $l10n->t('Nextcloud folder'),
+			self::OWNERS => $l10n->t('Users of Paperless'),
 			default => $this->id,
 		};
 	}

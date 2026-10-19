@@ -10,6 +10,11 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Model;
 
 final class SyncConfig implements \JsonSerializable {
+	/** The target user gets every document, as before per-user ownership. */
+	public const SINGLE = 'single';
+	/** Each user of Nextcloud gets the documents that their user of Paperless owns. */
+	public const PER_USER = 'per-user';
+
 	public function __construct(
 		public readonly string $paperlessUrl,
 		public readonly bool $tokenConfigured,
@@ -75,7 +80,24 @@ final class SyncConfig implements \JsonSerializable {
 		 * them in step with Paperless.
 		 */
 		public readonly bool $nextcloudTags = false,
+		/**
+		 * Who gets the documents: single, the target user all of them, or per-user, each user of
+		 * Nextcloud those that their user of Paperless owns, and the target user the others.
+		 */
+		public readonly string $ownership = self::SINGLE,
+		/**
+		 * The users of Paperless whose documents go to a user of Nextcloud with another ID, one on
+		 * each line, as paperless-name = nextcloud-id; they win over the users with the same ID.
+		 */
+		public readonly string $userMap = '',
+		/** The ID of the group of Nextcloud whose members alone get their documents in per-user ownership; '' for every user. */
+		public readonly string $userGroup = '',
 	) {
+	}
+
+	/** Whether each user of Nextcloud gets the documents that their user of Paperless owns. */
+	public function perUser(): bool {
+		return $this->ownership === self::PER_USER;
 	}
 
 	/** Whether a run can start: with the address of Paperless, its token and the target user. */
@@ -87,6 +109,18 @@ final class SyncConfig implements \JsonSerializable {
 	public function withBatchSize(int $batchSize): self {
 		$values = get_object_vars($this);
 		$values['batchSize'] = $batchSize;
+
+		return new self(...$values);
+	}
+
+	/**
+	 * The same settings for the archive of another user of Nextcloud, in per-user ownership: the
+	 * folders below the same base folder of that user, whose files, states, activity and time zone
+	 * a run then takes.
+	 */
+	public function withTargetUser(string $targetUser): self {
+		$values = get_object_vars($this);
+		$values['targetUser'] = $targetUser;
 
 		return new self(...$values);
 	}

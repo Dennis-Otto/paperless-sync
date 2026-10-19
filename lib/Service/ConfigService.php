@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
+use OCP\IUserManager;
 use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
 
@@ -63,6 +64,9 @@ final class ConfigService {
 		'write_metadata' => false,
 		'send_group' => 'admin',
 		'nextcloud_tags' => false,
+		'ownership' => SyncConfig::SINGLE,
+		'user_map' => '',
+		'user_group' => '',
 	];
 
 	/**
@@ -91,6 +95,7 @@ final class ConfigService {
 		private IFactory $l10nFactory,
 		private IConfig $config,
 		private IGroupManager $groupManager,
+		private IUserManager $userManager,
 	) {
 	}
 
@@ -233,6 +238,13 @@ final class ConfigService {
 			'paperless_url' => static fn (mixed $value): string => rtrim(trim(is_scalar($value) ? (string)$value : ''), '/'),
 			'paperless_local_network' => static fn (mixed $value): bool => filter_var($value, FILTER_VALIDATE_BOOLEAN),
 			'target_user' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
+			// Who gets the documents decides whose files a run reads, as the target user does.
+			'ownership' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
+			'user_map' => static fn (mixed $value): string => implode("\n", array_map(
+				static fn (array $line): string => mb_strtolower($line['paperless']) . ' = ' . mb_strtolower($line['nextcloud']),
+				OwnerMapping::parse(is_scalar($value) ? (string)$value : '', false),
+			)),
+			'user_group' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
 		];
 		foreach ($same as $key => $normalize) {
 			if (array_key_exists($key, $settings) && $normalize($settings[$key]) !== $normalize($saved[$key])) {
@@ -261,6 +273,7 @@ final class ConfigService {
 			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
 			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup', 'nextcloud_tags' => 'nextcloudTags',
+			'ownership' => 'ownership', 'user_map' => 'userMap', 'user_group' => 'userGroup',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -464,6 +477,17 @@ final class ConfigService {
 		if ($values['send_group'] !== '' && !$this->groupManager->groupExists($values['send_group'])) {
 			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['send_group']], 'send_group');
 		}
+		if (!in_array($values['ownership'], [SyncConfig::SINGLE, SyncConfig::PER_USER], true)) {
+			throw new InvalidSettingException('Choose one of the options of "Who gets the documents".', [], 'ownership');
+		}
+		$values['user_group'] = trim((string)$values['user_group']);
+		// The table and the group count only in per-user ownership, whose settings show them.
+		$values['user_map'] = $values['ownership'] === SyncConfig::PER_USER ? $this->normalizeUserMap((string)$values['user_map']) : trim((string)$values['user_map']);
+		// Its members get the documents that they own in Paperless, so a typo must not give them to
+		// a group that someone could create later under that name.
+		if ($values['ownership'] === SyncConfig::PER_USER && $values['user_group'] !== '' && !$this->groupManager->groupExists($values['user_group'])) {
+			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['user_group']], 'user_group');
+		}
 		// The numbers, by the labels of the settings page, which their messages name.
 		$values['sync_interval_minutes'] = self::within((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES)
 			?? throw new InvalidSettingException('"Interval in minutes" must be between %1$s and %2$s.', [(string)self::MINIMUM_INTERVAL_MINUTES, (string)self::MAXIMUM_INTERVAL_MINUTES], 'sync_interval_minutes');
@@ -482,6 +506,33 @@ final class ConfigService {
 		}
 
 		return $values;
+	}
+
+	/**
+	 * The users of Paperless with another ID in Nextcloud, one on each line as paperless = nextcloud,
+	 * with the ID of each user as Nextcloud spells it. A user of Paperless twice, or a user of
+	 * Nextcloud that doesn't exist, is refused with its line: a mapping to a user that someone
+	 * could create later under that name would give that user the documents.
+	 *
+	 * @throws InvalidSettingException for a line that is no mapping, a user of Paperless twice or an unknown user of Nextcloud
+	 */
+	private function normalizeUserMap(string $map): string {
+		$lines = [];
+		$seen = [];
+		foreach (OwnerMapping::parse($map) as $line) {
+			$key = mb_strtolower($line['paperless']);
+			if (isset($seen[$key])) {
+				throw new InvalidSettingException('"Paperless users with another Nextcloud ID", line %1$s: the user %2$s of Paperless has a line already.', [(string)$line['line'], $line['paperless']], 'user_map');
+			}
+			$seen[$key] = true;
+			$user = $this->userManager->get($line['nextcloud']);
+			if ($user === null) {
+				throw new InvalidSettingException('"Paperless users with another Nextcloud ID", line %1$s: Nextcloud has no user with the ID %2$s.', [(string)$line['line'], $line['nextcloud']], 'user_map');
+			}
+			$lines[] = $line['paperless'] . ' = ' . $user->getUID();
+		}
+
+		return implode("\n", $lines);
 	}
 
 	/** The value when it is from $minimum to $maximum, or else null. */
@@ -508,7 +559,8 @@ final class ConfigService {
 			(string)$values['untitled'], (bool)$values['paperless_local_network'], (bool)$values['inbox_folder_tags'],
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
 			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
-			(bool)$values['nextcloud_tags'],
+			(bool)$values['nextcloud_tags'], (string)$values['ownership'], (string)$values['user_map'],
+			(string)$values['user_group'],
 		);
 	}
 }

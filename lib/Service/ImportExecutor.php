@@ -31,6 +31,9 @@ use Psr\Log\LogLevel;
  * of their folders, ends the uploads whose tasks ended, and saves the states of the uploads. A
  * dry-run reports the same uploads, in the same batch, and changes nothing: it creates no tag,
  * uploads no file and moves none.
+ *
+ * In per-user ownership, the inbox of a user of Nextcloud with a user of Paperless gives each
+ * document that its uploads created that user as the owner, once Paperless imported it.
  */
 final class ImportExecutor {
 	/** The wait after the first failed upload of a file whose failure may pass, in seconds; it doubles with each further one. */
@@ -51,6 +54,8 @@ final class ImportExecutor {
 		private LoggerInterface $logger,
 		private ITimeFactory $clock,
 		private string $inboxRoot,
+		/** The user of Paperless who owns the documents of the files of this inbox, in per-user ownership, or null to leave them to the account of the app. */
+		private ?int $owner = null,
 	) {
 		$this->dryRun = $report->dryRun;
 		$this->tags = new InboxTags($paperless, $config, $report);
@@ -206,6 +211,9 @@ final class ImportExecutor {
 	 */
 	private function succeeded(ImportSucceeded $action): void {
 		$path = $action->context->path;
+		if ($this->owner !== null && !$this->dryRun) {
+			$this->giveOwner($action);
+		}
 		if ($action->sameContent) {
 			if (!$this->dryRun && $this->config->deleteInboxAfterSuccess) {
 				$this->storage->delete($this->config->targetUser, $path);
@@ -220,6 +228,22 @@ final class ImportExecutor {
 		}
 		$this->report->importResult(SyncReport::IMPORTED, $path, $action->document);
 		++$this->report->importsSucceeded;
+	}
+
+	/**
+	 * Gives the document of an upload its owner, the user of Paperless of the user of Nextcloud whose
+	 * inbox held the file, as Paperless makes the account that uploads a file its owner. Only the
+	 * document that the task of the upload names is the upload's: another document with the content
+	 * of the file, which a search found, may be someone else's, so it stays as it is, and so does a
+	 * document that Paperless didn't name, which the report names as an error. When Paperless
+	 * refuses the owner, the upload stays pending, so that the next run asks again.
+	 */
+	private function giveOwner(ImportSucceeded $action): void {
+		if ($action->document === null || !$action->uploaded) {
+			$this->report->error("Import {$action->context->path}: Paperless did not name the document that the upload created, so its owner stays as Paperless has it", null, $action->context->path);
+			return;
+		}
+		$this->paperless->setOwner($action->document, (int)$this->owner);
 	}
 
 	/**

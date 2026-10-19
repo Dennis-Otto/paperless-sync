@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\FileActions;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
@@ -195,6 +196,30 @@ final class FileActionsTest extends TestCase {
 		$id = $this->file('Documents/Paperless/Inbox/scan.pdf');
 
 		self::assertSame(1, $this->send([$id])['queued']);
+	}
+
+	/**
+	 * In per-user ownership, the runs look after the inbox, the error folder and the archive below
+	 * the base folder of every user's files, so a click on one of them is refused as for the target user.
+	 */
+	public function testPerUserOwnershipRefusesTheFilesOfTheFolderOfTheAppOfEveryUser(): void {
+		$this->configService->save(['send_group' => 'scanners', 'batch_size' => 3, 'ownership' => SyncConfig::PER_USER] + self::validSettings());
+		$inbox = $this->file('Documents/Paperless/Inbox/scan.pdf');
+		$error = $this->file('Documents/Paperless/Errors/broken.pdf');
+		$other = $this->file('Scans/receipt.pdf');
+
+		self::assertSame(FileActions::REFUSED_APP_FOLDER, $this->send([$inbox])['refused']);
+		self::assertSame(FileActions::REFUSED_APP_FOLDER, $this->send([$error])['refused']);
+		self::assertSame(1, $this->send([$other])['queued']);
+	}
+
+	/** A rule of Flow skips the files of the inbox of a user in per-user ownership, which the run of their inbox uploads already. */
+	public function testARuleSkipsTheFilesOfTheInboxOfAUserInPerUserOwnership(): void {
+		$this->configService->save(['send_group' => 'scanners', 'batch_size' => 3, 'ownership' => SyncConfig::PER_USER] + self::validSettings());
+		$id = $this->file('Documents/Paperless/Inbox/scan.pdf');
+
+		self::assertSame(FileActions::RULE_APP_FOLDER, $this->actions->sendByRule($this->configService->get(), self::SENDER, $id, [], 7));
+		self::assertSame([], $this->state->sends);
 	}
 
 	public function testAFolderWithMoreFilesThanABatchIsRefusedByItsName(): void {

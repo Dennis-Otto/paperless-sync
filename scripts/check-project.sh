@@ -530,7 +530,7 @@ broken_twin README.md 'has the diagram docs/diagrams/how-paperless-sync-moves-do
   -e 's/how-paperless-sync-moves-documents\.de\.svg/how-paperless-sync-moves-documents.svg/'
 broken_twin README.md 'has the dark diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
   -e 's/how-paperless-sync-moves-documents\.de\.dark\.svg/how-paperless-sync-moves-documents.dark.svg/'
-broken_twin docs/faq.md 'removed somewhere between there and line 79, the heading of level 2 ("## Einrichtung und Betrieb"), and line' \
+broken_twin docs/faq.md 'removed somewhere between there and line 83, the heading of level 2 ("## Einrichtung und Betrieb"), and line' \
   -e '/^### Wie oft läuft es?$/d'
 broken_twin docs/guide.md 'has the snippet include --8<-- "README.md:features" where line' \
   -e 's/README\.de\.md:features/README.md:features/'

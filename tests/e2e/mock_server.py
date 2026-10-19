@@ -88,6 +88,7 @@ LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
     "active", "renamed", "tagged", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
+    "per-user",
 }
 # The versions of Paperless-ngx that the mock plays, with the versions of the API that each serves
 # and its default (src/paperless/settings.py, REST_FRAMEWORK): 2.15 is the last before version 9,
@@ -126,6 +127,8 @@ def reset_state():
                 "paperless": "3.3.0",
                 # The API version that each request asked for, "none" without one.
                 "apiVersions": {},
+                # The document and its new owner of every change of an owner, as per-user ownership makes it.
+                "ownerChanges": [],
             }
         )
 
@@ -265,7 +268,7 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
 
 # The users and the custom fields of Paperless, for {{ owner_username }} and
 # {{ custom_fields.<name> }}.
-USERS = [{"id": 3, "username": "e2e-owner"}]
+USERS = [{"id": 3, "username": "e2e-owner"}, {"id": 4, "username": "E2E-Other"}]
 CUSTOM_FIELDS = [{"id": 1, "name": "Invoice number", "data_type": "string", "extra_data": {}}]
 
 
@@ -359,6 +362,27 @@ def scenario_documents():
         return [archived_letter(number) for number in range(1, 41)], []
     if scenario == "names":
         return [named_document(document_id) for document_id in NAMED_DOCUMENTS], []
+    if scenario == "per-user":
+        # Per-user ownership: P123 of e2e-owner, P124 of E2E-Other, whose user of Nextcloud is
+        # e2e-other, whatever the case, and the documents that the inbox of e2e-owner sent. As in
+        # Paperless, the account of the app owns the document of an upload until the app gives it
+        # its owner, so the runs must hold it until then.
+        other = statement()
+        other["owner"] = 4
+        with LOCK:
+            owners = {
+                task["result_data"]["document_id"]: OWNER_ID
+                for task in STATE["tasks"].values()
+                if task["status"] == "success" and "document_id" in (task["result_data"] or {})
+            }
+            owners.update({change["document"]: change["owner"] for change in STATE["ownerChanges"]})
+        sent = []
+        for document_id, owner in owners.items():
+            letter = document(f"Sent letter {document_id}")
+            letter["id"] = document_id
+            letter["owner"] = owner
+            sent.append(letter)
+        return [document(), other, *sent], []
     raise ValueError(f"Unknown scenario: {scenario}")
 
 
@@ -392,6 +416,11 @@ class Handler(BaseHTTPRequestHandler):
             # account. The account of the app owns every document of the mock.
             others = query["owner__id__none"][0] != str(OWNER_ID) and query.get("owner__isnull") == ["0"]
             self._page(documents if others else [])
+        elif parsed.path == "/api/documents/" and ("owner__id" in query or "owner__isnull" in query):
+            # The count of the documents of a user, or of those without an owner, for the
+            # connection checklist of per-user ownership.
+            owner = int(query["owner__id"][0]) if "owner__id" in query else None
+            self._page([item for item in documents if item.get("owner") == owner])
         elif parsed.path == "/api/documents/" and "checksum__iexact" in query:
             # The lookup of a document by the checksum of its original, MD5 up to Paperless-ngx 2.x
             # and SHA-256 since 3.0, as before an upload from Files.
@@ -462,7 +491,8 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 checksum = paperless_checksum(data)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
-        elif match := re.fullmatch(r"/api/documents/(123|124)/(download|metadata)/", parsed.path):
+        elif match := re.fullmatch(r"/api/documents/(123|124|5\d\d)/(download|metadata)/", parsed.path):
+            # P123, P124, and the documents of the uploads, which the scenario per-user lists.
             data = document_content(int(match.group(1)))
             if match.group(2) == "download":
                 with LOCK:
@@ -600,6 +630,32 @@ class Handler(BaseHTTPRequestHandler):
             )
             STATE["tasks"][task_id] = {"id": number, "filename": filename, "status": "pending", "result_data": None}
         self._json(200, task_id)
+
+    def do_PATCH(self):
+        """Changes the owner of a document, as per-user ownership does after an upload; nothing else."""
+        self.api_headers = {}
+        match = re.fullmatch(r"/api/documents/(\d+)/", urlparse(self.path).path)
+        token = self._authorized()
+        if token is None or not self._versioned():
+            return
+        if match is None:
+            self._json(404, {"detail": "Not found"})
+            return
+        if "change_document" not in ACCOUNTS[token]["permissions"]:
+            self._json(403, FORBIDDEN)
+            return
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            fields = json.loads(self.rfile.read(length) or b"null")
+        except ValueError:
+            fields = None
+        if not isinstance(fields, dict) or set(fields) != {"owner"} or not isinstance(fields["owner"], int):
+            self._json(400, {"detail": "Only the owner may change."})
+            return
+        document_id = int(match.group(1))
+        with LOCK:
+            STATE["ownerChanges"].append({"document": document_id, "owner": fields["owner"]})
+        self._json(200, {"id": document_id, "owner": fields["owner"]})
 
     def _create_tag(self):
         """Creates a tag as Paperless-ngx does: with Add for Tags, a name, and an ID of its own."""

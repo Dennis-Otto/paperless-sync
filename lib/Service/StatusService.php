@@ -396,6 +396,10 @@ final class StatusService {
 		$shorten = static fn (string $line): string => mb_substr($line, 0, self::LINE_LENGTH);
 		$kept = $summary;
 		$kept['omittedActions'] = $report->omittedActions + max(0, count($report->actions) - self::REPORT_ACTIONS);
+		// In per-user ownership, the counts of each user, which the settings page shows in a table.
+		if ($report->users !== []) {
+			$kept['users'] = $report->users;
+		}
 		$kept['errorMessages'] = array_map($shorten, $report->errorMessages);
 		$kept['actions'] = array_map($shorten, array_slice($report->actions, 0, self::REPORT_ACTIONS));
 		$kept['entries'] = array_map(static function (array $entry) use ($shorten): array {

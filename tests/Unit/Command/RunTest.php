@@ -74,6 +74,7 @@ final class RunTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
+			$this->ownerMapping(),
 		);
 		$this->run = new Run($sync);
 		$this->command = new CommandTester($this->run);
@@ -98,6 +99,21 @@ final class RunTest extends TestCase {
 		self::assertStringNotContainsString('Errors:', $output);
 		self::assertSame('completed', $this->settings['status_last_state'], 'The settings page shows the run as any other.');
 		self::assertSame('', $this->command->getErrorOutput());
+	}
+
+	/** In per-user ownership, the report counts the changes of each user, as the settings page shows them. */
+	public function testRunPrintsTheChangesOfEachUser(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->configService->save(['batch_size' => 1, 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['1' => 'alice'];
+		$this->documents(2);
+		$this->paperless->documents[0]['owner'] = 1;
+		$this->paperless->documents[1]['owner'] = null;
+
+		self::assertSame(Run::OK, $this->execute([]));
+
+		self::assertStringContainsString("By user:\n  paperless  Exported 1\n  alice  Exported 1\n", $this->command->getDisplay());
+		self::assertStringContainsString('  [alice] EXPORT P1: ' . sprintf(self::PATH, 1) . "\n", $this->command->getDisplay());
 	}
 
 	/** A script reads the report as the settings page does, from the same JSON. */

@@ -38,7 +38,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 
     ---
 
-    Die Dokumente erscheinen in Ordnern des eingestellten Nextcloud-Benutzers, standardmäßig zuerst nach Korrespondent, gebildet aus einer einstellbaren Pfadvorlage, als Archiv-PDF oder Originaldatei.
+    Die Dokumente erscheinen in Ordnern des eingestellten Nextcloud-Benutzers, oder jedes Benutzers mit den Dokumenten, die ihm in Paperless gehören, standardmäßig zuerst nach Korrespondent, gebildet aus einer einstellbaren Pfadvorlage, als Archiv-PDF oder Originaldatei.
 
 - :material-file-move-outline:{ .lg .middle } **Folgt den Änderungen in Paperless**
 

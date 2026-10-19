@@ -360,6 +360,30 @@ final class ExportPlannerTest extends TestCase {
 		], $this->plan($documents, $trash, true));
 	}
 
+	/**
+	 * Per-user ownership: the copy of a document that the archive of another user takes now is
+	 * removed, within the batch, and one of a document whose user the run can't tell stays; neither
+	 * counts as missing, as Paperless lists both.
+	 */
+	public function testTheCopyOfADocumentOfAnotherUserLeavesTheArchive(): void {
+		$this->arrange(['exported' => [[1, 'A'], [2, 'B'], [3, 'C', 'm1', ['missing_runs' => 1]], [4, 'D']], 'documents' => []]);
+		unset($this->storage->files[self::path('D', 4)]);
+
+		self::assertSame([
+			'remove-reassigned P1: ' . self::path('A', 1),
+			'forget P4',
+			// Paperless lists it again, so its count of missing scans starts anew.
+			'save P3: missing_runs=0',
+		], $this->plan([], [], true, ['missingGraceRuns' => 1], [1 => true, 2 => false, 3 => false, 4 => true, 5 => true]));
+		self::assertSame(0, $this->missingActive);
+	}
+
+	public function testTheCopyOfADocumentOfAnotherUserWaitsWhileTheBatchIsFull(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A']], 'documents' => [[2, 'B']]]);
+
+		self::assertSame(['export P2: ' . self::path('B', 2)], $this->plan($documents, [], true, ['batchSize' => 1], [1 => true]));
+	}
+
 	/** The run of one document knows neither the trash nor which documents are gone. */
 	public function testThePlanOfOneDocumentLeavesTheTrashAndTheMissingDocuments(): void {
 		$documents = $this->arrange(['exported' => [[2, 'B', 'm1', ['missing_runs' => 2]]], 'documents' => [[1, 'A']]]);
@@ -440,12 +464,12 @@ final class ExportPlannerTest extends TestCase {
 	 * @param array<string, bool|int|string> $settings
 	 * @return list<string>
 	 */
-	private function plan(array $documents, ?array $trash, bool $complete, array $settings = []): array {
+	private function plan(array $documents, ?array $trash, bool $complete, array $settings = [], array $others = []): array {
 		$config = TestConfig::of($settings);
 		$batch = new SyncBatch($config->batchSize);
 		$planner = $this->planner($config, $batch);
 		$lines = [];
-		foreach ($planner->plan($documents, $trash, $complete) as $action) {
+		foreach ($planner->plan($documents, $trash, $complete, $others) as $action) {
 			$lines[] = self::describe($action);
 			if ($action instanceof ExportCopy || ($action instanceof Failed && $action->attempt)) {
 				$batch->take(SyncBatch::EXPORT);

@@ -74,6 +74,7 @@ final class ActivityPublisher {
 			'trashed' => $report->movedToTrash,
 			'deleted' => $report->permanentlyDeleted,
 			'removed' => $report->removedExcluded,
+			'reassigned' => $report->removedReassigned,
 			'submitted' => $report->importsSubmitted,
 		];
 		if (array_sum($counts) === 0) {

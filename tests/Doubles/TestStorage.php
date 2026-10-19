@@ -42,6 +42,8 @@ final class TestStorage implements NextcloudStorageInterface {
 	public array $openedStreams = [];
 	/** The failure of the test of the base folder, such as of a user that does not exist. */
 	public ?\Throwable $testException = null;
+	/** @var array<string, \Throwable> the failure of the test of the base folder of one user, by the ID of the user */
+	public array $testFailures = [];
 	/** The failure of every write of a document, such as of a full quota or a read-only storage. */
 	public ?\Throwable $writeException = null;
 	public ?\Throwable $writeTextException = null;
@@ -73,6 +75,9 @@ final class TestStorage implements NextcloudStorageInterface {
 		if ($this->testException !== null) {
 			throw $this->testException;
 		}
+		if (isset($this->testFailures[$userId])) {
+			throw $this->testFailures[$userId];
+		}
 	}
 
 	/** Creates the folders of the enabled directions, as Nextcloud's storage does. */
@@ -101,12 +106,13 @@ final class TestStorage implements NextcloudStorageInterface {
 	/** A folder exists while a file is in it, and has an ID of its own as well. */
 	public function findFileId(string $userId, string $path): ?int {
 		$this->requirePath($path);
-		if (isset($this->files[$path])) {
-			return $this->fileId($path);
+		$files = $this->filesOfUser($userId);
+		if (isset($files[$path])) {
+			return $this->fileId($path, $userId);
 		}
-		foreach (array_keys($this->files) as $file) {
+		foreach (array_keys($files) as $file) {
 			if (str_starts_with($file, rtrim($path, '/') . '/')) {
-				return $this->fileIds[$path] ??= ++$this->lastFileId;
+				return $this->fileIds[$userId][$path] ??= ++$this->lastFileId;
 			}
 		}
 

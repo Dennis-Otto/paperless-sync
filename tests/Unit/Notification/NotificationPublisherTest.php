@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCA\PaperlessSync\Tests\Doubles\TestNotification;
 use OCA\PaperlessSync\Tests\Doubles\TestStorage;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -212,6 +213,24 @@ final class NotificationPublisherTest extends TestCase {
 		$this->failedRuns(NotificationPublisher::ALERT_RUNS);
 
 		self::assertSame([], $this->notifications);
+	}
+
+	/**
+	 * In per-user ownership, each user hears of the failed imports of their own inbox; a notification
+	 * that Nextcloud refuses is logged, and a dry-run notifies nobody.
+	 */
+	public function testAUserOfPerUserOwnershipHearsOfTheImportsOfTheirInbox(): void {
+		$report = new SyncReport(false, $this->clock->time, $this->clock->time + 60);
+		$report->importResult(SyncReport::IMPORT_FAILED, 'Documents/Paperless/Errors/broken.pdf', null, 'Unsupported');
+
+		$this->publisher->publishImports($this->config->withTargetUser('alice'), $report);
+		$this->publisher->publishImports($this->config->withTargetUser('alice'), new SyncReport(true));
+
+		self::assertSame(['alice'], array_map(static fn (TestNotification $notification): string => $notification->getUser(), $this->notifications));
+		$this->notificationFailure = new RuntimeException('The database is full.');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('could not send its notifications'));
+
+		$this->publisher->publishImports($this->config->withTargetUser('alice'), $report);
 	}
 
 	/** Whoever sent a file from Files hears how its import ended, with the document of Paperless when there is one. */

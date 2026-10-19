@@ -13,6 +13,70 @@ use OCA\PaperlessSync\Model\SyncReport;
 use PHPUnit\Framework\TestCase;
 
 final class SyncReportTest extends TestCase {
+	/**
+	 * Per-user ownership: the report of the run takes in the report of each user, its counts, also
+	 * those for the user, its lines and its errors with the user, and its notices as notices; the
+	 * files that it changed and its imports stay with it, for the activity stream of that user.
+	 */
+	public function testTakesInTheReportOfEachUser(): void {
+		$run = new SyncReport(false, 100);
+		$run->notice(SyncReport::TYPE_SCAN_INCOMPLETE, 'SCAN INCOMPLETE: of the run');
+		$alice = new SyncReport(false, 100);
+		$alice->change(SyncReport::TYPE_EXPORT, 1, 'Dokumente/Paperless/Archiv/a.pdf');
+		$alice->changedFile('Dokumente/Paperless/Archiv/a.pdf');
+		++$alice->exported;
+		$alice->importResult(SyncReport::IMPORTED, 'Dokumente/Paperless/Eingang/scan.pdf', 7);
+		$bob = new SyncReport(false, 100);
+		$bob->change(SyncReport::TYPE_REMOVE_REASSIGNED, 1, 'Dokumente/Paperless/Archiv/a.pdf');
+		++$bob->removedReassigned;
+		$bob->error('P2: the quota is full', 2, 'Dokumente/Paperless/Archiv/b.pdf');
+		$bob->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive');
+		++$bob->unchanged;
+
+		$run->absorb($alice, 'alice');
+		$run->absorb($bob, 'bob');
+
+		self::assertSame([1, 1, 1, 1], [$run->exported, $run->removedReassigned, $run->errors, $run->unchanged]);
+		self::assertSame(['exported' => 1, 'removedReassigned' => 0, 'errors' => 0], array_intersect_key($run->users['alice'], ['exported' => 0, 'removedReassigned' => 0, 'errors' => 0]));
+		self::assertSame(['exported' => 0, 'removedReassigned' => 1, 'unchanged' => 1, 'errors' => 1], array_intersect_key($run->users['bob'], ['exported' => 0, 'removedReassigned' => 0, 'unchanged' => 0, 'errors' => 0]));
+		self::assertSame([
+			'SCAN INCOMPLETE: of the run',
+			'[alice] EXPORT P1: Dokumente/Paperless/Archiv/a.pdf',
+			'[bob] REMOVE REASSIGNED P1: Dokumente/Paperless/Archiv/a.pdf',
+			'[bob] ERROR: P2: the quota is full',
+			'[bob] EXPORT STOPPED: Nextcloud cannot store files in the archive',
+		], $run->actions);
+		self::assertSame(['alice', 'bob', 'bob', 'bob'], array_column(array_slice($run->entries, 1), 'user'));
+		self::assertSame(['[bob] P2: the quota is full'], $run->errorMessages);
+		self::assertSame([[], 0, []], [$run->changedFiles(), $run->changedFileCount(), $run->importResults()], 'The files and the imports of a user stay in their report.');
+		self::assertSame(['alice' => $alice->counts(), 'bob' => $bob->counts()], $run->jsonSerialize()['users']);
+		self::assertArrayNotHasKey('users', $run->summary());
+	}
+
+	/** A notice of a user keeps its place past the limit of the lines, as one of the run does. */
+	public function testKeepsTheNoticesOfAUserPastTheLimit(): void {
+		$run = new SyncReport(true);
+		$user = new SyncReport(true);
+		for ($document = 1; $document <= SyncReport::ACTION_LIMIT; ++$document) {
+			$user->change(SyncReport::TYPE_EXPORT, $document, "a{$document}.pdf");
+		}
+		$user->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED');
+		$user->change(SyncReport::TYPE_DELETE, 999, 'gone.pdf');
+		$user->errorMessages = array_fill(0, SyncReport::ERROR_LIMIT, 'an error');
+
+		$run->absorb($user, 'alice');
+
+		self::assertContains('[alice] EXPORT STOPPED', $run->actions);
+		self::assertContains('[alice] DELETE P999: gone.pdf', $run->actions, 'A deletion takes the place of an export.');
+		self::assertSame(1, $run->omittedActions, 'The run counts the line that the report of the user left out.');
+		self::assertCount(SyncReport::ERROR_LIMIT, $run->errorMessages);
+	}
+
+	/** Single ownership has no counts of users, so its report stays as it was. */
+	public function testAReportWithoutUsersHasNoCountsOfUsers(): void {
+		self::assertArrayNotHasKey('users', (new SyncReport(false))->jsonSerialize());
+	}
+
 	public function testListsTheChangesInTheirOrder(): void {
 		$report = new SyncReport(true);
 
