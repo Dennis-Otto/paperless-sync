@@ -1,0 +1,32 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How a check of the app that fails explains itself
+    accDescr: A check of the app fails, such as the end-to-end tests, the contract tests against Paperless, the package or a check of scripts/check-project.sh. Its job explains the failure from .github/checks.project.toml, in its summary and as its annotation, and where a command can fix it, the CI runs that command; the end-to-end tests, the contract tests and the package need a person, and the commands of the checks of scripts/check-project.sh join the fix bot once repo-blueprint#351 ships. After the checks, the PR coach keeps one comment on the pull request with the explanation of each check that failed, also on a pull request from a fork, and the fix bot commits the fixes onto a branch of this repository or suggests them at their lines on a fork. You fix the rest with the commands that the explanation names and push, and the checks run again, as they do after a commit of the fix bot. You are orange, the checks and the bots blue, and the explanations and the new run green.
+
+    fails{"A check of<br>the app fails"}
+    explain["Its job explains it:<br>summary and<br>annotation"]
+    catalog[(".github/<br>checks.project.toml")]
+    autofix["The CI runs the<br>commands of autofix"]
+    coach["PR coach: one comment<br>on the pull request,<br>also from a fork"]
+    bot["Fix bot: commits<br>the fixes, or suggests<br>them on a fork"]
+    you(["You fix the rest<br>with the commands<br>that it names"])
+    again(["The checks<br>run again"])
+
+    fails --> explain
+    catalog -. "what, why,<br>how to fix" .-> explain
+    fails -- "where a<br>command can" --> autofix
+    explain --> coach --> you
+    autofix --> bot
+    you -- "push" --> again
+    bot -- "a commit" --> again
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class you yours
+    class fails,explain,autofix,coach,bot bots
+    class catalog,again result
