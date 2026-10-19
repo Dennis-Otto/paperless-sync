@@ -432,17 +432,23 @@ create_tag() {
 
 # The collaborative tags of a file as Files shows them to the user, each as its name and
 # whether users may assign it, such as insurance:false, one per line in the order of the names.
+# The answer goes into a file, which the Python of the mock then reads: Scorecard reports a pipe
+# of curl into exec … python as a download that runs ("Downloads that a script runs" in
+# scripts/check-project.sh). A command substitution, such as that of assert_file_tags, doesn't
+# stop at a failure, so a request that fails returns its status at once.
 file_tags() {
 	user="$1"
 	file="$2"
+	answer="${TMP_DIR}/file-tags-$RANDOM.xml"
 	curl --fail-with-body --silent --show-error \
 		--user "${user}:${PASSWORD}" \
 		--request PROPFIND \
 		--header 'Depth: 1' \
 		--header 'Content-Type: application/xml' \
 		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:display-name/><oc:user-assignable/></d:prop></d:propfind>' \
-		"${BASE_URL}/remote.php/dav/systemtags-relations/files/${file}" \
-		| "${COMPOSE[@]}" exec -T paperless-mock python -c '
+		--output "${answer}" \
+		"${BASE_URL}/remote.php/dav/systemtags-relations/files/${file}" || return
+	"${COMPOSE[@]}" exec -T paperless-mock python -c '
 import sys, xml.etree.ElementTree as tree
 ns = {"d": "DAV:", "oc": "http://owncloud.org/ns"}
 tags = []
@@ -450,7 +456,7 @@ for prop in tree.parse(sys.stdin).getroot().iterfind("d:response/d:propstat/d:pr
     name = prop.find("oc:display-name", ns)
     if name is not None and name.text:
         tags.append(name.text + ":" + str(prop.findtext("oc:user-assignable", namespaces=ns)))
-print("\n".join(sorted(tags)))'
+print("\n".join(sorted(tags)))' < "${answer}"
 }
 
 # The tags of the copy of P123 at its renamed path are those that a step expects.

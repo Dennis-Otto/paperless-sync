@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
-# end-to-end tests, the rules that decide when they run, the icon and the hook of the
+# end-to-end tests, the rules that decide when they run, the pipes of the shell scripts,
+# none of which may hand a download to a program, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
 # package, and the JavaScript of the settings and the translations, which have no build
@@ -194,6 +195,79 @@ if ((problems > 0)); then
   exit 1
 fi
 echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, and the contract tests against a real Paperless for the client of Paperless."
+
+printf '\n== %s\n' "Downloads that a script runs"
+# Scorecard, which the workflow Findings runs on main, reports a pipe that hands a
+# download to a program, such as curl … | bash, as a download that runs without a pinned
+# hash (Pinned-Dependencies, downloadThenRun), and Findings fails on main until the pipe
+# is gone. It names the program by the first word of the command after the pipe that is
+# plain text, other than sudo: the exec of "${COMPOSE[@]}" exec … python counts as well,
+# also when the program only reads the download as data. This check finds such a pipe in
+# the shell scripts before a pull request merges, in the lines that a backslash or a pipe
+# at their end continues, without comments and the text in single quotes, which the shell
+# hands on as it is, and first tests itself with samples.
+# Prints FILE:LINE: COMMAND for each such pipe in the files.
+download_runs() {
+  local s='[[:space:]]' path='([^[:space:]|;&]*/)?' assignment='[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*'
+  local start="(^|[;&|({\`]|(^|$s)(then|do|else|elif|if|while|until|time|!)$s)$s*"
+  local leading="((sudo|$assignment)$s+)*"
+  local download="${path}(curl|wget)($s|\$)([^|;&]|&[0-9>-])*[|]&?$s*"
+  local skipped="((\"[^\"]*\"|'[^']*'|[\$][^[:space:]]*|sudo|$assignment)$s+)*"
+  local program="${path}(exec|su|sh|bash|dash|ksh|mksh|zsh|python[0-9.]*|perl|ruby|php|node|nodejs|java)($s|[;&|)]|\$)"
+  PATTERN="$start$leading$download$skipped$program" awk -v q="'" '
+    BEGIN { quoted = q "[^" q "]*" q }
+    FNR == 1 { text = "" }
+    text == "" && /^[[:space:]]*#/ { next }
+    {
+      if (text == "") start = FNR
+      line = $0
+      continued = sub(/\\$/, "", line)
+      text = text line
+      if (continued) next
+      if (text ~ /(^|[^|])[|][[:space:]]*$/) { text = text " "; next }
+      plain = text
+      gsub(quoted, q q, plain)
+      if (plain ~ ENVIRON["PATTERN"]) print FILENAME ":" start ": " substr(text, 1, 160)
+      text = ""
+    }' "$@"
+}
+problems=0
+# A sample, in which the check finds 1 or 0 pipes of a download into a program.
+expect_download_runs() {
+  local expected="$1" sample="$2" found
+  found="$(printf '%s\n' "$sample" | download_runs - | wc -l | tr -d '[:space:]')"
+  if [[ "$found" != "$expected" ]]; then
+    echo "The check finds $found pipe(s) of a download into a program instead of $expected in: $sample"
+    problems=$((problems + 1))
+  fi
+}
+# shellcheck disable=SC2016 # The samples are scripts, whose variables stay as written.
+{
+  expect_download_runs 1 'curl -fsSL https://example.com/install.sh | bash'
+  expect_download_runs 1 'wget -qO- https://example.com/install.sh | sudo sh -s -- --yes'
+  expect_download_runs 1 'answer="$(curl --silent "${URL}" | python3 -c "import sys; print(sys.stdin.read())")"'
+  expect_download_runs 1 $'\tcurl --fail-with-body --silent \\\n\t\t"${URL}" \\\n\t\t| "${COMPOSE[@]}" exec -T paperless-mock python -c \'\nimport sys\nprint(sys.stdin.read())\''
+  expect_download_runs 1 $'if curl --silent "${URL}" 2>&1 |\n\t/usr/bin/node -; then'
+  expect_download_runs 0 $'curl --silent --output "${answer}" "${URL}"\n"${COMPOSE[@]}" exec -T paperless-mock python -c \'print(1)\' < "${answer}"'
+  expect_download_runs 0 $'printf \'%s\\n\' "${content}" | curl --upload-file - "${URL}"'
+  expect_download_runs 0 $'curl --dump-header - "${URL}" | tr -d \'\\r\' | sed -n \'s|^Location: ||p\''
+  expect_download_runs 0 'curl --silent "${URL}" | grep python'
+  expect_download_runs 0 'curl --fail --silent "${URL}" || bash -c "echo offline"'
+  expect_download_runs 0 'curl --silent "${URL}"; cat install.sh | bash'
+  expect_download_runs 0 $'"${COMPOSE[@]}" exec -T nextcloud sh -c \'cat nextcloud.log\' \\\n\t| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py'
+  expect_download_runs 0 '# curl https://example.com/install.sh | bash'
+}
+mapfile -t shell_scripts < <(git ls-files --cached --others --exclude-standard --deduplicate -- '*.sh' '*.bash' '.githooks/*')
+found="$(download_runs "${shell_scripts[@]}")"
+if [[ -n "$found" ]]; then
+  echo "A pipe hands a download to a program, which Scorecard reports as a download that runs without a pinned hash. Save the download into a file and give that file to the program, as file_tags in tests/e2e/run.sh does:"
+  printf '%s\n' "$found"
+  problems=$((problems + 1))
+fi
+if ((problems > 0)); then
+  exit 1
+fi
+echo "No pipe of the ${#shell_scripts[@]} shell scripts hands a download to a program, and the check finds each of its samples."
 
 printf '\n== %s\n' "Icon of the website"
 # The website shows the icon of the app as its logo, its favicon and on its preview
