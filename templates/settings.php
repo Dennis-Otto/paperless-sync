@@ -137,7 +137,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">1</span><h3><?php p($l->t('Connection and ownership')); ?></h3></div>
-				<p><?php p($l->t('The target user owns all synchronized files. No Nextcloud password is required.')); ?> <?php $help('paperless-connection', $l->t('Connection and ownership')); ?></p>
+				<p><?php p($l->t('The target user owns the synchronized files, or each user those they own in Paperless. No Nextcloud password is required.')); ?> <?php $help('paperless-connection', $l->t('Connection and ownership')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field paperless-sync-field--wide">
@@ -161,6 +161,34 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					<input data-setting="base_path" type="text" value="<?php p($config->basePath); ?>" required>
 				</label>
 			</div>
+			<!-- Who gets the documents: the target user all of them, or each user of Nextcloud those of their user of Paperless. -->
+			<div class="paperless-sync-grid">
+				<label class="paperless-sync-field">
+					<span><?php p($l->t('Who gets the documents')); ?></span>
+					<select id="paperless-sync-ownership" data-setting="ownership" aria-describedby="paperless-sync-ownership-hint">
+						<option value="single" <?php if (!$config->perUser()) {
+							print_unescaped('selected');
+						} ?>><?php p($l->t('The target user, all of them')); ?></option>
+						<option value="per-user" <?php if ($config->perUser()) {
+							print_unescaped('selected');
+						} ?>><?php p($l->t('Each user, those they own in Paperless')); ?></option>
+					</select>
+				</label>
+				<div class="paperless-sync-field" data-per-user<?php if (!$config->perUser()) { ?> hidden<?php } ?>>
+					<label for="paperless-sync-user-group"><?php p($l->t('Only members of this group')); ?></label>
+					<div class="paperless-sync-combobox">
+						<input id="paperless-sync-user-group" data-setting="user_group" type="text" value="<?php p($config->userGroup); ?>" placeholder="<?php p($l->t('Every user')); ?>" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="paperless-sync-user-group-options" aria-describedby="paperless-sync-user-group-problem paperless-sync-ownership-hint" autocomplete="off" autocapitalize="none" spellcheck="false">
+						<ul id="paperless-sync-user-group-options" class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Groups of Nextcloud')); ?>" hidden></ul>
+					</div>
+					<p id="paperless-sync-user-group-problem" class="paperless-sync-field-hint" aria-live="polite"></p>
+				</div>
+				<label class="paperless-sync-field paperless-sync-field--wide" data-per-user<?php if (!$config->perUser()) { ?> hidden<?php } ?>>
+					<span><?php p($l->t('Paperless users with another Nextcloud ID')); ?></span>
+					<textarea data-setting="user_map" rows="3" placeholder="jdoe = john.doe" autocapitalize="none" spellcheck="false" aria-describedby="paperless-sync-user-map-hint"><?php p($config->userMap); ?></textarea>
+					<span id="paperless-sync-user-map-hint" class="paperless-sync-field-hint"><?php p($l->t('One on each line: the user of Paperless, an equals sign and the user ID of Nextcloud. Without a line, a user of Paperless gets the user of Nextcloud with the same ID, whatever its case, as single sign-on gives them.')); ?></span>
+				</label>
+			</div>
+			<p class="settings-hint" id="paperless-sync-ownership-hint"><?php p($l->t('With "Each user", every user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files, and the files of their inbox become theirs in Paperless. The target user gets the documents without an owner and those whose owner has no user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of its own, and the connection checklist shows who gets which. The account of the token needs to see the documents of every user.')); ?> <?php $help('per-user-ownership', $l->t('Per-user ownership')); ?></p>
 			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving, testing or disconnecting may ask for your password.')); ?></p>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {
@@ -440,6 +468,10 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 		<p id="paperless-sync-report-meta" class="paperless-sync-report-meta"></p>
 		<div id="paperless-sync-report-summary" class="paperless-sync-report-summary"></div>
 		<p id="paperless-sync-report-rest" class="paperless-sync-report-rest" hidden></p>
+		<div id="paperless-sync-report-users" class="paperless-sync-report-users" hidden>
+			<h4 id="paperless-sync-report-users-title"><?php p($l->t('By user')); ?></h4>
+			<ul id="paperless-sync-report-users-list" aria-labelledby="paperless-sync-report-users-title"></ul>
+		</div>
 		<div id="paperless-sync-report-filters" class="paperless-sync-report-filters" role="group" aria-label="<?php p($l->t('Show changes of one kind')); ?>" hidden></div>
 		<div id="paperless-sync-report-actions" class="paperless-sync-report-list" tabindex="0" role="region" aria-label="<?php p($l->t('File changes of the run')); ?>">
 			<ul id="paperless-sync-report-entries"></ul>

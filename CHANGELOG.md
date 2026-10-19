@@ -4,9 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.1.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.0.0...v1.1.0) (2026-10-19)
+
 ### Fixed
 
 - **Screen readers name the custom field button as it reads:** the button *custom_fields.…* under the path template now announces its visible text, with *Insert a custom field, then type its name* as its tooltip and description, so voice control finds it by what it shows.
+
+### Features
+
+- **Every user their own documents:** with *Who gets the documents* in *1 · Connection and ownership* set to *Each user, those they own in Paperless*, each user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files: by the same ID, whatever its case, as single sign-on such as OpenID Connect gives them, or by the table *Paperless users with another Nextcloud ID*, and only for the members of a group if you choose one. The files of a user's inbox, and those they send with *Send to Paperless* or a rule of Flow, become theirs in Paperless and come back into their archive. The target user gets the documents without an owner and those of users of Paperless without a user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of their own, and the connection checklist shows who gets which documents, with their numbers. When the owner of a document changes in Paperless, its copy moves to the archive of the new owner. Each user has their own batch, Activity entries and notifications, and the report and the status API count the changes of each user. The account of the app needs to see the documents of every user and to view the users of Paperless; the security design explains how. The default, the target user for all documents, keeps your archive as it is ([#84](https://github.com/Dennis-Otto/paperless-sync/issues/84)).
+
+### Bug fixes
+
+- **The real reason of a failed import on Paperless-ngx 2.x:** Paperless-ngx 2.x marks a failed import first without its reason, as `<traceback object at 0x…>`, and writes the reason a moment later. A run that checked the import in that moment moved the file to the error folder with the placeholder in its `.error.txt`, and a file sent from Files reported it in its notification. The app now waits for the reason, so the `.error.txt` and the notification say why Paperless didn't import the file.
 
 ## [1.0.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.4.0...v1.0.0) (2026-10-18)
 

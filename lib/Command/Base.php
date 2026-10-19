@@ -36,6 +36,7 @@ abstract class Base extends Command {
 		'movedToTrash' => 'Moved to trash',
 		'permanentlyDeleted' => 'Deleted',
 		'removedExcluded' => 'Excluded copies removed',
+		'removedReassigned' => 'Copies of another user now',
 		'importsSubmitted' => 'Imports submitted',
 		'importsSucceeded' => 'Imports succeeded',
 		'importsFailed' => 'Imports failed',
@@ -82,6 +83,22 @@ abstract class Base extends Command {
 		$width = max(array_map('mb_strlen', self::COUNTS));
 		foreach (self::COUNTS as $key => $label) {
 			$this->line($output, sprintf('  %s  %d', str_pad($label, $width), self::integer($report[$key] ?? 0)));
+		}
+		/** @psalm-suppress MixedAssignment the report as JSON, whose counts of each user are checked one by one */
+		$users = $report['users'] ?? null;
+		if (is_array($users) && $users !== []) {
+			$this->line($output, 'By user:');
+			/** @psalm-suppress MixedAssignment */
+			foreach ($users as $user => $counts) {
+				$changes = [];
+				foreach (self::COUNTS as $key => $label) {
+					$count = is_array($counts) ? self::integer($counts[$key] ?? 0) : 0;
+					if ($count > 0) {
+						$changes[] = "{$label} {$count}";
+					}
+				}
+				$this->line($output, sprintf('  %s  %s', (string)$user, $changes !== [] ? implode(', ', $changes) : 'No changes'));
+			}
 		}
 		$actions = self::lines($report['actions'] ?? []);
 		$omitted = self::integer($report['omittedActions'] ?? 0);

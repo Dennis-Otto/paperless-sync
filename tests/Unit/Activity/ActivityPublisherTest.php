@@ -77,6 +77,7 @@ final class ActivityPublisherTest extends TestCase {
 			'trashed' => 1,
 			'deleted' => 0,
 			'removed' => 0,
+			'reassigned' => 0,
 			'submitted' => 0,
 			'files' => array_map(fn (int $id): array => ['id' => $this->storage->fileId(self::ARCHIVE . "/{$id}.pdf"), 'path' => self::ARCHIVE . "/{$id}.pdf"], range(1, 5)),
 			'more' => 3,

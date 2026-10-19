@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-08
+- Amended by [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md): with per-user ownership, each user of Nextcloud gets the documents that their user of Paperless owns
 
 ## Context
 

@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\OwnerMapping;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SystemTagService;
@@ -19,6 +20,8 @@ use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IL10N;
+use OCP\IUser;
+use OCP\IUserManager;
 use OCP\L10N\IFactory;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
@@ -45,9 +48,42 @@ trait InMemoryConfiguration {
 	private bool|string $forcedLanguage = false;
 	/** @var list<string> the IDs of the groups of Nextcloud */
 	private array $groupsOfNextcloud = ['admin', 'scanners'];
+	/** @var array<string, list<string>> the IDs of the members of the groups of Nextcloud, by the IDs of the groups */
+	private array $membersOfGroups = [];
+	/** @var list<string> the IDs of the users of Nextcloud, as Nextcloud spells them */
+	private array $usersOfNextcloud = ['paperless', 'admin'];
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
-		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud());
+		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud(), $this->usersOfNextcloud());
+	}
+
+	/**
+	 * The users of Nextcloud of $usersOfNextcloud, which Nextcloud finds by their IDs whatever their
+	 * case, and gives with the ID as it spells it.
+	 */
+	private function usersOfNextcloud(): IUserManager {
+		$find = function (string $userId): ?IUser {
+			foreach ($this->usersOfNextcloud as $known) {
+				if (mb_strtolower($known) === mb_strtolower($userId)) {
+					$user = $this->createStub(IUser::class);
+					$user->method('getUID')->willReturn($known);
+
+					return $user;
+				}
+			}
+
+			return null;
+		};
+		$users = $this->createStub(IUserManager::class);
+		$users->method('get')->willReturnCallback($find);
+		$users->method('userExists')->willReturnCallback(static fn (string $userId): bool => $find($userId) !== null);
+
+		return $users;
+	}
+
+	/** Which users of Nextcloud get the documents of which users of Paperless, from $usersOfNextcloud and $membersOfGroups. */
+	private function ownerMapping(): OwnerMapping {
+		return new OwnerMapping($this->usersOfNextcloud(), $this->groupsOfNextcloud());
 	}
 
 	/** The collaborative tags of Nextcloud, which the runs give the copies with the tags of Paperless as tags of Nextcloud. */
@@ -64,6 +100,7 @@ trait InMemoryConfiguration {
 	private function groupsOfNextcloud(): IGroupManager {
 		$groups = $this->createStub(IGroupManager::class);
 		$groups->method('groupExists')->willReturnCallback(fn (string $groupId): bool => in_array($groupId, $this->groupsOfNextcloud, true));
+		$groups->method('isInGroup')->willReturnCallback(fn (string $userId, string $groupId): bool => in_array($userId, $this->membersOfGroups[$groupId] ?? [], true));
 
 		return $groups;
 	}

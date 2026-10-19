@@ -15,6 +15,8 @@
           - lib/Service/UnsavedSettingException.php
           - lib/Model/SyncConfig.php
           - lib/Model/ConnectionCheck.php
+          - lib/Model/Owners.php
+          - lib/Service/OwnerMapping.php
           - lib/Migration/Version000111Date20261013000000.php
           - lib/Migration/Version000130Date20261014120000.php
           - js/settings.js
@@ -25,6 +27,8 @@
           - tests/Unit/Settings/**
           - tests/Unit/Service/ConfigServiceTest.php
           - tests/Unit/Model/ConnectionCheckTest.php
+          - tests/Unit/Model/OwnersTest.php
+          - tests/Unit/Service/OwnerMappingTest.php
           - tests/Unit/Migration/Version000111*
           - tests/Unit/Migration/Version000130*
 "area: archive":
@@ -118,6 +122,7 @@
           - tests/Unit/Notification/**
           - tests/Unit/SetupChecks/**
           - tests/Unit/Service/SyncServiceTest.php
+          - tests/Unit/Service/PerUserOwnershipTest.php
           - tests/Unit/Service/PaperlessApiServiceTest.php
           - tests/Unit/Service/StatusServiceTest.php
           - tests/Unit/Service/WebhookServiceTest.php

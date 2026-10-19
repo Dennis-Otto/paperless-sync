@@ -13,6 +13,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 
 - Exports archive PDFs or original files through the Paperless API
 - Builds a configurable hierarchy from correspondent, document type, date, title, and document ID
+- Gives each Nextcloud user the documents they own in Paperless, through the one connection of the administrator (optional per-user ownership)
 - Moves or renames files when Paperless metadata changes
 - Skips Paperless inbox documents until they are finalized and removes previously mirrored copies when an exclusion tag is added
 - Imports files from a configurable Nextcloud inbox into Paperless
@@ -48,6 +49,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 
 - Exportiert Archiv-PDFs oder Originaldateien über die Paperless-API
 - Erstellt eine konfigurierbare Hierarchie aus Korrespondent, Dokumenttyp, Datum, Titel und Dokument-ID
+- Gibt jedem Nextcloud-Benutzer die Dokumente, die ihm in Paperless gehören, über die eine Verbindung des Administrators (optionales Eigentum je Benutzer)
 - Verschiebt oder benennt Dateien um, wenn sich Paperless-Metadaten ändern
 - Überspringt Dokumente im Paperless-Posteingang bis zur Fertigstellung und entfernt bereits gespiegelte Kopien, wenn ein Ausschluss-Tag gesetzt wird
 - Importiert Dateien aus einem konfigurierbaren Nextcloud-Eingang in Paperless
@@ -74,7 +76,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
 ]]></description>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -89,9 +91,9 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	<discussion>https://github.com/Dennis-Otto/paperless-sync/discussions</discussion>
 	<bugs>https://github.com/Dennis-Otto/paperless-sync/issues</bugs>
 	<repository type="git">https://github.com/Dennis-Otto/paperless-sync.git</repository>
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.0.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.0.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
-	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.0.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.1.0/screenshots/01-admin-settings.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.1.0/screenshots/02-structured-archive.png</screenshot><!-- x-release-please-version -->
+	<screenshot>https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.1.0/screenshots/03-dry-run-report.png</screenshot><!-- x-release-please-version -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
 		<php min-version="8.2"/>

@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Model;
 
 /**
- * @psalm-type ReportEntry = array{type: string, document?: int, path?: string, target?: string, detail?: string, values?: array<string, int|string>}
+ * @psalm-type ReportEntry = array{type: string, document?: int, path?: string, target?: string, detail?: string, values?: array<string, int|string>, user?: string}
  * @psalm-suppress PossiblyUnusedProperty
  */
 final class SyncReport implements \JsonSerializable {
@@ -25,6 +25,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_MOVE = 'move';
 	/** The copy of a document that got an excluded tag is removed. */
 	public const TYPE_REMOVE_EXCLUDED = 'remove-excluded';
+	/** The copy of a document that now belongs to another user of Nextcloud, in per-user ownership, is removed. */
+	public const TYPE_REMOVE_REASSIGNED = 'remove-reassigned';
 	/** The copy of a document in the trash of Paperless moves to the deleted folder. */
 	public const TYPE_TRASH = 'trash';
 	/** The copy of a document that is gone from Paperless moves to the deleted folder. */
@@ -69,6 +71,7 @@ final class SyncReport implements \JsonSerializable {
 		self::TYPE_ERROR => 1,
 		self::TYPE_DELETE => 2,
 		self::TYPE_REMOVE_EXCLUDED => 2,
+		self::TYPE_REMOVE_REASSIGNED => 2,
 		self::TYPE_TRASH => 3,
 		self::TYPE_MISSING => 3,
 		self::TYPE_UPLOAD_FAILED => 4,
@@ -94,6 +97,8 @@ final class SyncReport implements \JsonSerializable {
 	public int $movedToTrash = 0;
 	public int $permanentlyDeleted = 0;
 	public int $removedExcluded = 0;
+	/** The copies removed because their documents belong to another user of Nextcloud now, in per-user ownership. */
+	public int $removedReassigned = 0;
 	public int $importsSubmitted = 0;
 	public int $importsSucceeded = 0;
 	public int $importsFailed = 0;
@@ -120,6 +125,13 @@ final class SyncReport implements \JsonSerializable {
 	public array $entries = [];
 	/** @var list<string> the first errors of the run, without the lines of its changes */
 	public array $errorMessages = [];
+	/**
+	 * In per-user ownership, the counts of each user of Nextcloud whose archive the run reached, as
+	 * counts() gives them, by the ID of the user; empty otherwise.
+	 *
+	 * @var array<string, array<string, int>>
+	 */
+	public array $users = [];
 
 	/** @var list<int> the priority of each line of $actions */
 	private array $priorities = [];
@@ -145,7 +157,7 @@ final class SyncReport implements \JsonSerializable {
 	 * move to the deleted folder or a deletion; $path is the file that the change concerns, at its
 	 * new path after an export or a move.
 	 *
-	 * @param self::TYPE_EXPORT|self::TYPE_MOVE|self::TYPE_REMOVE_EXCLUDED|self::TYPE_TRASH|self::TYPE_MISSING|self::TYPE_DELETE $type
+	 * @param self::TYPE_EXPORT|self::TYPE_MOVE|self::TYPE_REMOVE_EXCLUDED|self::TYPE_REMOVE_REASSIGNED|self::TYPE_TRASH|self::TYPE_MISSING|self::TYPE_DELETE $type
 	 */
 	public function change(string $type, int $document, string $path): void {
 		$this->action(strtoupper(str_replace('-', ' ', $type)) . " P{$document}: {$path}", ['type' => $type, 'document' => $document, 'path' => $path]);
@@ -281,6 +293,70 @@ final class SyncReport implements \JsonSerializable {
 		}
 	}
 
+	/**
+	 * Takes in the report of the archive of one user of Nextcloud in per-user ownership: its counts,
+	 * also those for the user, its lines of changes and its errors, each with the user, by the
+	 * rules of the lines of this report. The files that it changed and the results of its imports
+	 * stay with it, for the activity stream and the notifications of that user alone.
+	 */
+	public function absorb(self $user, string $userId): void {
+		$this->users[$userId] = $user->counts();
+		$this->exported += $user->exported;
+		$this->moved += $user->moved;
+		$this->movedToTrash += $user->movedToTrash;
+		$this->permanentlyDeleted += $user->permanentlyDeleted;
+		$this->removedExcluded += $user->removedExcluded;
+		$this->removedReassigned += $user->removedReassigned;
+		$this->importsSubmitted += $user->importsSubmitted;
+		$this->importsSucceeded += $user->importsSucceeded;
+		$this->importsFailed += $user->importsFailed;
+		$this->foldersPruned += $user->foldersPruned;
+		$this->tagged += $user->tagged;
+		$this->unchanged += $user->unchanged;
+		$this->skipped += $user->skipped;
+		$this->errors += $user->errors;
+		$this->omittedActions += $user->omittedActions;
+		foreach ($user->actions as $index => $line) {
+			$entry = $user->entries[$index] + ['user' => $userId];
+			$line = "[{$userId}] {$line}";
+			if ($user->priorities[$index] === self::NOTICE) {
+				$this->append($line, self::NOTICE, $entry);
+				++$this->notices;
+			} else {
+				$this->action($line, $entry);
+			}
+		}
+		foreach ($user->errorMessages as $message) {
+			if (count($this->errorMessages) < self::ERROR_LIMIT) {
+				$this->errorMessages[] = "[{$userId}] {$message}";
+			}
+		}
+	}
+
+	/**
+	 * The counts of the changes of the report, and of the documents that stayed as they were or were skipped, by their keys.
+	 *
+	 * @return array<string, int>
+	 */
+	public function counts(): array {
+		return [
+			'exported' => $this->exported,
+			'moved' => $this->moved,
+			'movedToTrash' => $this->movedToTrash,
+			'permanentlyDeleted' => $this->permanentlyDeleted,
+			'removedExcluded' => $this->removedExcluded,
+			'removedReassigned' => $this->removedReassigned,
+			'importsSubmitted' => $this->importsSubmitted,
+			'importsSucceeded' => $this->importsSucceeded,
+			'importsFailed' => $this->importsFailed,
+			'foldersPruned' => $this->foldersPruned,
+			'tagged' => $this->tagged,
+			'unchanged' => $this->unchanged,
+			'skipped' => $this->skipped,
+			'errors' => $this->errors,
+		];
+	}
+
 	/** @return list<string> */
 	public function changedFiles(): array {
 		return $this->changedFiles;
@@ -295,19 +371,23 @@ final class SyncReport implements \JsonSerializable {
 		return $this->importResults;
 	}
 
-	/** @return array<string, bool|int|list<string>|list<ReportEntry>> */
+	/** @return array<string, bool|int|list<string>|list<ReportEntry>|array<string, array<string, int>>> */
 	public function jsonSerialize(): array {
 		$data = get_object_vars($this);
 		unset($data['priorities'], $data['notices'], $data['changedFiles'], $data['changedFileCount'], $data['importResults']);
+		// Only per-user ownership has counts for each user.
+		if ($this->users === []) {
+			unset($data['users']);
+		}
 
-		/** @var array<string, bool|int|list<string>|list<ReportEntry>> $data */
+		/** @var array<string, bool|int|list<string>|list<ReportEntry>|array<string, array<string, int>>> $data */
 		return $data;
 	}
 
 	/** @return array<string, bool|int> */
 	public function summary(): array {
 		$data = $this->jsonSerialize();
-		unset($data['actions'], $data['entries'], $data['errorMessages']);
+		unset($data['actions'], $data['entries'], $data['errorMessages'], $data['users']);
 
 		/** @var array<string, bool|int> $data */
 		return $data;

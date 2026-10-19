@@ -163,7 +163,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertIsString($guide);
 		self::assertIsString($readme);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(12, $links[1], 'Each of the six sections, each warning of the setup checks, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(13, $links[1], 'Each of the six sections, each warning of the setup checks, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		$page = preg_replace_callback('/^--8<-- "README\.md:([a-z-]+)"$/m', static function (array $include) use ($readme): string {
 			$name = preg_quote($include[1], '/');

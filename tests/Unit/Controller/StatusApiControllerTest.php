@@ -69,6 +69,29 @@ final class StatusApiControllerTest extends TestCase {
 		self::assertSame(['2.20.15', '9'], [$data['paperlessVersion'], $data['paperlessApiVersion']]);
 	}
 
+	/** Per-user ownership counts the changes of each user, which the API names beside the summary. */
+	public function testTheCountsOfEachUserComeWithPerUserOwnership(): void {
+		$alice = new SyncReport(false);
+		$alice->exported = 2;
+		$report = new SyncReport(false, $this->clock->time - 60, $this->clock->time);
+		$report->absorb($alice, 'alice');
+		$this->status->started(false);
+		$this->status->completed($report);
+
+		$data = $this->controller->status()->getData();
+
+		self::assertSame([2, 2], [$data['summary']['exported'], $data['users']['alice']['exported']]);
+		self::assertArrayNotHasKey('users', $data['summary']);
+	}
+
+	/** Single ownership has no counts of users. */
+	public function testSingleOwnershipNamesNoUsers(): void {
+		$this->status->started(false);
+		$this->status->completed(new SyncReport(false, $this->clock->time - 60, $this->clock->time));
+
+		self::assertSame([], $this->controller->status()->getData()['users']);
+	}
+
 	public function testAFailingMirrorIsNotHealthy(): void {
 		$this->status->failed(new RuntimeException('Paperless answered 401.'));
 		$this->clock->advance(900);

@@ -106,6 +106,7 @@ final class SyncServiceTest extends TestCase {
 			new UserTimeZones($this->userConfig(), $this->timeZones),
 			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
 			$this->systemTagService($this->storage),
+			$this->ownerMapping(),
 		);
 	}
 
@@ -146,6 +147,7 @@ final class SyncServiceTest extends TestCase {
 			new UserTimeZones($this->userConfig(), $this->timeZones),
 			$this->notificationPublisher($this->status, $this->storage, $this->clock, $this->logger),
 			$this->systemTagService($this->storage),
+			$this->ownerMapping(),
 		);
 	}
 
@@ -1180,6 +1182,7 @@ final class SyncServiceTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($this->status, $storage, $this->clock, $this->logger),
 			$this->systemTagService($storage),
+			$this->ownerMapping(),
 		);
 		memory_reset_peak_usage();
 		$before = memory_get_usage();

@@ -58,11 +58,15 @@ Ja. Die nächsten Läufe verschieben jede Datei an den Pfad der neuen Vorlage, i
 
 ### Können mehrere Benutzer das Archiv sehen?
 
-Ja, über Nextcloud: Der Zielbenutzer teilt den Ordner des Archivs mit ihnen oder mit einer Gruppe von ihnen, wie es [Entscheidung 0002](decisions/0002-the-filesystem-api-of-nextcloud.md) vorsieht. Teile es nur zum Lesen, da nichts von dort zu Paperless zurückgeht und ein Lauf eine bearbeitete Kopie ersetzen oder eine gelöschte neu schreiben kann; teile den Eingangsordner nur mit denen, die Dokumente an Paperless schicken dürfen. Ein eigenes Archiv für jeden Benutzer, mit den Dokumenten, die jeder in Paperless sehen darf, ist der Funktionswunsch [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84); gib dort dein 👍 oder beschreibe deinen Anwendungsfall.
+Ja, über Nextcloud: Der Zielbenutzer teilt den Ordner des Archivs mit ihnen oder mit einer Gruppe von ihnen, wie es [Entscheidung 0002](decisions/0002-the-filesystem-api-of-nextcloud.md) vorsieht. Teile es nur zum Lesen, da nichts von dort zu Paperless zurückgeht und ein Lauf eine bearbeitete Kopie ersetzen oder eine gelöschte neu schreiben kann; teile den Eingangsordner nur mit denen, die Dokumente an Paperless schicken dürfen. Mit dem [Eigentum je Benutzer](guide.de.md#eigentum-je-benutzer) erhält stattdessen jeder Benutzer ein eigenes Archiv, mit den Dokumenten, die seinem Benutzer von Paperless gehören.
 
 ### Kann ich die Kopien nach ihren Tags finden?
 
 Ja, mit den [Tags in Nextcloud](guide.de.md#tags-in-nextcloud). Jede Kopie trägt dann die Tags ihres Dokuments als kollaborative Tags von Nextcloud, also filtert Dateien das Archiv nach ihnen, in seiner Ansicht *Schlagworte*, und die Suche von Nextcloud findet die Kopien nach ihnen; alle, die eine Kopie öffnen können, auch über eine Freigabe, sehen ihre Tags. Die Namen der Tags selbst sehen alle Benutzer von Nextcloud, auch die, die das Archiv nicht öffnen können, also schalte die Einstellung nur ein, wenn die Namen deiner Tags in Paperless für alle sichtbar sein dürfen. Sie folgen jeder Änderung in Paperless mit dem nächsten Lauf, auch der eines Dokuments, dessen Kopie bleibt, wie sie ist, und nur Administratoren können sie zuweisen, damit niemand sie versehentlich an eine Kopie hängt. Die Tags, die Leute in Nextcloud anlegen, bleiben ihre, auch an den Kopien: Die Läufe ändern oder entfernen sie nie.
+
+### Kann jeder Benutzer seine eigenen Dokumente erhalten?
+
+Ja, wenn die Dokumente deines Paperless Eigentümer haben: Stelle *Wer die Dokumente erhält* auf *Jeder Benutzer, die ihm in Paperless gehören*. Jeder Benutzer von Nextcloud erhält dann die Dokumente des Benutzers von Paperless mit derselben ID, gleich in welcher Schreibung, wie Single Sign-on sie vergibt, oder des Benutzers, den die Tabelle *Paperless-Benutzer mit einer anderen Nextcloud-ID* nennt, in seinen eigenen Dateien; die Dateien seines Eingangs werden in Paperless seine, und der Zielbenutzer erhält nur die Dokumente, die sonst niemand erhält. Ein Administrator verbindet Paperless weiterhin mit einem Token, dessen Konto die Dokumente jedes Benutzers sehen muss. [Eigentum je Benutzer](guide.de.md#eigentum-je-benutzer) hat die Einzelheiten.
 
 ### Kann ich den Zielbenutzer ändern?
 
@@ -98,7 +102,7 @@ Ja: `occ paperless_sync:run`, `occ paperless_sync:status` und `occ paperless_syn
 
 ### Kann ich mehrere Paperless-Instanzen verbinden?
 
-Nein, ein Nextcloud-Server verbindet sich mit einem Paperless, mit einem Zielbenutzer. Ob sich mehr lohnen, ist eine Frage für einen [Funktionswunsch](https://github.com/Dennis-Otto/paperless-sync/issues/new?template=feature_request.yml).
+Nein, ein Nextcloud-Server verbindet sich mit einem Paperless, mit einem Zielbenutzer, oder mit dem [Eigentum je Benutzer](guide.de.md#eigentum-je-benutzer) einem Archiv für jeden Benutzer. Ob sich mehr lohnen, ist eine Frage für einen [Funktionswunsch](https://github.com/Dennis-Otto/paperless-sync/issues/new?template=feature_request.yml).
 
 ### Funktioniert Paperless unter einem Unterpfad oder hinter einem Reverse Proxy?
 

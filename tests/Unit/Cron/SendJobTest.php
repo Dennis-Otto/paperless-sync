@@ -87,7 +87,7 @@ final class SendJobTest extends TestCase {
 
 	private function job(?SyncStateRepositoryInterface $state = null): SendJob {
 		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
-		$service = new SendService($this->configService(), $this->paperless, $state ?? $this->state, $this->storage, $publisher, $this->clock, $this->createStub(LoggerInterface::class));
+		$service = new SendService($this->configService(), $this->paperless, $state ?? $this->state, $this->storage, $publisher, $this->clock, $this->createStub(LoggerInterface::class), $this->ownerMapping());
 
 		return new SendJob($this->clock, $service, $this->logger);
 	}

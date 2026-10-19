@@ -43,6 +43,14 @@ interface SyncStateRepositoryInterface {
 
 	public function deleteExport(string $ownerUid, int $documentId): void;
 
+	/**
+	 * The users of Nextcloud whose archives have copies of documents, or other states of exports,
+	 * such as those of per-user ownership, in the order of their IDs.
+	 *
+	 * @return list<string>
+	 */
+	public function exportOwners(): array;
+
 	/** @return array<string, int|string|null>|null */
 	public function findImport(string $ownerUid, string $path): ?array;
 

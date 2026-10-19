@@ -795,6 +795,32 @@
 	margin-top: 10px;
 }
 
+/* The counts of each user of per-user ownership, a line for each user. */
+.paperless-sync-report-users {
+	margin-top: 12px;
+}
+
+.paperless-sync-report-users h4 {
+	margin: 0 0 4px;
+	font-size: 14px;
+}
+
+.paperless-sync-report-users ul {
+	display: grid;
+	gap: 2px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.paperless-sync-report-users strong {
+	margin-inline-end: 8px;
+}
+
+.paperless-sync-report-users span {
+	color: var(--color-text-maxcontrast);
+}
+
 /* The counts, the filters and the entries of a report hide themselves with the attribute
    hidden, which their own display would otherwise outweigh. */
 .paperless-sync-report-summary[hidden],
@@ -903,6 +929,12 @@
 .paperless-sync-entry-document {
 	color: var(--color-text-maxcontrast);
 	font-variant-numeric: tabular-nums;
+}
+
+/* The user of Nextcloud whose file an entry of per-user ownership names. */
+.paperless-sync-entry-user {
+	color: var(--color-text-maxcontrast);
+	font-size: 12px;
 }
 
 .paperless-sync-entry-file {

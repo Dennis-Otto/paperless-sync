@@ -1473,7 +1473,62 @@ notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation'
+# Per-user ownership (#84): each user of Nextcloud gets the documents that their user of
+# Paperless owns, in their own files below the same base folder, and the copies that the target
+# user had of them leave its archive. The Paperless user E2E-Other gets e2e-other, whatever the
+# case, and e2e-owner a user of its own. The file that e2e-owner puts into their inbox becomes
+# theirs in Paperless, and comes back into their archive. The other users see none of it.
+"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \
+	php occ user:add --password-from-env e2e-owner >/dev/null
+control /control/scenario/per-user
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'settings[ownership]=per-user' \
+	--output "${TMP_DIR}/checklist-per-user.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/test"
+assert_json checklist-per-user "${TMP_DIR}/checklist-per-user.json"
+save_settings "${TMP_DIR}/per-user-settings.json" ownership=per-user
+sync_run false "${TMP_DIR}/per-user.json"
+assert_json per-user "${TMP_DIR}/per-user.json"
+# Each copy is in the files of its user alone, and the copies that left are gone: the user and
+# the path, for WebDAV, of each change of a type in a report.
+per_user_files() {
+	type="$1"
+	"${COMPOSE[@]}" exec -T paperless-mock python -c '
+import json, sys
+from urllib.parse import quote
+for entry in json.load(sys.stdin)["entries"]:
+    if entry["type"] == sys.argv[1]:
+        print(entry["user"], quote(entry["path"]))' "${type}" < "$2"
+}
+# The helpers set user and path themselves, so the loops name theirs otherwise.
+while read -r copy_user copy_path; do
+	assert_dav_file "${copy_user}" "${copy_path}" 'Synthetic Paperless archive document'
+	for other_user in sync-target e2e-other e2e-owner; do
+		if [[ "${other_user}" != "${copy_user}" ]]; then
+			assert_dav_missing "${other_user}" "${copy_path}"
+		fi
+	done
+done < <(per_user_files export "${TMP_DIR}/per-user.json")
+while read -r copy_user copy_path; do
+	assert_dav_missing "${copy_user}" "${copy_path}"
+done < <(per_user_files remove-reassigned "${TMP_DIR}/per-user.json")
+dav_upload e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf' '%PDF-1.4 Synthetic letter of e2e-owner'
+sync_run false "${TMP_DIR}/per-user-upload.json"
+control /control/task-of/owner-letter.pdf/success
+# The run gives the new document its owner, and its export brings it into the archive of e2e-owner.
+sync_run false "${TMP_DIR}/per-user-sent.json"
+mock_state > "${TMP_DIR}/mock-owner-changes.json"
+assert_json mock-owner-changes "${TMP_DIR}/mock-owner-changes.json"
+assert_dav_missing e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf'
+SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
+assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
+save_settings "${TMP_DIR}/single-settings.json" ownership=single
+
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

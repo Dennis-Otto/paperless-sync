@@ -85,11 +85,30 @@ final class NotificationPublisher {
 		}
 		try {
 			$this->alertOrClear();
-			if ($config !== null) {
-				foreach ($report->importResults() as $result) {
-					if ($result['outcome'] !== SyncReport::IMPORTED) {
-						$this->notifyImport($config, $result);
-					}
+		} catch (\Throwable $exception) {
+			$this->logger->warning('Paperless Sync could not send its notifications: {error}', [
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+		}
+		if ($config !== null) {
+			$this->publishImports($config, $report);
+		}
+	}
+
+	/**
+	 * The notifications of the imports of a run that Paperless refused or that failed, for the target
+	 * user of $config, whose inbox held the files: in per-user ownership, each user of Nextcloud
+	 * hears of the files of their own inbox. A dry-run notifies nobody.
+	 */
+	public function publishImports(SyncConfig $config, SyncReport $report): void {
+		if ($report->dryRun) {
+			return;
+		}
+		try {
+			foreach ($report->importResults() as $result) {
+				if ($result['outcome'] !== SyncReport::IMPORTED) {
+					$this->notifyImport($config, $result);
 				}
 			}
 		} catch (\Throwable $exception) {

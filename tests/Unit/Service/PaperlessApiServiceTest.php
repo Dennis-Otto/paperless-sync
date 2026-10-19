@@ -80,6 +80,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$client = $this->createStub(IClient::class);
 		$client->method('get')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('GET', $url, $options));
 		$client->method('post')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('POST', $url, $options));
+		$client->method('patch')->willReturnCallback(fn (string $url, array $options): IResponse => $this->respond('PATCH', $url, $options));
 		$this->clientService = $this->createStub(IClientService::class);
 		$this->clientService->method('newClient')->willReturn($client);
 		$this->tempManager = $this->createStub(ITempManager::class);
@@ -776,6 +777,99 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(['name' => 'tags', 'contents' => '12'], $parts[1]);
 		self::assertSame(['name' => 'tags', 'contents' => '7'], $parts[2]);
 		self::assertCount(3, $parts);
+	}
+
+	/** Per-user ownership gives a document its owner, and changes nothing else of it. */
+	public function testGivesADocumentItsOwner(): void {
+		$this->responses[] = [200, ['id' => 77, 'owner' => 5]];
+
+		$this->service->setOwner(77, 5);
+
+		$request = $this->requests[0];
+		self::assertSame(['PATCH', self::URL . '/api/documents/77/', ['owner' => 5]], [$request['method'], $request['url'], $request['options']['json']]);
+		self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
+		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
+	}
+
+	/**
+	 * Paperless-ngx 2.x saves the owner, then reads the document again as the account, which no
+	 * longer sees a document that it gave away without the permission View: the 404 is a success.
+	 */
+	public function testADocumentThatTheAccountNoLongerSeesHasItsOwner(): void {
+		$this->responses[] = [404, ['detail' => 'No Document matches the given query.']];
+
+		$this->service->setOwner(77, 5);
+
+		self::assertCount(1, $this->requests);
+	}
+
+	/** The ID of the account, which per-user ownership needs to tell the uploads of the app from the documents of the users. */
+	public function testNamesTheIdOfTheAccount(): void {
+		$this->responses[] = [200, ['user' => ['id' => 9, 'is_superuser' => false], 'permissions' => ['view_document']]];
+		$this->responses[] = [403, ['detail' => 'You do not have permission to perform this action.']];
+
+		self::assertSame([9, null], [$this->service->accountId(), $this->service->accountId()]);
+		self::assertSame(self::URL . '/api/ui_settings/', $this->requests[0]['url']);
+	}
+
+	/** @return array<string, array{int, mixed, string}> the answer of Paperless and the message of the failure */
+	public static function refusedOwners(): array {
+		return [
+			'an account that may not change the document' => [403, ['detail' => 'Insufficient permissions.'], 'Paperless did not make the user 5 the owner of the document 77: HTTP 403: Insufficient permissions.'],
+			'an answer without a reason' => [502, '', 'Paperless did not make the user 5 the owner of the document 77: HTTP 502.'],
+		];
+	}
+
+	#[DataProvider('refusedOwners')]
+	public function testAnOwnerThatPaperlessRefusesIsReportedWithItsReason(int $status, mixed $body, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage($message);
+
+		$this->service->setOwner(77, 5);
+	}
+
+	/** The connection checklist counts the documents of each user of Paperless, and those without an owner. */
+	public function testCountsTheDocumentsOfAnOwner(): void {
+		$this->responses[] = [200, self::page(12)];
+		$this->responses[] = [200, self::page(3)];
+
+		self::assertSame([12, 3], [$this->service->ownedDocuments(5), $this->service->ownedDocuments(null)]);
+		self::assertSame([
+			['page' => 1, 'page_size' => 1, 'owner__id' => 5],
+			['page' => 1, 'page_size' => 1, 'owner__isnull' => 1],
+		], array_map(static fn (array $request): mixed => $request['options']['query'], $this->requests));
+	}
+
+	/**
+	 * In per-user ownership, the documents of the users are theirs, not the account's: a superuser
+	 * sees their trash, any other account gets the note about the trash of other owners.
+	 *
+	 * @return array<string, array{array{0: int, 1: mixed}, ConnectionCheck}>
+	 */
+	public static function perUserAccounts(): array {
+		$hint = 'Paperless shows the account in its trash only the documents that it owns and those without an owner, unless it is a superuser. In per-user ownership, the documents of the users belong to them, so their copies count as missing when they go to the trash, and move to the deleted folder only after the required missing scans.';
+
+		return [
+			'a superuser' => [[200, self::account(true, [])], ConnectionCheck::passed('trash', 'Visible to the account: %s', ['1'])],
+			'another account' => [[200, self::account(false, [])], ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], $hint)],
+			'an account without View for UI Settings' => [[403, ['detail' => 'You do not have permission to perform this action.']], ConnectionCheck::warning('trash', 'Visible to the account: %s', ['1'], $hint)],
+		];
+	}
+
+	/** @param array{0: int, 1: mixed} $account */
+	#[DataProvider('perUserAccounts')]
+	public function testTheLineOfTheTrashKnowsPerUserOwnership(array $account, ConnectionCheck $trash): void {
+		$this->responses[] = [200, self::page(1)];
+		$this->responses[] = $account;
+		for ($list = 0; $list < 5; ++$list) {
+			$this->responses[] = [200, self::page(1)];
+		}
+
+		$checks = $this->preflight(['ownership' => 'per-user', 'inbox_enabled' => false, 'send_group' => '']);
+
+		self::assertEquals($trash, $checks[2]);
 	}
 
 	/** A new tag that Paperless assigns to no other document on its own: its matching algorithm is None. */

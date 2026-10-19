@@ -80,20 +80,36 @@ final class ExportPlanner {
 
 	/**
 	 * The actions of the export, in their order: those of the active documents, then those of the
-	 * documents in the trash, then those of the documents that Paperless no longer lists. Without
-	 * $trash, the plan of one document, which knows neither the trash nor which documents are gone.
+	 * active documents of other users, then those of the documents in the trash, then those of the
+	 * documents that Paperless no longer lists. Without $trash, the plan of one document, which
+	 * knows neither the trash nor which documents are gone.
+	 *
+	 * In per-user ownership, each user of Nextcloud has a plan of their own, with their documents
+	 * in $documents and those of the others in $others: Paperless lists them, so none of them is
+	 * missing. The copy of a document that another user's archive takes now is removed here, as
+	 * that of a document with an excluded tag; one whose user the run can't tell, or whose user's
+	 * archive can't take it in this run, stays where it is.
 	 *
 	 * @param list<array<string, mixed>> $documents the active documents
 	 * @param list<array<string, mixed>>|null $trash the documents in the trash, or null for the plan of one document
 	 * @param bool $complete whether both lists are complete: a document that an incomplete list left out may still exist, so the plan counts none as missing then
+	 * @param array<int, bool> $others the active documents of other users, by ID: true when the archive of another user takes the document, false when its copy stays
 	 * @return \Generator<int, ExportAction, mixed, void>
 	 * @throws RuntimeException for a document without a valid ID
 	 */
-	public function plan(array $documents, ?array $trash, bool $complete): \Generator {
+	public function plan(array $documents, ?array $trash, bool $complete, array $others = []): \Generator {
 		foreach ($this->queue($documents) as [$document, $documentId, $entry]) {
 			($this->heartbeat)();
 			$this->seen[$documentId] = true;
 			yield from $this->active($document, $documentId, $entry);
+		}
+		foreach ($others as $documentId => $reassigned) {
+			($this->heartbeat)();
+			$this->seen[$documentId] = true;
+			$entry = $this->states->find($documentId);
+			if ($reassigned && $entry !== null) {
+				yield from $this->removed($documentId, $entry, DocumentContext::reassigned($documentId, $entry), SyncReport::TYPE_REMOVE_REASSIGNED);
+			}
 		}
 		if ($trash === null) {
 			return;
@@ -154,7 +170,7 @@ final class ExportPlanner {
 	 */
 	private function active(array $document, int $documentId, ?array $entry): array {
 		if ($this->filter->excludes($document)) {
-			return [new Skipped(), ...$this->excluded($documentId, $entry)];
+			return [new Skipped(), ...($entry !== null ? $this->removed($documentId, $entry, DocumentContext::excluded($documentId, $entry), SyncReport::TYPE_REMOVE_EXCLUDED) : [])];
 		}
 		$target = '';
 		// The checksum and the fingerprint that the run learned of a changed document, written with
@@ -248,24 +264,22 @@ final class ExportPlanner {
 	}
 
 	/**
-	 * A document with an excluded tag: its copy is removed, and its state is forgotten. When the
-	 * batch is full, both wait for a later run.
+	 * A document that leaves this archive: one with an excluded tag, or one that belongs to another
+	 * user of Nextcloud now. Its copy is removed, and its state is forgotten. When the batch is
+	 * full, both wait for a later run.
 	 *
-	 * @param array<string, int|string|null>|null $entry
+	 * @param array<string, int|string|null> $entry
+	 * @param SyncReport::TYPE_REMOVE_EXCLUDED|SyncReport::TYPE_REMOVE_REASSIGNED $type
 	 * @return list<ExportAction>
 	 */
-	private function excluded(int $documentId, ?array $entry): array {
-		if ($entry === null) {
-			return [];
-		}
-		$context = DocumentContext::excluded($documentId, $entry);
+	private function removed(int $documentId, array $entry, DocumentContext $context, string $type): array {
 		try {
 			$path = (string)($entry['path'] ?? '');
 			if (!$this->files->exists($path)) {
 				return [new ForgetState($documentId, $context)];
 			}
 
-			return $this->batch->fits(SyncBatch::DELETE) ? [new RemoveCopy($context, $path, SyncReport::TYPE_REMOVE_EXCLUDED)] : [];
+			return $this->batch->fits(SyncBatch::DELETE) ? [new RemoveCopy($context, $path, $type)] : [];
 		} catch (\Throwable $exception) {
 			return [new Failed($context, $exception)];
 		}

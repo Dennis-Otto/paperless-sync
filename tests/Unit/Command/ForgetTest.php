@@ -71,6 +71,7 @@ final class ForgetTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
+			$this->ownerMapping(),
 		);
 		$this->forget = new Forget($sync);
 		$this->command = new CommandTester($this->forget);
