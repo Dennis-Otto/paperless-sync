@@ -138,8 +138,9 @@ interface PaperlessClientInterface {
 	/**
 	 * The state of the task of an upload: its status in upper case, as Paperless names it, such as
 	 * PENDING, STARTED, SUCCESS, FAILURE or REVOKED, PENDING also while Paperless doesn't list the
-	 * task; what Paperless says about its result, such as the reason of a failure; the ID of the
-	 * document that it created, if it names one; and whether Paperless lists the task at all.
+	 * task or has marked it as failed without writing the reason yet; what Paperless says about its
+	 * result, such as the reason of a failure; the ID of the document that it created, if it names
+	 * one; and whether Paperless lists the task at all.
 	 *
 	 * @return array{status: string, message: string, documentId: int|null, listed: bool}
 	 */

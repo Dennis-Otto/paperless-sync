@@ -2212,6 +2212,35 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Paperless-ngx 2.x marks a failed task in two steps: its handler of task_failure writes
+	 * FAILURE with the traceback object as the result, "<traceback object at 0x…>", and its
+	 * handler of task_postrun the reason a moment later. A poll between the two reads the recorded
+	 * failure with the placeholder as its result; for the app, the task has not ended until the
+	 * reason is there, so the .error.txt next to the file names it (issue #161).
+	 */
+	public function testAFailureWhoseReasonPaperlessHasNotWrittenYetIsStillPending(): void {
+		[$status, $body, $headers] = self::recorded('2', 'task-failure');
+		$tasks = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($tasks);
+		self::assertIsArray($tasks[0]);
+		$tasks[0]['result'] = '<traceback object at 0x7f3c2a1b4e80>';
+		$this->responses[] = [$status, json_encode($tasks, JSON_THROW_ON_ERROR), $headers];
+		$this->responses[] = [$status, $body, $headers];
+
+		$placeholder = $this->service->taskStatus('task-1');
+		$reason = $this->service->taskStatus('task-1');
+
+		self::assertSame([
+			'status' => 'PENDING',
+			'message' => 'Paperless has marked the task as failed, but not yet written the reason.',
+			'documentId' => null,
+			'listed' => true,
+		], $placeholder);
+		self::assertSame('FAILURE', $reason['status']);
+		self::assertStringStartsWith('broken.pdf: Error occurred while consuming document broken.pdf: ', $reason['message']);
+	}
+
 	#[DataProvider('paperlessLines')]
 	public function testAnUploadToPaperlessGivesItsTask(string $line): void {
 		$this->responses[] = self::recorded($line, 'upload');

@@ -39,6 +39,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const VERSION_LENGTH = 32;
 	/** The longest message of a task that the app keeps, such as the reason of a failed import. */
 	private const TASK_MESSAGE_LENGTH = 4000;
+	/**
+	 * The start of the result of a task that Paperless-ngx 2.x has marked as failed without its
+	 * reason yet: the text of the traceback object of Python, such as "<traceback object at 0x…>".
+	 */
+	private const UNWRITTEN_REASON = '<traceback object at ';
 	private const PAGE_SIZE = 1000;
 	/** The matching algorithm "None" of Paperless: a tag that Paperless assigns to no document on its own. */
 	private const MATCH_NONE = 0;
@@ -501,6 +506,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * 3.x lists them in pages, with the status in lower case and the result in result_data, as
 	 * document_id, reason, duplicate_of or error_message.
 	 *
+	 * Paperless-ngx 2.x marks a failed task in two steps: its handler of task_failure writes
+	 * FAILURE with the traceback object as the result, "<traceback object at 0x…>", and its
+	 * handler of task_postrun the reason a moment later. Such a task is still pending, so that a
+	 * poll between the two steps doesn't end the import with the placeholder as its reason.
+	 *
 	 * @psalm-suppress MixedAssignment
 	 */
 	public function taskStatus(string $taskId): array {
@@ -515,6 +525,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$message = self::text($task['result'] ?? null);
 		if ($message === '') {
 			$message = self::resultMessage($data);
+		}
+		if ($status === 'FAILURE' && str_starts_with($message, self::UNWRITTEN_REASON)) {
+			return ['status' => 'PENDING', 'message' => 'Paperless has marked the task as failed, but not yet written the reason.', 'documentId' => null, 'listed' => true];
 		}
 		$ids = $task['related_document_ids'] ?? null;
 		$documentId = null;
