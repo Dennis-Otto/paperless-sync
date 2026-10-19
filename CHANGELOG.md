@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- **Screen readers name the custom field button as it reads:** the button *custom_fields.…* under the path template now announces its visible text, with *Insert a custom field, then type its name* as its tooltip and description, so voice control finds it by what it shows.
+
 ## [1.0.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.4.0...v1.0.0) (2026-10-18)
 
 ### Features
