@@ -117,6 +117,11 @@ def reset_state():
                 "documentScans": [],
                 # The ID and the fields of every document that a run read alone, as the webhook asks.
                 "documentReads": [],
+                # The IDs of documents that the scan leaves out though Paperless has them, as pages
+                # that shift while a run reads them can (/control/left-out/<ids>), and the ID of
+                # every read of one of them alone.
+                "leftOut": [],
+                "leftOutReads": [],
                 "invalidAuth": 0,
                 "uploads": [],
                 "refusedUploads": [],
@@ -411,6 +416,11 @@ class Handler(BaseHTTPRequestHandler):
             if "fields" in query:
                 fields = query["fields"][0].split(",")
                 documents = [{key: value for key, value in item.items() if key in fields} for item in documents]
+            # A scan that pages shifted: one document deleted and another one added keep the count,
+            # so the scan looks complete without a document that /api/documents/<id>/ still serves.
+            with LOCK:
+                left_out = set(STATE["leftOut"])
+            documents = [item for item in documents if item.get("id") not in left_out]
             # An incomplete answer, as of a proxy or a permission glitch: an empty page whose count
             # still lists the document.
             self._page(documents, 1 if STATE["scenario"] == "incomplete" else None)
@@ -480,6 +490,8 @@ class Handler(BaseHTTPRequestHandler):
             fields = query.get("fields", [""])[0]
             with LOCK:
                 STATE["documentReads"].append({"id": document_id, "fields": fields})
+                if document_id in STATE["leftOut"]:
+                    STATE["leftOutReads"].append(document_id)
             document = next((item for item in documents if item.get("id") == document_id), None)
             if document is None:
                 self._json(404, {"detail": "No Document matches the given query."})
@@ -519,6 +531,13 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["checksum"] = algorithm
             self._json(200, {"checksum": algorithm})
+            return
+        if match := re.fullmatch(r"/control/left-out/(none|\d+(?:,\d+)*)", parsed.path):
+            # The documents that the scan leaves out: /control/left-out/123,124, or none.
+            left_out = [] if match.group(1) == "none" else [int(item) for item in match.group(1).split(",")]
+            with LOCK:
+                STATE["leftOut"] = left_out
+            self._json(200, {"leftOut": left_out})
             return
         if parsed.path.startswith("/control/paperless/"):
             version = parsed.path.rsplit("/", 1)[-1]

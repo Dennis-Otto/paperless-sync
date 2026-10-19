@@ -43,6 +43,7 @@ The scenario verifies:
 - the background job as system cron starts it: once synchronization is enabled and the interval since the last run has passed, it runs, and started again at once, it waits
 - a document restored from the Paperless trash, whose copy moves back from the deleted folder without a download
 - conflicts: with `skip`, a file of the user at the path of a document stays and the run reports it; with `replace`, the document takes its place
+- a document that a complete scan leaves out while Paperless still has it, as pages that shift while a run reads them can: the run asks Paperless for it alone, and its copy stays without a missing scan
 - a document that vanishes from Paperless without passing through its trash: its copy waits for the grace runs, then moves to the deleted folder, and stays there, as direct deletion is not allowed
 - version 9 of the Paperless API in every request, which the mock counts, the version of Paperless in the status, and a Paperless-ngx 2.15 without version 9, whose run says which Paperless the app needs
 - a run that can't reach Paperless, near the end, whose error the log of Nextcloud holds without the token, with the arguments of the frames of its trace that PHP replaced

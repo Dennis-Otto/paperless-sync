@@ -31,6 +31,11 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public ?int $documentsListed = null;
 	/** The number of documents that Paperless lists in its trash, when the run receives fewer. */
 	public ?int $trashListed = null;
+	/**
+	 * @var list<int> the IDs of documents that Paperless has but a complete scan leaves out, as pages
+	 *                that shift while a run reads them can: one document deleted and another one added
+	 */
+	public array $leftOut = [];
 	/** @var array<string, string> */
 	public array $correspondents = [];
 	/** @var array<string, string> */
@@ -125,7 +130,9 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 
 	public function documents(bool $notes = false): PaperlessScan {
 		$this->notesAsked[] = $notes;
-		return self::scan($this->documents, $this->documentsListed);
+		$listed = array_values(array_filter($this->documents, fn (array $document): bool => !in_array($document['id'] ?? null, $this->leftOut, true)));
+
+		return self::scan($listed, $this->documentsListed);
 	}
 
 	public function trash(): PaperlessScan {
