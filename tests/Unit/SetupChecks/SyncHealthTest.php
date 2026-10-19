@@ -34,7 +34,7 @@ final class SyncHealthTest extends TestCase {
 	protected function setUp(): void {
 		$this->clock = new TestClock();
 		$this->status = $this->statusService($this->clock);
-		$formatter = $this->createMock(IDateTimeFormatter::class);
+		$formatter = $this->createStub(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturnCallback(fn (int $timestamp): string => 'vor ' . intdiv($this->clock->time - $timestamp, 60) . ' Minuten');
 		$this->check = new SyncHealth($this->status, $this->configService(), $this->germanL10n(), $formatter);
 		$this->configService()->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');

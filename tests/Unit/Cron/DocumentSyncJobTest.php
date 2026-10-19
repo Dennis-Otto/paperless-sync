@@ -31,6 +31,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\Config\IUserConfig;
 use OCP\Lock\ILockingProvider;
 use OCP\Lock\LockedException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -40,6 +41,7 @@ use Psr\Log\NullLogger;
  * The background job of a document that the webhook of Paperless named, started the way
  * Nextcloud's cron starts it.
  */
+#[AllowMockObjectsWithoutExpectations]
 final class DocumentSyncJobTest extends TestCase {
 	use InMemoryConfiguration;
 	use InMemoryWebhook;
@@ -63,7 +65,7 @@ final class DocumentSyncJobTest extends TestCase {
 	protected function setUp(): void {
 		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
 		$this->clock = new TestClock();
-		$this->locking = $this->createMock(ILockingProvider::class);
+		$this->locking = $this->createStub(ILockingProvider::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->paperless = new TestPaperlessClient();
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
@@ -80,11 +82,11 @@ final class DocumentSyncJobTest extends TestCase {
 			new PathTemplateService(),
 			$status,
 			$this->locking,
-			$this->createMock(LoggerInterface::class),
+			$this->createStub(LoggerInterface::class),
 			$this->clock,
-			$this->activityPublisher($this->storage, $this->createMock(LoggerInterface::class)),
+			$this->activityPublisher($this->storage, $this->createStub(LoggerInterface::class)),
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
-			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createMock(LoggerInterface::class)),
+			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService($this->storage),
 		);
 		$this->jobList = $this->createMock(IJobList::class);
@@ -123,7 +125,7 @@ final class DocumentSyncJobTest extends TestCase {
 		$this->logger->expects(self::never())->method('error');
 		$this->logger->expects(self::once())->method('info')->with('Paperless synchronization of document {document} postponed: another run is active.', ['document' => 123]);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame([], $this->paperless->documentReads);
 	}
@@ -137,7 +139,7 @@ final class DocumentSyncJobTest extends TestCase {
 			'reason' => 'Scheduled synchronization is off, so changes from Paperless wait until it is on again.',
 		]);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame([], $this->storage->files);
 		self::assertSame('off', $this->webhook->state()['lastCall']['result'] ?? null);
@@ -149,7 +151,7 @@ final class DocumentSyncJobTest extends TestCase {
 		$this->logger->expects(self::never())->method('info');
 		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization of document {document} failed: {error}', ['document' => 123, 'error' => 'Paperless has no tag named "Nextclod", which "Only mirror documents with these tags" names; a run would remove the copies of the documents that should stay.']);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame([], $this->storage->files);
 		self::assertSame('failed', $this->webhook->state()['lastCall']['result'] ?? null);
@@ -161,7 +163,7 @@ final class DocumentSyncJobTest extends TestCase {
 		$this->jobList->expects(self::never())->method('scheduleAfter');
 		$this->logger->expects(self::once())->method('error')->with('Paperless synchronization of document {document} failed: {error}', ['document' => 123, 'error' => 'cURL error 7: Failed to connect']);
 
-		$this->job->start($this->createMock(IJobList::class));
+		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame(['at' => TestClock::START, 'document' => 123, 'result' => 'failed', 'message' => 'cURL error 7: Failed to connect'], $this->webhook->state()['lastCall']);
 	}
@@ -169,7 +171,7 @@ final class DocumentSyncJobTest extends TestCase {
 	public function testAJobWithoutADocumentChangesNothing(): void {
 		foreach ([null, [], ['document' => '123'], ['document' => 0], 'P123'] as $argument) {
 			$this->job->setArgument($argument);
-			$this->job->start($this->createMock(IJobList::class));
+			$this->job->start($this->createStub(IJobList::class));
 		}
 
 		self::assertSame([], $this->paperless->documentReads);

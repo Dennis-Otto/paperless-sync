@@ -29,12 +29,14 @@ use OCP\SystemTag\MapperEvent;
 use OCP\WorkflowEngine\IManager;
 use OCP\WorkflowEngine\IRuleMatcher;
 use OCP\WorkflowEngine\ISpecificOperation;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SendToPaperlessTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;

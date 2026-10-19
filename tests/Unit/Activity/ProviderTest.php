@@ -37,12 +37,12 @@ final class ProviderTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
-		$factory = $this->createMock(IFactory::class);
+		$factory = $this->createStub(IFactory::class);
 		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => match ($language) {
 			'de' => $this->germanL10n(),
 			default => $this->englishL10n(),
 		});
-		$urls = $this->createMock(IURLGenerator::class);
+		$urls = $this->createStub(IURLGenerator::class);
 		$urls->method('linkToRouteAbsolute')->willReturnCallback(static function (string $route, array $parameters): string {
 			self::assertSame('files.viewcontroller.showFile', $route);
 
@@ -292,7 +292,7 @@ final class ProviderTest extends TestCase {
 
 	/** English, the language of the texts in the code: the singular for 1 and the plural for every other count. */
 	private function englishL10n(): IL10N {
-		$l10n = $this->createMock(IL10N::class);
+		$l10n = $this->createStub(IL10N::class);
 		$l10n->method('t')->willReturnCallback(static fn (string $text, array|string $parameters = []): string => vsprintf($text, (array)$parameters));
 		$l10n->method('n')->willReturnCallback(static fn (string $singular, string $plural, int $count, array $parameters = []): string => vsprintf(str_replace('%n', (string)$count, $count === 1 ? $singular : $plural), $parameters));
 

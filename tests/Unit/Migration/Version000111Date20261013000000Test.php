@@ -54,6 +54,6 @@ final class Version000111Date20261013000000Test extends TestCase {
 	}
 
 	private function migrate(IOutput $output): void {
-		(new Version000111Date20261013000000($this->configService()))->postSchemaChange($output, fn (): ISchemaWrapper => $this->createMock(ISchemaWrapper::class), []);
+		(new Version000111Date20261013000000($this->configService()))->postSchemaChange($output, fn (): ISchemaWrapper => $this->createStub(ISchemaWrapper::class), []);
 	}
 }

@@ -33,7 +33,7 @@ trait InMemoryWebhook {
 	private const WEBHOOK_URL = 'https://cloud.example.test/index.php/apps/paperless_sync/api/v1/webhook';
 
 	private function webhookService(ITimeFactory $clock): WebhookService {
-		$credentials = $this->createMock(ICredentialsManager::class);
+		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(fn (string $userId, string $identifier): mixed => $this->webhookCredentials[$identifier] ?? null);
 		$credentials->method('store')->willReturnCallback(function (string $userId, string $identifier, mixed $value): void {
 			/** @psalm-suppress MixedAssignment */
@@ -45,7 +45,7 @@ trait InMemoryWebhook {
 
 			return $deleted;
 		});
-		$random = $this->createMock(ISecureRandom::class);
+		$random = $this->createStub(ISecureRandom::class);
 		$random->method('generate')->willReturnCallback(function (int $length, string $characters): string {
 			self::assertSame([WebhookService::SECRET_LENGTH, ISecureRandom::CHAR_ALPHANUMERIC], [$length, $characters]);
 			$secret = array_shift($this->secrets);
@@ -53,7 +53,7 @@ trait InMemoryWebhook {
 
 			return $secret;
 		});
-		$urlGenerator = $this->createMock(IURLGenerator::class);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route): string => $route === WebhookService::ROUTE ? self::WEBHOOK_URL : "https://cloud.example.test/{$route}");
 
 		return new WebhookService($credentials, $random, $clock, $this->appConfig(), $urlGenerator);

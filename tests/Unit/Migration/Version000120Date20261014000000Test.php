@@ -47,7 +47,7 @@ final class Version000120Date20261014000000Test extends TestCase {
 		$output = $this->createMock(IOutput::class);
 		$output->expects(self::once())->method('info')->with('Stored 3 settings of Paperless Sync as lazy, which Nextcloud loads only when the app asks for them.');
 
-		$this->step()->postSchemaChange($output, fn (): ISchemaWrapper => $this->createMock(ISchemaWrapper::class), []);
+		$this->step()->postSchemaChange($output, fn (): ISchemaWrapper => $this->createStub(ISchemaWrapper::class), []);
 
 		self::assertSame(['paperless_url', 'sync_enabled', 'status_last_state'], array_keys($this->lazyKeys), 'The key of Nextcloud that enables the app stays as it is.');
 	}
@@ -56,7 +56,7 @@ final class Version000120Date20261014000000Test extends TestCase {
 		$output = $this->createMock(IOutput::class);
 		$output->expects(self::never())->method('info');
 
-		$this->step()->postSchemaChange($output, fn (): ISchemaWrapper => $this->createMock(ISchemaWrapper::class), []);
+		$this->step()->postSchemaChange($output, fn (): ISchemaWrapper => $this->createStub(ISchemaWrapper::class), []);
 
 		self::assertSame([], $this->lazyKeys);
 	}
@@ -66,11 +66,11 @@ final class Version000120Date20261014000000Test extends TestCase {
 	}
 
 	private function migrate(ISchemaWrapper $schema): ?ISchemaWrapper {
-		return $this->step()->changeSchema($this->createMock(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
+		return $this->step()->changeSchema($this->createStub(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
 	}
 
 	private function schema(object $exports): ISchemaWrapper {
-		$schema = $this->createMock(ISchemaWrapper::class);
+		$schema = $this->createStub(ISchemaWrapper::class);
 		$schema->method('getTable')->willReturnCallback(static function (string $name) use ($exports): object {
 			self::assertSame('paperless_sync_export', $name);
 

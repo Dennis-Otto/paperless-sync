@@ -46,11 +46,11 @@ final class Version000110Date20261008000000Test extends TestCase {
 	}
 
 	private function migrate(ISchemaWrapper $schema): ?ISchemaWrapper {
-		return (new Version000110Date20261008000000())->changeSchema($this->createMock(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
+		return (new Version000110Date20261008000000())->changeSchema($this->createStub(IOutput::class), static fn (): ISchemaWrapper => $schema, []);
 	}
 
 	private function schema(object $imports): ISchemaWrapper {
-		$schema = $this->createMock(ISchemaWrapper::class);
+		$schema = $this->createStub(ISchemaWrapper::class);
 		$schema->method('getTable')->willReturnCallback(static function (string $name) use ($imports): object {
 			self::assertSame('paperless_sync_import', $name);
 
