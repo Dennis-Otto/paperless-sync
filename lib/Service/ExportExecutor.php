@@ -207,7 +207,11 @@ final class ExportExecutor {
 				$this->prune($action->path);
 			}
 			$this->report->change($action->type, $documentId, $action->path);
-			$action->type === SyncReport::TYPE_DELETE ? ++$this->report->permanentlyDeleted : ++$this->report->removedExcluded;
+			match ($action->type) {
+				SyncReport::TYPE_DELETE => ++$this->report->permanentlyDeleted,
+				SyncReport::TYPE_REMOVE_REASSIGNED => ++$this->report->removedReassigned,
+				default => ++$this->report->removedExcluded,
+			};
 			if (!$this->dryRun) {
 				$this->states->delete($documentId);
 			}

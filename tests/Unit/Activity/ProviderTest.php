@@ -109,6 +109,11 @@ final class ProviderTest extends TestCase {
 				'Paperless Sync removed 2 excluded documents and sent 1 file to Paperless',
 				'Paperless Sync hat 2 ausgeschlossene Dokumente entfernt und 1 Datei an Paperless gesendet',
 			],
+			'the copies of documents of other users' => [
+				['reassigned' => 2],
+				'Paperless Sync removed 2 documents of another user now',
+				'Paperless Sync hat 2 Dokumente entfernt, die jetzt einem anderen Benutzer gehören',
+			],
 			'every kind' => [
 				['exported' => 1, 'moved' => 2, 'deleted' => 3, 'removed' => 1, 'submitted' => 4],
 				'Paperless Sync added or updated 1 document, moved 2 documents, deleted 3 documents, removed 1 excluded document and sent 4 files to Paperless',

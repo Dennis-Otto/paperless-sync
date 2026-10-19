@@ -78,7 +78,7 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 
 ### Archive
 
-- A folder tree in the files of the configured Nextcloud user, by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
+- A folder tree in the files of the configured Nextcloud user, or [of each user, with the documents that they own in Paperless](#per-user-ownership), by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
 - Variables with the names that Paperless-ngx uses for its own file names, such as the archive serial number, the owner, the tags, the name of the month and custom fields, and a preview under the template that shows where the newest documents go while you type, before you save
 - The archive PDF of each document, or its original file
 - Renames and moves when the metadata changes in Paperless, and no empty folders left behind
@@ -205,6 +205,9 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | Nextcloud inbox | **Add** for Documents, and **View** for Paperless Tasks | uploads the files of the inbox, and learns whether Paperless imported them |
 | [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
+| [Per-user ownership](#per-user-ownership) | **View** for Users, **View** on the documents of every user, and with the inbox **Change** for Documents | finds the owner of each document, mirrors the documents of every user, and gives the document of an upload the user of Paperless of its user |
+
+With per-user ownership, the documents belong to their users, not to the account of the app: give the account the permission *View* on them instead, or use a superuser, as [the security design](docs/security.md#per-user-ownership) explains. Otherwise:
 
 The Paperless trash shows an account only the documents that it owns and those without an owner: a permission granted on a document of someone else doesn't count there. A superuser sees the whole trash, but its token controls all of Paperless, every document and every user, so don't use one for this app. Make the account of the app the owner of the documents instead, and keep the access of the people who own them now:
 
@@ -265,7 +268,7 @@ Saving checks every setting first. When scheduled synchronization is on, or when
 
 To pause synchronization, such as while Paperless is down, its token is revoked or the target user is disabled, uncheck **Enable scheduled synchronization** and save. A save that fails while the schedule is on says so and moves the focus to that switch.
 
-After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag and each tag to mirror once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so, and the browser asks before you leave the page. **Run dry-run** then tries the changes without saving them, and its report says *Dry-run of unsaved settings*: a new path template, other folders or another deletion policy show what they would do before anything uses them. It keeps the saved connection to Paperless and the saved target user, which only a save tests and confirms with your password: a token that you enter waits for the save, and with a new URL, local network setting or target user, the dry-run asks you to save first. **Synchronize now** uses the saved settings only, so it waits until you save.
+After a save, the form shows the settings as Nextcloud stored them: the URL without a slash at its end, each excluded tag and each tag to mirror once, and an empty fallback name as `Unknown`. While the form holds changes that aren't saved, the bar of the buttons says so, and the browser asks before you leave the page. **Run dry-run** then tries the changes without saving them, and its report says *Dry-run of unsaved settings*: a new path template, other folders or another deletion policy show what they would do before anything uses them. It keeps the saved connection to Paperless, the saved target user and who gets the documents, which only a save tests and confirms with your password: a token that you enter waits for the save, and with a new URL, local network setting, target user, *Who gets the documents*, table or group of users, the dry-run asks you to save first. **Synchronize now** uses the saved settings only, so it waits until you save.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/what-a-dry-run-of-unsaved-settings-uses.dark.svg">
@@ -297,6 +300,24 @@ The fields **Additional excluded Paperless tags**, **Only mirror documents with 
 The configured Nextcloud target user owns the synchronized folders. The app operates through Nextcloud's internal filesystem API and therefore does not need that user's password or an app password. Other users see the archive when the target user shares its folder with them, or with a group of them; share it read-only, and share the inbox folder only with those who may send documents to Paperless.
 
 The app remembers what it wrote for each target user. Another target user starts a new archive, which the runs write anew from Paperless, and the archive of the previous one stays as it is, no longer updated.
+
+#### Per-user ownership
+
+When the documents of your Paperless have owners, such as in a household or a team where everyone signs in to Paperless and to Nextcloud, each person can find their own documents in their own files: set **Who gets the documents** in *1 · Connection and ownership* to **Each user, those they own in Paperless**. The default, **The target user, all of them**, keeps everything as described above. One administrator still connects one Paperless with the token of one account; nobody else enters a URL or a token ([decision 0025](docs/decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)).
+
+- **Who is who.** A user of Paperless gets the user of Nextcloud with the same ID, whatever its case, as single sign-on such as OpenID Connect gives them, so `Alice` in Paperless finds `alice` in Nextcloud. **Paperless users with another Nextcloud ID** takes the others, one on each line, such as `jdoe = john.doe`; a line wins over the same ID, and a save refuses two lines for one user of Paperless, or one whose user of Nextcloud doesn't exist. **Only members of this group** limits it to the members of one group of Nextcloud.
+- **None is lost, nothing is guessed.** The target user gets the documents without an owner, those whose owner has no user of Nextcloud or isn't in the group, and those of two users of Paperless for one user of Nextcloud, such as `Alice` and `alice`, which get neither. A document whose owner Paperless doesn't list, or whose user's folder Nextcloud can't reach, stays where its copy is until a run can tell.
+- **The same folders for everyone.** Each user gets the archive, the inbox, the error and the deleted folder below the same base folder of their own files, with the same path template, and shares, versions and search of their own.
+- **The inbox makes it theirs.** A file in the inbox of a user goes to Paperless with the token of the app, and the document then gets the user of Paperless of that user as its owner, so that it comes back into their archive; so does a file that they send with *Send to Paperless*. A document that Paperless had already keeps its owner.
+- **A copy follows its owner.** When the owner of a document changes in Paperless, or the table or the group changes, the next run writes its copy into the archive of its new user and removes the old one, which goes to the trash bin of Nextcloud of the old user, as for a document with an excluded tag. Turning per-user ownership on moves the documents of the users out of the archive of the target user in the same way, within the batch size, so run a dry-run first: it lists each change with its user.
+- **What each user sees.** Each archive has its own batch of changes, its own entries in the Activity stream and its own notifications of failed imports. The report of a run names the user of each line and counts the changes of each user, on the settings page, with `occ paperless_sync:run` and in the status API.
+
+The connection checklist shows who gets the documents of whom, with the number of documents of each user of Paperless, warns of every user of Paperless that the target user gets for a mistake of the settings, and checks the base folder of each user. The account of the token must see the documents of every user, as a superuser, or with the permission *View* on them, and needs *View* for Users; [the security design](docs/security.md#per-user-ownership) explains why and how.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/whose-archive-a-document-goes-to.dark.svg">
+  <img src="docs/images/diagrams/whose-archive-a-document-goes-to.svg" alt="Whose archive a document goes to: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, outside the group of the setting, or when another user of Paperless has the same user of Nextcloud, the document goes to the target user, so that none is lost, and the connection checklist names the case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files, and leaves every other archive.">
+</picture>
 
 ### Folder names
 

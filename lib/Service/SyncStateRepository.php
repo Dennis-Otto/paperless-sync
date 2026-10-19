@@ -73,6 +73,21 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$this->delete(self::EXPORT_TABLE, ['owner_uid' => $ownerUid, 'document_id' => $documentId]);
 	}
 
+	public function exportOwners(): array {
+		$query = $this->connection->getQueryBuilder();
+		$query->selectDistinct('owner_uid')
+			->from(self::EXPORT_TABLE)
+			->orderBy('owner_uid');
+		$result = $query->executeQuery();
+		$owners = [];
+		while (($row = $result->fetchAssociative()) !== false) {
+			$owners[] = is_scalar($row['owner_uid'] ?? null) ? (string)$row['owner_uid'] : '';
+		}
+		$result->closeCursor();
+
+		return $owners;
+	}
+
 	/** @psalm-suppress MixedReturnTypeCoercion */
 	public function findImport(string $ownerUid, string $path): ?array {
 		$query = $this->connection->getQueryBuilder();

@@ -174,8 +174,8 @@ elif mode == "dry-run-unsaved":
 elif mode == "dry-run-other-user":
     expect(
         "message",
-        "A dry-run of unsaved settings uses the saved connection to Paperless and the saved target user. "
-        "Save the settings to try another one.",
+        "A dry-run of unsaved settings uses the saved connection to Paperless and the saved users who get the documents. "
+        "Save the settings to try others.",
     )
     expect("setting", "target_user")
 elif mode == "export":
@@ -635,6 +635,37 @@ elif mode == "mock-after-webhook":
         fields = read.get("fields", "").split(",")
         if "title" not in fields or "content" in fields:
             raise AssertionError(f"mock-after-webhook: a read asked for other fields than a run reads: {read!r}")
+elif mode == "checklist-per-user":
+    # Per-user ownership: the checklist names who gets the documents of each user of Paperless,
+    # E2E-Other as e2e-other whatever the case, and those without an owner, with their numbers.
+    owners = [line["message"] for line in payload.get("checks", []) if line.get("id") == "owners"]
+    expected = [
+        "E2E-Other → e2e-other, documents: 1",
+        "e2e-owner → e2e-owner, documents: 1",
+        "Without an owner → sync-target, the target user, documents: 0",
+    ]
+    if owners != expected:
+        raise AssertionError(f"checklist-per-user: the lines of the users are {owners!r} instead of {expected!r}")
+elif mode in ("per-user", "per-user-sent"):
+    # Each user gets the documents of their user of Paperless in their own archive, and the copies
+    # that the target user had of them leave its archive; the report counts the changes of each.
+    users = payload.get("users")
+    if payload.get("errors") != 0 or not isinstance(users, dict) or not {"e2e-owner", "e2e-other"} <= set(users):
+        raise AssertionError(f"{mode}: the run did not reach the archive of each user: {payload!r}")
+    exports = sorted((entry.get("user"), entry.get("document")) for entry in payload["entries"] if entry["type"] == "export")
+    expected = [("e2e-other", 124), ("e2e-owner", 123)] if mode == "per-user" else [("e2e-owner", int(argument))]
+    if exports != expected:
+        raise AssertionError(f"{mode}: the run exported {exports!r} instead of {expected!r}")
+    if users["e2e-owner"].get("exported") != 1:
+        raise AssertionError(f"{mode}: the counts of e2e-owner are {users['e2e-owner']!r}")
+    for entry in payload["entries"]:
+        if entry["type"] == "remove-reassigned" and entry.get("user") != "sync-target":
+            raise AssertionError(f"{mode}: a copy left the archive of another user than the target user: {entry!r}")
+elif mode == "mock-owner-changes":
+    # The document of the file of the inbox of e2e-owner became that of e2e-owner in Paperless.
+    changes = payload.get("ownerChanges")
+    if not isinstance(changes, list) or len(changes) != 1 or changes[0].get("owner") != 3 or changes[0].get("document", 0) <= 500:
+        raise AssertionError(f"mock-owner-changes: the owners changed as {changes!r}")
 elif mode == "recovered":
     if payload.get("errors") != 0 or payload.get("dryRun") is not False:
         raise AssertionError(f"recovered: the run after the failures did not succeed: {payload!r}")

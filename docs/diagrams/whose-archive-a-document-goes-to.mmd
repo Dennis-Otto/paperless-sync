@@ -1,0 +1,22 @@
+flowchart TB
+    accTitle: Whose archive a document goes to
+    accDescr: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, outside the group of the setting, or when another user of Paperless has the same user of Nextcloud, the document goes to the target user, so that none is lost, and the connection checklist names the case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files, and leaves every other archive.
+
+    document["Each active document<br>of Paperless"] --> owner{"Who owns it<br>in Paperless?"}
+    owner -->|nobody| target["The archive of<br>the target user"]
+    owner -->|a user that Paperless<br>did not list| held["Stays where<br>its copy is"]
+    owner -->|a user of Paperless| match{"A user of Nextcloud,<br>by the table, or else<br>by the same ID?"}
+    match -->|none| target
+    match -->|one| group{"A member of the group,<br>if the settings name one?"}
+    group -->|no| target
+    group -->|yes| shared{"Has another user of Paperless<br>the same user of Nextcloud?"}
+    shared -->|yes| target
+    shared -->|no| user["The archive of that user,<br>below the same base folder<br>of their own files"]
+    target --> copy["The copy is written there<br>and leaves every other archive"]
+    user --> copy
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class document,owner,match,group,shared check
+    class user,copy kept
+    class target,held changed

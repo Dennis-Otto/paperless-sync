@@ -87,6 +87,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** The visible documents of other owners, which the trash of Paperless leaves out. */
 	private const FOREIGN_DOCUMENTS_HINT = 'Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees %s of them. When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. Make the account of the app their owner.';
 	/** A superuser sees the trash of every owner, but its token controls all of Paperless. */
+	/** Why the trash of Paperless may lack the documents of the users in per-user ownership, and what that means for them. */
+	private const PER_USER_TRASH_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner, unless it is a superuser. In per-user ownership, the documents of the users belong to them, so their copies count as missing when they go to the trash, and move to the deleted folder only after the required missing scans.';
 	private const SUPERUSER_HINT = 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.';
 	/** What /api/ui_settings/ needs, which tells the checklist the permissions and the ID of the account. */
 	private const UI_SETTINGS_HINT = 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The inbox needs Add for Documents and View for Paperless Tasks.';
@@ -162,7 +164,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$account = $config->exportEnabled || $uploads ? $this->account() : self::ACCOUNT_UNKNOWN;
 		if ($config->exportEnabled) {
 			foreach (self::EXPORT_LISTS as $id => $path) {
-				$checks[] = $this->listCheck($id, $path, $account);
+				$checks[] = $this->listCheck($id, $path, $account, $config->perUser());
 			}
 		}
 		if ($uploads) {
@@ -272,6 +274,32 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	public function users(): array {
 		return $this->namedMap('/api/users/', 'username');
+	}
+
+	public function ownedDocuments(?int $owner): int {
+		// The filters of the document list of Paperless, as the line of the trash uses them.
+		$filter = $owner === null ? ['owner__isnull' => 1] : ['owner__id' => $owner];
+
+		return $this->requestPage('/api/documents/', ['page' => 1, 'page_size' => 1] + $filter)['count'];
+	}
+
+	public function setOwner(int $documentId, int $owner): void {
+		$response = $this->send(
+			'PATCH',
+			"/api/documents/{$documentId}/",
+			[
+				'json' => ['owner' => $owner],
+				'connect_timeout' => 10,
+				'timeout' => 60,
+				// An error comes back as a response, so that the reason in its body can be read.
+				'http_errors' => false,
+			],
+		);
+		$status = $response->getStatusCode();
+		if ($status < 200 || $status >= 300) {
+			$reason = $this->errorReason($response->getBody());
+			throw new RuntimeException("Paperless did not make the user {$owner} the owner of the document {$documentId}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'));
+		}
 	}
 
 	/** @psalm-suppress MixedAssignment */
@@ -817,7 +845,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private function listCheck(string $id, string $path, array|string $account): ConnectionCheck {
+	private function listCheck(string $id, string $path, array|string $account, bool $perUser): ConnectionCheck {
 		try {
 			$answer = $this->probe($path);
 		} catch (PaperlessRequestException $exception) {
@@ -832,7 +860,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			};
 		}
 		if ($id === ConnectionCheck::TRASH) {
-			return $this->trashCheck($listed, $account);
+			return $this->trashCheck($listed, $account, $perUser);
 		}
 
 		return ConnectionCheck::passed($id, 'Visible to the account: %s', [(string)$listed]);
@@ -848,8 +876,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @param array{id: int|null, superuser: bool, permissions: list<string>}|self::ACCOUNT_* $account
 	 */
-	private function trashCheck(int $listed, array|string $account): ConnectionCheck {
+	private function trashCheck(int $listed, array|string $account, bool $perUser): ConnectionCheck {
 		$visible = [(string)$listed];
+		// In per-user ownership, the documents of the users are not the account's, and a superuser
+		// sees the trash of all of them.
+		if ($perUser) {
+			return is_array($account) && $account['superuser']
+				? ConnectionCheck::passed(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible)
+				: ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, self::PER_USER_TRASH_HINT);
+		}
 		if (!is_array($account)) {
 			return ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', $visible, $account === self::ACCOUNT_FORBIDDEN ? self::TRASH_UNKNOWN_HINT : self::TRASH_HINT);
 		}
@@ -1076,7 +1111,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * allow_local_remote_servers, which would lift the protection for every app, stays off.
 	 * Without it, a request that follows redirects checks every one of them as Nextcloud does.
 	 *
-	 * @param 'GET'|'POST' $method
+	 * @param 'GET'|'POST'|'PATCH' $method
 	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
 	 */
 	private function send(string $method, string $path, #[\SensitiveParameter] array $options): IResponse {
@@ -1093,7 +1128,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			$options['allow_redirects'] = ['on_redirect' => $this->refuseLocalRedirect(...)] + $options['allow_redirects'];
 		}
 		try {
-			$response = $method === 'POST' ? $this->client->post($url, $options) : $this->client->get($url, $options);
+			$response = match ($method) {
+				'POST' => $this->client->post($url, $options),
+				'PATCH' => $this->client->patch($url, $options),
+				default => $this->client->get($url, $options),
+			};
 		} catch (LocalServerException $exception) {
 			$message = $this->failureMessage($exception->getMessage(), $token);
 			if (!str_starts_with($message, 'No DNS record found')) {

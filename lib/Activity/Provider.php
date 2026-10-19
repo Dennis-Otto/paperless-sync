@@ -99,6 +99,11 @@ final class Provider implements IProvider {
 			// TRANSLATORS: a part of "Paperless Sync %s", for documents that got a tag that keeps them out of Nextcloud
 			$changes[] = $l->n('removed %n excluded document', 'removed %n excluded documents', $count);
 		}
+		$count = self::count($parameters, 'reassigned');
+		if ($count > 0) {
+			// TRANSLATORS: a part of "Paperless Sync %s", for documents that belong to another user now
+			$changes[] = $l->n('removed %n document of another user now', 'removed %n documents of another user now', $count);
+		}
 		$count = self::count($parameters, 'submitted');
 		if ($count > 0) {
 			// TRANSLATORS: a part of "Paperless Sync %s", for files of the inbox folder

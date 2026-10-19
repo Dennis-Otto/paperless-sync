@@ -101,6 +101,12 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public ?\Throwable $documentException = null;
 	/** @var list<bool> whether each read of the documents, or of one document, asked for their notes */
 	public array $notesAsked = [];
+	/** @var list<array{int, int}> every change of the owner of a document: its ID and the ID of its new owner */
+	public array $ownerChanges = [];
+	/** The failure of a change of the owner, as for an account that may not change the document. */
+	public ?\Throwable $ownerException = null;
+	/** The failure of the count of the documents of an owner. */
+	public ?\Throwable $ownedException = null;
 
 	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
 		$this->connects[] = $connection;
@@ -187,6 +193,28 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 			throw $this->usersException;
 		}
 		return $this->users;
+	}
+
+	/** The active documents with the owner, as the filters owner__id and owner__isnull count them. */
+	public function ownedDocuments(?int $owner): int {
+		if ($this->ownedException !== null) {
+			throw $this->ownedException;
+		}
+
+		return count(array_filter($this->documents, static fn (array $document): bool => ($document['owner'] ?? null) === $owner));
+	}
+
+	/** Changes the owner of the document, as a PATCH of /api/documents/<id>/ does, and records it. */
+	public function setOwner(int $documentId, int $owner): void {
+		$this->ownerChanges[] = [$documentId, $owner];
+		if ($this->ownerException !== null) {
+			throw $this->ownerException;
+		}
+		foreach ($this->documents as $index => $document) {
+			if (($document['id'] ?? null) === $documentId) {
+				$this->documents[$index]['owner'] = $owner;
+			}
+		}
 	}
 
 	public function customFields(): array {

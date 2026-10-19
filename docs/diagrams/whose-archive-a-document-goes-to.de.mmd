@@ -1,0 +1,22 @@
+flowchart TB
+    accTitle: In wessen Archiv ein Dokument kommt
+    accDescr: Beim Eigentum je Benutzer fragt ein Lauf bei jedem aktiven Dokument, wem es in Paperless gehört. Ein Dokument ohne Eigentümer kommt zum Zielbenutzer. Ein Dokument, dessen Eigentümer Paperless nicht aufgelistet hat, bleibt, wo seine Kopie ist. Für jeden anderen Eigentümer sucht der Lauf genau einen Benutzer von Nextcloud: den, den die Tabelle Paperless-Benutzer mit einer anderen Nextcloud-ID nennt, sonst den mit derselben ID, gleich in welcher Schreibung. Ohne solchen Benutzer, außerhalb der Gruppe der Einstellung oder wenn ein anderer Benutzer von Paperless denselben Benutzer von Nextcloud hat, kommt das Dokument zum Zielbenutzer, damit keines verloren geht, und die Verbindungs-Checkliste nennt den Fall. Sonst kommt es zu diesem Benutzer. Seine Kopie wird im Archiv dieses Benutzers geschrieben, unter demselben Basisordner seiner eigenen Dateien, und verlässt jedes andere Archiv.
+
+    document["Jedes aktive Dokument<br>von Paperless"] --> owner{"Wem gehört es<br>in Paperless?"}
+    owner -->|niemandem| target["Das Archiv<br>des Zielbenutzers"]
+    owner -->|einem Benutzer, den Paperless<br>nicht aufgelistet hat| held["Bleibt, wo<br>seine Kopie ist"]
+    owner -->|einem Benutzer von Paperless| match{"Ein Benutzer von Nextcloud,<br>nach der Tabelle, sonst<br>nach derselben ID?"}
+    match -->|keiner| target
+    match -->|einer| group{"Mitglied der Gruppe,<br>wenn die Einstellungen<br>eine nennen?"}
+    group -->|nein| target
+    group -->|ja| shared{"Hat ein anderer Benutzer von<br>Paperless denselben Benutzer<br>von Nextcloud?"}
+    shared -->|ja| target
+    shared -->|nein| user["Das Archiv dieses Benutzers,<br>unter demselben Basisordner<br>seiner eigenen Dateien"]
+    target --> copy["Die Kopie wird dort geschrieben<br>und verlässt jedes andere Archiv"]
+    user --> copy
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class document,owner,match,group,shared check
+    class user,copy kept
+    class target,held changed

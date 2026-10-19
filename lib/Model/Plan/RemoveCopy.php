@@ -12,11 +12,12 @@ namespace OCA\PaperlessSync\Model\Plan;
 use OCA\PaperlessSync\Model\SyncReport;
 
 /**
- * The removal of the copy of a document with an excluded tag, or the deletion of the copy of a
- * document that Paperless deleted; the state of the document is forgotten with it.
+ * The removal of the copy of a document with an excluded tag or of one that belongs to another
+ * user of Nextcloud now, or the deletion of the copy of a document that Paperless deleted; the
+ * state of the document is forgotten with it.
  */
 final class RemoveCopy implements ExportAction {
-	/** @param SyncReport::TYPE_REMOVE_EXCLUDED|SyncReport::TYPE_DELETE $type */
+	/** @param SyncReport::TYPE_REMOVE_EXCLUDED|SyncReport::TYPE_REMOVE_REASSIGNED|SyncReport::TYPE_DELETE $type */
 	public function __construct(
 		public readonly DocumentContext $context,
 		public readonly string $path,

@@ -44,6 +44,18 @@ final class DocumentContext {
 	}
 
 	/**
+	 * A document that belongs to another user of Nextcloud now, in per-user ownership, whose copy
+	 * the run removes. A removal needs no space, so its failure stops no writes.
+	 *
+	 * @param array<string, int|string|null> $entry
+	 */
+	public static function reassigned(int $document, array $entry): self {
+		$path = (string)($entry['path'] ?? '');
+
+		return new self($document, 'Reassigned ', $entry, $path, $path, true, false);
+	}
+
+	/**
 	 * An active document, which the run exports or moves to $target, or '' before the run knows its path.
 	 *
 	 * @param array<string, int|string|null>|null $entry

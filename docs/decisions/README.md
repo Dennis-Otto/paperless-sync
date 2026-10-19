@@ -7,7 +7,7 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | Record | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-record-decisions.md) | Record the decisions that shape the project | accepted |
-| [0002](0002-the-filesystem-api-of-nextcloud.md) | Write the archive through the filesystem API of Nextcloud | accepted |
+| [0002](0002-the-filesystem-api-of-nextcloud.md) | Write the archive through the filesystem API of Nextcloud | accepted, amended by [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) |
 | [0003](0003-paperless-is-the-source.md) | Paperless is the source of the archive | accepted |
 | [0004](0004-delete-only-what-is-confirmed.md) | Delete only what Paperless has confirmed gone, and only what fits into a run | accepted |
 | [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted |
@@ -30,3 +30,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0022](0022-a-dry-run-takes-the-plan-of-a-run.md) | A dry-run takes the plan of a run: planners decide, executors apply or only report | accepted |
 | [0023](0023-file-actions-in-files-without-a-build.md) | Actions in the menu of Files, without a build, and uploads in the background | accepted |
 | [0024](0024-the-tags-of-paperless-as-tags-of-nextcloud-that-the-app-alone-changes.md) | The tags of Paperless become tags of Nextcloud that the app alone changes | accepted |
+| [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted |

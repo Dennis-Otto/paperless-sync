@@ -81,9 +81,9 @@ final class ImportExecutorTest extends TestCase {
 			'an unchanged file' => [new Unchanged(), []],
 			'a skipped file' => [new Skipped(), []],
 			'the state of a file that is gone' => [new ForgetImport(self::FILE), []],
-			'an import that succeeded, whose file is deleted' => [new ImportSucceeded($context, 'etag', true, 7), []],
-			'an import that succeeded, whose file stays' => [new ImportSucceeded($context, 'etag', true, 7), ['deleteInboxAfterSuccess' => false]],
-			'an import of a file that changed since its upload' => [new ImportSucceeded($context, 'etag', false, 7), []],
+			'an import that succeeded, whose file is deleted' => [new ImportSucceeded($context, 'etag', true, 7, true), []],
+			'an import that succeeded, whose file stays' => [new ImportSucceeded($context, 'etag', true, 7, true), ['deleteInboxAfterSuccess' => false]],
+			'an import of a file that changed since its upload' => [new ImportSucceeded($context, 'etag', false, 7, true), []],
 			'an import that failed' => [new ImportFailed($context, self::ERROR, 'Broken PDF', "Paperless import failed\n"), []],
 			'an import that Paperless has not finished a day after the upload' => [new ImportFailed($context, self::ERROR, 'Not finished', "Paperless import not finished\n", 'task-1', 'Paperless has not finished it'), []],
 			'a check that failed' => [new ImportCheckFailed($context, new RuntimeException('Paperless is down')), []],
@@ -200,12 +200,64 @@ final class ImportExecutorTest extends TestCase {
 	}
 
 	public function testTheFileOfASucceededImportIsDeletedWithTheFoldersThatItLeavesEmpty(): void {
-		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7));
+		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
 
 		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P7'], $this->report->actions);
 		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
 		self::assertSame([], $this->state->imports);
 		self::assertSame([[self::FILE, TestConfig::INBOX]], $this->storage->prunes);
+	}
+
+	/** In per-user ownership, the document of an upload becomes that of the user of Paperless whose inbox held the file. */
+	public function testTheDocumentOfAnUploadGetsTheOwnerOfTheInbox(): void {
+		$this->arrange(false, [], 5);
+
+		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
+
+		self::assertSame([[7, 5]], $this->paperless->ownerChanges);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P7'], $this->report->actions);
+	}
+
+	/**
+	 * A document that the task of the upload doesn't name, or that a search found by the content of
+	 * the file and that may be someone else's, keeps its owner, and the report says so.
+	 *
+	 * @return array<string, array{ImportSucceeded}>
+	 */
+	public static function documentsOfOthers(): array {
+		$context = new ImportContext(self::FILE, []);
+
+		return [
+			'a document that Paperless did not name' => [new ImportSucceeded($context, 'etag', true, null, true)],
+			'a document that a search found' => [new ImportSucceeded($context, 'etag', true, 7, false)],
+		];
+	}
+
+	#[DataProvider('documentsOfOthers')]
+	public function testOnlyTheDocumentOfTheUploadGetsAnOwner(ImportSucceeded $action): void {
+		$this->arrange(false, [], 5);
+
+		$this->executor->apply($action);
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['Import ' . self::FILE . ': Paperless did not name the document that the upload created, so its owner stays as Paperless has it'], $this->report->errorMessages);
+		self::assertSame(1, $this->report->importsSucceeded, 'The import succeeded all the same.');
+	}
+
+	/** While Paperless refuses the owner, the upload stays pending, so that the next run asks again; a dry-run asks nothing. */
+	public function testAnOwnerThatPaperlessRefusesKeepsTheUploadPending(): void {
+		$this->arrange(false, [], 5);
+		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 5 the owner of the document 7: HTTP 403.');
+
+		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
+
+		self::assertArrayHasKey(self::FILE, $this->storage->files);
+		self::assertSame('Paperless did not make the user 5 the owner of the document 7: HTTP 403.', $this->state->imports[self::FILE]['last_error']);
+		self::assertSame(0, $this->report->importsSucceeded);
+
+		$this->arrange(true, [], 5);
+		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
+		self::assertSame([], $this->paperless->ownerChanges);
 	}
 
 	public function testTheFileOfAFailedImportMovesToTheErrorFolderWithItsReason(): void {
@@ -312,7 +364,7 @@ final class ImportExecutorTest extends TestCase {
 	 *
 	 * @param array<string, bool|int|string> $settings
 	 */
-	private function arrange(bool $dryRun, array $settings = []): void {
+	private function arrange(bool $dryRun, array $settings = [], ?int $owner = null): void {
 		$this->storage = new TestStorage();
 		$this->storage->files[self::FILE] = self::CONTENT;
 		$this->state = new TestStateRepository();
@@ -321,7 +373,7 @@ final class ImportExecutorTest extends TestCase {
 		$this->clock = new TestClock();
 		$this->report = new SyncReport($dryRun);
 		$this->batch = new SyncBatch(1);
-		$this->executor = new ImportExecutor(TestConfig::of($settings + ['batchSize' => 1]), $this->report, $this->state, $this->batch, $this->storage, $this->paperless, $this->logger, $this->clock, TestConfig::INBOX);
+		$this->executor = new ImportExecutor(TestConfig::of($settings + ['batchSize' => 1]), $this->report, $this->state, $this->batch, $this->storage, $this->paperless, $this->logger, $this->clock, TestConfig::INBOX, $owner);
 	}
 
 	/** @return array<string, bool|int> the counts of the report, without those of the kind of run and the pruned folders, which a dry-run doesn't prune */

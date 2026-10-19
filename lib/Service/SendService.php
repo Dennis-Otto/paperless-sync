@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
@@ -57,6 +58,7 @@ final class SendService {
 		private NotificationPublisher $notifications,
 		private ITimeFactory $timeFactory,
 		private LoggerInterface $logger,
+		private OwnerMapping $ownerMapping,
 	) {
 	}
 
@@ -75,10 +77,12 @@ final class SendService {
 		$now = $this->timeFactory->getTime();
 		$uploads = 0;
 		$paperlessFailed = false;
+		/** @var Owners|null $owners the owners of per-user ownership, once a document of the round needs them */
+		$owners = null;
 		foreach ($sends as $send) {
 			$status = (string)($send['status'] ?? '');
 			if ($status === self::PENDING) {
-				$this->followTask($paperless, $config, $send, $now);
+				$this->followTask($paperless, $config, $send, $now, $owners);
 				continue;
 			}
 			if (($status === self::RETRY && (int)($send['retry_at'] ?? 0) > $now) || $paperlessFailed || $uploads >= $config->batchSize) {
@@ -204,7 +208,7 @@ final class SendService {
 	 *
 	 * @param array<string, int|string|null> $send
 	 */
-	private function followTask(PaperlessClientInterface $paperless, SyncConfig $config, array $send, int $now): void {
+	private function followTask(PaperlessClientInterface $paperless, SyncConfig $config, array $send, int $now, ?Owners &$owners): void {
 		$path = (string)$send['path'];
 		$taskId = (string)$send['task_id'];
 		try {
@@ -222,12 +226,51 @@ final class SendService {
 			return;
 		}
 		if (in_array($task['status'], ImportPlanner::TASK_SUCCEEDED, true)) {
+			if ($config->perUser() && $task['documentId'] !== null && !$this->giveOwner($paperless, $config, $send, $task['documentId'], $owners)) {
+				return;
+			}
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_IMPORTED, $task['documentId']);
 		} elseif (in_array($task['status'], ImportPlanner::TASK_FAILED, true)) {
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, ImportPlanner::failureReason($task));
 		} elseif ($now - (int)($send['submitted_at'] ?? 0) >= ImportPlanner::TASK_TIMEOUT) {
 			$state = $task['status'] . ($task['message'] !== '' ? ": {$task['message']}" : '');
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.");
+		}
+	}
+
+	/**
+	 * In per-user ownership, the document of a sent file becomes the document of the user of
+	 * Paperless of the user of Nextcloud whose file it is, as Paperless makes the account that
+	 * uploads a file the owner of its document, so that the next runs mirror it into that user's
+	 * archive. A user without a user of Paperless leaves it to the account. Only the document that
+	 * the task of the upload names changes, never one that Paperless had with the content of the
+	 * file already. While Paperless refuses, the import stays pending, and the log says so once.
+	 *
+	 * @param array<string, int|string|null> $send
+	 * @return bool whether the import may end
+	 */
+	private function giveOwner(PaperlessClientInterface $paperless, SyncConfig $config, array $send, int $documentId, ?Owners &$owners): bool {
+		try {
+			$owners ??= $this->ownerMapping->owners($config, $paperless->users());
+			$owner = $owners->paperlessUserOf((string)$send['user_id']);
+			if ($owner !== null) {
+				$paperless->setOwner($documentId, $owner);
+			}
+
+			return true;
+		} catch (\Throwable $exception) {
+			$error = $exception->getMessage();
+			if (($send['last_error'] ?? null) !== $error) {
+				$this->logger->warning('Paperless Sync could not give the document {document} of {path}, which {user} sent to Paperless, its owner: {error}', [
+					'document' => $documentId,
+					'path' => (string)$send['path'],
+					'user' => (string)$send['user_id'],
+					'error' => $error,
+				]);
+				$this->state->saveSend((string)$send['user_id'], (int)$send['file_id'], ['last_error' => mb_substr($error, 0, 4000)]);
+			}
+
+			return false;
 		}
 	}
 

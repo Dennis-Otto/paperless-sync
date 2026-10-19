@@ -69,6 +69,16 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 		unset($exports[$documentId]);
 	}
 
+	public function exportOwners(): array {
+		$owners = array_map('strval', array_keys(array_filter($this->exportsOfOthers)));
+		if ($this->exports !== []) {
+			$owners[] = self::OWNER;
+		}
+		sort($owners, SORT_STRING);
+
+		return $owners;
+	}
+
 	/** The writes of the exports since the calls were last cleared. */
 	public function exportWrites(): int {
 		return count(array_filter($this->exportCalls, static fn (string $call): bool => in_array($call, ['saveExport', 'deleteExport'], true)));

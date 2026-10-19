@@ -105,6 +105,18 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(2, $this->selects, 'Without a hint, the save asks whether the export exists.');
 	}
 
+	/** Per-user ownership reaches the archive of every user that has exports, also one that gets no documents now. */
+	public function testTheOwnersOfExportsComeOnceEachInTheOrderOfTheirIds(): void {
+		self::assertSame([], $this->repository->exportOwners());
+
+		$this->repository->saveExport('paperless', 1, ['path' => 'a.pdf']);
+		$this->repository->saveExport('alice', 1, ['path' => 'b.pdf']);
+		$this->repository->saveExport('paperless', 2, ['path' => 'c.pdf']);
+		$this->repository->saveImport('bob', 'Eingang/scan.pdf', ['etag' => 'e1']);
+
+		self::assertSame(['alice', 'paperless'], $this->repository->exportOwners(), 'The inbox of a user has no copies of documents.');
+	}
+
 	public function testExportsBelongToTheirOwner(): void {
 		$this->repository->saveExport('paperless', 1, ['path' => 'a.pdf']);
 		$this->repository->saveExport('paperless', 2, ['path' => 'b.pdf']);
@@ -357,9 +369,16 @@ final class SyncStateRepositoryTest extends TestCase {
 				return $builder;
 			});
 		}
+		$builder->method('selectDistinct')->willReturnCallback(function (string $column) use (&$query, $builder): IQueryBuilder {
+			$query['type'] = 'select';
+			$query['distinct'] = $column;
+
+			return $builder;
+		});
 		$builder->method('orderBy')->willReturnCallback(function (string $column) use (&$query, $builder): IQueryBuilder {
-			// The rows of the database in memory are in the order of their IDs already.
-			self::assertSame('id', $column);
+			// The rows of the database in memory are in the order of their IDs already; the distinct
+			// owners come in the order of their IDs.
+			self::assertContains($column, ['id', 'owner_uid']);
 			$query['order'] = $column;
 
 			return $builder;
@@ -374,11 +393,19 @@ final class SyncStateRepositoryTest extends TestCase {
 		$builder->method('executeQuery')->willReturnCallback(function () use (&$query, &$parameters): IResult {
 			self::assertSame('select', $query['type']);
 			++$this->selects;
-
-			return $this->queryResult(array_values(array_filter(
+			$rows = array_values(array_filter(
 				$this->tables[$query['table']],
 				fn (array $row): bool => $this->rowMatches($row, $query['where'], $parameters),
-			)));
+			));
+			if (isset($query['distinct'])) {
+				$values = array_values(array_unique(array_column($rows, $query['distinct'])));
+				if (($query['order'] ?? null) === $query['distinct']) {
+					sort($values, SORT_STRING);
+				}
+				$rows = array_map(static fn (?string $value): array => [$query['distinct'] => $value], $values);
+			}
+
+			return $this->queryResult($rows);
 		});
 		$builder->method('executeStatement')->willReturnCallback(function () use (&$query, &$parameters): int {
 			return $this->execute($query, $parameters);
@@ -463,6 +490,11 @@ final class SyncStateRepositoryTest extends TestCase {
 		$result = $this->createMock(IResult::class);
 		$result->method('fetchAssociative')->willReturnCallback(function () use (&$rows): array|false {
 			return array_shift($rows) ?? false;
+		});
+		$result->method('fetchOne')->willReturnCallback(function () use (&$rows): mixed {
+			$row = array_shift($rows);
+
+			return $row === null ? false : reset($row);
 		});
 		$result->expects(self::once())->method('closeCursor')->willReturn(true);
 

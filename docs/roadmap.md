@@ -15,9 +15,14 @@ The app does what it was built for: a mirror of Paperless-ngx in Nextcloud and a
 
 Feature requests with the most reactions are considered next, in that order: anything that breaks for users first, then what makes the synchronization safer, then the rest.
 
+## Done
+
+- **Each user their own documents** ([#84](https://github.com/Dennis-Otto/paperless-sync/issues/84)): with [per-user ownership](guide.md#per-user-ownership), each user of Nextcloud gets the documents that their user of Paperless owns, through the one connection of the administrator ([decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)).
+
 ## Not planned
 
 - **Two-way synchronization.** Paperless remains the source of truth; changes of the mirrored files in Nextcloud are not sent back to Paperless.
 - **Access through WebDAV or with the passwords of users.** The app works through Nextcloud's file API alone.
+- **A Paperless or a token of each user.** One administrator connects one Paperless with one token; per-user ownership gives each user the documents that they own there ([decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)).
 - **Search in Nextcloud.** That is [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search), a separate app with its own releases.
 - **Deletion without the guard.** Permanent deletion stays off by default and waits for the configured number of complete runs.

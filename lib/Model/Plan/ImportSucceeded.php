@@ -14,12 +14,16 @@ namespace OCA\PaperlessSync\Model\Plan;
  * Paperless doesn't have, goes up again in the next run.
  */
 final class ImportSucceeded implements ImportAction {
-	/** @param int|null $document the new document, when Paperless names it */
+	/**
+	 * @param int|null $document the new document, when Paperless names it
+	 * @param bool $uploaded whether the task of the upload named the document, which the upload created, rather than a search found a document with the content of the file, which may be another one's
+	 */
 	public function __construct(
 		public readonly ImportContext $context,
 		public readonly string $etag,
 		public readonly bool $sameContent,
 		public readonly ?int $document,
+		public readonly bool $uploaded,
 	) {
 	}
 }

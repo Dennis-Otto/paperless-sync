@@ -500,6 +500,27 @@ final class SettingsControllerTest extends TestCase {
 		self::assertNull($this->credential);
 	}
 
+	/**
+	 * In per-user ownership, the checklist shows who gets the documents of whom, in German, once
+	 * Paperless answered; a blocking failure of Paperless leaves those lines out.
+	 */
+	public function testTheChecklistOfPerUserOwnershipShowsWhoGetsWhichDocuments(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->paperless->method('users')->willReturn(['1' => 'alice']);
+		$this->paperless->method('ownedDocuments')->willReturnCallback(static fn (?int $owner): int => $owner === null ? 2 : 5);
+
+		$answer = self::answer($this->controller->test(self::validSettings() + ['ownership' => 'per-user'], 'secret-token'));
+
+		self::assertSame(['paperless', 'documents', 'owners', 'owners', 'folder'], array_column($answer['checks'], 'id'));
+		self::assertSame(['Benutzer von Paperless', 'alice → alice, Dokumente: 5'], [$answer['checks'][2]['label'], $answer['checks'][2]['message']]);
+		self::assertSame('Ohne Eigentümer → paperless, der Zielbenutzer, Dokumente: 2', $answer['checks'][3]['message']);
+
+		$this->checks = [self::tokenRefused()];
+		$answer = self::answer($this->controller->test(self::validSettings() + ['ownership' => 'per-user'], 'secret-token'));
+
+		self::assertSame(['paperless', 'folder'], array_column($answer['checks'], 'id'));
+	}
+
 	/** The test sends the stored token as a save does: only to the URL that it was stored with. */
 	public function testTheTestSendsTheStoredTokenOnlyToItsUrl(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
@@ -794,6 +815,7 @@ final class SettingsControllerTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, $this->storage, $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService($this->storage),
+			$this->ownerMapping(),
 		);
 
 		return new SettingsController(
@@ -805,6 +827,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->germanL10n(),
 			$sync,
 			$paths,
+			$this->ownerMapping(),
 		);
 	}
 

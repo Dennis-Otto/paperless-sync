@@ -88,6 +88,7 @@ final class DocumentSyncJobTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, $this->storage, $this->clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService($this->storage),
+			$this->ownerMapping(),
 		);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->webhook = $this->webhookService($this->clock);

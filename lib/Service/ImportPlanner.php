@@ -122,7 +122,7 @@ final class ImportPlanner {
 			$taskId = (string)($pending['task_id'] ?? '');
 			$task = $this->paperless->taskStatus($taskId);
 			if (in_array($task['status'], self::TASK_SUCCEEDED, true)) {
-				return [new ImportSucceeded($context, $etag, $unchangedFile, $task['documentId'])];
+				return [new ImportSucceeded($context, $etag, $unchangedFile, $task['documentId'], true)];
 			}
 			if (in_array($task['status'], self::TASK_FAILED, true)) {
 				$reason = self::failureReason($task);
@@ -160,7 +160,7 @@ final class ImportPlanner {
 		$content = $this->files->fingerprint($context->path);
 		$documentId = $content !== null ? $this->paperless->findDocument($content) : null;
 		if ($documentId !== null) {
-			return new ImportSucceeded($context, $etag, true, $documentId);
+			return new ImportSucceeded($context, $etag, true, $documentId, false);
 		}
 		$state = $task['status'] . ($task['message'] !== '' ? ": {$task['message']}" : '');
 		$error = "Paperless has not finished the import task {$taskId} a day after the upload ({$state})";

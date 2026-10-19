@@ -55,7 +55,7 @@ final class SendServiceTest extends TestCase {
 		$this->paperless = new TestPaperlessClient();
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
-		$this->service = new SendService($this->configService, $this->paperless, $this->state, $this->storage, $publisher, $this->clock, $this->logger);
+		$this->service = new SendService($this->configService, $this->paperless, $this->state, $this->storage, $publisher, $this->clock, $this->logger, $this->ownerMapping());
 	}
 
 	public function testNothingSentNeedsNoPaperless(): void {
@@ -193,7 +193,7 @@ final class SendServiceTest extends TestCase {
 		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
 		$this->state->saveSend(self::SENDER, 5, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
 
-		(new SendService($this->configService, $this->paperless, $this->state, $storage, $publisher, $this->clock, $this->logger))->process();
+		(new SendService($this->configService, $this->paperless, $this->state, $storage, $publisher, $this->clock, $this->logger, $this->ownerMapping()))->process();
 
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_GONE, 5, 'Scans/receipt.pdf');
 	}
@@ -308,6 +308,51 @@ final class SendServiceTest extends TestCase {
 
 		self::assertNull($this->state->findSend(self::SENDER, $id));
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123);
+	}
+
+	/** In per-user ownership, the document of a sent file becomes that of the user of Paperless of its sender. */
+	public function testTheDocumentOfASentFileGetsTheUserOfPaperlessOfItsSender(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'alice'];
+		$first = $this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => 'Success. New document id 123 created', 'documentId' => 123];
+
+		$this->service->process();
+
+		self::assertSame([[123, 5]], $this->paperless->ownerChanges);
+		self::assertNull($this->state->findSend(self::SENDER, $first));
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $first, 'Scans/receipt.pdf', 123);
+	}
+
+	/** A sender without a user of Paperless leaves the document to the account of the app. */
+	public function testTheDocumentOfASenderWithoutAUserOfPaperlessKeepsItsOwner(): void {
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'bob'];
+		$this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->ownerChanges);
+	}
+
+	/** While Paperless refuses the owner, the import stays pending, the log says so once, and the next round asks again. */
+	public function testAnOwnerThatPaperlessRefusesKeepsTheImportPending(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'alice'];
+		$id = $this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 5 the owner of the document 123: HTTP 403.');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('its owner'));
+
+		$this->service->process();
+		$this->service->process();
+
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
+		self::assertSame('Paperless did not make the user 5 the owner of the document 123: HTTP 403.', $this->send($id)['last_error']);
+		self::assertCount(2, $this->paperless->ownerChanges);
 	}
 
 	/**

@@ -74,6 +74,7 @@ final class ManualSyncJobTest extends TestCase {
 			new UserTimeZones($this->createStub(IUserConfig::class), new TestTimeZones()),
 			$this->notificationPublisher($status, new TestStorage(), $clock, $this->createStub(LoggerInterface::class)),
 			$this->systemTagService(new TestStorage()),
+			$this->ownerMapping(),
 		);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->job = new ManualSyncJob($this->createStub(ITimeFactory::class), $sync, $this->jobList, $this->logger);
