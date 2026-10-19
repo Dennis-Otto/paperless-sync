@@ -7,6 +7,21 @@
 # comment follows a workflow of this project alone, such as one of visual tests, once
 # the answer test_workflows of .copier-answers.yml names it.
 # https://github.com/Dennis-Otto/repo-blueprint#the-pr-coach
+#
+# Each explanation also says in autofix how its check fixes itself: the commands that
+# fix what it finds, which the fix bot runs and commits after the checks, or suggests on
+# a pull request from a fork, or a sentence with the reason why no command can. The fix
+# bot takes the fixes of the runs of Lint and of the CI alone, so a check of
+# .github/workflows/e2e.yml names its commands for a person
+# (https://github.com/Dennis-Otto/repo-blueprint/issues/225), and it runs those of the
+# step "Checks of this project" once the blueprint finds that step, which scripts/check.sh
+# indents (https://github.com/Dennis-Otto/repo-blueprint/issues/351).
+#
+# tests/coach/test_checks_project.py, which scripts/check-project.sh runs, checks that
+# every required check, every step of scripts/check.sh and every check of
+# scripts/check-project.sh has its explanation here or in .github/checks.toml, that every
+# job of e2e.yml explains its failure, that the files and headings named here exist, and
+# that the commands of autofix fix what they promise.
 
 # A check by the name that GitHub shows, where a * stands for any text. Each has a
 # title, problem, why and fix, and may have commands, one per line, and docs, a link or
@@ -19,13 +34,76 @@
 # fix = """Run the test that failed on your machine, fix what it shows, and push."""
 # commands = ["bash tests/e2e/run.sh"]
 # docs = "CONTRIBUTING.md#checks"
+# autofix = """A test of the whole app needs a person, who knows what the app should do."""
 
-# A step of scripts/check.sh by the name that it prints, such as the step that runs
-# scripts/check-project.sh, to explain the checks of this project there:
-# [step."Checks of this project"]
-# problem = """..."""
-# why = """..."""
-# fix = """..."""
+# ---------------------------------------------------------------- the checks
+
+[check.nextcloud]
+title = "The end-to-end tests against every supported Nextcloud"
+problem = """The end-to-end tests in Docker failed against a Nextcloud version from
+`min-version` to `max-version` of `appinfo/info.xml`, or ran out of their time. The
+summary of the check has a table with the result of each version, the log a group with
+the whole output of each, and its last lines the command that runs a version that failed
+again on its own. The flaky-test bot runs a failed job once more by itself, so a
+failure that stays is real."""
+why = """These tests run the app as a server runs it: a real Nextcloud with this checkout
+as its app, its settings page in a browser, its background jobs and its files in WebDAV,
+against a mock of Paperless. A change that passes the unit tests can still break the app
+in one of the versions that the App Store promises."""
+fix = """Run the version that failed on your machine with Docker, by the command that the
+log names, fix what its output shows, and push. When `main` fails the same way, a new
+point release of Nextcloud, which the image of the version brings, changed what the app
+relies on: adapt the app to it in a pull request of its own."""
+commands = [
+  "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache bash tests/e2e/run.sh  # one version, as the log names it",
+  "E2E_VARIANTS=none bash tests/e2e/run-all.sh  # every supported version side by side, as the check does",
+  "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
+]
+docs = "tests/e2e/README.md#every-supported-version-at-once"
+autofix = """A test of the whole app that fails needs a person, who finds out what the app
+or Nextcloud does differently."""
+
+[check."nextcloud on PostgreSQL, MariaDB and S3"]
+title = "The end-to-end tests on PostgreSQL, MariaDB and S3"
+problem = """The end-to-end tests in Docker failed against the newest supported Nextcloud
+on PostgreSQL, or on MariaDB with an object store of S3 as its primary storage, while
+the check nextcloud runs them on SQLite with local storage. The summary of the check has
+a table with the result of each, and the last lines of the log the command that runs one
+again on its own."""
+why = """Most servers keep their tables in MariaDB, MySQL or PostgreSQL, and larger ones
+their files in an object store: a query, a migration or a stream of a file can work on
+SQLite and the disk and still fail there, as every upload of the inbox once failed on S3
+(#73)."""
+fix = """Run the variant that failed on your machine with Docker, fix what its output
+shows, such as a query that only SQLite accepts or a file that the app reads as if its
+size were known, and push."""
+commands = [
+  "E2E_VERSIONS=none E2E_VARIANTS=pgsql bash tests/e2e/run-all.sh  # PostgreSQL on the newest version",
+  "E2E_VERSIONS=none E2E_VARIANTS=mysql+s3 bash tests/e2e/run-all.sh  # MariaDB with S3 on the newest version",
+  "E2E_VERSIONS=none bash tests/e2e/run-all.sh  # both side by side, as the check does",
+]
+docs = "tests/e2e/README.md#databases-and-object-storage"
+autofix = """A test that fails on one database or storage alone needs a person, who finds
+out what the app does differently there."""
+
+[check."coming Nextcloud"]
+title = "The end-to-end tests against the coming Nextcloud"
+problem = """The weekly canary failed: the end-to-end tests against the beta or release
+candidate of the next major version of Nextcloud, or against the daily build of its
+master branch, or the canary couldn't set that Nextcloud up. It opened the issue *The
+coming Nextcloud breaks the app*, or added this run to it."""
+why = """Nextcloud hasn't released that version yet, so this is no required check and
+blocks nothing; it gives notice while there is time to adapt the app before its users
+update their servers."""
+fix = """Run the canary on your machine with Docker and adapt the app to what the coming
+Nextcloud changed, without breaking the versions that `appinfo/info.xml` supports. Leave
+`max-version` as it is: the upstream bot raises it once Nextcloud releases the version.
+When the coming Nextcloud itself is broken, wait for its next build; the canary closes the
+issue once the tests pass again."""
+commands = ["bash tests/e2e/canary.sh"]
+docs = "tests/e2e/README.md#the-coming-nextcloud"
+autofix = """A change of a Nextcloud that isn't released yet needs a person, who decides
+how the app follows it."""
 
 [check."Paperless-ngx *"]
 title = "The contract tests against a real Paperless-ngx"
@@ -46,3 +124,71 @@ commands = [
   "CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2  # or 3: record the fixtures anew",
 ]
 docs = "tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx"
+autofix = """Whether the app or the fixtures follow a new answer of Paperless is the
+decision of a person, who reads what Paperless changed; the job keeps the answers as its
+artifact paperless-ngx-2 or paperless-ngx-3 for that."""
+
+# ---------------------------------------------------------------- the steps of scripts/check.sh
+
+[step.Package]
+problem = """krankerl couldn't build the package of the app, or `scripts/check-package.sh`
+found that it holds other files than the runtime files that Git tracks in the commit: one
+that is missing, a stray one, one with other content, or a link; or a PHP file or a
+script of the package doesn't parse. The log lists each difference."""
+why = """The release workflow signs this package and publishes it in the App Store, after
+the same check. A missing file breaks the app on the servers of its users, and a stray
+one ships what doesn't belong there, such as a test or a secret."""
+fix = """krankerl packs the commit, not the working tree: commit every file that the app
+needs. A new folder or file that the app needs at runtime belongs in `RUNTIME_PATHS` of
+`scripts/check-package.sh`, and `.nextcloudignore` must not leave it out; a file that the
+package holds without needing it belongs in `.nextcloudignore`. Then build and check the
+package again:"""
+commands = [
+  "krankerl package",
+  "bash scripts/check-package.sh build/artifacts/paperless_sync.tar.gz unsigned",
+]
+docs = "docs/releases.md#what-the-package-holds"
+autofix = """Which files the package of a release holds is the decision of a person: a
+stray file may be a secret, and a missing one a file that the app needs."""
+
+[step."Checks of this project"]
+problem = """A check of this app alone in `scripts/check-project.sh` failed; the line
+`== NAME` above its message names it. *Browser of the end-to-end tests*: the image of
+Playwright in `tests/e2e/run.sh` and playwright-core in `tests/e2e/package.json` differ.
+*Changes that run the end-to-end tests*: a rule of `tests/e2e/affected.sh` decides
+otherwise than its sample. *Icon of the website*: `docs/images/app.svg` differs from
+`img/app.svg`. *Hook of the website*: a test of `.github/mkdocs_project.py` fails.
+*Versions in the README*: a badge or a version in the text names other versions than
+`appinfo/info.xml`. *Description of the app*: the repository, `mkdocs.yml` and
+`composer.json` describe the app in other words. *German documentation*: a German page
+has another outline than its English twin. *Area labels of pull requests*: a file of the
+app belongs to no area of `.github/labeler.yml`, or a rule names no file. *Explanations
+of the checks*: a check lacks its explanation in `.github/checks.project.toml`, or an
+explanation names a file that is gone. *Check of the package*: a test of
+`scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
+parse, or `l10n/de.json` lacks a text that the code translates, has one that no code
+translates, a placeholder of another kind or a text twice, or differs from
+`l10n/de.js`."""
+why = """These checks keep what only this app has in step: the end-to-end tests with
+their browser and their rules, the website, the README and its German twin with the
+versions of `appinfo/info.xml`, the labels of pull requests, the explanations of the
+checks, the package of a release and the German words of the app."""
+fix = """The message names the file and what to change: keep the image of Playwright and
+playwright-core at one version, change a rule of `tests/e2e/affected.sh` together with
+its sample,
+change a version in `appinfo/info.xml` rather than in the text, give the three
+descriptions the same words, follow the English outline in the German twin, give a new
+file an area, explain a new check, and add a new text with its German words to
+`l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
+`check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
+anew. Then run the checks again:"""
+commands = [
+  "bash scripts/check-project.sh",
+  "cp img/app.svg docs/images/app.svg  # Icon of the website",
+  "node scripts/check-l10n.mjs --fix  # JavaScript and translations",
+]
+docs = "docs/development.md#set-up"
+autofix = [
+  "cp img/app.svg docs/images/app.svg",
+  "node scripts/check-l10n.mjs --fix",
+]
