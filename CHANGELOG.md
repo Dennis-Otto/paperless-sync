@@ -8,6 +8,18 @@ All notable changes to this project are documented in this file.
 
 - **Screen readers name the custom field button as it reads:** the button *custom_fields.…* under the path template now announces its visible text, with *Insert a custom field, then type its name* as its tooltip and description, so voice control finds it by what it shows.
 
+## [1.1.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.0.0...v1.1.0) (2026-10-19)
+
+
+### Features
+
+* give every Nextcloud user the Paperless documents they own ([#230](https://github.com/Dennis-Otto/paperless-sync/issues/230)) ([db6809f](https://github.com/Dennis-Otto/paperless-sync/commit/db6809ff88fae558160ca8942e3c9b288038a356))
+
+
+### Bug fixes
+
+* a 2.x task that just failed reports its real error, not the traceback placeholder ([#227](https://github.com/Dennis-Otto/paperless-sync/issues/227)) ([4df72ac](https://github.com/Dennis-Otto/paperless-sync/commit/4df72acda8a23c0513d76077fa3116115ffb000d))
+
 ## [1.0.0](https://github.com/Dennis-Otto/paperless-sync/compare/v0.4.0...v1.0.0) (2026-10-18)
 
 ### Features
