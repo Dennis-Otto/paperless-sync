@@ -5,10 +5,11 @@
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
 # end-to-end tests, the rules that decide when they run, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
-# pull requests, the check of its package, and the JavaScript of the settings and the
-# translations, which have no build step, and that the German twins of the documentation,
-# README.de.md and docs/*.de.md, follow their English pages; the versions check covers
-# README.de.md and docs/index.de.md as well.
+# pull requests, the explanations of its checks for the PR coach, the check of its
+# package, and the JavaScript of the settings and the translations, which have no build
+# step, and that the German twins of the documentation, README.de.md and docs/*.de.md,
+# follow their English pages; the versions check covers README.de.md and
+# docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -535,6 +536,20 @@ if [[ -n "$python" ]]; then
   echo "The check of the area labels reports a file without an area, a glob without a file, a ** inside a name and an area without a rule."
 else
   echo "Python 3.11 or newer is not installed here; the CI checks the area labels of pull requests."
+fi
+
+printf '\n== %s\n' "Explanations of the checks"
+# When a check of this app alone fails, the PR coach explains it from
+# .github/checks.project.toml, also on a pull request from a fork, and the fix bot runs
+# the commands of its autofix. tests/coach/test_checks_project.py checks that every
+# required check, every step of scripts/check.sh and every check of this script has its
+# explanation, that every job of e2e.yml that runs the code explains its failure, that
+# the files and headings that the explanations name exist, and that the commands of
+# autofix fix what they promise.
+if [[ -n "$python" ]]; then
+  "$python" -B tests/coach/test_checks_project.py
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the explanations of the checks."
 fi
 
 printf '\n== %s\n' "Check of the package"

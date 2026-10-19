@@ -96,6 +96,8 @@ Of the changes that run the tests, those that can behave differently on another 
 
 Every push to `main`, a run by hand and every night run both jobs in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
+A job that fails explains itself, as every check does: its summary and, after the checks, the comment of the PR coach on the pull request say what failed, why that matters and how to run it on your machine, from [`.github/checks.project.toml`](../../.github/checks.project.toml), also on a pull request from a fork. The table of the summary names each version, database and storage with its result, and the last lines of the log the command that runs one that failed again on its own.
+
 ## Databases and object storage
 
 Few installations of Nextcloud run on SQLite: most keep their tables in MariaDB, MySQL or PostgreSQL, and larger ones keep their files in an object store with the API of S3. The state of the app lives in two tables of its own, which its migrations create, and on an object store Nextcloud reads every file as a stream of no known size, which once made Paperless refuse every upload of the inbox ([#73](https://github.com/Dennis-Otto/paperless-sync/issues/73)). `run.sh` runs the same scenario on them as well:
