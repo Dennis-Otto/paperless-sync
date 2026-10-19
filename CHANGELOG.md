@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.1.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.0...v1.1.1) (2026-10-19)
+
+
+### Bug fixes
+
+* ask Paperless before counting a document a complete scan left out as missing ([#229](https://github.com/Dennis-Otto/paperless-sync/issues/229)) ([b0faab3](https://github.com/Dennis-Otto/paperless-sync/commit/b0faab3cb27b313944910a10a193ca47d1e7d5fa))
+
 ## [1.1.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.0.0...v1.1.0) (2026-10-19)
 
 ### Fixed
