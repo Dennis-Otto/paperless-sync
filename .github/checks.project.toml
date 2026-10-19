@@ -156,7 +156,10 @@ problem = """A check of this app alone in `scripts/check-project.sh` failed; the
 `== NAME` above its message names it. *Browser of the end-to-end tests*: the image of
 Playwright in `tests/e2e/run.sh` and playwright-core in `tests/e2e/package.json` differ.
 *Changes that run the end-to-end tests*: a rule of `tests/e2e/affected.sh` decides
-otherwise than its sample. *Icon of the website*: `docs/images/app.svg` differs from
+otherwise than its sample. *Downloads that a script runs*: a pipe of a shell script
+hands a download to a program, such as `curl … | bash` or `curl … | "${COMPOSE[@]}" exec
+… python`, which Scorecard reports as a download that runs without a pinned hash, or the
+check misreads one of its samples. *Icon of the website*: `docs/images/app.svg` differs from
 `img/app.svg`. *Hook of the website*: a test of `.github/mkdocs_project.py` fails.
 *Versions in the README*: a badge or a version in the text names other versions than
 `appinfo/info.xml`. *Description of the app*: the repository, `mkdocs.yml` and
@@ -170,13 +173,15 @@ parse, or `l10n/de.json` lacks a text that the code translates, has one that no 
 translates, a placeholder of another kind or a text twice, or differs from
 `l10n/de.js`."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
-their browser and their rules, the website, the README and its German twin with the
-versions of `appinfo/info.xml`, the labels of pull requests, the explanations of the
-checks, the package of a release and the German words of the app."""
+their browser and their rules, the scripts free of downloads that run unchecked, which
+would fail the workflow Findings on `main`, the website, the README and its German twin
+with the versions of `appinfo/info.xml`, the labels of pull requests, the explanations of
+the checks, the package of a release and the German words of the app."""
 fix = """The message names the file and what to change: keep the image of Playwright and
 playwright-core at one version, change a rule of `tests/e2e/affected.sh` together with
-its sample,
-change a version in `appinfo/info.xml` rather than in the text, give the three
+its sample, save a download into a file with `curl --output` and give that file to the
+program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
+`appinfo/info.xml` rather than in the text, give the three
 descriptions the same words, follow the English outline in the German twin, give a new
 file an area, explain a new check, and add a new text with its German words to
 `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
