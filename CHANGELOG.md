@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.1.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.0...v1.1.1) (2026-10-19)
+
+### Bug fixes
+
+- **A document that Paperless still has keeps its copy, also when a scan left it out:** when one document was deleted in Paperless and another one added while a run read the pages of its list, the count of Paperless stayed the same, and a third document that still exists could be left out without a sign. That counted as a missing scan, and with *Required consecutive missing scans* at 1 its copy moved to the deleted folder, or was deleted with direct deletion. A run now asks Paperless for each document that a scan would count as missing: only when Paperless answers that it has no such document does the scan count; a document that Paperless still has keeps its copy and starts its count anew, and an error of Paperless counts nothing in that run and shows in the report. A run asks at most twice as many of these questions as *Maximum changes per module and run* allows, and none after the first error, so a run stays short also when many documents vanish at once.
+
 ## [1.1.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.0.0...v1.1.0) (2026-10-19)
 
 ### Fixed
