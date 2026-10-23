@@ -8,9 +8,9 @@
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
 # package, the JavaScript of the settings and the translations, which have no build
-# step, and the thumbnails of the screenshots of the App Store, and that the German twins of the documentation, README.de.md and docs/*.de.md,
-# follow their English pages; the versions check covers README.de.md and
-# docs/index.de.md as well.
+# step, the thumbnails of the screenshots of the App Store, and that the German twins
+# of the documentation, README.de.md and docs/*.de.md, follow their English pages; the
+# versions check covers README.de.md and docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -168,6 +168,22 @@ diff --git a/appinfo/info.xml b/appinfo/info.xml
 +    -->https://example.com/v1.2.0-rc.1/01.png</screenshot>
 +  <screenshot small-thumbnail="https://example.com/v1.2.0-rc.1/02-small.png"><!--
 +    -->https://example.com/v1.2.0-rc.1/02.png</screenshot>
+DIFF
+expect_info run "a raise of the version of PHP" <<'DIFF'
+diff --git a/appinfo/info.xml b/appinfo/info.xml
+--- a/appinfo/info.xml
++++ b/appinfo/info.xml
+@@ -107 +107 @@
+-    <php min-version="8.2.0"/>
++    <php min-version="8.3.0"/>
+DIFF
+expect_info run "a raise of the versions of Nextcloud" <<'DIFF'
+diff --git a/appinfo/info.xml b/appinfo/info.xml
+--- a/appinfo/info.xml
++++ b/appinfo/info.xml
+@@ -108 +108 @@
+-    <nextcloud min-version="33.0.0" max-version="35.0.0"/>
++    <nextcloud min-version="33.0.4" max-version="35.0.0"/>
 DIFF
 expect_info run "a version and another screenshot" <<'DIFF'
 @@ -98 +98 @@

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\AppInfo;
 
+use DOMDocument;
 use PHPUnit\Framework\TestCase;
 use SimpleXMLElement;
 
@@ -39,12 +40,18 @@ final class ScreenshotsTest extends TestCase {
 	}
 
 	/**
-	 * What the generic updater of release-please (the second extra file of
-	 * release-please-config.json) makes of the file: in each line marked
-	 * x-release-please-version, and in each line between x-release-please-start-version and
-	 * x-release-please-end, it writes the version in place of the first one of the line.
+	 * What release-please makes of the file with its two updaters of release-please-config.json.
+	 * The XML updater, for <version>, runs first and writes the whole file out again, which
+	 * joins the lines of a start tag into one, as DOMDocument does here. Then the generic
+	 * updater, in each line marked x-release-please-version, and in each line between
+	 * x-release-please-start-version and x-release-please-end, writes the version in place of
+	 * the first one of the line.
 	 */
 	private static function released(string $xml, string $version): string {
+		$document = new DOMDocument();
+		self::assertTrue($document->loadXML($xml));
+		$xml = $document->saveXML($document->documentElement);
+		self::assertIsString($xml);
 		$block = false;
 		$lines = explode("\n", $xml);
 		foreach ($lines as $index => $line) {
@@ -119,11 +126,25 @@ final class ScreenshotsTest extends TestCase {
 	 * that both addresses of a screenshot on one line would leave the second at the old tag.
 	 */
 	public function testTheUpdaterOfTheTestWritesOnlyTheFirstVersionOfALine(): void {
-		$line = "<screenshot small-thumbnail=\"a/v1.0.0/b\">a/v1.0.0/c</screenshot><!-- x-release-please-version -->\n<x>1.0.0</x>";
+		$line = "<info><screenshot small-thumbnail=\"a/v1.0.0/b\">a/v1.0.0/c</screenshot><!-- x-release-please-version -->\n<x>1.0.0</x></info>";
 
 		self::assertSame(
-			"<screenshot small-thumbnail=\"a/v2.0.0/b\">a/v1.0.0/c</screenshot><!-- x-release-please-version -->\n<x>1.0.0</x>",
+			"<info><screenshot small-thumbnail=\"a/v2.0.0/b\">a/v1.0.0/c</screenshot><!-- x-release-please-version -->\n<x>1.0.0</x></info>",
 			self::released($line, '2.0.0'),
+		);
+	}
+
+	/**
+	 * Like the XML updater of release-please, the updater of these tests joins the lines of a
+	 * start tag, so that a thumbnail on a line of its own inside the tag would keep the old tag
+	 * in the address of its screenshot.
+	 */
+	public function testTheUpdaterOfTheTestJoinsTheLinesOfAStartTag(): void {
+		$xml = "<info>\n<!-- x-release-please-start-version -->\n<screenshot\n small-thumbnail=\"a/v1.0.0/b\"\n>a/v1.0.0/c</screenshot>\n<!-- x-release-please-end -->\n</info>";
+
+		self::assertSame(
+			"<info>\n<!-- x-release-please-start-version -->\n<screenshot small-thumbnail=\"a/v2.0.0/b\">a/v1.0.0/c</screenshot>\n<!-- x-release-please-end -->\n</info>",
+			self::released($xml, '2.0.0'),
 		);
 	}
 }

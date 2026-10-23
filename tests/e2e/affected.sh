@@ -73,10 +73,19 @@ without_versions() {
 	printf '%s' "${rest}${line}"
 }
 
+# Whether a line of appinfo/info.xml, with its versions written as X.Y.Z, is one that
+# the release bot writes: <version>, a line that it marks with x-release-please-version,
+# or an address at a tag, such as that of a screenshot or of its thumbnail. A version
+# elsewhere, such as the min-version of PHP or of Nextcloud, is not.
+release_line() {
+	local version='^[[:space:]]*<version>X\.Y\.Z</version>[[:space:]]*$'
+	[[ "$1" =~ ${version} || "$1" == *x-release-please-version* || "$1" == *://*/vX.Y.Z/* ]]
+}
+
 # Whether a change of appinfo/info.xml can affect the app, from its diff on standard
 # input (git diff --unified=0): it can, unless each hunk only writes other versions into
-# its lines, as the release bot does in <version> and in the addresses of the
-# screenshots, both of a screenshot and of its thumbnail, which it marks with
+# lines that the release bot writes (release_line), as it does in <version> and in the
+# addresses of the screenshots, both of a screenshot and of its thumbnail, which it marks with
 # x-release-please-version or keeps between x-release-please-start-version and
 # x-release-please-end. A line that it adds or removes, or a change of anything but a
 # version, such as max-version, which the upstream bot raises, can.
@@ -104,7 +113,8 @@ info_xml_change_affects_app() {
 				;;
 			+*)
 				if [[ "${hunk}" == true ]]; then
-					if ((next >= ${#removed[@]})) || [[ "$(without_versions "${line:1}")" != "${removed[next]}" ]]; then
+					if ((next >= ${#removed[@]})) || [[ "$(without_versions "${line:1}")" != "${removed[next]}" ]] ||
+						! release_line "${removed[next]}"; then
 						affects=0
 					fi
 					next=$((next + 1))
