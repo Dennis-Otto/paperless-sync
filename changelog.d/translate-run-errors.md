@@ -1,3 +1,0 @@
-### Features
-
-- **The errors of a run in the language of the administrator:** the status and the report on the settings page now show the errors that Paperless Sync explains in the language of the administrator who reads them, such as *Den Nextcloud-Benutzer paperless gibt es nicht.* or a full quota, also for a scheduled run, which has no reader when it fails. The log, `occ paperless_sync:run`, `occ paperless_sync:status` and the status API keep them in English, and the messages of Paperless and Nextcloud within an error stay as the run got them. The status of a run before the update still shows, in English, until the next run.

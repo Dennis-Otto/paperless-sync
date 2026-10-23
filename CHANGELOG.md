@@ -6,18 +6,16 @@ All notable changes to this project are documented in this file.
 
 ## [1.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.1...v1.2.0) (2026-10-23)
 
-
 ### Features
 
-* App Store screenshots get a small thumbnail ([#242](https://github.com/Dennis-Otto/paperless-sync/issues/242)) ([7f8c507](https://github.com/Dennis-Otto/paperless-sync/commit/7f8c5072368c94b94598af79f92b94d9c6113a1a))
-* **l10n:** German screenshots, German website links and a German help link ([#246](https://github.com/Dennis-Otto/paperless-sync/issues/246)) ([073dfcd](https://github.com/Dennis-Otto/paperless-sync/commit/073dfcda275dae86523b347fdf3a431e6d7cfaa7))
-* translate the errors of a run in the status and the report ([#245](https://github.com/Dennis-Otto/paperless-sync/issues/245)) ([a1aa889](https://github.com/Dennis-Otto/paperless-sync/commit/a1aa889d14896648a753d632f0a06cf36e3cba3b))
-
+- **Help in German for a German Nextcloud:** the *Help* links of the settings and the links of the warnings of Paperless Sync in *Administration → Overview* open the German guide on the website when Nextcloud speaks German to you, and the English one in every other language. The German README and the German pages of the website show the app in German pictures, and the German README links to the German website, its FAQ and its troubleshooting.
+- **Lighter previews in the App Store:** each screenshot of Paperless Sync in the Nextcloud App Store comes with a small thumbnail, which the list of the apps loads in place of the whole picture. Every release points both at its own version.
+- **The errors of a run in the language of the administrator:** the status and the report on the settings page now show the errors that Paperless Sync explains in the language of the administrator who reads them, such as *Den Nextcloud-Benutzer paperless gibt es nicht.* or a full quota, also for a scheduled run, which has no reader when it fails. The log, `occ paperless_sync:run`, `occ paperless_sync:status` and the status API keep them in English, and the messages of Paperless and Nextcloud within an error stay as the run got them. The status of a run before the update still shows, in English, until the next run.
 
 ### Bug fixes
 
-* every deleted copy goes to the trash bin of its user ([#244](https://github.com/Dennis-Otto/paperless-sync/issues/244)) ([a79c319](https://github.com/Dennis-Otto/paperless-sync/commit/a79c3191236f794b43c9e956b02d5443ce53c3f7))
-* **settings:** keep the report of a dry-run when an older status arrives late ([#237](https://github.com/Dennis-Otto/paperless-sync/issues/237)) ([56e9e4b](https://github.com/Dennis-Otto/paperless-sync/commit/56e9e4b83fbce5a702251b227dd14a7a65042083))
+- **The report of a dry-run stays in view:** an answer of the status that the settings page asked for before a dry-run, such as the one after *Save*, could arrive after the report of the dry-run and show the report from before it again, such as *Dry-run, finished* in place of *Dry-run of unsaved settings, finished*. The page now shows only a status that is newer than what it shows, and keeps following a run that is queued or active.
+- **Every deleted copy goes to the trash bin of its user:** a copy that a run deleted, such as one of a document with an excluded tag, one in the deleted folder after Paperless deleted its document for good, an inbox file after its import or an emptied folder, went to the trash bin of the target user only when the run set up the files of that user first. With per-user ownership, the copies that left the archive of any other user, such as for a new owner, were gone for good, and so was a deletion in a process that had set up the files of another user, such as of an administrator. Every run now changes the files of each user in that user's own files, so every deletion lands in *Deleted files* of its user, whoever or whatever starts the run. The switch of permanent deletion in *5 · Trash and deletion safety* is now called *Delete the Nextcloud copy after Paperless deletes the document for good*.
 
 ## [1.1.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.0...v1.1.1) (2026-10-19)
 
