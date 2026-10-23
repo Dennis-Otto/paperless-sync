@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.1...v1.2.0) (2026-10-23)
+
+
+### Features
+
+* App Store screenshots get a small thumbnail ([#242](https://github.com/Dennis-Otto/paperless-sync/issues/242)) ([7f8c507](https://github.com/Dennis-Otto/paperless-sync/commit/7f8c5072368c94b94598af79f92b94d9c6113a1a))
+* **l10n:** German screenshots, German website links and a German help link ([#246](https://github.com/Dennis-Otto/paperless-sync/issues/246)) ([073dfcd](https://github.com/Dennis-Otto/paperless-sync/commit/073dfcda275dae86523b347fdf3a431e6d7cfaa7))
+* translate the errors of a run in the status and the report ([#245](https://github.com/Dennis-Otto/paperless-sync/issues/245)) ([a1aa889](https://github.com/Dennis-Otto/paperless-sync/commit/a1aa889d14896648a753d632f0a06cf36e3cba3b))
+
+
+### Bug fixes
+
+* every deleted copy goes to the trash bin of its user ([#244](https://github.com/Dennis-Otto/paperless-sync/issues/244)) ([a79c319](https://github.com/Dennis-Otto/paperless-sync/commit/a79c3191236f794b43c9e956b02d5443ce53c3f7))
+* **settings:** keep the report of a dry-run when an older status arrives late ([#237](https://github.com/Dennis-Otto/paperless-sync/issues/237)) ([56e9e4b](https://github.com/Dennis-Otto/paperless-sync/commit/56e9e4b83fbce5a702251b227dd14a7a65042083))
+
 ## [1.1.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.0...v1.1.1) (2026-10-19)
 
 ### Bug fixes
