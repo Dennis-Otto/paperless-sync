@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Settings;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
@@ -76,6 +77,35 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);
 		self::assertSame($parameters['webhook'], $this->initialState['webhook']);
+	}
+
+	/**
+	 * The page shows the error of a failed run and the errors of its report from the start in the
+	 * language of its administrator, as the status that SyncController answers, without the records.
+	 */
+	public function testThePageShowsTheErrorsOfTheLastRunInGerman(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->statusService(new TestClock())->failed(new InvalidSettingException('Nextcloud user %s does not exist.', ['paperless'], 'target_user'));
+		$this->settings['status_last_report'] = json_encode([
+			'errors' => 1,
+			'errorMessages' => ['Trash P7: The file is locked'],
+			'errorRecords' => [['message' => 'Trash P7: The file is locked', 'text' => 'Trash P%1$s: %2$s', 'parameters' => ['7', ['message' => 'The file is locked']]]],
+			'entries' => [
+				['type' => 'error', 'document' => 7, 'detail' => 'Trash P7: The file is locked', 'error' => ['message' => 'Trash P7: The file is locked', 'text' => 'Trash P%1$s: %2$s', 'parameters' => ['7', ['message' => 'The file is locked']]]],
+			],
+		], JSON_THROW_ON_ERROR);
+		$this->lazyKeys['status_last_report'] = true;
+
+		$parameters = $this->adminSettings()->getForm()->getParams();
+
+		$status = $this->initialState['status'];
+		self::assertSame('failed', $status['state']);
+		self::assertSame('Den Nextcloud-Benutzer paperless gibt es nicht.', $status['error']);
+		self::assertSame(['Papierkorb P7: The file is locked'], $status['report']['errorMessages']);
+		self::assertSame([['type' => 'error', 'document' => 7, 'detail' => 'Papierkorb P7: The file is locked']], $status['report']['entries']);
+		self::assertArrayNotHasKey('errorRecord', $status);
+		self::assertArrayNotHasKey('errorRecords', $status['report']);
+		self::assertSame($status, $parameters['status'], 'The template shows the same status.');
 	}
 
 	/** The page shows the address of the webhook and its last call, never its secret. */
@@ -234,6 +264,7 @@ final class AdminSettingsTest extends TestCase {
 			new SyncHealth($status, $this->configService(), $this->germanL10n(), $formatter),
 			new BackgroundJobMode($this->appConfig(), $this->configService(), $this->germanL10n()),
 			$this->webhookService(new TestClock()),
+			$this->germanL10n(),
 		);
 	}
 }
