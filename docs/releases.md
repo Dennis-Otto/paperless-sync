@@ -13,7 +13,7 @@ Every pull request that changes something for users describes it under `## Unrel
 
 - **The version** follows from the titles of the pull requests merged since the last release: `fix` makes a patch, `feat` a minor and `!` or `BREAKING CHANGE` a major version. Every merge decides it anew. A line `Release-As: x.y.z` in the description of a pull request sets it explicitly.
 - **The changelog:** the text of *Unreleased* becomes the section of the release; without one, the section lists the pull requests.
-- **The files of the version:** `appinfo/info.xml` (`<version>` and the screenshot URLs marked `x-release-please-version`), `version.txt` and `.release-please-manifest.json`.
+- **The files of the version:** `appinfo/info.xml` (`<version>`, and the addresses of the screenshots and of their small thumbnails between `x-release-please-start-version` and `x-release-please-end`), `version.txt` and `.release-please-manifest.json`. The release bot writes the version into the first address of each line only, so each address of a screenshot has a line of its own, the two joined by an XML comment that the App Store and Nextcloud leave out; `tests/Unit/AppInfo/ScreenshotsTest.php` fails when a release would leave an address at the old tag.
 
 The pull request needs the same required checks as every other one. Its Docker end-to-end tests pass at once, as a release changes nothing of the app but its version: they ran against every supported Nextcloud version in the pull requests of its changes and with every push to `main` ([decision 0005](decisions/0005-end-to-end-tests-where-they-can-fail.md)). A release of dependency updates alone merges itself; every other release waits for the maintainer to merge it.
 

@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Takes the pictures of the documentation (docs/images/) and of the App Store
-// (screenshots/) in Chromium, in the light and the dark theme of Nextcloud, and records
-// two animations as GIFs. screenshots.sh sets the app up with the synthetic archive of
-// showcase.py and starts this script in the image of Playwright; the pictures go to
-// the folder pictures/ next to this script, which screenshots.sh returns as a tar archive.
+// (screenshots/, each with its small thumbnail) in Chromium, in the light and the dark
+// theme of Nextcloud, and records two animations as GIFs. screenshots.sh sets the app
+// up with the synthetic archive of showcase.py and starts this script in the image of
+// Playwright; the pictures go to the folder pictures/ next to this script, which
+// screenshots.sh returns as a tar archive.
 //
 // The story follows the quick start: a dry-run, the first synchronization, the archive
 // in Files, a dry-run a few days later that shows every kind of change, and a run that
@@ -17,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
+import { thumbnail } from './thumbnail.mjs'
 
 // gifenc is a CommonJS module, whose functions come with its default export.
 const { applyPalette, GIFEncoder, quantize } = gifenc
@@ -45,6 +47,15 @@ function save(path, data) {
 	mkdirSync(dirname(`${OUTPUT}/${path}`), { recursive: true })
 	writeFileSync(`${OUTPUT}/${path}`, data)
 	console.log(`${path}: ${Math.round(data.length / 1024)} KB`)
+}
+
+// A screenshot of the App Store, screenshots/<name>.png, and its small thumbnail next to it,
+// screenshots/<name>-small.png, which appinfo/info.xml names as its small-thumbnail. A
+// screenshot of the page is opaque, so the thumbnail keeps no alpha channel, which would
+// only make the file larger.
+function saveScreenshot(name, data) {
+	save(`screenshots/${name}.png`, data)
+	save(`screenshots/${name}-small.png`, PNG.sync.write(thumbnail(PNG.sync.read(data)), { colorType: 2 }))
 }
 
 // Switches the scenario or the tasks of the Paperless mock.
@@ -329,7 +340,7 @@ try {
 		const overview = await page.screenshot()
 		save(`docs/images/settings-${theme}.png`, overview)
 		if (theme === 'light') {
-			save('screenshots/01-admin-settings.png', overview)
+			saveScreenshot('01-admin-settings', overview)
 		}
 		// The bar of the buttons sticks to the bottom of the window and would cover a section.
 		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
@@ -435,7 +446,7 @@ try {
 		const archive = await page.screenshot()
 		save(`docs/images/archive-${theme}.png`, archive)
 		if (theme === 'light') {
-			save('screenshots/02-structured-archive.png', archive)
+			saveScreenshot('02-structured-archive', archive)
 		}
 		await context.close()
 	}
@@ -537,7 +548,7 @@ try {
 		const report = await shot(page, page.locator('#paperless-sync-report'))
 		save(`docs/images/report-${theme}.png`, report)
 		if (theme === 'light') {
-			save('screenshots/03-dry-run-report.png', report)
+			saveScreenshot('03-dry-run-report', report)
 		}
 		await context.close()
 	}
