@@ -37,6 +37,7 @@ interface NextcloudStorageInterface {
 	/** Moves the file with its file ID, so that it keeps its shares, comments, tags, favorites and versions. */
 	public function move(string $userId, string $source, string $destination, string $conflictMode): bool;
 
+	/** Deletes the file or folder into the trash bin of the user, while the trash bin is on; a missing path is no error. */
 	public function delete(string $userId, string $path): void;
 
 	/**

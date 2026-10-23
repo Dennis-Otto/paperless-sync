@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-10-08
 - Amended by [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md): with per-user ownership, each user of Nextcloud gets the documents that their user of Paperless owns
+- Amended by [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md): every change of files runs in the filesystem of their user, through one class of the private API of Nextcloud
 
 ## Context
 

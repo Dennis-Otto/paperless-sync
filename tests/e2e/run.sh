@@ -416,6 +416,38 @@ assert_dav_file() {
 	grep --fixed-strings "${needle}" "${output}" >/dev/null
 }
 
+# The names in the trash bin of a user, Deleted files in Files, one per line: a run deletes into
+# the trash bin of the user whose files it changes, whoever started it and whatever the process
+# did before (decision 0026). Names with a character that XML escapes don't occur in the suite.
+trash_names() {
+	user="$1"
+	output="${TMP_DIR}/trash-$RANDOM.xml"
+	curl --fail-with-body --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		--header 'Content-Type: application/xml' \
+		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:nc="http://nextcloud.org/ns"><d:prop><nc:trashbin-filename/></d:prop></d:propfind>' \
+		--output "${output}" \
+		"${BASE_URL}/remote.php/dav/trashbin/${user}/trash"
+	{ grep --only-matching '<nc:trashbin-filename>[^<]*</nc:trashbin-filename>' "${output}" || true; } \
+		| sed -e 's/<nc:trashbin-filename>//' -e 's/<\/nc:trashbin-filename>//'
+}
+
+# Fails unless the trash bin of the user holds one more file or folder of the name than the list
+# of trash_names from before the step.
+assert_trashed() {
+	user="$1"
+	name="$2"
+	before="$3"
+	count_before="$(grep --count --line-regexp --fixed-strings -- "${name}" "${before}" || true)"
+	count_after="$(trash_names "${user}" | grep --count --line-regexp --fixed-strings -- "${name}" || true)"
+	if ((count_after <= count_before)); then
+		echo "The trash bin of ${user} holds ${count_after} entries named ${name}, as many as before: the run deleted it for good instead of moving it to the trash bin." >&2
+		exit 1
+	fi
+}
+
 # A collaborative tag that a user makes in Files, which every user may assign; prints its ID.
 create_tag() {
 	user="$1"
@@ -937,6 +969,7 @@ if ((VERSIONS_AFTER != VERSIONS_BEFORE + 1)); then
 fi
 
 control /control/scenario/excluded >/dev/null
+trash_names sync-target > "${TMP_DIR}/trash-before-excluded.txt"
 sync_run false "${TMP_DIR}/excluded.json"
 assert_json excluded "${TMP_DIR}/excluded.json"
 assert_dav_missing sync-target "${RENAMED_PATH}"
@@ -944,6 +977,11 @@ if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/Example%20
 	echo 'Empty archive hierarchy was not pruned after exclusion.' >&2
 	exit 1
 fi
+# The removed copy and the folders that its removal emptied are in the trash bin of the target
+# user, to restore.
+COPY_NAME='2026-08-26 - Monthly invoice corrected [P123].pdf'
+assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-excluded.txt"
+assert_trashed sync-target 'Example GmbH' "${TMP_DIR}/trash-before-excluded.txt"
 
 # With tags to mirror, the archive holds only the documents with one of them: the document of
 # the scenario lacks Private, a tag of the mock, so it stays out, whatever the case of the name.
@@ -1041,9 +1079,11 @@ sync_run true "${TMP_DIR}/deletion-off.json"
 save_settings "${TMP_DIR}/deletion-on-settings.json" permanent_delete=1
 assert_json deletion-off "${TMP_DIR}/deletion-off.json"
 assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+trash_names sync-target > "${TMP_DIR}/trash-before-deleted.txt"
 sync_run false "${TMP_DIR}/deleted.json"
 assert_json deleted "${TMP_DIR}/deleted.json"
 assert_dav_missing sync-target "${TRASH_PATH}"
+assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-deleted.txt"
 # The sidecar went with the copy, and the index has no row for the document any more.
 assert_dav_missing sync-target "${SIDECAR_PATH}"
 assert_dav_file sync-target "${INDEX_PATH}" 'id,title,correspondent'
@@ -1491,6 +1531,8 @@ curl --fail-with-body --silent --show-error \
 	"${BASE_URL}/apps/paperless_sync/settings/test"
 assert_json checklist-per-user "${TMP_DIR}/checklist-per-user.json"
 save_settings "${TMP_DIR}/per-user-settings.json" ownership=per-user
+# The copies leave the archive of the target user alone (assert_json per-user).
+trash_names sync-target > "${TMP_DIR}/trash-before-per-user-sync-target.txt"
 sync_run false "${TMP_DIR}/per-user.json"
 assert_json per-user "${TMP_DIR}/per-user.json"
 # Each copy is in the files of its user alone, and the copies that left are gone: the user and
@@ -1515,20 +1557,26 @@ while read -r copy_user copy_path; do
 done < <(per_user_files export "${TMP_DIR}/per-user.json")
 while read -r copy_user copy_path; do
 	assert_dav_missing "${copy_user}" "${copy_path}"
+	# The copy that left the archive of the target user is in its trash bin.
+	assert_trashed "${copy_user}" "$(basename -- "$(printf '%b' "${copy_path//%/\\x}")")" "${TMP_DIR}/trash-before-per-user-${copy_user}.txt"
 done < <(per_user_files remove-reassigned "${TMP_DIR}/per-user.json")
 dav_upload e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf' '%PDF-1.4 Synthetic letter of e2e-owner'
 sync_run false "${TMP_DIR}/per-user-upload.json"
 control /control/task-of/owner-letter.pdf/success
 # The run gives the new document its owner, and its export brings it into the archive of e2e-owner.
+trash_names e2e-owner > "${TMP_DIR}/trash-before-per-user-sent.txt"
 sync_run false "${TMP_DIR}/per-user-sent.json"
 mock_state > "${TMP_DIR}/mock-owner-changes.json"
 assert_json mock-owner-changes "${TMP_DIR}/mock-owner-changes.json"
 assert_dav_missing e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf'
+# The file of the inbox of e2e-owner is in the trash bin of e2e-owner after its import, although
+# the run set up the files of the target user first.
+assert_trashed e2e-owner 'owner-letter.pdf' "${TMP_DIR}/trash-before-per-user-sent.txt"
 SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
 assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
 save_settings "${TMP_DIR}/single-settings.json" ownership=single
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, deletions into the trash bin of the user of each copy, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

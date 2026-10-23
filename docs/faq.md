@@ -37,7 +37,7 @@ It depends on what deletes them:
 | --- | --- |
 | The document goes to the Paperless trash | Into the deleted folder, below the date of the trash in the time zone of the target user, such as `_Deleted/2026-08-27/Example GmbH/Invoice/2026/…`, or it stays in the archive with the trash behavior *Keep archive file in place* |
 | It is restored in Paperless | Back into the archive |
-| It is deleted for good in Paperless | Deleted in Nextcloud after the configured number of complete scans, only when permanent deletion is on; otherwise it stays in the deleted folder |
+| It is deleted for good in Paperless | Deleted in Nextcloud after the configured number of complete scans, only when *Delete the Nextcloud copy after Paperless deletes the document for good* is on; otherwise it stays in the deleted folder |
 | It gets an excluded tag, or the inbox tag again | Deleted in Nextcloud in the next run |
 | It loses its last [tag to mirror](guide.md#which-documents-the-archive-mirrors) | Deleted in Nextcloud in the next run |
 | You delete it in Nextcloud | Into your trash bin, and the next run writes it anew |
@@ -50,7 +50,7 @@ Every copy that the app deletes in Nextcloud, and every folder that it empties, 
   <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.svg" alt="Where a copy goes that Paperless Sync deletes: A copy that Paperless Sync deletes in Nextcloud is gone for good when the app Deleted files of Nextcloud is off. Otherwise, the run moves it into the trash bin of the target user, who can restore it until the retention of the trash bin ends, whether the schedule, Synchronize now or occ started the run.">
 </picture>
 
-Only the target user sees that trash bin, under *Deleted files* in *Files*. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
+Only the target user sees that trash bin, under *Deleted files* in *Files*; with per-user ownership, each user has the copies of their own documents in theirs. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
 
 ### Can I change the path template later?
 
