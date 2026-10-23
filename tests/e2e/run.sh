@@ -440,6 +440,10 @@ assert_trashed() {
 	user="$1"
 	name="$2"
 	before="$3"
+	if [[ ! -f "${before}" ]]; then
+		echo "No list of the trash bin of ${user} from before the step: ${before}" >&2
+		exit 1
+	fi
 	count_before="$(grep --count --line-regexp --fixed-strings -- "${name}" "${before}" || true)"
 	count_after="$(trash_names "${user}" | grep --count --line-regexp --fixed-strings -- "${name}" || true)"
 	if ((count_after <= count_before)); then
@@ -1532,7 +1536,10 @@ curl --fail-with-body --silent --show-error \
 assert_json checklist-per-user "${TMP_DIR}/checklist-per-user.json"
 save_settings "${TMP_DIR}/per-user-settings.json" ownership=per-user
 # The copies leave the archive of the target user alone (assert_json per-user).
-trash_names sync-target > "${TMP_DIR}/trash-before-per-user-sync-target.txt"
+# The trash bin of each user who can lose a copy, from before the run.
+for trash_user in sync-target e2e-other e2e-owner; do
+	trash_names "${trash_user}" > "${TMP_DIR}/trash-before-per-user-${trash_user}.txt"
+done
 sync_run false "${TMP_DIR}/per-user.json"
 assert_json per-user "${TMP_DIR}/per-user.json"
 # Each copy is in the files of its user alone, and the copies that left are gone: the user and
