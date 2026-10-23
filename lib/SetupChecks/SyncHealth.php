@@ -48,7 +48,7 @@ final class SyncHealth implements ISetupCheck {
 		$health = $this->status->health($config);
 		$failures = $this->status->failures();
 		$error = mb_substr($failures['error'], 0, self::ERROR_LIMIT);
-		$guide = AppConstants::GUIDE_URL . '#being-notified';
+		$guide = AppConstants::guide($this->l10n->getLanguageCode(), 'being-notified');
 		$lastSuccess = $this->status->get()['lastSuccess'];
 
 		return match ($health) {

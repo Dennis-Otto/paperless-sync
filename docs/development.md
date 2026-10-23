@@ -44,10 +44,11 @@ See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/m
 
 ## Pictures
 
-The pictures of the documentation and of the App Store come from the same Docker setup, with a synthetic household archive; take them anew after a change of the interface:
+The pictures of the documentation and of the App Store come from the same Docker setup, with a synthetic household archive, once with Nextcloud in English, for `docs/images/` and `screenshots/`, and once in German, for `docs/images/de/`, which the German pages show; take them anew after a change of the interface:
 
 ```bash
-bash tests/e2e/screenshots.sh
+bash tests/e2e/screenshots.sh        # English and German
+bash tests/e2e/screenshots.sh de     # German only
 ```
 
 ## The README and the website
@@ -72,7 +73,7 @@ The README and the pages that administrators read first have a German twin: `REA
   <img src="images/diagrams/how-the-german-documentation-stays-in-step.svg" alt="How the German documentation stays in step: README.md and README.de.md link to each other. The English pages of the website, such as guide.md, take their snippets from README.md, and the German ones, such as guide.de.md, from README.de.md; an English page shows the diagram NAME.mmd, its German twin NAME.de.mmd. scripts/check-project.sh compares the outline of each German page with that of its English twin. MkDocs builds the English website and, with the plugin i18n, the German one in de/, with a language switch in the header. The English sources are blue, the German ones orange, the check and the website green.">
 </picture>
 
-So a change of an English page changes its German twin in the same pull request. `scripts/check-project.sh` fails when the two part: it compares their outlines, the headings with their levels, the snippet markers and includes, and the diagrams, in order, and names the first entry where they part, with the line in both files. Run it alone with `bash scripts/check-project.sh`. The hook `.github/mkdocs_project.py` titles an alert of a German page in German, such as *Warnung*, and leads the path of a picture of HTML, such as a screenshot, to its file from the German pages in `de/` and from the snippets of the README alike. An English page that links to a heading of a German twin, such as `guide.md#requirements`, finds it on the German website through an anchor above the German heading, `<a id="requirements"></a>`, and `mkdocs build --strict` names one that is missing. The screenshots show the English interface on both websites.
+So a change of an English page changes its German twin in the same pull request. `scripts/check-project.sh` fails when the two part: it compares their outlines, the headings with their levels, the snippet markers and includes, and the diagrams, in order, and names the first entry where they part, with the line in both files. Run it alone with `bash scripts/check-project.sh`. The hook `.github/mkdocs_project.py` titles an alert of a German page in German, such as *Warnung*, and leads the path of a picture of HTML, such as a screenshot, to its file from the German pages in `de/` and from the snippets of the README alike. An English page that links to a heading of a German twin, such as `guide.md#requirements`, finds it on the German website through an anchor above the German heading, `<a id="requirements"></a>`, and `mkdocs build --strict` names one that is missing. The same anchors let the *Help* links of the settings and the links of the setup checks open the German guide for an administrator whose Nextcloud speaks German (`AppConstants::guide`): each part that the app links to has its English anchor above its German heading, such as `<a id="being-notified"></a>`, which `tests/Unit/Settings/AdminSettingsTest.php` checks. The German pages and `README.de.md` show the screenshots of the German interface, from `docs/images/de/`, which `bash tests/e2e/screenshots.sh de` takes, and the English pages those of the English interface.
 
 ## Code
 

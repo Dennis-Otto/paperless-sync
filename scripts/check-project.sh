@@ -8,9 +8,10 @@
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
 # package, the JavaScript of the settings and the translations, which have no build
-# step, the thumbnails of the screenshots of the App Store, and that the German twins
-# of the documentation, README.de.md and docs/*.de.md, follow their English pages; the
-# versions check covers README.de.md and docs/index.de.md as well.
+# step, the thumbnails of the screenshots of the App Store, the language of the pictures
+# of the documentation, and that the German twins of the documentation, README.de.md and
+# docs/*.de.md, follow their English pages; the versions check covers README.de.md and
+# docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -709,6 +710,10 @@ echo "${#scripts[@]} JavaScript file(s) parse."
 # shrinks with tests/e2e/thumbnail.mjs.
 node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
 echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail, each pixel the average of those it covers."
+# The language of the pictures: the German ones find every text of the app that they look
+# for in its catalog, l10n/de.json.
+node --test --test-reporter=dot tests/e2e/language.test.mjs
+echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German."
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of the catalog: a text that the code

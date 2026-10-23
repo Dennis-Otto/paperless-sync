@@ -61,7 +61,7 @@ final class BackgroundJobModeTest extends TestCase {
 
 		self::assertSame(SetupResult::WARNING, $result->getSeverity());
 		self::assertStringStartsWith("Nextcloud führt seine Hintergrundjobs mit {$name} aus, das sie nur startet, während jemand Nextcloud benutzt", (string)$result->getDescription());
-		self::assertSame(AppConstants::GUIDE_URL . '#being-notified', $result->getLinkToDoc());
+		self::assertSame(AppConstants::GERMAN_GUIDE_URL . '#being-notified', $result->getLinkToDoc());
 	}
 
 	public function testScheduledRunsThatAreOffNeedNoCron(): void {

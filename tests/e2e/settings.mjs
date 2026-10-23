@@ -769,6 +769,15 @@ try {
 		expect(!(await required()), 'Dismissing the question keeps the token.')
 		console.log('Settings: the questions of the page are in the language of the administrator.')
 
+		// So are the Help links, which open the German guide, at the same parts as in English.
+		const germanHelpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
+		expect(
+			germanHelpLinks.length === helpLinks.length
+				&& germanHelpLinks.every(([href, label], index) => href === helpLinks[index][0].replace('/paperless-sync/guide.html#', '/paperless-sync/de/guide.html#') && label.startsWith('Hilfe zu ')),
+			`The Help links must open the German guide: ${JSON.stringify(germanHelpLinks)}`,
+		)
+		console.log('Settings: the Help links open the guide in the language of the administrator.')
+
 		// The times of the runs are in the format of the locale of Nextcloud, not in that of the
 		// browser, which is en-US here and would write "Oct 14, 2026".
 		await page.waitForFunction(() => /\d/.test(document.querySelector('#paperless-sync-last-ended').textContent), null, { timeout: 10000 })

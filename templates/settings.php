@@ -37,11 +37,12 @@ $stateLabels = [
 	'failed' => $l->t('Failed'),
 	'interrupted' => $l->t('Interrupted'),
 ];
-// A link from a section to its part of the guide, which names the section for screen readers.
+// A link from a section to its part of the guide, in German for an administrator who reads
+// German, which names the section for screen readers.
 $help = static function (string $anchor, string $section) use ($l): void {
 	print_unescaped(sprintf(
 		'<a class="paperless-sync-help" href="%s" target="_blank" rel="noreferrer noopener" aria-label="%s">%s</a>',
-		Util::sanitizeHTML(AppConstants::GUIDE_URL . '#' . $anchor),
+		Util::sanitizeHTML(AppConstants::guide($l->getLanguageCode(), $anchor)),
 		Util::sanitizeHTML($l->t('Help on %s', [$section])),
 		Util::sanitizeHTML($l->t('Help')),
 	));

@@ -180,40 +180,60 @@ final class AdminSettingsTest extends TestCase {
 
 	/**
 	 * Every section of the form links to its part of the guide on the website, which MkDocs builds
-	 * from docs/guide.md and the parts of README.md that it includes. The anchor of a part is its
-	 * heading as MkDocs turns it into one: in lowercase, without punctuation, and with hyphens
-	 * for spaces. The App Store links to the same guide.
+	 * from docs/guide.md and the parts of README.md that it includes, and for an administrator who
+	 * reads German to the German guide, from docs/guide.de.md and README.de.md, under the same
+	 * anchor. The anchor of a part is its heading as MkDocs turns it into one: in lowercase,
+	 * without punctuation, and with hyphens for spaces; a German part has the English one above
+	 * its heading, such as <a id="being-notified"></a>. The App Store links to the English guide.
 	 */
-	public function testEveryHelpLinkLeadsToAPartOfTheGuide(): void {
+	public function testEveryHelpLinkLeadsToAPartOfTheGuideInEnglishAndInGerman(): void {
 		$root = __DIR__ . '/../../..';
 		$template = file_get_contents("{$root}/templates/settings.php");
-		$guide = file_get_contents("{$root}/docs/guide.md");
-		$readme = file_get_contents("{$root}/README.md");
 		self::assertIsString($template);
-		self::assertIsString($guide);
-		self::assertIsString($readme);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
 		self::assertCount(13, $links[1], 'Each of the six sections, each warning of the setup checks, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
-		$page = preg_replace_callback('/^--8<-- "README\.md:([a-z-]+)"$/m', static function (array $include) use ($readme): string {
-			$name = preg_quote($include[1], '/');
-			self::assertSame(1, preg_match("/\\[start:{$name}\\] -->\\n(.*?)<!-- --8<-- \\[end:{$name}\\]/s", $readme, $part), "README.md has no part {$include[1]}.");
-
-			return $part[1];
-		}, $guide);
-		self::assertIsString($page);
-		preg_match_all('/^#{1,6} (.+)$/m', $page, $headings);
-		$anchors = array_map(
-			static fn (string $heading): string => (string)preg_replace('/[\s-]+/', '-', trim((string)preg_replace('/[^\w\s-]/', '', strtolower($heading)))),
-			$headings[1],
-		);
-		foreach ($links[1] as $anchor) {
-			self::assertContains($anchor, $anchors, "The guide has no part #{$anchor}.");
+		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
+			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);
+			foreach ($links[1] as $anchor) {
+				self::assertContains($anchor, $anchors, "{$guide} has no part #{$anchor}.");
+			}
 		}
 
 		$info = simplexml_load_file("{$root}/appinfo/info.xml");
 		self::assertNotFalse($info);
 		self::assertStringStartsWith(AppConstants::GUIDE_URL . '#', (string)$info->documentation->admin);
+	}
+
+	/**
+	 * The anchors of a page of the guide with the parts of its README that it includes: those of
+	 * its headings and those of the elements with an id.
+	 *
+	 * @return list<string>
+	 */
+	private static function anchorsOfTheGuide(string $root, string $guide, string $readme): array {
+		$page = file_get_contents("{$root}/{$guide}");
+		$parts = file_get_contents("{$root}/{$readme}");
+		self::assertIsString($page);
+		self::assertIsString($parts);
+		$quoted = preg_quote($readme, '/');
+		$page = preg_replace_callback("/^--8<-- \"{$quoted}:([a-z-]+)\"$/m", static function (array $include) use ($parts, $readme): string {
+			$name = preg_quote($include[1], '/');
+			self::assertSame(1, preg_match("/\\[start:{$name}\\] -->\\n(.*?)<!-- --8<-- \\[end:{$name}\\]/s", $parts, $part), "{$readme} has no part {$include[1]}.");
+
+			return $part[1];
+		}, $page);
+		self::assertIsString($page);
+		preg_match_all('/^#{1,6} (.+)$/m', $page, $headings);
+		preg_match_all('/<a id="([a-z0-9-]+)"><\/a>/', $page, $ids);
+
+		return [
+			...array_map(
+				static fn (string $heading): string => (string)preg_replace('/[\s-]+/', '-', trim((string)preg_replace('/[^\w\s-]/u', '', mb_strtolower($heading)))),
+				$headings[1],
+			),
+			...$ids[1],
+		];
 	}
 
 	/** Every text of the page, of the template and of js/settings.js, has its German translation. */
