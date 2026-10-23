@@ -169,7 +169,8 @@ app belongs to no area of `.github/labeler.yml`, or a rule names no file. *Expla
 of the checks*: a check lacks its explanation in `.github/checks.project.toml`, or an
 explanation names a file that is gone. *Check of the package*: a test of
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
-parse, or `l10n/de.json` lacks a text that the code translates, has one that no code
+parse, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
+Store into their thumbnails, fails, or `l10n/de.json` lacks a text that the code translates, has one that no code
 translates, a placeholder of another kind or a text twice, or differs from
 `l10n/de.js`."""
 why = """These checks keep what only this app has in step: the end-to-end tests with

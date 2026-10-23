@@ -62,30 +62,59 @@ path_affects_contract() {
 	esac
 }
 
-# A line of appinfo/info.xml that the release bot writes in every release: <version>,
-# and the lines that it marks with x-release-please-version, such as the addresses of
-# the screenshots.
-release_line() {
-	local version='^[[:space:]]*<version>[^<]*</version>[[:space:]]*$'
-	[[ "$1" =~ ${version} || "$1" == *x-release-please-version* ]]
+# A line with each version in it, such as the 1.1.1 of a tag v1.1.1 in an address,
+# written as X.Y.Z.
+without_versions() {
+	local line="$1" rest="" version='([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?(\+[0-9A-Za-z.-]+)?)'
+	while [[ "${line}" =~ ${version} ]]; do
+		rest+="${line%%"${BASH_REMATCH[1]}"*}X.Y.Z"
+		line="${line#*"${BASH_REMATCH[1]}"}"
+	done
+	printf '%s' "${rest}${line}"
 }
 
 # Whether a change of appinfo/info.xml can affect the app, from its diff on standard
-# input (git diff --unified=0): it can, if it changes a line that the release bot
-# doesn't write, such as max-version, which the upstream bot raises.
+# input (git diff --unified=0): it can, unless each hunk only writes other versions into
+# its lines, as the release bot does in <version> and in the addresses of the
+# screenshots, both of a screenshot and of its thumbnail, which it marks with
+# x-release-please-version or keeps between x-release-please-start-version and
+# x-release-please-end. A line that it adds or removes, or a change of anything but a
+# version, such as max-version, which the upstream bot raises, can.
 info_xml_change_affects_app() {
-	local line hunk=false affects=1
+	local line hunk=false affects=1 next=0
+	local -a removed=()
 	while IFS= read -r line; do
 		case "${line}" in
-			'diff --git '*) hunk=false ;;
-			'@@ '*) hunk=true ;;
-			[-+]*)
-				if [[ "${hunk}" == true ]] && ! release_line "${line:1}"; then
+			'diff --git '* | '@@ '*)
+				if ((next < ${#removed[@]})); then
 					affects=0
+				fi
+				removed=()
+				next=0
+				if [[ "${line}" == '@@ '* ]]; then
+					hunk=true
+				else
+					hunk=false
+				fi
+				;;
+			-*)
+				if [[ "${hunk}" == true ]]; then
+					removed+=("$(without_versions "${line:1}")")
+				fi
+				;;
+			+*)
+				if [[ "${hunk}" == true ]]; then
+					if ((next >= ${#removed[@]})) || [[ "$(without_versions "${line:1}")" != "${removed[next]}" ]]; then
+						affects=0
+					fi
+					next=$((next + 1))
 				fi
 				;;
 		esac
 	done
+	if ((next < ${#removed[@]})); then
+		affects=0
+	fi
 	return "${affects}"
 }
 

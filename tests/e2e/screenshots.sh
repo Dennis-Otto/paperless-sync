@@ -113,7 +113,7 @@ BROWSER='
 	node screenshots.mjs
 	tar -C pictures -cf - . >&3
 '
-tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json screenshots.mjs fonts.conf \
+tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json screenshots.mjs thumbnail.mjs fonts.conf \
 	| "${DOCKER_BIN}" run --rm --interactive \
 		--network "${PROJECT_NAME}_default" \
 		--env NPM_CONFIG_UPDATE_NOTIFIER=false \

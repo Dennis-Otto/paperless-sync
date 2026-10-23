@@ -7,8 +7,8 @@
 # none of which may hand a download to a program, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
-# package, and the JavaScript of the settings and the translations, which have no build
-# step, and that the German twins of the documentation, README.de.md and docs/*.de.md,
+# package, the JavaScript of the settings and the translations, which have no build
+# step, and the thumbnails of the screenshots of the App Store, and that the German twins of the documentation, README.de.md and docs/*.de.md,
 # follow their English pages; the versions check covers README.de.md and
 # docs/index.de.md as well.
 set -euo pipefail
@@ -128,8 +128,9 @@ for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php temp
 done
 
 # A change of appinfo/info.xml, as git diff --unified=0 shows it. A release writes
-# only its version and must skip the tests; the upstream bot raises max-version, and
-# that must run them, as any other change of the file.
+# only its version, also into both addresses of a screenshot, and must skip the tests;
+# the upstream bot raises max-version, and that must run them, as any other change of
+# the file.
 expect_info() {
   local expected="$1" actual=skip
   if info_xml_change_affects_app; then
@@ -150,6 +151,40 @@ diff --git a/appinfo/info.xml b/appinfo/info.xml
 @@ -83 +83 @@
 -  <screenshot>https://example.com/v0.1.9/01.png</screenshot><!-- x-release-please-version -->
 +  <screenshot>https://example.com/v0.1.10/01.png</screenshot><!-- x-release-please-version -->
+DIFF
+expect_info skip "a release of the screenshots with their thumbnails" <<'DIFF'
+diff --git a/appinfo/info.xml b/appinfo/info.xml
+--- a/appinfo/info.xml
++++ b/appinfo/info.xml
+@@ -79 +79 @@
+-  <version>1.1.1</version>
++  <version>1.2.0-rc.1</version>
+@@ -98,4 +98,4 @@
+-  <screenshot small-thumbnail="https://example.com/v1.1.1/01-small.png"><!--
+-    -->https://example.com/v1.1.1/01.png</screenshot>
+-  <screenshot small-thumbnail="https://example.com/v1.1.1/02-small.png"><!--
+-    -->https://example.com/v1.1.1/02.png</screenshot>
++  <screenshot small-thumbnail="https://example.com/v1.2.0-rc.1/01-small.png"><!--
++    -->https://example.com/v1.2.0-rc.1/01.png</screenshot>
++  <screenshot small-thumbnail="https://example.com/v1.2.0-rc.1/02-small.png"><!--
++    -->https://example.com/v1.2.0-rc.1/02.png</screenshot>
+DIFF
+expect_info run "a version and another screenshot" <<'DIFF'
+@@ -98 +98 @@
+-  <screenshot small-thumbnail="https://example.com/v1.1.1/01-small.png"><!--
++  <screenshot small-thumbnail="https://example.com/v1.2.0/04-small.png"><!--
+DIFF
+expect_info run "a line that a release writes, and a new one" <<'DIFF'
+@@ -98 +98,2 @@
+-  <screenshot small-thumbnail="https://example.com/v1.1.1/01-small.png"><!--
++  <screenshot small-thumbnail="https://example.com/v1.2.0/01-small.png"><!--
++  <!-- x-release-please-end -->
+DIFF
+expect_info run "a line that a release writes, and a removed one" <<'DIFF'
+@@ -79,2 +79 @@
+-  <version>1.1.1</version>
+-  <licence>AGPL-3.0-or-later</licence>
++  <version>1.2.0</version>
 DIFF
 expect_info run "max-version" <<'DIFF'
 @@ -88 +88 @@
@@ -654,6 +689,10 @@ for script in "${scripts[@]}"; do
   node --check "$script"
 done
 echo "${#scripts[@]} JavaScript file(s) parse."
+# The thumbnails of the screenshots of the App Store, which tests/e2e/screenshots.mjs
+# shrinks with tests/e2e/thumbnail.mjs.
+node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
+echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail, each pixel the average of those it covers."
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of the catalog: a text that the code
