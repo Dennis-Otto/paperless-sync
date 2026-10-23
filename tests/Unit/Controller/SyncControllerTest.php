@@ -12,7 +12,6 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SyncController;
 use OCA\PaperlessSync\Cron\ManualSyncJob;
-use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -96,8 +95,9 @@ final class SyncControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		$report = $response->getData();
-		self::assertInstanceOf(SyncReport::class, $report);
-		self::assertTrue($report->dryRun, 'A run from the settings page is a dry run unless asked otherwise.');
+		self::assertIsArray($report);
+		self::assertTrue($report['dryRun'], 'A run from the settings page is a dry run unless asked otherwise.');
+		self::assertArrayNotHasKey('errorRecords', $report, 'The answer says each error once, in the language of the administrator.');
 		self::assertSame('dry-run-completed', $this->settings['status_last_state']);
 	}
 
@@ -229,9 +229,9 @@ final class SyncControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
 		$report = $response->getData();
-		self::assertInstanceOf(SyncReport::class, $report);
-		self::assertTrue($report->unsavedSettings);
-		self::assertSame(['EXPORT P5: Documents/Paperless/Archive/2026/Strom [P5].pdf'], $report->actions);
+		self::assertIsArray($report);
+		self::assertTrue($report['unsavedSettings']);
+		self::assertSame(['EXPORT P5: Documents/Paperless/Archive/2026/Strom [P5].pdf'], $report['actions']);
 		foreach (['path_template', 'inbox_enabled', 'paperless_url', 'target_user'] as $key) {
 			self::assertSame($saved[$key], $this->settings[$key], "The dry-run saves no setting, {$key} neither.");
 		}
@@ -294,5 +294,49 @@ final class SyncControllerTest extends TestCase {
 		self::assertSame(0, $status['summary']['errors']);
 		self::assertSame([], $status['report']['errorMessages']);
 		self::assertNull($status['nextRun'], 'Scheduled runs are off until the settings turn them on.');
+	}
+
+	/**
+	 * A run, also a scheduled one, keeps its error in English, as the log shows it; the settings
+	 * page reads it in the language of its administrator.
+	 */
+	public function testTheErrorOfAFailedRunIsGermanOnAGermanPage(): void {
+		$this->storage->testException = new InvalidSettingException('Nextcloud user %s does not exist.', ['paperless'], 'target_user');
+		$this->controller->run();
+
+		$status = $this->controller->status()->getData();
+
+		self::assertIsArray($status);
+		self::assertSame('failed', $status['state']);
+		self::assertSame('Den Nextcloud-Benutzer paperless gibt es nicht.', $status['error']);
+		self::assertArrayNotHasKey('errorRecord', $status);
+		self::assertSame('Nextcloud user paperless does not exist.', $this->settings['status_last_error'], 'The status keeps the English text, as the log and occ show it.');
+	}
+
+	/** The errors of the report of the last run are German too, and so is the status that a queued run answers with. */
+	public function testTheErrorsOfTheReportAreGermanOnAGermanPage(): void {
+		$this->settings['status_last_state'] = 'completed-with-errors';
+		$this->settings['status_last_report'] = json_encode([
+			'errors' => 2,
+			'errorMessages' => ['Trash P7: The file is locked', 'P8: an error of an earlier version'],
+			'errorRecords' => [['message' => 'Trash P7: The file is locked', 'text' => 'Trash P%1$s: %2$s', 'parameters' => ['7', ['message' => 'The file is locked']]]],
+			'entries' => [
+				['type' => 'error', 'document' => 7, 'detail' => 'Trash P7: The file is locked', 'error' => ['message' => 'Trash P7: The file is locked', 'text' => 'Trash P%1$s: %2$s', 'parameters' => ['7', ['message' => 'The file is locked']]]],
+				['type' => 'error', 'document' => 8, 'detail' => 'P8: an error of an earlier version'],
+			],
+		], JSON_THROW_ON_ERROR);
+
+		$status = $this->controller->status()->getData();
+		$queued = $this->controller->run(false)->getData();
+
+		self::assertIsArray($status);
+		self::assertSame(['Papierkorb P7: The file is locked', 'P8: an error of an earlier version'], $status['report']['errorMessages']);
+		self::assertSame([
+			['type' => 'error', 'document' => 7, 'detail' => 'Papierkorb P7: The file is locked'],
+			['type' => 'error', 'document' => 8, 'detail' => 'P8: an error of an earlier version'],
+		], $status['report']['entries']);
+		self::assertArrayNotHasKey('errorRecords', $status['report']);
+		self::assertIsArray($queued);
+		self::assertSame($status['report'], $queued['status']['report']);
 	}
 }

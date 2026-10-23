@@ -14,7 +14,6 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
-use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
 use OCP\Files\Storage\ISharedStorage;
 use OCP\IUserManager;
@@ -266,7 +265,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	 * exists, before it creates a folder, because a full quota refuses new folders as well.
 	 * Unlimited, unknown and not yet computed space is negative and not checked.
 	 *
-	 * @throws NotEnoughSpaceException
+	 * @throws FullStorageException
 	 */
 	private function requireSpace(string $userId, string $parentPath, int $size): void {
 		$folder = $this->rootFolder->getUserFolder($userId);
@@ -283,7 +282,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		/** @var mixed $free Nextcloud declares an int, and its implementations return a float for large values. */
 		$free = $folder->getFreeSpace();
 		if ((is_int($free) || is_float($free)) && $free >= 0 && $free < $size) {
-			throw new NotEnoughSpaceException("Not enough free space in Nextcloud: the file needs {$size} bytes, and {$free} are free.");
+			throw new FullStorageException('Not enough free space in Nextcloud: the file needs %1$s bytes, and %2$s are free.', [(string)$size, (string)$free]);
 		}
 	}
 

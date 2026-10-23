@@ -9,8 +9,10 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -48,6 +50,7 @@ final class StatusServiceTest extends TestCase {
 			'state' => 'never-run',
 			'summary' => [],
 			'error' => '',
+			'errorRecord' => [],
 			'report' => [],
 			'paperlessVersion' => '',
 			'paperlessApiVersion' => '',
@@ -298,6 +301,47 @@ final class StatusServiceTest extends TestCase {
 		$status = $this->service->get();
 		self::assertSame(TestClock::START + 120, $status['lastEnded'], 'The end of the failed run is no longer the end of the last run.');
 		self::assertSame('', $status['error']);
+	}
+
+	/**
+	 * The error of a failed run stays English, as in the log, with its record, its text and its
+	 * parameters, each value shortened, which the settings page translates; the next run clears it.
+	 */
+	public function testFailedRunKeepsTheRecordOfItsError(): void {
+		$this->service->failed(new InvalidSettingException('Nextcloud user %s does not exist.', [str_repeat('ä', 1500)], 'target_user'));
+
+		$status = $this->service->get();
+		self::assertSame('Nextcloud user ' . str_repeat('ä', 985), $status['error']);
+		self::assertSame([
+			'message' => 'Nextcloud user ' . str_repeat('ä', 1000) . ' does not exist.',
+			'text' => 'Nextcloud user %s does not exist.',
+			'parameters' => [str_repeat('ä', 1000)],
+			'setting' => 'target_user',
+		], $status['errorRecord']);
+
+		$this->service->started(false);
+		self::assertSame([], $this->service->get()['errorRecord']);
+		$this->service->failed(new RuntimeException('Paperless was unavailable'));
+		self::assertSame(['message' => 'Paperless was unavailable'], $this->service->get()['errorRecord'], 'What Paperless said stays as it came.');
+		$this->service->completed(new SyncReport(false, TestClock::START, TestClock::START + 60));
+		self::assertSame([], $this->service->get()['errorRecord']);
+	}
+
+	/** The report keeps the record of each error next to its English text, also in its entries, each value shortened. */
+	public function testKeptReportHoldsTheRecordsOfItsErrors(): void {
+		$report = new SyncReport(false, 1000, 1060);
+		$report->error(new RunError('Tags P%1$s: %2$s', ['7', RunError::plain(str_repeat('é', 1500))]), 7, 'Archiv/a.pdf');
+		$report->error('Paperless timed out');
+
+		$this->service->completed($report);
+
+		$kept = $this->service->get()['report'];
+		$record = ['message' => 'Tags P7: ' . str_repeat('é', 1000), 'text' => 'Tags P%1$s: %2$s', 'parameters' => ['7', ['message' => str_repeat('é', 1000)]]];
+		self::assertSame(['Tags P7: ' . str_repeat('é', 991), 'Paperless timed out'], $kept['errorMessages']);
+		self::assertSame([$record, ['message' => 'Paperless timed out']], $kept['errorRecords']);
+		self::assertIsArray($kept['entries']);
+		self::assertSame($record, $kept['entries'][0]['error']);
+		self::assertSame(['type' => 'error', 'detail' => 'Paperless timed out'], $kept['entries'][1], 'A plain error is its detail.');
 	}
 
 	public function testFailedRunKeepsTheReportOfWhatItDid(): void {

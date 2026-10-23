@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\SystemTag\ISystemTagManager;
@@ -91,7 +92,7 @@ final class ArchiveTags {
 				$this->deleteUnused();
 			}
 		} catch (\Throwable $exception) {
-			$this->report->error('Tags: ' . SyncErrors::message($exception));
+			$this->report->error(new RunError('Tags: %s', [RunError::of($exception)]));
 		} finally {
 			if ($this->changed) {
 				$this->service->remember($this->managed);
@@ -178,7 +179,7 @@ final class ArchiveTags {
 	 * @param array{document: int, path: string, current: string, names: list<string>} $copy
 	 */
 	private function copyError(array $copy, \Throwable $exception): void {
-		$this->report->error("Tags P{$copy['document']}: " . SyncErrors::message($exception), $copy['document'], $copy['path']);
+		$this->report->error(new RunError('Tags P%1$s: %2$s', [(string)$copy['document'], RunError::of($exception)]), $copy['document'], $copy['path']);
 	}
 
 	/**
@@ -199,7 +200,7 @@ final class ArchiveTags {
 			}
 			$this->report->tags($documentId, $path, array_values($added), array_map(fn (int $id): string => $this->managed[$id], $removed));
 		} catch (\Throwable $exception) {
-			$this->report->error("Tags P{$documentId}: " . SyncErrors::message($exception), $documentId, $path);
+			$this->report->error(new RunError('Tags P%1$s: %2$s', [(string)$documentId, RunError::of($exception)]), $documentId, $path);
 		}
 	}
 

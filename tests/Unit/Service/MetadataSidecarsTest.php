@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ExportStates;
@@ -256,7 +257,7 @@ final class MetadataSidecarsTest extends TestCase {
 
 		self::assertSame(['Metadata P123: Insufficient space in Documents'], $this->report->errorMessages);
 		self::assertSame(['writeText'], array_values(array_filter($this->storage->methods(), static fn (string $method): bool => $method !== 'exists')));
-		self::assertSame(['type' => 'error', 'document' => 123, 'path' => self::SIDECAR, 'detail' => 'Metadata P123: Insufficient space in Documents'], $this->report->entries[0]);
+		self::assertEquals(['type' => 'error', 'document' => 123, 'path' => self::SIDECAR, 'detail' => 'Metadata P123: Insufficient space in Documents', 'error' => new RunError('Metadata P%1$s: %2$s', ['123', RunError::plain('Insufficient space in Documents')])], $this->report->entries[0]);
 	}
 
 	/**
@@ -407,7 +408,7 @@ final class MetadataSidecarsTest extends TestCase {
 		$this->sidecars()->finish($this->states());
 
 		self::assertSame(['Metadata index: The storage is read-only.'], $this->report->errorMessages);
-		self::assertSame(['type' => 'error', 'path' => self::INDEX, 'detail' => 'Metadata index: The storage is read-only.'], $this->report->entries[0]);
+		self::assertEquals(['type' => 'error', 'path' => self::INDEX, 'detail' => 'Metadata index: The storage is read-only.', 'error' => new RunError('Metadata index: %s', [RunError::plain('The storage is read-only.')])], $this->report->entries[0]);
 	}
 
 	/** @param array<string, string>|null $correspondents */

@@ -5,7 +5,7 @@ config:
 ---
 flowchart TB
     accTitle: What the check of the translations finds
-    accDescr: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck and an InvalidSettingException, with the constants that they name. It compares them with the German catalog l10n/de.json. A text that the catalog lacks, or a German text with other placeholders than its English one, fails the check with the place in the code; it needs German words. A text that no code translates, a text twice, or an l10n/de.js that differs from l10n/de.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/de.js anew. Otherwise the check passes.
+    accDescr: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck, an InvalidSettingException and the errors that a run keeps, with the constants that they name. It compares them with the German catalog l10n/de.json. A text that the catalog lacks, or a German text with other placeholders than its English one, fails the check with the place in the code; it needs German words. A text that no code translates, a text twice, or an l10n/de.js that differs from l10n/de.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/de.js anew. Otherwise the check passes.
 
     code["The code<br>js · templates · lib"]
     texts["`The texts it translates<br>*and those that lib*<br>*translates later*`"]

@@ -1006,8 +1006,12 @@ occ user:setting sync-target files quota '1 B' >/dev/null
 sync_run false "${TMP_DIR}/export-stopped.json"
 occ user:setting --delete sync-target files quota >/dev/null
 assert_json export-stopped "${TMP_DIR}/export-stopped.json"
-# The status keeps the error of the document for the settings page.
+# The status keeps the error of the document for the settings page, which reads it in the
+# language of its administrator, while the run keeps it in English, as the log does.
 assert_status_soon status-errors "${TMP_DIR}/status-errors.json"
+occ user:setting e2e-admin core lang de >/dev/null
+assert_status_soon status-errors-german "${TMP_DIR}/status-errors-german.json"
+occ user:setting --delete e2e-admin core lang >/dev/null
 assert_dav_missing sync-target "${RENAMED_PATH}"
 
 sync_run false "${TMP_DIR}/re-export.json"

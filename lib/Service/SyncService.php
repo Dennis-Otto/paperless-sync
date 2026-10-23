@@ -15,6 +15,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\PaperlessScan;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
@@ -407,7 +408,7 @@ final class SyncService {
 					}
 					$archives[$user] = $archive;
 				} catch (\Throwable $exception) {
-					$reports[$user]->error("Archive of {$user}: " . SyncErrors::message($exception) . ' Its documents wait until Nextcloud can store them.');
+					$reports[$user]->error(new RunError('Archive of %1$s: %2$s Its documents wait until Nextcloud can store them.', [$user, RunError::of($exception)]));
 				}
 			}
 			if ($document === null && $config->inboxEnabled) {
@@ -418,7 +419,7 @@ final class SyncService {
 			if ($config->exportEnabled) {
 				$held = $this->heldOwner($paperless, $config, $owners);
 				if ($held === false) {
-					$report->error('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.');
+					$report->error(new RunError('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'));
 				} else {
 					$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports, $held);
 				}
@@ -526,7 +527,7 @@ final class SyncService {
 		try {
 			$users = $paperless->users();
 		} catch (RuntimeException $exception) {
-			throw new RuntimeException('Paperless did not list its users, which per-user ownership needs to give each document to the user who owns it; the user of the API token needs the permission to view users: ' . $exception->getMessage(), 0, $exception);
+			throw new RunException('Paperless did not list its users, which per-user ownership needs to give each document to the user who owns it; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception);
 		}
 
 		return [$this->ownerMapping->owners($config, $users), $users];
@@ -560,7 +561,7 @@ final class SyncService {
 				fn (\Throwable $exception): bool => SyncErrors::archiveFailed($exception, $this->storage, $config->targetUser, $archiveRoot),
 			);
 		} catch (\Throwable $exception) {
-			$report->error('Metadata index: ' . SyncErrors::message($exception), null, Paths::join($archiveRoot, MetadataSidecars::FOLDER, MetadataSidecars::INDEX));
+			$report->error(new RunError('Metadata index: %s', [RunError::of($exception)]), null, Paths::join($archiveRoot, MetadataSidecars::FOLDER, MetadataSidecars::INDEX));
 
 			return null;
 		}
@@ -647,7 +648,7 @@ final class SyncService {
 				$users = $this->pathTemplate->usesOwner($config->pathTemplate) ? $paperless->users() : [];
 			}
 		} catch (RuntimeException $exception) {
-			throw new RuntimeException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: ' . $exception->getMessage(), 0, $exception);
+			throw new RunException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception);
 		}
 		$template = $this->pathTemplate->customFieldNames($config->pathTemplate) !== [];
 		$writesMetadata = $metadata !== null;
@@ -656,11 +657,10 @@ final class SyncService {
 				$customFields = $paperless->customFields();
 			}
 		} catch (RuntimeException $exception) {
-			$permission = 'the user of the API token needs the permission to view custom fields: ' . $exception->getMessage();
 			if ($template || $metadata === null) {
-				throw new RuntimeException('Paperless did not list its custom fields, which the archive path template uses; ' . $permission, 0, $exception);
+				throw new RunException('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: %s', [RunError::of($exception)], $exception);
 			}
-			$metadata->error('Metadata: Paperless did not list its custom fields, which the metadata next to the archive names, so the run writes no metadata; ' . $permission);
+			$metadata->error(new RunError('Metadata: Paperless did not list its custom fields, which the metadata next to the archive names, so the run writes no metadata; the user of the API token needs the permission to view custom fields: %s', [RunError::of($exception)]));
 			$writesMetadata = false;
 		}
 		$this->pathTemplate->requireCustomFields($config->pathTemplate, $customFields);

@@ -16,7 +16,7 @@ namespace OCA\PaperlessSync\Model\Plan;
  */
 final class DocumentContext {
 	/**
-	 * @param string $label the start of the line of the report, such as "Trash " for "Trash P123: …"
+	 * @param ''|'Excluded '|'Reassigned '|'Trash '|'Missing ' $label the start of the line of the report, such as "Trash " for "Trash P123: …", which ExportExecutor::ERRORS translates
 	 * @param array<string, int|string|null>|null $entry the state of the document before the run, whose error is logged only when it changes
 	 * @param string $reportPath the file that the line of the report names, or '' for none
 	 */

@@ -23,6 +23,7 @@ use OCA\PaperlessSync\Model\Plan\SaveState;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\WaitForMissing;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -44,6 +45,19 @@ use Psr\Log\LoggerInterface;
  * their tags once the export is done.
  */
 final class ExportExecutor {
+	/**
+	 * The error of a document in the report by the label of its action (DocumentContext), in
+	 * English with the ID of the document and the error for its placeholders, which the settings
+	 * page translates.
+	 */
+	private const ERRORS = [
+		'' => 'P%1$s: %2$s',
+		'Excluded ' => 'Excluded P%1$s: %2$s',
+		'Reassigned ' => 'Reassigned P%1$s: %2$s',
+		'Trash ' => 'Trash P%1$s: %2$s',
+		'Missing ' => 'Missing P%1$s: %2$s',
+	];
+
 	private bool $dryRun;
 
 	public function __construct(
@@ -264,7 +278,7 @@ final class ExportExecutor {
 	 */
 	private function fail(DocumentContext $context, \Throwable $exception, array $values = []): void {
 		$error = SyncErrors::message($exception);
-		$this->report->error("{$context->label}P{$context->document}: {$error}", $context->document, $context->reportPath);
+		$this->report->error(new RunError(self::ERRORS[$context->label], [(string)$context->document, RunError::of($exception)]), $context->document, $context->reportPath);
 		if (!$this->dryRun) {
 			$this->states->save($context->document, $values + ($context->seen ? ['last_seen' => $this->now()] : []) + ['last_error' => SyncErrors::stored($error)]);
 		}
