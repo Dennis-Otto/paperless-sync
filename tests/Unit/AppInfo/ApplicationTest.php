@@ -23,6 +23,8 @@ use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\SyncStateRepository;
 use OCA\PaperlessSync\Service\SyncStateRepositoryInterface;
+use OCA\PaperlessSync\Service\UserFilesystem;
+use OCA\PaperlessSync\Service\UserFilesystemInterface;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
 use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCA\PaperlessSync\Tests\Doubles\TestServer;
@@ -109,6 +111,7 @@ final class ApplicationTest extends TestCase {
 			PaperlessClientFactoryInterface::class => PaperlessClientFactory::class,
 			NextcloudStorageInterface::class => NextcloudStorageService::class,
 			SyncStateRepositoryInterface::class => SyncStateRepository::class,
+			UserFilesystemInterface::class => UserFilesystem::class,
 		], $aliases);
 	}
 

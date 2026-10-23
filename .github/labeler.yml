@@ -36,6 +36,7 @@
       - any-glob-to-any-file:
           - lib/Service/PathTemplateService.php
           - lib/Service/NextcloudStorage*.php
+          - lib/Service/UserFilesystem*.php
           - lib/Model/DocumentFingerprint.php
           - lib/Service/MetadataSidecars.php
           - lib/Service/SystemTagService.php
@@ -45,6 +46,7 @@
           - tests/Unit/Service/MetadataSidecarsTest.php
           - tests/Unit/Service/SystemTagServiceTest.php
           - tests/Unit/Service/NextcloudStorage*
+          - tests/Unit/Service/UserFilesystemTest.php
           - tests/Unit/Model/DocumentFingerprintTest.php
           - tests/Unit/Migration/Version000100*
 "area: inbox":

@@ -362,7 +362,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 		<section class="paperless-sync-card paperless-sync-card--danger">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">5</span><h3><?php p($l->t('Trash and deletion safety')); ?></h3></div>
-				<p><?php p($l->t('Permanent deletion is off by default. Turn it on only after a few runs with deletion off looked right.')); ?> <?php $help('deletion-safety', $l->t('Trash and deletion safety')); ?></p>
+				<p><?php p($l->t('Deleting the copies of documents that Paperless deleted for good is off by default. Turn it on only after a few runs without it looked right. A copy that a run deletes goes to the trash bin of its user in Nextcloud.')); ?> <?php $help('deletion-safety', $l->t('Trash and deletion safety')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field">
@@ -382,7 +382,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 			<div class="paperless-sync-switches">
 				<label class="paperless-sync-danger-toggle"><input data-setting="permanent_delete" type="checkbox" <?php if ($config->permanentDelete) {
 					print_unescaped('checked');
-				} ?>> <span><?php p($l->t('Permanently delete the Nextcloud file after permanent Paperless deletion')); ?></span></label>
+				} ?>> <span><?php p($l->t('Delete the Nextcloud copy after Paperless deletes the document for good')); ?></span></label>
 				<label><input data-setting="allow_direct_delete" type="checkbox" <?php if ($config->allowDirectDelete) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Also delete copies of documents that disappeared without passing the Paperless trash')); ?></span></label>

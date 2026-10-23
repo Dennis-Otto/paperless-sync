@@ -13,6 +13,8 @@ require_once __DIR__ . '/stubs/Doctrine/ArrayParameterType.php';
 require_once __DIR__ . '/stubs/Doctrine/ExpressionBuilder.php';
 require_once __DIR__ . '/stubs/Doctrine/ParameterType.php';
 require_once __DIR__ . '/stubs/Doctrine/Types.php';
+require_once __DIR__ . '/stubs/Files/Filesystem.php';
+require_once __DIR__ . '/stubs/Files/SetupManager.php';
 require_once __DIR__ . '/../vendor/autoload.php';
 
 $ocpRoot = __DIR__ . '/../vendor/nextcloud/ocp/';

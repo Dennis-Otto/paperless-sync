@@ -37,7 +37,7 @@ Das hängt davon ab, was sie löscht:
 | --- | --- |
 | Das Dokument kommt in den Papierkorb von Paperless | In den Gelöscht-Ordner, unterhalb des Datums des Papierkorbs in der Zeitzone des Zielbenutzers, etwa `_Gelöscht/2026-08-27/Beispiel GmbH/Rechnung/2026/…`, oder es bleibt mit dem Papierkorb-Verhalten *Archivdatei am Ort behalten* im Archiv |
 | Es wird in Paperless wiederhergestellt | Zurück ins Archiv |
-| Es wird in Paperless endgültig gelöscht | Nach der eingestellten Zahl vollständiger Scans in Nextcloud gelöscht, nur wenn endgültiges Löschen an ist; sonst bleibt es im Gelöscht-Ordner |
+| Es wird in Paperless endgültig gelöscht | Nach der eingestellten Zahl vollständiger Scans in Nextcloud gelöscht, nur wenn *Nextcloud-Kopie löschen, nachdem Paperless das Dokument endgültig gelöscht hat* an ist; sonst bleibt es im Gelöscht-Ordner |
 | Es bekommt einen ausgeschlossenen Tag oder wieder den Posteingangs-Tag | Im nächsten Lauf in Nextcloud gelöscht |
 | Es verliert seinen letzten [Tag zum Spiegeln](guide.de.md#welche-dokumente-das-archiv-spiegelt) | Im nächsten Lauf in Nextcloud gelöscht |
 | Du löschst es in Nextcloud | In deinen Papierkorb, und der nächste Lauf schreibt es neu |
@@ -50,7 +50,7 @@ Jede Kopie, die die App in Nextcloud löscht, und jeder Ordner, den sie leert, n
   <img src="images/diagrams/where-a-copy-goes-that-paperless-sync-deletes.de.svg" alt="Wohin eine Kopie geht, die Paperless Sync löscht: Eine Kopie, die Paperless Sync in Nextcloud löscht, ist endgültig weg, wenn die App Gelöschte Dateien von Nextcloud aus ist. Sonst verschiebt der Lauf sie in den Papierkorb des Zielbenutzers, der sie wiederherstellen kann, bis die Aufbewahrungszeit des Papierkorbs endet, gleich ob der Zeitplan, Jetzt synchronisieren oder occ den Lauf gestartet hat.">
 </picture>
 
-Nur der Zielbenutzer sieht diesen Papierkorb, unter *Gelöschte Dateien* in *Dateien*. Nextcloud leert ihn nach seiner Aufbewahrungszeit, standardmäßig 30 Tage, oder früher, wenn das Kontingent des Benutzers den Platz braucht. Die [Löschsicherheit](guide.de.md#löschsicherheit) beschreibt, wann die App überhaupt löscht.
+Nur der Zielbenutzer sieht diesen Papierkorb, unter *Gelöschte Dateien* in *Dateien*; mit Eigentum je Benutzer hat jeder Benutzer die Kopien seiner eigenen Dokumente in seinem. Nextcloud leert ihn nach seiner Aufbewahrungszeit, standardmäßig 30 Tage, oder früher, wenn das Kontingent des Benutzers den Platz braucht. Die [Löschsicherheit](guide.de.md#löschsicherheit) beschreibt, wann die App überhaupt löscht.
 
 ### Kann ich die Pfadvorlage später ändern?
 

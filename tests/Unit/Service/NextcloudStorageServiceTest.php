@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\TestUserFilesystem;
 use OCP\Files\File;
 use OCP\Files\FileInfo;
 use OCP\Files\Folder;
@@ -57,16 +58,26 @@ final class NextcloudStorageServiceTest extends TestCase {
 	/** @var array<string, int|float> the free space of a folder, by absolute path; unlimited for the others */
 	private array $freeSpace = [];
 	private bool $filesCannotBeOpened = false;
+	/** How often the service looked up the folder of the files of a user. */
+	private int $userFolderLookups = 0;
+	private TestUserFilesystem $filesystem;
 	private NextcloudStorageService $service;
 
 	protected function setUp(): void {
 		// A German instance, as the documents of the tests: the folders have their German names.
 		$this->defaultLanguage = 'de';
 		$rootFolder = $this->createStub(IRootFolder::class);
-		$rootFolder->method('getUserFolder')->willReturnCallback(fn (string $userId): Folder => $this->folder('/' . $userId . '/files'));
+		$rootFolder->method('getUserFolder')->willReturnCallback(function (string $userId): Folder {
+			++$this->userFolderLookups;
+
+			return $this->folder('/' . $userId . '/files');
+		});
 		$userManager = $this->createStub(IUserManager::class);
 		$userManager->method('get')->willReturnCallback(fn (string $userId): ?IUser => $userId === self::USER ? $this->createStub(IUser::class) : null);
-		$this->service = new NextcloudStorageService($rootFolder, $userManager, new PathTemplateService());
+		// Each user whose filesystem a change entered, with the number of lookups of the files of a
+		// user and of deleted nodes before.
+		$this->filesystem = new TestUserFilesystem(fn (string $userId): array => [$userId, $this->userFolderLookups, count($this->deleted)]);
+		$this->service = new NextcloudStorageService($rootFolder, $userManager, new PathTemplateService(), $this->filesystem);
 	}
 
 	public function testWritableBaseFolderPassesTheTest(): void {
@@ -563,6 +574,48 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertSame(0, $this->service->pruneEmptyParents(self::USER, 'Archiv-alt/a.pdf', 'Archiv'), 'A folder whose name only starts with the name of the root is outside it.');
 		self::assertArrayHasKey(self::HOME . '/Eingang', $this->nodes);
 		self::assertArrayHasKey(self::HOME . '/Archiv-alt', $this->nodes);
+	}
+
+	/**
+	 * Nextcloud's trash bin takes a deleted file only from the filesystem of the process: each
+	 * change of the files of a user enters the filesystem of that user before it looks at them,
+	 * so that what it deletes or replaces goes into the user's trash bin, whoever runs it.
+	 */
+	public function testEveryChangeEntersTheFilesystemOfItsUserBeforeItLooksAtTheFiles(): void {
+		$changes = [
+			'prepare' => fn () => $this->service->prepare($this->configService()->validate(self::validSettings(), 'token')),
+			'writeStream' => fn () => $this->service->writeStream(self::USER, 'Archiv/Neu/a.pdf', $this->stream('%PDF'), 'replace'),
+			'writeText' => fn () => $this->service->writeText(self::USER, 'Archiv/Neu/a.txt', 'text'),
+			'move' => fn () => $this->service->move(self::USER, 'Archiv/Neu/a.pdf', 'Archiv/Neu/a.txt', 'replace'),
+			'delete' => fn () => $this->service->delete(self::USER, 'Archiv/Neu/a.txt'),
+			'pruneEmptyParents' => fn () => $this->service->pruneEmptyParents(self::USER, 'Archiv/Neu/a.txt', 'Archiv'),
+		];
+		foreach ($changes as $name => $change) {
+			$this->filesystem->entered = [];
+			$lookups = $this->userFolderLookups;
+			$deleted = count($this->deleted);
+
+			$change();
+
+			self::assertSame([[self::USER, $lookups, $deleted]], $this->filesystem->entered, "{$name} enters the filesystem of the user first, once.");
+		}
+		self::assertSame([self::HOME . '/Archiv/Neu/a.txt', self::HOME . '/Archiv/Neu/a.txt', self::HOME . '/Archiv/Neu'], $this->deleted, 'The move replaced the text, and the delete and the pruning deleted the rest.');
+	}
+
+	/** Reading leaves the filesystem of the process as it is, such as that of a user who sends a file of theirs. */
+	public function testReadingLeavesTheFilesystemOfTheProcessAlone(): void {
+		$this->nodes[self::HOME . '/Eingang'] = null;
+		$this->nodes[self::HOME . '/Eingang/a.pdf'] = '%PDF';
+
+		$this->service->test(self::USER, 'Eingang');
+		$this->service->exists(self::USER, 'Eingang/a.pdf');
+		$this->service->findFileId(self::USER, 'Eingang/a.pdf');
+		$this->service->isWritableFolder(self::USER, 'Eingang');
+		$this->service->listFiles(self::USER, 'Eingang', true);
+		$this->service->nodeById(self::USER, $this->fileId(self::HOME . '/Eingang/a.pdf'));
+		fclose($this->service->openRead(self::USER, 'Eingang/a.pdf'));
+
+		self::assertSame([], $this->filesystem->entered);
 	}
 
 	/** @return resource */

@@ -20,12 +20,17 @@ use OCP\Files\Storage\ISharedStorage;
 use OCP\IUserManager;
 use RuntimeException;
 
+/**
+ * Every change of the files of a user happens in the filesystem of that user (UserFilesystem), so
+ * that what a run deletes or replaces goes into the user's trash bin, whoever started the run.
+ */
 final class NextcloudStorageService implements NextcloudStorageInterface {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private IUserManager $userManager,
 		private PathTemplateService $pathTemplate,
+		private UserFilesystemInterface $filesystem,
 	) {
 	}
 
@@ -46,6 +51,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	}
 
 	public function prepare(SyncConfig $config): void {
+		$this->filesystem->enter($config->targetUser);
 		$this->ensureFolder($config->targetUser, $config->basePath);
 		if ($config->exportEnabled) {
 			$this->ensureFolder($config->targetUser, $this->join($config->basePath, $config->archiveFolder));
@@ -91,6 +97,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	public function move(string $userId, string $source, string $destination, string $conflictMode): bool {
 		$source = $this->normalize($source);
 		$destination = $this->normalize($destination);
+		$this->filesystem->enter($userId);
 		$userFolder = $this->rootFolder->getUserFolder($userId);
 		if (!$userFolder->nodeExists($source)) {
 			return false;
@@ -110,6 +117,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 
 	public function delete(string $userId, string $path): void {
 		$path = $this->normalize($path);
+		$this->filesystem->enter($userId);
 		$userFolder = $this->rootFolder->getUserFolder($userId);
 		if (!$userFolder->nodeExists($path)) {
 			return;
@@ -187,6 +195,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		$stopAt = $this->normalize($stopAt);
 		$directory = dirname($filePath);
 		$removed = 0;
+		$this->filesystem->enter($userId);
 		$userFolder = $this->rootFolder->getUserFolder($userId);
 		while ($directory !== '.' && $directory !== $stopAt && str_starts_with($directory . '/', $stopAt . '/')) {
 			if (!$userFolder->nodeExists($directory)) {
@@ -219,6 +228,7 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	 */
 	private function write(string $userId, string $path, $content, string $conflictMode): void {
 		$path = $this->normalize($path);
+		$this->filesystem->enter($userId);
 		[$parentPath, $name] = $this->split($path);
 		$this->requireSpace($userId, $parentPath, is_string($content) ? strlen($content) : $this->streamSize($content));
 		$parent = $this->ensureFolder($userId, $parentPath);
