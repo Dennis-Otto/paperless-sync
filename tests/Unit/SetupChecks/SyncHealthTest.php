@@ -25,7 +25,7 @@ final class SyncHealthTest extends TestCase {
 	use GermanTranslations;
 	use InMemoryConfiguration;
 
-	private const GUIDE = AppConstants::GUIDE_URL . '#being-notified';
+	private const GUIDE = AppConstants::GERMAN_GUIDE_URL . '#being-notified';
 
 	private TestClock $clock;
 	private StatusService $status;

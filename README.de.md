@@ -13,11 +13,11 @@ above a heading lets an English page of the German website link to it. -->
 [![Die Version von Paperless Sync im Nextcloud App Store](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml&query=%2Finfo%2Fversion&prefix=v&label=App%20Store&logo=nextcloud&logoColor=white&color=0082c9)](https://apps.nextcloud.com/apps/paperless_sync)
 [![Die Versionen von Nextcloud, die Paperless Sync unterstützt](https://img.shields.io/badge/dynamic/xml?url=https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml&query=concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29&label=Nextcloud&logo=nextcloud&logoColor=white&color=0082c9)](#voraussetzungen)
 [![Lizenz: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
-[![Dokumentation](https://img.shields.io/badge/docs-website-526cfe?logo=materialformkdocs&logoColor=white)](https://dennis-otto.github.io/paperless-sync/)
+[![Dokumentation](https://img.shields.io/badge/docs-website-526cfe?logo=materialformkdocs&logoColor=white)](https://dennis-otto.github.io/paperless-sync/de/)
 
-[**Im App Store holen**](https://apps.nextcloud.com/apps/paperless_sync) · [Voraussetzungen](#voraussetzungen) · [Schnellstart](#schnellstart) · [Dokumentation](https://dennis-otto.github.io/paperless-sync/) · [FAQ](docs/faq.de.md) · [Fehlerbehebung](docs/troubleshooting.de.md) · [Hilfe](#hilfe-und-feedback) · [Änderungen](CHANGELOG.md) · [English](README.md)
+[**Im App Store holen**](https://apps.nextcloud.com/apps/paperless_sync) · [Voraussetzungen](#voraussetzungen) · [Schnellstart](#schnellstart) · [Dokumentation](https://dennis-otto.github.io/paperless-sync/de/) · [FAQ](https://dennis-otto.github.io/paperless-sync/de/faq.html) · [Fehlerbehebung](https://dennis-otto.github.io/paperless-sync/de/troubleshooting.html) · [Hilfe](#hilfe-und-feedback) · [Änderungen](CHANGELOG.md) · [English](README.md)
 
-![Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet](docs/images/archive.gif)
+![Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet](docs/images/de/archive.gif)
 
 </div>
 
@@ -25,7 +25,7 @@ Paperless Sync ist eine native Nextcloud-App. Sie schreibt die fertigen Dokument
 
 Anders als ein Mount des Medienordners von Paperless oder ein Skript, das über WebDAV kopiert, läuft Paperless Sync in Nextcloud als einer seiner Hintergrundjobs: Es braucht keinen zusätzlichen Container und kein gespeichertes Nextcloud-Passwort, die Kopien sind echte Dateien von Nextcloud mit Versionen, Freigaben und Suche, eine Bearbeitung in Nextcloud erreicht nie die Originale in Paperless, und eine Kopie, deren Dokument Paperless verlässt, wird nur gelöscht, wenn du das endgültige Löschen einschaltest, und erst, nachdem vollständige Scans von Paperless bestätigen, dass das Dokument weg ist. [Der Vergleich](https://dennis-otto.github.io/paperless-sync/alternatives.html) stellt jeden Weg, Paperless und Nextcloud zu verbinden, nebeneinander, mit Anleitungen für den Umstieg von einem Mount oder vom WebDAV-Container.
 
-Die [Dokumentations-Website](https://dennis-otto.github.io/paperless-sync/) zeigt diese Anleitung auf Deutsch und Englisch, zusammen mit den [FAQ](docs/faq.de.md) und der [Fehlerbehebung](docs/troubleshooting.de.md), und auf Englisch mit dem [Vergleich mit den Alternativen](https://dennis-otto.github.io/paperless-sync/alternatives.html), der [Architektur](docs/architecture.md), dem [Sicherheitsdesign](docs/security.md), der [Automatisierung](docs/automation.md), den [Entscheidungen](docs/decisions/README.md) und der [Roadmap](docs/roadmap.md).
+Die [Dokumentations-Website](https://dennis-otto.github.io/paperless-sync/de/) zeigt diese Anleitung auf Deutsch und Englisch, zusammen mit den [FAQ](https://dennis-otto.github.io/paperless-sync/de/faq.html) und der [Fehlerbehebung](https://dennis-otto.github.io/paperless-sync/de/troubleshooting.html), und auf Englisch mit dem [Vergleich mit den Alternativen](https://dennis-otto.github.io/paperless-sync/alternatives.html), der [Architektur](docs/architecture.md), dem [Sicherheitsdesign](docs/security.md), der [Automatisierung](docs/automation.md), den [Entscheidungen](docs/decisions/README.md) und der [Roadmap](docs/roadmap.md).
 
 <sub>💛 Wenn Paperless Sync dir hilft, [bewerte es im App Store](https://apps.nextcloud.com/apps/paperless_sync), damit andere es finden, oder [unterstütze seine Entwicklung](https://github.com/sponsors/Dennis-Otto).</sub>
 
@@ -121,7 +121,7 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 - Läufe auf Abruf und Testläufe aus den Einstellungen, jeder mit einem Bericht seiner Änderungen und Fehler in der Sprache des Administrators, Fehler zuerst, mit einem Filter für jede Art von Änderung, Links zu den Dateien und einem Knopf, der ihn für einen Fehlerbericht kopiert, und mit dem Status des letzten Laufs; ein Testlauf probiert Änderungen der Einstellungen aus, bevor du sie speicherst, und ein Lauf auf Abruf läuft als Hintergrundjob, sodass kein Proxy ihn abschneidet
 - [Auswahlfelder in den Einstellungen](#zielbenutzer-und-tags) bieten die Benutzer von Nextcloud für den Zielbenutzer und die Tags von Paperless für die ausgeschlossenen Tags, die Tags zum Spiegeln und die Tags jedes Imports an und markieren einen Benutzer oder einen Tag, den es nicht gibt, sodass sich ein Tippfehler vor dem ersten Lauf zeigt
 - Der [Aktivitätenstrom](#aktivität) des Zielbenutzers erzählt, was jeder Lauf geändert hat, mit Links zu seinen Dateien, und jeden Import, mit einem Link zum neuen Dokument in Paperless
-- Auf Englisch und Deutsch: Die Einstellungen, ihre Meldungen und der Aktivitätenstrom folgen der Sprache von Nextcloud, die Zeiten dem Gebietsschema deiner persönlichen Einstellungen
+- Auf Englisch und Deutsch: Die Einstellungen, ihre Meldungen, ihre Links *Hilfe* zur Anleitung und der Aktivitätenstrom folgen der Sprache von Nextcloud, die Zeiten dem Gebietsschema deiner persönlichen Einstellungen
 - [Benachrichtigungen, Einrichtungsprüfungen und eine Status-API](#benachrichtigungen) sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant
 - [`occ`-Befehle](#kommandozeile) für Skripte, Cron-Jobs und Überwachung: ein Lauf oder ein Testlauf mit eigener oder ohne Batchgröße, der Status und neu geschriebene Kopien, mit JSON-Ausgabe und Exit-Codes
 - Signierte Releases: dasselbe Paket im Nextcloud App Store und auf GitHub, mit einer SBOM und signierter Build-Provenienz
@@ -130,29 +130,29 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 
 ## Screenshots
 
-Nach dem Schnellstart: Ein Testlauf listet jede Datei auf, die ein Lauf schreiben, verschieben oder löschen würde, ohne etwas zu ändern, und *Jetzt synchronisieren* macht die Änderungen. Die Bilder zeigen die englische Oberfläche; auf Deutsch tragen die Knöpfe und Abschnitte die Namen, die diese Anleitung nennt.
+Nach dem Schnellstart: Ein Testlauf listet jede Datei auf, die ein Lauf schreiben, verschieben oder löschen würde, ohne etwas zu ändern, und *Jetzt synchronisieren* macht die Änderungen. Die Bilder zeigen Nextcloud auf Deutsch, mit den Dokumenten eines erfundenen Haushalts in Paperless, deren Namen englisch sind.
 
-![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](docs/images/dry-run.gif)
+![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](docs/images/de/dry-run.gif)
 
 Ein paar Tage später zeigt ein Testlauf jede Art von Änderung auf einmal: neue Dokumente, einen neuen Titel, ein Dokument im Papierkorb von Paperless, eines mit einem ausgeschlossenen Tag und einen abgeschlossenen Import aus dem Eingang.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/report-dark.png">
-  <img alt="Der Bericht eines Testlaufs unter der Überschrift Testlauf – nichts wurde geändert, mit dem Knopf Bericht kopieren: die Zahlen der Änderungen, die nicht 0 sind, die unveränderten Dokumente in einem Satz, ein Filter für jede Art von Änderung und eine Liste mit einem farbigen Abzeichen, dem Dokument und der Datei jeder Änderung" src="docs/images/report-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/report-dark.png">
+  <img alt="Der Bericht eines Testlaufs unter der Überschrift Testlauf – nichts wurde geändert, mit dem Knopf Bericht kopieren: die Zahlen der Änderungen, die nicht 0 sind, die unveränderten Dokumente in einem Satz, ein Filter für jede Art von Änderung und eine Liste mit einem farbigen Abzeichen, dem Dokument und der Datei jeder Änderung" src="docs/images/de/report-light.png">
 </picture>
 
 Das Archiv in Dateien, ein Ordner je Korrespondent, Dokumenttyp und Jahr, mit der ID jedes Dokuments im Namen:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/archive-dark.png">
-  <img alt="Nextcloud Dateien mit dem Ordnerbaum des Archivs, geöffnet bis City Utilities, Invoice, 2026, mit zwei Stromrechnungen, benannt nach Datum, Titel und Paperless-ID, mit ihren Tags von Paperless, Electricity und Paid, als Tags von Nextcloud" src="docs/images/archive-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/archive-dark.png">
+  <img alt="Nextcloud Dateien mit dem Ordnerbaum des Archivs, geöffnet bis City Utilities, Invoice, 2026, mit zwei Stromrechnungen, benannt nach Datum, Titel und Paperless-ID, mit ihren Tags von Paperless, Electricity und Paid, als Tags von Nextcloud" src="docs/images/de/archive-light.png">
 </picture>
 
 Die Einstellungen der App in den Administrationseinstellungen von Nextcloud:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-dark.png">
-  <img alt="Die Administrationseinstellungen von Paperless Sync: der Status des letzten Laufs, die Verbindung zu Paperless und der Eigentümer des Archivs" src="docs/images/settings-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/settings-dark.png">
+  <img alt="Die Administrationseinstellungen von Paperless Sync: der Status des letzten Laufs, die Verbindung zu Paperless und der Eigentümer des Archivs" src="docs/images/de/settings-light.png">
 </picture>
 
 Die [Anleitung](docs/guide.de.md#die-einstellungen-abschnitt-für-abschnitt) zeigt jeden Abschnitt der Einstellungen.
@@ -196,6 +196,8 @@ Feste Markierungen wie `[P123]` passen zur unabhängigen App [Paperless Unified 
 
 ## Konfiguration
 
+<a id="paperless-connection"></a>
+
 ### Paperless-Verbindung
 
 Verwende ein eigenes Dienstkonto in Paperless, das kein Superuser ist, mit nur den Berechtigungen der Funktionen, die du nutzt. In Paperless stehen sie unter *Benutzer & Gruppen*, in den Berechtigungen des Kontos:
@@ -231,8 +233,8 @@ Das API-Token wird im Anmeldedaten-Speicher von Nextcloud gespeichert und nie an
 
 <!-- The picture comes from tests/e2e/screenshots.mjs, with the token of an account of the mock that lacks three permissions. -->
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-checklist-dark.png">
-  <img alt="Die Verbindungs-Checkliste nach Verbindung testen: Paperless-ngx antwortet, das Konto sieht die Dokumente, Korrespondenten, Dokumenttypen und Speicherpfade, der Papierkorb hat einen Hinweis, dass das Konto ein Dokument eines anderen Eigentümers sieht, das der Papierkorb von Paperless auslässt, und die Tags, das Hochladen aus dem Eingang und die Tags des Eingangs sind fehlgeschlagen, jeweils mit den Berechtigungen, die in Paperless zu vergeben sind" src="docs/images/settings-checklist-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/settings-checklist-dark.png">
+  <img alt="Die Verbindungs-Checkliste nach Verbindung testen: Paperless-ngx antwortet, das Konto sieht die Dokumente, Korrespondenten, Dokumenttypen und Speicherpfade, der Papierkorb hat einen Hinweis, dass das Konto ein Dokument eines anderen Eigentümers sieht, das der Papierkorb von Paperless auslässt, und die Tags, das Hochladen aus dem Eingang und die Tags des Eingangs sind fehlgeschlagen, jeweils mit den Berechtigungen, die in Paperless zu vergeben sind" src="docs/images/de/settings-checklist-light.png">
 </picture>
 
 <!-- --8<-- [start:configuration-checklist] -->
@@ -289,8 +291,8 @@ Das Feld **Nextcloud-Zielbenutzer-ID** bietet die Benutzer von Nextcloud an, der
 Die Felder **Zusätzlich ausgeschlossene Paperless-Tags**, **Nur Dokumente mit diesen Tags spiegeln** und **Tags für jeden Import** bieten die Tags von Paperless an: Tippe einen Teil eines Namens, um sie einzugrenzen, und wähle einen aus. Jeder Tag des Felds hat einen Knopf, der ihn entfernt, und die Rücktaste im leeren Feld entfernt den letzten. Einen Tag, den Paperless noch nicht hat, kannst du ebenfalls tippen, abgeschlossen mit der Eingabetaste oder einem Komma, und ein Speichern, ein Test oder ein Testlauf nimmt auch das Getippte mit. Ein solcher Name wird als *nicht in Paperless* markiert, was auch einen Tippfehler zeigt: Ein Lauf schließt die Dokumente mit diesem Tag aus, sobald Paperless ihn hat, und gibt einem Import diesen Tag, sobald Paperless ihn hat oder, mit *Fehlende Tags anlegen*, legt ihn an. Ein Tag zum Spiegeln, den Paperless nicht hat, hält dagegen den Export an, wie [Welche Dokumente das Archiv spiegelt](#welche-dokumente-das-archiv-spiegelt) erklärt. Ein Lauf vergleicht die Namen ohne Rücksicht auf Groß- und Kleinschreibung, und das Feld ebenso: Ein Name, den du tippst, übernimmt die Schreibweise von Paperless. Die Seite liest die Tags mit der gespeicherten Adresse und dem gespeicherten Token, wie ein Lauf sie liest, also erscheinen sie, sobald die Verbindung gespeichert ist, und das Token bleibt auf dem Server. Ein Tag, dessen Name ein Komma enthält, kann in keiner der Listen stehen, weil Kommas die Namen der Einstellung trennen, also bieten die Felder ihn nicht an.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-tags-dark.png">
-  <img alt="Die ausgeschlossenen Tags beim Tippen eines Namens: Private, und Drfat, markiert als nicht in Paperless; darunter das Feld mit dem getippten Dr und die offene Liste mit dem Tag Draft von Paperless und der Möglichkeit, Dr so hinzuzufügen, wie es ist" src="docs/images/settings-tags-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/settings-tags-dark.png">
+  <img alt="Die ausgeschlossenen Tags beim Tippen eines Namens: Private, und Drfat, markiert als nicht in Paperless; darunter das Feld mit dem getippten Dr und die offene Liste mit dem Tag Draft von Paperless und der Möglichkeit, Dr so hinzuzufügen, wie es ist" src="docs/images/de/settings-tags-light.png">
 </picture>
 
 <picture>
@@ -363,6 +365,8 @@ Die *Dateikonflikt-Regel* entscheidet, was ein Lauf tut, wenn am Pfad eines Doku
 > [!WARNING]
 > Die Dateien des Archivs sind ein Spiegel von Paperless und mit Absicht nur zum Lesen da: Nichts geht von ihnen zurück zu Paperless. Der nächste Lauf schreibt eine Kopie, die du gelöscht oder umbenannt hast, neu an ihren Pfad, und wenn sich ihr Dokument in Paperless ändert, kann ein Lauf seinen neuen Inhalt über eine Kopie schreiben, die du bearbeitet hast, oder einen Konflikt für sie melden, wenn Konflikte übersprungen werden. Bearbeite Dokumente in Paperless, und kopiere eine Datei aus dem Archiv heraus, um eine eigene Fassung zu behalten.
 
+<a id="path-template-variables"></a>
+
 ### Variablen der Pfadvorlage
 
 Die meisten Variablen haben die Namen, die Paperless-ngx für seine eigenen Dateinamen verwendet, also funktionieren viele Vorlagen eines Speicherpfads von Paperless hier, sobald `{{ id }}` hinzukommt. Vorlagen mit Logik von Jinja, mit `custom_fields|get_cf_value(...)` oder mit einer Variablen, die die Tabelle unten nicht nennt, funktionieren nicht. Für ein Dokument, das am 26. August 2026 erstellt und am 1. September hinzugefügt wurde:
@@ -396,8 +400,8 @@ Die Benutzer und die benutzerdefinierten Felder von Paperless werden nur für ei
 Unter der Vorlage zeigen die Einstellungen, wohin die fünf neuesten Dokumente von Paperless mit der Vorlage kämen, die du tippst, einen Moment nachdem du aufhörst, vor dem Speichern, mit den Ersatznamen und den Schaltern der Seite und einem Hinweis für ein Dokument, das ein Lauf überspringt. Die Knöpfe unter dem Feld fügen eine Variable an der Cursorposition ein. Eine ungültige Vorlage sagt dort, warum, wie es das Speichern täte:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/path-preview-dark.png">
-  <img alt="Die Pfadvorlage in den Einstellungen, mit einem Knopf für jede Variable darunter und den Pfaden der fünf neuesten Dokumente von Paperless mit der getippten Vorlage, vor einem Speichern" src="docs/images/path-preview-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/path-preview-dark.png">
+  <img alt="Die Pfadvorlage in den Einstellungen, mit einem Knopf für jede Variable darunter und den Pfaden der fünf neuesten Dokumente von Paperless mit der getippten Vorlage, vor einem Speichern" src="docs/images/de/path-preview-light.png">
 </picture>
 
 Jeder Dateiname behält die Markierung `[P{{ id }}]` und endet mit `{{ extension }}`: Lässt der letzte Teil der Vorlage sie weg, fügt die App sie an seinem Ende an. Die Markierung hält die Pfade zweier Dokumente auseinander und bindet jede Datei an ihr Dokument.
@@ -410,6 +414,8 @@ Nextcloud nimmt Namen mit bis zu 250 Bytes an, und ein kyrillisches Zeichen brau
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.de.dark.svg">
   <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.de.svg" alt="Wie ein Teil des Pfads entsteht: Die Werte kommen als reiner Text in den Teil der Vorlage, und der Teil wird bereinigt. Solange er mehr Bytes hat, als Nextcloud erlaubt, wird der längste der Freitextwerte gekürzt, sodass der Text der Vorlage, die Daten, die Markierung und die Endung ganz bleiben. Der Dateiname endet dann mit der Endung.">
 </picture>
+
+<a id="which-documents-the-archive-mirrors"></a>
 
 ### Welche Dokumente das Archiv spiegelt
 
@@ -428,6 +434,8 @@ Ein Lauf vergleicht die Namen ohne Rücksicht auf Groß- und Kleinschreibung, wi
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-documents-the-archive-mirrors.de.dark.svg">
   <img src="docs/images/diagrams/which-documents-the-archive-mirrors.de.svg" alt="Welche Dokumente das Archiv spiegelt: Ein Lauf prüft zuerst, dass Paperless jeden Tag zum Spiegeln der Einstellungen hat; fehlt einer davon, hält der Export an, bevor sich eine Datei ändert. Dann stellt er jedem aktiven Dokument drei Fragen. Ein Dokument im Posteingang von Paperless, solange die Einstellungen den Posteingang überspringen, bleibt draußen, ebenso ein Dokument mit einem ausgeschlossenen Tag. Nennen die Einstellungen Tags zum Spiegeln, bleibt auch ein Dokument ohne jeden davon draußen. Jedes andere Dokument wird gespiegelt. Ein Dokument, das draußen bleibt, verliert seine Kopie im Archiv, im Rahmen der Batchgröße.">
 </picture>
+
+<a id="metadata-next-to-the-archive"></a>
 
 ### Metadaten neben dem Archiv
 
@@ -515,6 +523,8 @@ Der Bericht nennt jede Kopie, deren Tags sich ändern, etwa `TAGS P123: +Steuer 
 
 Nextcloud lässt nur Benutzer und die Kommandozeile Tags anlegen: Die Hintergrundjobs per Cron und `occ paperless_sync:run` legen sie an, ein Aufruf des [Webhooks](#änderungen-in-sekunden) und Hintergrundjobs per AJAX oder Webcron können es nicht. Ein solcher Lauf gibt den Kopien die Tags, die es schon gibt, und der Bericht nennt die, die auf den nächsten Lauf per Cron warten: *Nextcloud lässt nur Benutzer und die Kommandozeile Tags anlegen*. Die Einstellung auszuschalten lässt die Tags der Kopien, wie sie sind; ein Administrator löscht die Tags der App, und mit ihnen ihre Plätze an den Kopien, unter *Administrationseinstellungen* → *Grundeinstellungen* → *Kollaborative Schlagworte*.
 
+<a id="nextcloud-inbox"></a>
+
 ### Nextcloud-Eingang
 
 Dateien im Eingangsordner, und in seinen Unterordnern, wenn *Unterordner des Eingangs durchsuchen* an ist, gehen zu Paperless, in einem Lauf höchstens so viele, wie die Batchgröße erlaubt. Eine Datei bleibt im Eingang, bis ihre Paperless-Aufgabe Erfolg meldet:
@@ -531,6 +541,8 @@ Hat Paperless die Aufgabe einer Datei einen Tag nach dem Hochladen nicht abgesch
 Paperless kann eine Datei sofort ablehnen: eine eines Typs, den es nicht annimmt, eine leere oder eine, die zu groß für einen Proxy davor ist, etwa die 100 MB des kostenlosen Tarifs von Cloudflare. Der Bericht dieses Laufs führt die Datei einmal als *Abgelehnt*, mit dem Grund, den Paperless genannt hat (`IMPORT REJECTED` auf der Kommandozeile), und das Nextcloud-Protokoll verzeichnet es als Warnung. Die Läufe danach lassen die Datei im Eingang und überspringen sie, bis sie sich ändert; speichere sie neu, benenne sie um oder ersetze sie, um sie erneut zu übergeben.
 
 Ist Paperless nicht erreichbar oder scheitert es mit einem Serverfehler wie `502 Bad Gateway`, lädt der Lauf keine weiteren Dateien hoch und versucht diese später erneut: nach 15 Minuten, dann jedes Mal nach doppelt so langer Zeit, höchstens einmal am Tag. Die anderen Dateien folgen in den nächsten Läufen.
+
+<a id="tags-of-the-inbox"></a>
 
 #### Tags des Eingangs
 
@@ -556,8 +568,8 @@ Jeder, der in den Eingangsordner schreiben darf, kann seine Ordner benennen, als
 Eine Datei muss nicht über den Eingang gehen: **An Paperless senden** im Menü einer Datei oder eines Ordners in Dateien, oder einer Auswahl davon, sendet sie an Paperless, und die Datei bleibt, wo sie ist. Die Mitglieder der Gruppe in *Gruppe, die Dateien senden darf*, in *4 · Nextcloud-Eingang*, bekommen die Aktion: standardmäßig die Administratoren, die Gruppe `admin`. Die Uploads nutzen das API-Token der App, also das Paperless-Konto, das du für sie eingerichtet hast, nicht ein Konto der Person, die sendet; wähle also eine Gruppe von Menschen, denen du dieses Konto anvertraust, etwa eine für die Menschen, die die Post scannen, und lass das Feld leer, um die Aktion auszuschalten. Das Konto braucht die Berechtigungen **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben, die die Verbindungs-Checkliste prüft, solange das Feld eine Gruppe nennt.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-send-dark.png">
-  <img alt="Nextcloud-Dateien mit der Datei Letter from the bank.pdf im Ordner Scans und ihrem geöffneten Menü, das unter den Aktionen von Dateien Send to Paperless anbietet, auf Deutsch An Paperless senden" src="docs/images/files-send-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/files-send-dark.png">
+  <img alt="Nextcloud-Dateien mit der Datei Brief der Bank.pdf im Ordner Scans und ihrem geöffneten Menü, das unter den Aktionen von Dateien An Paperless senden anbietet" src="docs/images/de/files-send-light.png">
 </picture>
 
 <picture>
@@ -574,8 +586,8 @@ Eine Datei muss nicht über den Eingang gehen: **An Paperless senden** im Menü 
 **In Paperless öffnen** steht im Menü jeder Datei, deren Name eine Markierung wie `[P123]` trägt, etwa jeder Kopie des Archivs, für alle, die die Datei sehen, auch über eine Freigabe: Es öffnet das Dokument in Paperless, unter der Paperless-URL der Einstellungen, wo Paperless nach seiner eigenen Anmeldung fragt und das Dokument nur denen zeigt, denen es das erlaubt. So erfährt jeder Benutzer von Dateien diese Adresse; die [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) nennen sie auch.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/files-open-dark.png">
-  <img alt="Nextcloud-Dateien mit der Kopie 2026-06-30 - Electricity bill June des Archivs und ihrem geöffneten Menü, das Open in Paperless anbietet, auf Deutsch In Paperless öffnen" src="docs/images/files-open-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/files-open-dark.png">
+  <img alt="Nextcloud-Dateien mit der Kopie 2026-06-30 - Electricity bill June des Archivs und ihrem geöffneten Menü, das In Paperless öffnen anbietet" src="docs/images/de/files-open-light.png">
 </picture>
 
 ### Durch eine Regel von Flow senden
@@ -587,8 +599,8 @@ Dateien können auch von selbst zu Paperless gehen: **An Paperless senden** ist 
 3. Tippe die Tags von Paperless für die Dateien der Regel in *Tags in Paperless*, durch Kommas getrennt, wie das Feld sie aus Paperless vorschlägt, und speichere die Regel.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-rule-dark.png">
-  <img alt="Eine Regel von Flow unter Verwaltung → Ablauf, auf Englisch: Wenn eine Datei erstellt wird, ihr File MIME type PDF documents ist und ihr File system tag To Paperless, sendet An Paperless senden sie mit den Tags Letters und Bank aus dem Feld Tags in Paperless" src="docs/images/flow-rule-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/flow-rule-dark.png">
+  <img alt="Eine Regel von Flow unter Verwaltung → Ablauf: Wenn eine Datei erstellt wird, ihr Datei MIME-Typ PDF-Dokumente ist und sie mit dem kollaborativen Tag An Paperless getaggt ist, sendet An Paperless senden sie mit den Tags Briefe und Bank aus dem Feld Tags in Paperless" src="docs/images/de/flow-rule-light.png">
 </picture>
 
 <picture>
@@ -601,6 +613,8 @@ Dateien können auch von selbst zu Paperless gehen: **An Paperless senden** ist 
 - **Die Tags der Regel** folgen den Einstellungen des [Eingangs](#tags-des-eingangs): Einen Tag, den Paperless nicht hat, legt *Fehlende Tags anlegen* an, sonst bleibt er weg. Flow speichert keinen Namen mit einem Komma oder Zeilenumbruch, die die Namen trennen, und keinen, der länger ist als die 128 Zeichen, die Paperless speichert.
 - **Dateien des Archivs bleiben außen vor,** wie aus Dateien: die Dateien des Basisordners, beim Eigentum je Benutzer des Basisordners jedes Benutzers, die die Läufe schreiben, etwa die Kopien des Archivs und die Dateien des Eingangs, und jede Datei, deren Name eine Markierung wie `[P123]` hat, damit eine Regel für jedes neue PDF das Archiv nicht zurück an Paperless sendet. Eine Datei, deren Inhalt Paperless nach seiner Prüfsumme schon hat, wird nicht noch einmal hochgeladen.
 - **Der Eigentümer erfährt, was ihn braucht:** eine Benachrichtigung für einen Import, den Paperless abgelehnt hat oder der gescheitert ist, nach denselben Wiederholungen wie aus Dateien. Eine Regel kann viele Dateien senden, daher kommen ein Import, der geklappt hat, ein Inhalt, den Paperless hatte, und eine Datei, die ihr Eigentümer vor ihrem Upload gelöscht hat, nur ins Protokoll von Nextcloud, auf der Stufe *info*.
+
+<a id="deletion-safety"></a>
 
 ### Löschsicherheit
 
@@ -639,6 +653,8 @@ Die Batchgröße, *Maximale Änderungen je Modul und Lauf*, begrenzt die Änderu
 
 Der Lauf nimmt die zuletzt hinzugefügten Dokumente zuerst, sodass ein neues Dokument nicht hinter einem Rückstau wartet, etwa dem ersten Export eines großen Archivs. Ein Dokument, dessen letzter Export oder letzte Verschiebung gescheitert ist, wartet hinter den anderen, das am längsten gescheiterte zuerst, sodass Dokumente, die immer wieder scheitern, den Rest nicht aufhalten. Kann Nextcloud gar keine Dateien im Archiv speichern, weil das Kontingent voll, das Archiv schreibgeschützt oder sein Speicher nicht verfügbar ist, hört der Lauf beim ersten Fehler auf zu exportieren und zu verschieben, und der Bericht zeigt einen Hinweis, dass Nextcloud keine Dateien im Archiv speichern kann (`EXPORT STOPPED` auf der Kommandozeile); die anderen Dokumente folgen im nächsten Lauf, und das Entfernen von Kopien, das Platz schafft, geht weiter. Nextcloud wendet auf die temporäre Datei eines Schreibvorgangs kein Kontingent an, also prüft die App den freien Platz vor jedem Schreiben selbst. Ein Pfad, den Nextcloud von sich aus ablehnt, etwa ein verbotener Dateiname oder ein schreibgeschützter Unterordner, betrifft nur sein Dokument. Mit der Dateikonflikt-Regel *Überspringen und Konflikt melden* wird eine Datei im Weg als Konflikt gemeldet, bevor das Dokument heruntergeladen wird, und ein Testlauf meldet ihn ebenfalls. Die eigene Kopie der App ist nicht im Weg: Der Zustand des Dokuments verzeichnet ihren Pfad, und sie hat noch den Inhalt des letzten Herunterladens, also bekommt sie den neuen Inhalt. Eine Kopie, die jemand in Nextcloud geändert hat, gilt als seine und bleibt, auch wenn das Dokument einen neuen Pfad bekommt; eine Kopie, die ein gescheitertes Schreiben unvollständig hinterlassen hat, ist noch die eigene der App und bekommt den Inhalt im nächsten Lauf.
 
+<a id="background-jobs"></a>
+
 ### Hintergrundjobs
 
 Die App verwendet den nativen Cron-Planer von Nextcloud. Der System-Cron muss zuverlässig laufen. Das eingestellte Intervall, von 5 Minuten bis zu einem Tag, setzt die App durch; jeder Lauf begrenzt seine Änderungen in Nextcloud und sein Hochladen zu Paperless jeweils auf die eingestellte [Batchgröße](#batchgröße). Nextcloud startet den Job der App höchstens alle fünf Minuten, also kann das Intervall nicht kürzer sein; ein Intervall unter fünf Minuten, das eine frühere Version gespeichert hat, wirkt wie fünf Minuten.
@@ -674,8 +690,8 @@ So richtest du ihn ein:
 5. Ändere in Paperless den Titel eines Dokuments: Seine Kopie wird in Sekunden verschoben, und Abschnitt 6 zeigt den letzten Aufruf, *P123 verschoben*.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-webhook-dark.png">
-  <img alt="Der Abschnitt Änderungen in Sekunden direkt nach Geheimnis erstellen: die Webhook-URL und das neue Geheimnis, jeweils mit einem Knopf Kopieren, der Hinweis, das Geheimnis jetzt zu kopieren, weil es nur dieses eine Mal angezeigt wird, die Knöpfe Neues Geheimnis erstellen und Webhook ausschalten, der Schalter Dokument während des Aufrufs spiegeln, der an ist, und die eingeklappten Schritte in Paperless" src="docs/images/settings-webhook-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/settings-webhook-dark.png">
+  <img alt="Der Abschnitt Änderungen in Sekunden direkt nach Geheimnis erstellen: die Webhook-URL und das neue Geheimnis, jeweils mit einem Knopf Kopieren, der Hinweis, das Geheimnis jetzt zu kopieren, weil es nur dieses eine Mal angezeigt wird, die Knöpfe Neues Geheimnis erstellen und Webhook ausschalten, der Schalter Dokument während des Aufrufs spiegeln, der an ist, und die eingeklappten Schritte in Paperless" src="docs/images/de/settings-webhook-light.png">
 </picture>
 
 Der Webhook nimmt `{"document": 123}` als JSON oder als Formular, und die Zahl darf Text oder die Adresse des Dokuments in Paperless sein. Er antwortet:
@@ -713,8 +729,8 @@ Oben auf der Einstellungsseite steht, wie der letzte Lauf endete, wann er fertig
 <!-- --8<-- [end:status] -->
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/status-error-dark.png">
-  <img alt="Der Status von Paperless Sync nach einem Lauf mit einem Fehler: der Zustand Mit Fehlern abgeschlossen in Rot, die Zeiten des letzten Laufs, des letzten erfolgreichen Laufs und des nächsten geplanten Laufs, und darunter ein Kasten, der das Dokument nennt, dessen Herunterladen gescheitert ist" src="docs/images/status-error-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/status-error-dark.png">
+  <img alt="Der Status von Paperless Sync nach einem Lauf mit einem Fehler: der Zustand Mit Fehlern abgeschlossen in Rot, die Zeiten des letzten Laufs, des letzten erfolgreichen Laufs und des nächsten geplanten Laufs, und darunter ein Kasten, der das Dokument nennt, dessen Herunterladen gescheitert ist" src="docs/images/de/status-error-light.png">
 </picture>
 
 <!-- --8<-- [start:status-report] -->
@@ -746,6 +762,8 @@ Die App *Aktivität* von Nextcloud erzählt dem Zielbenutzer, oder beim [Eigentu
 
 Ein Testlauf und ein Lauf ohne Änderungen fügen keinen Eintrag hinzu. Der Filter *Paperless Sync* in der Navigation der App Aktivität zeigt nur die Einträge der App, und in den persönlichen Einstellungen unter *Aktivität* kann sich jeder Benutzer sie auch per E-Mail oder als Benachrichtigungen schicken lassen, was bis dahin aus ist. Die eigenen Einträge der App *Dateien* von Nextcloud erzählen diese Geschichte nicht: Sie lassen die Dateien eines Laufs von Hand aus und zeigen die eines geplanten Laufs als Änderungen eines *entfernten Kontos*.
 <!-- --8<-- [end:activity] -->
+
+<a id="being-notified"></a>
 
 ### Benachrichtigungen
 
@@ -836,7 +854,7 @@ Wie ein Lauf von Hand startet, auf der Seite und auf der Kommandozeile:
 
 ## FAQ und Fehlerbehebung
 
-Die [FAQ](docs/faq.de.md) beantworten die häufigen Fragen, etwa was mit einer Bearbeitung einer gespiegelten Datei geschieht, wohin gelöschte Dateien gehen und wie lange die erste Synchronisation dauert. Die [Fehlerbehebung](docs/troubleshooting.de.md) führt von einer Fehlermeldung, einem Lauf, der scheitert, oder einer Datei, die fehlt, zu ihrer Ursache und ihrer Lösung.
+Die [FAQ](https://dennis-otto.github.io/paperless-sync/de/faq.html) beantworten die häufigen Fragen, etwa was mit einer Bearbeitung einer gespiegelten Datei geschieht, wohin gelöschte Dateien gehen und wie lange die erste Synchronisation dauert. Die [Fehlerbehebung](https://dennis-otto.github.io/paperless-sync/de/troubleshooting.html) führt von einer Fehlermeldung, einem Lauf, der scheitert, oder einer Datei, die fehlt, zu ihrer Ursache und ihrer Lösung.
 
 <!-- --8<-- [start:help] -->
 

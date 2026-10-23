@@ -1,6 +1,6 @@
 # Fehlerbehebung
 
-[← README](https://github.com/Dennis-Otto/paperless-sync) · [Anleitung](guide.de.md) · [FAQ](faq.de.md)
+[← README](https://github.com/Dennis-Otto/paperless-sync/blob/main/README.de.md) · [Anleitung](guide.de.md) · [FAQ](faq.de.md)
 
 Wenn etwas nicht funktioniert, sagt Paperless Sync, warum, und diese Seite führt von dem, was du siehst, zu seiner Ursache und seiner Lösung. Die [FAQ](faq.de.md) beantworten die Fragen dazu, was die App tut, etwa wohin gelöschte Dateien gehen. Wo du zuerst nachsehen solltest:
 

@@ -1,6 +1,6 @@
 # FAQ
 
-[← README](https://github.com/Dennis-Otto/paperless-sync) · [Anleitung](guide.de.md) · [Fehlerbehebung](troubleshooting.de.md)
+[← README](https://github.com/Dennis-Otto/paperless-sync/blob/main/README.de.md) · [Anleitung](guide.de.md) · [Fehlerbehebung](troubleshooting.de.md)
 
 Die Fragen, die aufkommen, wenn Paperless Sync auf ein echtes Archiv trifft, mit kurzen Antworten und Links zu den Einzelheiten. Eine Fehlermeldung oder ein Lauf, der scheitert, ist ein Fall für die [Fehlerbehebung](troubleshooting.de.md).
 

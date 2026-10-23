@@ -50,7 +50,7 @@ final class BackgroundJobMode implements ISetupCheck {
 
 		return SetupResult::warning(
 			$this->l10n->t('Nextcloud runs its background jobs with %s, which starts them only while someone uses Nextcloud, so the scheduled runs of Paperless Sync fall behind or stop halfway. Set the background jobs to cron in the basic settings and set up the cron job of the system.', [$mode === 'webcron' ? 'Webcron' : 'AJAX']),
-			AppConstants::GUIDE_URL . '#being-notified',
+			AppConstants::guide($this->l10n->getLanguageCode(), 'being-notified'),
 		);
 	}
 }

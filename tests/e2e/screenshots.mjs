@@ -6,18 +6,21 @@
 // theme of Nextcloud, and records two animations as GIFs. screenshots.sh sets the app
 // up with the synthetic archive of showcase.py and starts this script in the image of
 // Playwright; the pictures go to the folder pictures/ next to this script, which
-// screenshots.sh returns as a tar archive.
+// screenshots.sh returns as a tar archive. With E2E_LANGUAGE=de, and Nextcloud in German,
+// it takes the pictures of the German documentation instead, in docs/images/de/, and no
+// screenshots of the App Store (language.mjs).
 //
 // The story follows the quick start: a dry-run, the first synchronization, the archive
 // in Files, a dry-run a few days later that shows every kind of change, and a run that
 // ends with an error, which the status keeps.
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
+import { pictureLanguage } from './language.mjs'
 import { thumbnail } from './thumbnail.mjs'
 
 // gifenc is a CommonJS module, whose functions come with its default export.
@@ -32,11 +35,17 @@ const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
 // a connection checklist that shows what it finds.
 const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
 const OUTPUT = fileURLToPath(new URL('pictures', import.meta.url))
+// The language of the pictures, with the German catalog of the app, which screenshots.sh
+// hands over next to this script.
+const LANGUAGE = process.env.E2E_LANGUAGE ?? 'en'
+const CATALOG = process.env.E2E_CATALOG ?? fileURLToPath(new URL('../../l10n/de.json', import.meta.url))
+const L = pictureLanguage(LANGUAGE, LANGUAGE === 'en' ? {} : JSON.parse(readFileSync(CATALOG, 'utf8')).translations)
+const IMAGES = L.images
 const THEMES = ['light', 'dark']
 const VIEWPORT = { width: 1280, height: 800 }
 const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
-const ARCHIVE = '/Documents/Paperless/Archive'
+const ARCHIVE = `/${L.base}/${L.archive}`
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
 
 function files(dir) {
@@ -54,6 +63,9 @@ function save(path, data) {
 // screenshot of the page is opaque, so the thumbnail keeps no alpha channel, which would
 // only make the file larger.
 function saveScreenshot(name, data) {
+	if (!L.appStore) {
+		return
+	}
 	save(`screenshots/${name}.png`, data)
 	save(`screenshots/${name}-small.png`, PNG.sync.write(thumbnail(PNG.sync.read(data)), { colorType: 2 }))
 }
@@ -106,7 +118,7 @@ async function open(browser, session, theme, url) {
 		storageState: session,
 		colorScheme: theme,
 		viewport: VIEWPORT,
-		locale: 'en-US',
+		locale: L.browserLocale,
 		timezoneId: 'Europe/Berlin',
 	})
 	const page = await context.newPage()
@@ -124,7 +136,7 @@ async function settle(page) {
 // Opens the folder tree in the navigation of Files down to the folders, one after the
 // other; Files remembers what is open.
 async function expandFolderTree(page, folders) {
-	for (const name of ['Folder tree', ...folders]) {
+	for (const name of [L.nextcloud('Folder tree'), ...folders]) {
 		const entry = page.locator(`xpath=//li[contains(@class, "files-navigation__item")]/div[contains(@class, "app-navigation-entry")][.//*[contains(@class, "app-navigation-entry__name")][normalize-space() = "${name}"]]`)
 			.filter({ visible: true })
 			.first()
@@ -306,7 +318,7 @@ try {
 	const owner = await signIn(browser, OWNER)
 	await control('reset')
 	await control('scenario/showcase')
-	await upload('Documents/Paperless/Inbox/Receipts/Hardware store.pdf', '%PDF-1.4 Synthetic receipt of the screenshots.\n')
+	await upload(`${L.base}/${L.inbox}/${L.receipt}`, '%PDF-1.4 Synthetic receipt of the screenshots.\n')
 
 	// The quick start: a dry-run lists what would change, then the first synchronization.
 	{
@@ -323,12 +335,12 @@ try {
 		// The button asks first, in a dialog of the browser that no screenshot shows.
 		page.once('dialog', (dialog) => dialog.accept())
 		await animation.click(page.locator('#paperless-sync-run'))
-		await animation.until(page.locator('#paperless-sync-message', { hasText: 'Synchronization completed.' }).waitFor())
+		await animation.until(page.locator('#paperless-sync-message', { hasText: L.t('Synchronization completed.') }).waitFor())
 		await animation.hold(2500)
 		await page.locator('#paperless-sync-settings').evaluate((element) => element.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 		await animation.record(1000)
 		await animation.hold(3500)
-		save('docs/images/dry-run.gif', animation.encode())
+		save(`${IMAGES}/dry-run.gif`, animation.encode())
 		await context.close()
 	}
 
@@ -338,7 +350,7 @@ try {
 		await page.locator('#paperless-sync-settings').waitFor()
 		await settle(page)
 		const overview = await page.screenshot()
-		save(`docs/images/settings-${theme}.png`, overview)
+		save(`${IMAGES}/settings-${theme}.png`, overview)
 		if (theme === 'light') {
 			saveScreenshot('01-admin-settings', overview)
 		}
@@ -353,7 +365,7 @@ try {
 		await page.locator('#paperless-sync-webhook-create:enabled').waitFor()
 		await page.locator('#paperless-sync-webhook-secret').evaluate((input) => input.blur())
 		for (const [index, card] of CARDS.entries()) {
-			save(`docs/images/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
+			save(`${IMAGES}/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
 		// The connection checklist of an account that lacks three permissions, below the
 		// connection settings: lines that passed, failed and have a note.
@@ -363,7 +375,7 @@ try {
 		await page.locator('#paperless-sync-test').click()
 		await page.locator('.paperless-sync-check--failed').first().waitFor()
 		await page.locator('#paperless-sync-test:enabled').waitFor()
-		save(`docs/images/settings-checklist-${theme}.png`, await shotFromTo(page, page.locator('.paperless-sync-test'), page.locator('#paperless-sync-checks')))
+		save(`${IMAGES}/settings-checklist-${theme}.png`, await shotFromTo(page, page.locator('.paperless-sync-test'), page.locator('#paperless-sync-checks')))
 		await context.close()
 	}
 
@@ -376,10 +388,10 @@ try {
 		await template.fill('{{ correspondent }}/{{ created_year }}/{{ created_month_name }}/{{ created_day }} {{ title }} [P{{ id }}]{{ extension }}')
 		// The start of the template in view, as after typing it and going back to its start.
 		await template.press('Home')
-		await page.locator('#paperless-sync-path-preview-list li', { hasText: /^[^/]+\/\d{4}\/[A-Z][a-z]+\// }).first().waitFor()
+		await page.locator('#paperless-sync-path-preview-list li', { hasText: /^[^/]+\/\d{4}\/\p{Lu}\p{Ll}+\//u }).first().waitFor()
 		await settle(page)
 		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
-		save(`docs/images/path-preview-${theme}.png`, await shot(page, page.locator('#paperless-sync-template')))
+		save(`${IMAGES}/path-preview-${theme}.png`, await shot(page, page.locator('#paperless-sync-template')))
 		await context.close()
 	}
 
@@ -405,7 +417,7 @@ try {
 		const field = await page.locator('[data-tag-picker="excluded_tags"]').boundingBox()
 		const list = await page.locator('#paperless-sync-excluded-tags-options').boundingBox()
 		const top = Math.max(0, field.y - 16)
-		save(`docs/images/settings-tags-${theme}.png`, await page.screenshot({
+		save(`${IMAGES}/settings-tags-${theme}.png`, await page.screenshot({
 			clip: {
 				x: Math.max(0, field.x - 16),
 				y: top,
@@ -421,7 +433,7 @@ try {
 		const { context, page } = await open(browser, owner, 'light', files(ARCHIVE))
 		const row = (name) => page.locator(`[data-cy-files-list-row-name^="${name}"] [data-cy-files-list-row-name-link]`)
 		await row('Example Insurance').waitFor()
-		await expandFolderTree(page, ['Documents', 'Paperless', 'Archive'])
+		await expandFolderTree(page, [...L.base.split('/'), L.archive])
 		const animation = new Animation(page)
 		await animation.hold(1500)
 		for (const [folder, next] of [['Example Insurance', 'Contract'], ['Contract', '2026'], ['2026', '2026-01-15 - Home insurance policy']]) {
@@ -434,7 +446,7 @@ try {
 		await animation.until(page.locator('.viewer').waitFor())
 		await animation.until(page.waitForTimeout(1500))
 		await animation.hold(3000)
-		save('docs/images/archive.gif', animation.encode())
+		save(`${IMAGES}/archive.gif`, animation.encode())
 		await context.close()
 	}
 
@@ -442,9 +454,9 @@ try {
 	for (const theme of THEMES) {
 		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
 		await page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]').waitFor()
-		await expandFolderTree(page, ['Documents', 'Paperless', 'Archive', 'City Utilities', 'Invoice'])
+		await expandFolderTree(page, [...L.base.split('/'), L.archive, 'City Utilities', 'Invoice'])
 		const archive = await page.screenshot()
-		save(`docs/images/archive-${theme}.png`, archive)
+		save(`${IMAGES}/archive-${theme}.png`, archive)
 		if (theme === 'light') {
 			saveScreenshot('02-structured-archive', archive)
 		}
@@ -456,7 +468,7 @@ try {
 	// files, sends a scanned letter to Paperless, and a copy of the archive opens its
 	// document there. A right click opens the menu at the pointer, which the picture leaves
 	// out; it shows the row of the file and the menu below it.
-	await upload('Scans/Letter from the bank.pdf', '%PDF-1.4 Synthetic letter of the screenshots.\n', ADMIN)
+	await upload(L.letter, '%PDF-1.4 Synthetic letter of the screenshots.\n', ADMIN)
 	const menuOf = async (page, row, action) => {
 		await row.waitFor()
 		await settle(page)
@@ -477,27 +489,28 @@ try {
 		})
 	}
 	for (const theme of THEMES) {
-		const { context, page } = await open(browser, admin, theme, files('/Scans'))
-		save(`docs/images/files-send-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name="Letter from the bank.pdf"]'), 'Send to Paperless'))
+		const { context, page } = await open(browser, admin, theme, files(`/${L.letter.split('/')[0]}`))
+		save(`${IMAGES}/files-send-${theme}.png`, await menuOf(page, page.locator(`[data-cy-files-list-row-name="${L.letter.split('/')[1]}"]`), L.t('Send to Paperless')))
 		await context.close()
 	}
 	for (const theme of THEMES) {
 		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
-		save(`docs/images/files-open-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]'), 'Open in Paperless'))
+		save(`${IMAGES}/files-open-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]'), L.t('Open in Paperless')))
 		await context.close()
 	}
 
 	// A rule of Flow that sends every PDF that someone uploads into a folder with the tag
-	// "To Paperless" to Paperless, with the tags Letters and Bank, saved as the settings of
-	// Flow save it; the picture shows the rule with the form of Paperless Sync.
+	// "To Paperless" to Paperless, with the tags Letters and Bank, in German "An Paperless"
+	// with Briefe and Bank, saved as the settings of Flow save it; the picture shows the rule
+	// with the form of Paperless Sync.
 	{
 		const { context, page } = await open(browser, admin, 'light', `${BASE_URL}/index.php/settings/admin/workflow`)
-		const saved = await page.evaluate(async () => {
+		const saved = await page.evaluate(async ({ flowTag, flowTags }) => {
 			const headers = { 'Content-Type': 'application/json', 'OCS-APIRequest': 'true', requesttoken: window.OC.requestToken }
 			const tag = await fetch('/remote.php/dav/systemtags/', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', requesttoken: window.OC.requestToken },
-				body: JSON.stringify({ name: 'To Paperless', userVisible: true, userAssignable: true }),
+				body: JSON.stringify({ name: flowTag, userVisible: true, userAssignable: true }),
 			})
 			const tagId = tag.headers.get('Content-Location')?.split('/').pop() ?? ''
 			const rule = await fetch('/ocs/v2.php/apps/workflowengine/api/v1/workflows/global?format=json', {
@@ -510,13 +523,13 @@ try {
 						{ class: 'OCA\\WorkflowEngine\\Check\\FileMimeType', operator: 'is', value: 'application/pdf' },
 						{ class: 'OCA\\WorkflowEngine\\Check\\FileSystemTags', operator: 'is', value: tagId },
 					],
-					operation: JSON.stringify({ tags: ['Letters', 'Bank'] }),
+					operation: JSON.stringify({ tags: flowTags }),
 					entity: 'OCA\\WorkflowEngine\\Entity\\File',
 					events: ['\\OCP\\Files::postCreate'],
 				}),
 			})
 			return `${tag.status} ${rule.status}`
-		})
+		}, { flowTag: L.flowTag, flowTags: L.flowTags })
 		if (saved !== '201 200') {
 			throw new Error(`The rule of Flow for the pictures was not saved: ${saved}`)
 		}
@@ -528,7 +541,7 @@ try {
 		await rule.waitFor()
 		await page.locator('oca-paperless_sync-send-to-paperless input').evaluate((input) => input.blur())
 		await settle(page)
-		save(`docs/images/flow-rule-${theme}.png`, await shot(page, rule))
+		save(`${IMAGES}/flow-rule-${theme}.png`, await shot(page, rule))
 		await context.close()
 	}
 
@@ -546,7 +559,7 @@ try {
 		await settle(page)
 		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
 		const report = await shot(page, page.locator('#paperless-sync-report'))
-		save(`docs/images/report-${theme}.png`, report)
+		save(`${IMAGES}/report-${theme}.png`, report)
 		if (theme === 'light') {
 			saveScreenshot('03-dry-run-report', report)
 		}
@@ -568,7 +581,7 @@ try {
 		const { context, page } = await open(browser, admin, theme, SETTINGS)
 		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
 		await settle(page)
-		save(`docs/images/status-error-${theme}.png`, await shot(page, page.locator('#paperless-sync-status')))
+		save(`${IMAGES}/status-error-${theme}.png`, await shot(page, page.locator('#paperless-sync-status')))
 		await context.close()
 	}
 } finally {

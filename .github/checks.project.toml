@@ -170,7 +170,9 @@ of the checks*: a check lacks its explanation in `.github/checks.project.toml`, 
 explanation names a file that is gone. *Check of the package*: a test of
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
 parse, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
-Store into their thumbnails, fails, or `l10n/de.json` lacks a text that the code
+Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
+the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
+doesn't translate, or `l10n/de.json` lacks a text that the code
 translates, has one that no code translates, a placeholder of another kind or a text
 twice, or differs from `l10n/de.js`."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
@@ -186,6 +188,8 @@ program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
 words, follow the English outline in the German twin, give a new file an area, explain
 a new check, fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
+look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`
+in `tests/e2e/screenshots.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
 and add a new text with its German words to `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
 `check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
 anew. Then run the checks again:"""

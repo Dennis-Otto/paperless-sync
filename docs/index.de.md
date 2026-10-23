@@ -28,7 +28,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 [Voraussetzungen](guide.de.md#voraussetzungen){ .md-button }
 { .ps-hero-actions }
 
-![Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet](images/archive.gif)
+![Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet](images/de/archive.gif)
 
 ## Was es tut
 
@@ -78,7 +78,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 
 --8<-- "README.de.md:quick-start"
 
-![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](images/dry-run.gif)
+![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](images/de/dry-run.gif)
 
 Die [Anleitung](guide.de.md) beschreibt die Konfiguration im Detail: das Paperless-Konto, die Ordner, die Pfadvorlage und die Löschsicherheit.
 
