@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.1...v1.2.0) (2026-10-23)
+
+### Features
+
+- **Help in German for a German Nextcloud:** the *Help* links of the settings and the links of the warnings of Paperless Sync in *Administration → Overview* open the German guide on the website when Nextcloud speaks German to you, and the English one in every other language. The German README and the German pages of the website show the app in German pictures, and the German README links to the German website, its FAQ and its troubleshooting.
+- **Lighter previews in the App Store:** each screenshot of Paperless Sync in the Nextcloud App Store comes with a small thumbnail, which the list of the apps loads in place of the whole picture. Every release points both at its own version.
+- **The errors of a run in the language of the administrator:** the status and the report on the settings page now show the errors that Paperless Sync explains in the language of the administrator who reads them, such as *Den Nextcloud-Benutzer paperless gibt es nicht.* or a full quota, also for a scheduled run, which has no reader when it fails. The log, `occ paperless_sync:run`, `occ paperless_sync:status` and the status API keep them in English, and the messages of Paperless and Nextcloud within an error stay as the run got them. The status of a run before the update still shows, in English, until the next run.
+
+### Bug fixes
+
+- **The report of a dry-run stays in view:** an answer of the status that the settings page asked for before a dry-run, such as the one after *Save*, could arrive after the report of the dry-run and show the report from before it again, such as *Dry-run, finished* in place of *Dry-run of unsaved settings, finished*. The page now shows only a status that is newer than what it shows, and keeps following a run that is queued or active.
+- **Every deleted copy goes to the trash bin of its user:** a copy that a run deleted, such as one of a document with an excluded tag, one in the deleted folder after Paperless deleted its document for good, an inbox file after its import or an emptied folder, went to the trash bin of the target user only when the run set up the files of that user first. With per-user ownership, the copies that left the archive of any other user, such as for a new owner, were gone for good, and so was a deletion in a process that had set up the files of another user, such as of an administrator. Every run now changes the files of each user in that user's own files, so every deletion lands in *Deleted files* of its user, whoever or whatever starts the run. The switch of permanent deletion in *5 · Trash and deletion safety* is now called *Delete the Nextcloud copy after Paperless deletes the document for good*.
+
 ## [1.1.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.0...v1.1.1) (2026-10-19)
 
 ### Bug fixes
