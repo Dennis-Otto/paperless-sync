@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\RunError;
+use OCA\PaperlessSync\Model\TranslatableError;
 use OCP\IL10N;
 
 /**
@@ -17,7 +19,7 @@ use OCP\IL10N;
  * and the setting "Paperless runs in my local network" is off. Its message says what to do, in
  * English for the log, and translated() in the language of the administrator.
  */
-final class PaperlessLocalNetworkException extends PaperlessRequestException {
+final class PaperlessLocalNetworkException extends PaperlessRequestException implements TranslatableError {
 	/** The advice, with the host for %s; translated() looks it up in the translations of the app. */
 	private const ADVICE = 'Nextcloud blocks connections to local addresses such as %s. If Paperless runs in your network, turn on "Paperless runs in my local network" and save the settings.';
 	/**
@@ -42,6 +44,11 @@ final class PaperlessLocalNetworkException extends PaperlessRequestException {
 
 	public function translated(IL10N $l10n): string {
 		return $l10n->t($this->withoutDnsRecord ? self::ADVICE_WITHOUT_DNS_RECORD : self::ADVICE, [$this->host]);
+	}
+
+	/** The advice as the status of a run keeps it, with the setting that allows the connection. */
+	public function runError(): RunError {
+		return new RunError($this->advice(), [$this->host], self::SETTING);
 	}
 
 	/** The advice in English, with %s for the host, as translated() looks it up. */

@@ -20,6 +20,7 @@ use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -119,7 +120,7 @@ final class ImportExecutor {
 				// The file waits for its tags, as for a failed upload. Without the list of the tags, or
 				// without Paperless, every other file would fail the same way.
 				if ($this->dryRun) {
-					$this->report->error("Import {$path}: " . SyncErrors::message($exception));
+					$this->report->error(new RunError('Import %1$s: %2$s', [$path, RunError::of($exception)]));
 				} else {
 					$this->retryUploadLater($action, $exception);
 				}
@@ -195,7 +196,8 @@ final class ImportExecutor {
 	private function retryUploadLater(Upload $action, \Throwable $exception): void {
 		$error = SyncErrors::message($exception);
 		$attempts = $action->attempts + 1;
-		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error);
+		// The report translates the text that the app wrote, as in a dry-run; the state and the log keep it in English.
+		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error, RunError::of($exception));
 		// The first failure of a file is a warning, the ones after it only information.
 		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
 			'path' => $action->path,
@@ -240,7 +242,7 @@ final class ImportExecutor {
 	 */
 	private function giveOwner(ImportSucceeded $action): void {
 		if ($action->document === null || !$action->uploaded) {
-			$this->report->error("Import {$action->context->path}: Paperless did not name the document that the upload created, so its owner stays as Paperless has it", null, $action->context->path);
+			$this->report->error(new RunError('Import %s: Paperless did not name the document that the upload created, so its owner stays as Paperless has it', [$action->context->path]), null, $action->context->path);
 			return;
 		}
 		$this->paperless->setOwner($action->document, (int)$this->owner);
@@ -273,10 +275,10 @@ final class ImportExecutor {
 	private function retryUnfinished(RetryUnfinished $action): void {
 		$path = $action->context->path;
 		if ($this->dryRun) {
-			$this->report->error("Import {$path}: {$action->error}; a run uploads it again", null, $path);
+			$this->report->error(new RunError('Import %1$s: %2$s; a run uploads it again', [$path, $action->error]), null, $path);
 			return;
 		}
-		$minutes = $this->retryLater($path, $action->etag, $action->attempts, $action->error);
+		$minutes = $this->retryLater($path, $action->etag, $action->attempts, $action->error, RunError::plain($action->error));
 		$this->logger->warning('Paperless has not finished the import of the inbox file {path} a day after its upload; it is uploaded again in {minutes} minutes: {error}', [
 			'path' => $path,
 			'error' => $action->error,
@@ -287,9 +289,10 @@ final class ImportExecutor {
 
 	/**
 	 * Saves that a file of the inbox waits for its next upload, twice as long after each failure up
-	 * to a day, and reports why. The answer is the wait in minutes.
+	 * to a day, and reports why: the state keeps the English error, the report its record. The answer
+	 * is the wait in minutes.
 	 */
-	private function retryLater(string $path, string $etag, int $attempts, string $error): int {
+	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
 		$now = $this->now();
@@ -302,7 +305,7 @@ final class ImportExecutor {
 			'retry_at' => $now + $delay,
 			'last_error' => SyncErrors::stored($error),
 		]);
-		$this->report->error("Import {$path}: {$error} (attempt {$attempts}, the next in {$minutes} minutes)", null, $path);
+		$this->report->error(new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [$path, $record, (string)$attempts, (string)$minutes]), null, $path);
 
 		return $minutes;
 	}
@@ -325,7 +328,7 @@ final class ImportExecutor {
 	private function checkFailed(ImportContext $context, \Throwable $exception): void {
 		$path = $context->path;
 		$error = SyncErrors::message($exception);
-		$this->report->error("Import task {$path}: {$error}", null, $path);
+		$this->report->error(new RunError('Import task %1$s: %2$s', [$path, RunError::of($exception)]), null, $path);
 		if (SyncErrors::changed($context->pending, $error)) {
 			// Without the exception, as for the error of a document.
 			$this->logger->warning('Paperless Sync could not check the import of the inbox file {path}: {error}', [

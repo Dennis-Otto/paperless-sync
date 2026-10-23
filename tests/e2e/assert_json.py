@@ -354,6 +354,18 @@ elif mode == "status-errors":
         raise AssertionError(f"The status keeps no report of the run: {payload!r}")
     if payload.get("lastEnded", 0) < payload.get("lastStarted", 0) or payload.get("lastSuccess", 0) < 1:
         raise AssertionError(f"The times of the runs are wrong: {payload!r}")
+elif mode == "status-errors-german":
+    # The same status for an administrator who reads German: the settings page translates the
+    # errors that the run kept in English, with their texts and parameters, which it leaves out.
+    report = payload.get("report", {})
+    messages = [str(message) for message in report.get("errorMessages", [])]
+    if not any(message.startswith("P123: Nextcloud hat nicht genug freien Speicherplatz: Die Datei braucht ") for message in messages):
+        raise AssertionError(f"The status keeps no German error of the document: {payload!r}")
+    details = [str(entry.get("detail")) for entry in report.get("entries", []) if entry.get("type") == "error"]
+    if not any(detail.startswith("P123: Nextcloud hat nicht genug freien Speicherplatz: ") for detail in details):
+        raise AssertionError(f"The report has no German error entry: {payload!r}")
+    if "errorRecord" in payload or "errorRecords" in report or any("error" in entry for entry in report.get("entries", [])):
+        raise AssertionError(f"The status answers with the records of its errors: {payload!r}")
 elif mode == "enabled":
     expect("enabled", True)
 elif mode == "disabled":

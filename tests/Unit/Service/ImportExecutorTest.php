@@ -20,8 +20,10 @@ use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ImportExecutor;
+use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\SyncBatch;
@@ -179,6 +181,22 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame(['ERROR: Import ' . self::FILE . ': Paperless is down (attempt 1, the next in 15 minutes)'], $this->report->actions);
 		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
 		self::assertTrue($this->batch->stopped());
+	}
+
+	/**
+	 * A file that waits for its next upload keeps an error that the app wrote as its record, which
+	 * the settings page translates as in a dry-run; the state keeps it in English.
+	 */
+	public function testAFailedUploadKeepsTheRecordOfTheErrorOfTheApp(): void {
+		$this->arrange(false, ['inboxFolderTags' => true]);
+		$exception = new PaperlessLocalNetworkException('paperless.local');
+		$this->paperless->tagsException = $exception;
+
+		$this->executor->apply(self::upload());
+
+		self::assertEquals([new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [self::FILE, RunError::of($exception), '1', '15'])], $this->report->errorRecords);
+		self::assertTrue($this->report->errorRecords[0]->parameters[1] instanceof RunError && $this->report->errorRecords[0]->parameters[1]->translatable);
+		self::assertSame($exception->getMessage(), $this->state->imports[self::FILE]['last_error']);
 	}
 
 	/** A tag that Paperless doesn't create fails the file, and the others go on, unless Paperless could not be reached. */

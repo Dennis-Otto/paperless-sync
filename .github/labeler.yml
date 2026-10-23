@@ -37,6 +37,7 @@
           - lib/Service/PathTemplateService.php
           - lib/Service/NextcloudStorage*.php
           - lib/Service/UserFilesystem*.php
+          - lib/Service/FullStorageException.php
           - lib/Model/DocumentFingerprint.php
           - lib/Service/MetadataSidecars.php
           - lib/Service/SystemTagService.php
@@ -107,6 +108,10 @@
           - lib/Service/ExportFilter.php
           - lib/Service/SyncBatch.php
           - lib/Service/SyncErrors.php
+          - lib/Service/RunException.php
+          - lib/Service/StatusTranslation.php
+          - lib/Model/RunError.php
+          - lib/Model/TranslatableError.php
           - lib/Service/Paths.php
           - lib/Service/TargetFiles.php
           - lib/Model/Plan/**
@@ -134,6 +139,8 @@
           - tests/Unit/Service/ExportExecutorTest.php
           - tests/Unit/Service/SyncBatchTest.php
           - tests/Unit/Service/SyncErrorsTest.php
+          - tests/Unit/Service/StatusTranslationTest.php
+          - tests/Unit/Model/RunErrorTest.php
           - tests/Unit/Service/PathsTest.php
           - tests/Unit/Migration/Version000120*
           - tests/Unit/Model/SyncReportTest.php

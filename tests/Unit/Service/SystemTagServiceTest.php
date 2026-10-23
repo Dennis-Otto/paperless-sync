@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ArchiveTags;
 use OCA\PaperlessSync\Service\SystemTagService;
@@ -243,7 +244,7 @@ final class SystemTagServiceTest extends TestCase {
 		$report = $this->runTags([[1, self::FIRST, [1]], [2, self::SECOND, [1]]]);
 
 		self::assertSame(['ERROR: Tags P1: The file is locked', 'TAGS P2: +Steuer 2026'], $report->actions);
-		self::assertSame(['type' => 'error', 'document' => 1, 'path' => self::FIRST, 'detail' => 'Tags P1: The file is locked'], $report->entries[0]);
+		self::assertEquals(['type' => 'error', 'document' => 1, 'path' => self::FIRST, 'detail' => 'Tags P1: The file is locked', 'error' => new RunError('Tags P%1$s: %2$s', ['1', RunError::plain('The file is locked')])], $report->entries[0]);
 		self::assertSame([1, 1], [$report->errors, $report->tagged]);
 	}
 
@@ -262,7 +263,7 @@ final class SystemTagServiceTest extends TestCase {
 			'TAGS P1: +Steuer 2026',
 			'TAGS P2: +Bezahlt',
 		], $report->actions);
-		self::assertSame(['type' => 'error', 'document' => 1, 'path' => self::FIRST, 'detail' => 'Tags P1: Incorrect string value'], $report->entries[1]);
+		self::assertEquals(['type' => 'error', 'document' => 1, 'path' => self::FIRST, 'detail' => 'Tags P1: Incorrect string value', 'error' => new RunError('Tags P%1$s: %2$s', ['1', RunError::plain('Incorrect string value')])], $report->entries[1]);
 		self::assertSame([2, 2], [$report->errors, $report->tagged]);
 		self::assertSame(['Steuer 2026', 'Bezahlt'], $this->tags->created);
 	}

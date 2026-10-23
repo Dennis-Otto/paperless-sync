@@ -12,11 +12,13 @@ namespace OCA\PaperlessSync\Settings;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\StatusTranslation;
 use OCA\PaperlessSync\Service\WebhookService;
 use OCA\PaperlessSync\SetupChecks\BackgroundJobMode;
 use OCA\PaperlessSync\SetupChecks\SyncHealth;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\Settings\ISettings;
 use OCP\SetupCheck\SetupResult;
@@ -36,13 +38,15 @@ final class AdminSettings implements ISettings {
 		private SyncHealth $syncHealth,
 		private BackgroundJobMode $backgroundJobMode,
 		private WebhookService $webhookService,
+		private IL10N $l10n,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
 		$config = $this->configService->get();
-		$status = $this->statusService->overview($config);
-		// The page shows the status, its error and its report from the start, as after a refresh.
+		// The page shows the status, its error and its report from the start, as after a refresh: in
+		// the language of the administrator, as SyncController answers, and without the records.
+		$status = StatusTranslation::status($this->statusService->overview($config), $this->l10n);
 		$this->initialState->provideInitialState('status', $status);
 		// The stored configuration, without the token, which the form compares with what it shows
 		// to tell unsaved changes, as after a save or a disconnect.

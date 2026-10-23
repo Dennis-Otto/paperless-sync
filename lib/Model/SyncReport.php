@@ -10,7 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Model;
 
 /**
- * @psalm-type ReportEntry = array{type: string, document?: int, path?: string, target?: string, detail?: string, values?: array<string, int|string>, user?: string}
+ * @psalm-type ReportEntry = array{type: string, document?: int, path?: string, target?: string, detail?: string, error?: RunError, values?: array<string, int|string>, user?: string}
  * @psalm-suppress PossiblyUnusedProperty
  */
 final class SyncReport implements \JsonSerializable {
@@ -118,13 +118,21 @@ final class SyncReport implements \JsonSerializable {
 	 * which shows them in the language of its reader: the type of the change, the ID of the
 	 * document in Paperless, the file in Nextcloud, relative to the home of the target user, the
 	 * file in the error folder that a failed import went to, a detail, such as the reason of
-	 * Paperless or an error message, and the numbers of a notice or of a document that waits.
+	 * Paperless or an error message, the error itself, which the page translates, and the numbers
+	 * of a notice or of a document that waits.
 	 *
 	 * @var list<ReportEntry>
 	 */
 	public array $entries = [];
-	/** @var list<string> the first errors of the run, without the lines of its changes */
+	/** @var list<string> the first errors of the run, without the lines of its changes, in English */
 	public array $errorMessages = [];
+	/**
+	 * The same errors, one for each of $errorMessages and in its order, with their texts and
+	 * parameters, which the settings page translates into the language of its reader.
+	 *
+	 * @var list<RunError>
+	 */
+	public array $errorRecords = [];
 	/**
 	 * In per-user ownership, the counts of each user of Nextcloud whose archive the run reached, as
 	 * counts() gives them, by the ID of the user; empty otherwise.
@@ -249,11 +257,17 @@ final class SyncReport implements \JsonSerializable {
 		++$this->notices;
 	}
 
-	/** An error of a single document or file, with the ID of the document in Paperless or the path of the file where they are known. */
-	public function error(string $message, ?int $document = null, string $path = ''): void {
+	/**
+	 * An error of a single document or file, with the ID of the document in Paperless or the path
+	 * of the file where they are known. A text without its parameters stays as it is: plain().
+	 */
+	public function error(RunError|string $error, ?int $document = null, string $path = ''): void {
+		$error = is_string($error) ? RunError::plain($error) : $error;
+		$message = $error->message();
 		++$this->errors;
 		if (count($this->errorMessages) < self::ERROR_LIMIT) {
 			$this->errorMessages[] = $message;
+			$this->errorRecords[] = $error;
 		}
 		$entry = ['type' => self::TYPE_ERROR];
 		if ($document !== null) {
@@ -263,6 +277,10 @@ final class SyncReport implements \JsonSerializable {
 			$entry['path'] = $path;
 		}
 		$entry['detail'] = $message;
+		// A plain error is its detail.
+		if ($error->translatable) {
+			$entry['error'] = $error;
+		}
 		$this->action('ERROR: ' . $message, $entry);
 	}
 
@@ -326,9 +344,11 @@ final class SyncReport implements \JsonSerializable {
 				$this->action($line, $entry);
 			}
 		}
-		foreach ($user->errorMessages as $message) {
+		foreach ($user->errorMessages as $index => $message) {
 			if (count($this->errorMessages) < self::ERROR_LIMIT) {
-				$this->errorMessages[] = "[{$userId}] {$message}";
+				$error = new RunError('[%1$s] %2$s', [$userId, $user->errorRecords[$index] ?? RunError::plain($message)]);
+				$this->errorMessages[] = $error->message();
+				$this->errorRecords[] = $error;
 			}
 		}
 	}
@@ -371,7 +391,7 @@ final class SyncReport implements \JsonSerializable {
 		return $this->importResults;
 	}
 
-	/** @return array<string, bool|int|list<string>|list<ReportEntry>|array<string, array<string, int>>> */
+	/** @return array<string, bool|int|list<string>|list<RunError>|list<ReportEntry>|array<string, array<string, int>>> */
 	public function jsonSerialize(): array {
 		$data = get_object_vars($this);
 		unset($data['priorities'], $data['notices'], $data['changedFiles'], $data['changedFileCount'], $data['importResults']);
@@ -380,14 +400,14 @@ final class SyncReport implements \JsonSerializable {
 			unset($data['users']);
 		}
 
-		/** @var array<string, bool|int|list<string>|list<ReportEntry>|array<string, array<string, int>>> $data */
+		/** @var array<string, bool|int|list<string>|list<RunError>|list<ReportEntry>|array<string, array<string, int>>> $data */
 		return $data;
 	}
 
 	/** @return array<string, bool|int> */
 	public function summary(): array {
 		$data = $this->jsonSerialize();
-		unset($data['actions'], $data['entries'], $data['errorMessages'], $data['users']);
+		unset($data['actions'], $data['entries'], $data['errorMessages'], $data['errorRecords'], $data['users']);
 
 		/** @var array<string, bool|int> $data */
 		return $data;

@@ -712,9 +712,10 @@ echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of the catalog: a text that the code
-# translates but the catalog lacks, one that no code translates, a German text without the
-# placeholder of its English one, a text twice, and a copy for the browser that differs; --fix
-# then drops the unused text and writes the copy for the browser anew.
+# translates but the catalog lacks, also the text of an error that a run keeps, one that no code
+# translates, a German text without the placeholder of its English one, a text twice, and a copy
+# for the browser that differs; --fix then drops the unused text and writes the copy for the
+# browser anew.
 l10n_copy="$(mktemp -d)"
 trap 'rm -rf "$l10n_copy"' EXIT
 # Runs the JavaScript of the argument on the translations, t, of the copy of l10n/de.json.
@@ -733,6 +734,10 @@ broken_catalog() {
 cp l10n/de.json l10n/de.js "$l10n_copy/"
 edit_catalog 'delete t["Paperless Sync"]'
 broken_catalog 'translates a text that l10n/de.json lacks: "Paperless Sync"'
+# The errors that a run keeps count too, as the settings page translates them later.
+cp l10n/de.json l10n/de.js "$l10n_copy/"
+edit_catalog 'delete t["Tags: %s"]'
+broken_catalog 'translates a text that l10n/de.json lacks: "Tags: %s"'
 cp l10n/de.json l10n/de.js "$l10n_copy/"
 edit_catalog 't["A text that no code translates"] = "Ein Text, den kein Code übersetzt"'
 broken_catalog 'translates a text that no code translates: "A text that no code translates"'

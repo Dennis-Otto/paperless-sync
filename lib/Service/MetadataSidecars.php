@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 
@@ -131,7 +132,7 @@ final class MetadataSidecars {
 			try {
 				$this->storage->writeText($this->config->targetUser, $this->sidecarPath($documentId), $json);
 			} catch (\Throwable $exception) {
-				$this->fail("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
+				$this->fail($exception, $documentId, $this->sidecarPath($documentId));
 
 				return;
 			}
@@ -170,7 +171,7 @@ final class MetadataSidecars {
 					$this->storage->delete($this->config->targetUser, $this->sidecarPath($documentId));
 				} catch (\Throwable $exception) {
 					// The row stays, so that the next run deletes the sidecar.
-					$this->fail("Metadata P{$documentId}", $exception, $documentId, $this->sidecarPath($documentId));
+					$this->fail($exception, $documentId, $this->sidecarPath($documentId));
 					continue;
 				}
 				unset($this->rows[$documentId]);
@@ -190,7 +191,7 @@ final class MetadataSidecars {
 		try {
 			$this->storage->writeText($this->config->targetUser, $this->indexPath(), $index);
 		} catch (\Throwable $exception) {
-			$this->fail('Metadata index', $exception, null, $this->indexPath());
+			$this->fail($exception, null, $this->indexPath());
 		}
 	}
 
@@ -326,13 +327,13 @@ final class MetadataSidecars {
 	 * Reports a failed write or deletion as an error of its document, or of the run for the index.
 	 * A failure of the whole archive stops the sidecars of the run and is reported once.
 	 */
-	private function fail(string $subject, \Throwable $exception, ?int $documentId, string $path): void {
+	private function fail(\Throwable $exception, ?int $documentId, string $path): void {
 		if ($this->stopped) {
 			return;
 		}
 		$this->stopped = ($this->archiveFailed)($exception);
-		$message = trim($exception->getMessage());
-		$this->report->error($subject . ': ' . ($message !== '' ? $message : $exception::class), $documentId, $path);
+		$error = RunError::of($exception);
+		$this->report->error($documentId === null ? new RunError('Metadata index: %s', [$error]) : new RunError('Metadata P%1$s: %2$s', [(string)$documentId, $error]), $documentId, $path);
 	}
 
 	/** The index as CSV after RFC 4180, with the rows by the IDs of their documents. */

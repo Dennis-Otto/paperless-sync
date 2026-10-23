@@ -10,10 +10,13 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Controller;
 
 use OCA\PaperlessSync\Cron\ManualSyncJob;
+use OCA\PaperlessSync\Model\RunError;
+use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\StatusTranslation;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UnsavedSettingException;
 use OCP\AppFramework\Controller;
@@ -74,7 +77,7 @@ final class SyncController extends Controller {
 			return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
 		}
 		try {
-			return new JSONResponse($this->syncService->run(true, $config));
+			return new JSONResponse(StatusTranslation::report($this->syncService->run(true, $config)->jsonSerialize(), $this->l10n));
 		} catch (LockedException) {
 			return $this->locked();
 		} catch (PaperlessLocalNetworkException $exception) {
@@ -84,15 +87,17 @@ final class SyncController extends Controller {
 			);
 		} catch (\Throwable $exception) {
 			// A run checks the target user and the base folder again, which may have changed since the save.
-			$message = $exception instanceof InvalidSettingException ? $exception->translated($this->l10n) : $exception->getMessage();
-
-			return new JSONResponse(['message' => $message], Http::STATUS_INTERNAL_SERVER_ERROR);
+			return new JSONResponse(['message' => RunError::of($exception)->translated($this->l10n)], Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 	}
 
+	/**
+	 * The status of the last run, with its errors in the language of the administrator who reads
+	 * it: the run kept them in English, as the log shows them.
+	 */
 	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
 	public function status(): JSONResponse {
-		return new JSONResponse($this->statusService->overview($this->configService->get()));
+		return new JSONResponse($this->overview($this->configService->get()));
 	}
 
 	/**
@@ -113,7 +118,12 @@ final class SyncController extends Controller {
 		$user = $this->userSession->getUser();
 		$this->jobList->add(ManualSyncJob::class, $user === null ? null : ['author' => $user->getUID()]);
 
-		return new JSONResponse(['queued' => true, 'status' => $this->statusService->overview($config)], Http::STATUS_ACCEPTED);
+		return new JSONResponse(['queued' => true, 'status' => $this->overview($config)], Http::STATUS_ACCEPTED);
+	}
+
+	/** @return array<string, mixed> */
+	private function overview(SyncConfig $config): array {
+		return StatusTranslation::status($this->statusService->overview($config), $this->l10n);
 	}
 
 	private function locked(): JSONResponse {

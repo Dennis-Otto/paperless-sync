@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -27,10 +28,14 @@ use OCP\Lock\ILockingProvider;
  * run that ended without saying how, because PHP stopped it, which the status tells from its lock
  * and from the signs of life of the run.
  *
+ * The error of a run and the errors of its report are English, as in the log, because a run, also
+ * a scheduled one, has no reader when it writes them; each comes with its text and parameters, its
+ * RunError, which the settings page translates when it reads the status (SyncController).
+ *
  * It also counts the runs in a row that did not succeed, from which the notifications, the setup
  * checks and the status API tell a mirror that keeps failing from one that failed once.
  *
- * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
+ * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
  * @psalm-type Failures = array{runs: int, since: int, failed: bool, errors: int, error: string}
  * @psalm-type Health = 'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
  */
@@ -69,6 +74,8 @@ final class StatusService {
 	private const LAST_STATE = 'status_last_state';
 	private const LAST_SUMMARY = 'status_last_summary';
 	private const LAST_ERROR = 'status_last_error';
+	/** The error of the last run that failed with its text and parameters, as RunError keeps it, for its translation. */
+	private const LAST_ERROR_RECORD = 'status_last_error_record';
 	private const LAST_REPORT = 'status_last_report';
 	/**
 	 * The start and the end of the last run that was not a dry-run, from which the schedule
@@ -89,7 +96,7 @@ final class StatusService {
 	/** Every key of the status. */
 	private const KEYS = [
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
-		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
+		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_ERROR_RECORD, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
 		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES, self::LAST_HEARTBEAT,
 	];
 
@@ -167,6 +174,7 @@ final class StatusService {
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $dryRun ? 'dry-run-running' : 'running', lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, '', lazy: true);
 		// Only a run that reaches Paperless names it, so that a failed connection doesn't show the Paperless of an earlier run.
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true);
@@ -198,6 +206,7 @@ final class StatusService {
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'), lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, '', lazy: true);
 		$this->keep($report);
 	}
 
@@ -215,6 +224,7 @@ final class StatusService {
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed', lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH), lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, json_encode(RunError::of($exception)->shortened(self::LINE_LENGTH), JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), lazy: true);
 		if ($report !== null) {
 			$this->keep($report);
 		}
@@ -239,6 +249,8 @@ final class StatusService {
 			'state' => $state,
 			'summary' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_SUMMARY, '{}', lazy: true)),
 			'error' => $this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true),
+			// None from a run that didn't fail, and from an earlier version, which kept the English text alone.
+			'errorRecord' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, '{}', lazy: true)),
 			'report' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_REPORT, '{}', lazy: true)),
 			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true),
 			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true),
@@ -304,7 +316,7 @@ final class StatusService {
 	/**
 	 * The status as the settings page shows it, with the time of the next scheduled run.
 	 *
-	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, nextRun: int|null}
+	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, nextRun: int|null}
 	 */
 	public function overview(SyncConfig $config): array {
 		$status = $this->get();
@@ -386,9 +398,9 @@ final class StatusService {
 	}
 
 	/**
-	 * Keeps the summary and the report of a run: its counts, its first errors and its first lines
-	 * of changes with their entries, each text shortened; the lines that it leaves out count as
-	 * omitted.
+	 * Keeps the summary and the report of a run: its counts, its first errors with their records
+	 * and its first lines of changes with their entries, each text shortened; the lines that it
+	 * leaves out count as omitted.
 	 */
 	private function keep(SyncReport $report): void {
 		$summary = $report->summary();
@@ -401,6 +413,7 @@ final class StatusService {
 			$kept['users'] = $report->users;
 		}
 		$kept['errorMessages'] = array_map($shorten, $report->errorMessages);
+		$kept['errorRecords'] = array_map(static fn (RunError $error): RunError => $error->shortened(self::LINE_LENGTH), $report->errorRecords);
 		$kept['actions'] = array_map($shorten, array_slice($report->actions, 0, self::REPORT_ACTIONS));
 		$kept['entries'] = array_map(static function (array $entry) use ($shorten): array {
 			foreach (['path', 'target', 'detail'] as $text) {
@@ -408,6 +421,9 @@ final class StatusService {
 				if (is_string($value)) {
 					$entry[$text] = $shorten($value);
 				}
+			}
+			if (isset($entry['error'])) {
+				$entry['error'] = $entry['error']->shortened(self::LINE_LENGTH);
 			}
 
 			return $entry;

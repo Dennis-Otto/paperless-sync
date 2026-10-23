@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use InvalidArgumentException;
+use OCA\PaperlessSync\Model\RunError;
+use OCA\PaperlessSync\Model\TranslatableError;
 use OCP\IL10N;
 
 /**
@@ -18,7 +20,7 @@ use OCP\IL10N;
  * text is the key of its translation in l10n/, so it is a literal at the place that throws it,
  * where scripts/check-l10n.mjs finds it, never a variable.
  */
-class InvalidSettingException extends InvalidArgumentException {
+class InvalidSettingException extends InvalidArgumentException implements TranslatableError {
 	/**
 	 * @param string $text the text in English, with %s or %1$s for each parameter
 	 * @param list<string> $parameters the values of its placeholders, which no translation changes
@@ -34,5 +36,10 @@ class InvalidSettingException extends InvalidArgumentException {
 
 	public function translated(IL10N $l10n): string {
 		return $l10n->t($this->text, $this->parameters);
+	}
+
+	/** The error as the status of a run keeps it, which the settings page translates when it reads it. */
+	public function runError(): RunError {
+		return new RunError($this->text, $this->parameters, $this->setting);
 	}
 }

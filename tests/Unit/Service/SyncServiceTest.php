@@ -13,6 +13,7 @@ use LogicException;
 use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessConnection;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
@@ -1488,7 +1489,7 @@ final class SyncServiceTest extends TestCase {
 			"ERROR: P3: {$error}",
 			'EXPORT STOPPED: Nextcloud cannot store files in the archive; the other documents wait for the next run.',
 		], $report->actions);
-		self::assertSame([['type' => 'error', 'document' => 3, 'detail' => "P3: {$error}"], ['type' => 'export-stopped']], $report->entries);
+		self::assertEquals([['type' => 'error', 'document' => 3, 'detail' => "P3: {$error}", 'error' => new RunError('P%1$s: %2$s', ['3', RunError::plain($error)])], ['type' => 'export-stopped']], $report->entries);
 		self::assertSame($error, $this->state->exports[3]['last_error']);
 		self::assertArrayNotHasKey(2, $this->state->exports);
 	}
@@ -2383,7 +2384,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run(true);
 
 		self::assertSame(['ERROR: Import task ' . $path . ': Paperless timed out'], $report->actions);
-		self::assertSame([['type' => 'error', 'path' => $path, 'detail' => 'Import task ' . $path . ': Paperless timed out']], $report->entries);
+		self::assertEquals([['type' => 'error', 'path' => $path, 'detail' => 'Import task ' . $path . ': Paperless timed out', 'error' => new RunError('Import task %1$s: %2$s', [$path, RunError::plain('Paperless timed out')])]], $report->entries);
 		self::assertSame('pending', $this->state->imports[$path]['status']);
 		self::assertSame('Paperless timed out', $this->state->imports[$path]['last_error']);
 		self::assertCount(1, $this->paperless->uploads);
@@ -3304,7 +3305,7 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 
 		self::assertSame(['ERROR: Excluded P123: File is locked'], $report->actions);
-		self::assertSame([['type' => 'error', 'document' => 123, 'path' => self::EXPORTED_PATH, 'detail' => 'Excluded P123: File is locked']], $report->entries);
+		self::assertEquals([['type' => 'error', 'document' => 123, 'path' => self::EXPORTED_PATH, 'detail' => 'Excluded P123: File is locked', 'error' => new RunError('Excluded P%1$s: %2$s', ['123', RunError::plain('File is locked')])]], $report->entries);
 		self::assertSame('File is locked', $this->state->exports[123]['last_error']);
 		self::assertSame(TestClock::START + 60, $this->state->exports[123]['last_seen'], 'The document failed in this run, so it waits behind those that failed earlier.');
 		self::assertArrayHasKey(self::EXPORTED_PATH, $this->storage->files);
@@ -4742,7 +4743,7 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame([1, 1], [$report->exported, $report->errors]);
 		self::assertSame(['Metadata index: The storage is not available'], $report->errorMessages);
-		self::assertContains(['type' => 'error', 'path' => $index, 'detail' => 'Metadata index: The storage is not available'], $report->entries);
+		self::assertContainsEquals(['type' => 'error', 'path' => $index, 'detail' => 'Metadata index: The storage is not available', 'error' => new RunError('Metadata index: %s', [RunError::plain('The storage is not available')])], $report->entries);
 		self::assertArrayNotHasKey(self::ARCHIVE . '/.paperless/P123.json', $this->storage->files);
 		self::assertSame('id', $this->storage->files[$index]);
 	}
