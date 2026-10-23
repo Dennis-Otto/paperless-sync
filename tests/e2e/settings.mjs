@@ -362,17 +362,40 @@ try {
 	console.log('Settings: the preview shows the paths of the newest documents with the template of the form, and a variable goes in at the cursor.')
 
 	// A dry-run tries the unsaved settings of the form, and the report says so; without a
-	// change, it sends none.
+	// change, it sends none. The status that a save asked for before it, which the server
+	// answered with the report from before the dry-run, may arrive after the report of the
+	// dry-run, and never shows the older report in its place.
 	const sentRuns = []
 	await page.route(`**${RUN}`, async (route) => {
 		sentRuns.push(route.request().postDataJSON())
 		await route.continue()
 	})
+	let releaseStatus = () => {}
+	const statusReleased = new Promise((resolve) => {
+		releaseStatus = resolve
+	})
+	await page.route(`**${STATUS}`, async (route) => {
+		const response = await route.fetch()
+		await statusReleased
+		await route.fulfill({ response })
+	}, { times: 1 })
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED, `The save failed: ${await message.textContent()}`)
 	await template.fill('{{ created_year }}/{{ title }} [P{{ id }}]')
+	await previewList.locator('li', { hasText: /^\d{4}\/[^/]+ \[P\d+\]\.\w+/ }).first().waitFor({ timeout: 5000 })
 	await dryRun.click()
 	await settle()
 	expect(sentRuns[0].dryRun === true && sentRuns[0].settings?.path_template === '{{ created_year }}/{{ title }} [P{{ id }}]', `The dry-run must send the template of the form: ${JSON.stringify(sentRuns[0])}`)
-	expect((await page.locator('#paperless-sync-report-meta').textContent()).startsWith('Dry-run of unsaved settings, finished'), `The report must say that it shows unsaved settings: ${await page.locator('#paperless-sync-report-meta').textContent()}`)
+	// The page asks for the status after the dry-run as well, and draws the report of the
+	// dry-run again, as the server kept it.
+	const reportMeta = page.locator('#paperless-sync-report-meta')
+	await reportMeta.filter({ hasText: /^Dry-run of unsaved settings, finished/ }).waitFor({ timeout: 5000 })
+	// Once the late status has its answer, the save asks for the preview, as after every save.
+	const previewAfterSave = page.waitForRequest((sent) => new URL(sent.url()).pathname.endsWith('/apps/paperless_sync/settings/preview'))
+	releaseStatus()
+	await previewAfterSave
+	expect((await reportMeta.textContent()).startsWith('Dry-run of unsaved settings, finished'), `A status asked for before the dry-run must not show the report from before it: ${await reportMeta.textContent()}`)
 	expect(await unsaved.isVisible(), 'The dry-run saves nothing.')
 	await template.fill(savedTemplate)
 	await dryRun.click()

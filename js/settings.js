@@ -344,6 +344,13 @@
 		// "Synchronize now" queued a run in a background job; the page says how it ended, once the
 		// status shows its end.
 		let awaitedRun = false
+		// The status answers in any order, and a dry-run answers with a report newer than every
+		// status asked for before its answer: each status that the page asks for, and each answer
+		// that brings a newer status or report, takes the next number, and an answer to a status
+		// asked for before the one that the page shows would show an older one again, such as the
+		// report from before a dry-run in place of the report of that dry-run.
+		let statusAsked = 0
+		let statusShown = 0
 		let busy = false
 		// The settings that the server stored, as settings() reads them from the form, to tell
 		// unsaved changes.
@@ -1260,6 +1267,7 @@
 					showMessage(translate('The synchronization starts with the next background jobs of Nextcloud, within a few minutes. The status above follows it, and this message says how it ends.'), 'progress')
 					status = result.status && typeof result.status === 'object' ? result.status : null
 				} else {
+					statusShown = ++statusAsked
 					showReport(result, true)
 					showResult(result, isDryRun)
 				}
@@ -1279,6 +1287,7 @@
 			// The status shows how the run ended, also when it failed, or follows it while it waits
 			// and continues. Without an answer, it shows the last state that the server sent.
 			if (status !== null) {
+				statusShown = ++statusAsked
 				updateStatus(status)
 			} else if (!(await refreshQuietly())) {
 				showState(serverState)
@@ -1306,9 +1315,16 @@
 			}
 		}
 
-		// Shows the status of the last run, and answers its state.
+		// Shows the status of the last run, and answers its state. An answer that a newer status or
+		// report overtook shows nothing; the page goes on following the state that it shows.
 		async function refreshStatus() {
+			const asked = ++statusAsked
 			const status = await request(root.dataset.statusUrl, 'GET')
+			if (asked < statusShown) {
+				watch(serverState)
+				return serverState
+			}
+			statusShown = asked
 			updateStatus(status)
 			return status.state || 'never-run'
 		}
