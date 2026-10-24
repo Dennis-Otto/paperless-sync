@@ -133,7 +133,7 @@ accessibility() {
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs flow.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -1442,11 +1442,16 @@ if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
 	echo 'The log of Nextcloud holds no failed run, so the check of the token below would prove nothing.' >&2
 	exit 1
 fi
-# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter].
-# Without one in the log, PHP left out the arguments of every frame
+# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter],
+# which Nextcloud 35 and before writes into the log as it is, and Nextcloud 36 as the text
+# "*** sensitive parameters replaced ***", taking the value out of every other frame as well.
+# Without either in the log, PHP left out the arguments of every frame
 # (zend.exception_ignore_args=On, as in php.ini-production), and the count of the token below
-# would pass without the fix.
-if [[ "$(log_count SensitiveParameterValue)" == "0" ]]; then
+# would pass without the fix. Nextcloud writes that text alone in place of all the arguments of
+# some functions of its own as well, also when PHP left them out, so only the text after another
+# argument of its frame counts.
+if [[ "$(log_count SensitiveParameterValue)" == "0" \
+	&& "$(log_count ',"*** sensitive parameters replaced ***"')" == "0" ]]; then
 	echo 'The log of Nextcloud holds no argument replaced by PHP, so the check of the token below would prove nothing.' >&2
 	exit 1
 fi

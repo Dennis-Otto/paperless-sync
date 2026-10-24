@@ -11,6 +11,7 @@
 // "Invoice [P123].pdf" of e2e-admin and letter.pdf of e2e-other that it uploaded.
 
 import { chromium } from 'playwright-core'
+import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const ADMIN = process.env.E2E_USER ?? 'e2e-admin'
@@ -33,7 +34,7 @@ async function signIn(browser, user) {
 	await page.locator('input[name="password"]').fill(PASSWORD)
 	await page.locator('input[name="password"]').press('Enter')
 	await page.waitForURL((url) => !url.pathname.includes('/login'))
-	await page.goto(`${BASE_URL}/index.php/apps/files/files?dir=/`)
+	await page.goto(folderAddress(await filesAddress(page), '/'))
 	return { context, page }
 }
 

@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
+import { filesAddress, folderAddress } from './files-address.mjs'
 import { pictureLanguage } from './language.mjs'
 import { thumbnail } from './thumbnail.mjs'
 
@@ -48,8 +49,12 @@ const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = `/${L.base}/${L.archive}`
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
 
+// The address of Files, as Nextcloud links it, which signIn() takes from the first page after
+// the login; files-address.mjs says why.
+let filesApp = ''
+
 function files(dir) {
-	return `${BASE_URL}/index.php/apps/files/files?dir=${encodeURIComponent(dir)}`
+	return folderAddress(filesApp, dir)
 }
 
 function save(path, data) {
@@ -107,6 +112,7 @@ async function signIn(browser, user) {
 		await page.locator('input[name="password"]').fill(PASSWORD)
 		await page.locator('input[name="password"]').press('Enter')
 		await page.waitForURL((url) => !url.pathname.endsWith('/login'))
+		filesApp ||= await filesAddress(page)
 		return await context.storageState()
 	} finally {
 		await context.close()
