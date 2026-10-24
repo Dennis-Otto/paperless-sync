@@ -664,12 +664,13 @@ def setup(paperless, url):
     app = Paperless(url)
     _, _, first = app.request("POST", "/api/token/", {"username": name, "password": PASSWORD})
     changed = [*permissions, "add_document"]
-    paperless.request(
+    _, _, updated = paperless.request(
         "PATCH",
         f"/api/users/{created['id']}/",
-        {"password": PASSWORD + "-new", "is_active": True, "user_permissions": changed},
+        {"password": PASSWORD + "-new", "is_active": True, "is_staff": False, "user_permissions": changed},
         record="user-updated",
     )
+    check(updated.get("is_staff") is False, f"The updated user is staff: {updated!r}")
     _, _, second = app.request("POST", "/api/token/", {"username": name, "password": PASSWORD + "-new"})
     check(is_text(second.get("token")) and second["token"] == first["token"], "A new password gave the user another token.")
     app.request("POST", "/api/token/", {"username": name, "password": PASSWORD}, expect=400)

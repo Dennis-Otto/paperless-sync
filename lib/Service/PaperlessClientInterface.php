@@ -134,8 +134,8 @@ interface PaperlessClientInterface {
 	public function createUser(string $username, #[\SensitiveParameter] string $password, array $permissions): void;
 
 	/**
-	 * Makes the user of Paperless with this ID active, with exactly these permissions and this
-	 * password. The permissions of its groups stay as they are.
+	 * Makes the user of Paperless with this ID active and no staff, with exactly these permissions
+	 * and this password. The permissions of its groups stay as they are.
 	 *
 	 * @param list<string> $permissions
 	 * @throws InvalidSettingException when Paperless refuses the token, or doesn't let its account manage users

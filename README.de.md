@@ -207,7 +207,9 @@ Verwende ein eigenes Dienstkonto in Paperless, das kein Superuser ist, mit nur d
 | Immer | **Anzeigen** für Dokumente, und Zugriff auf jedes zu spiegelnde Dokument, am besten als sein Eigentümer, wie unten beschrieben | listet die Dokumente auf und lädt sie herunter |
 | Archivexport | **Anzeigen** für Korrespondenten, Dokumenttypen, Speicherpfade und Tags | bildet die Pfade und überspringt die ausgeschlossenen Tags |
 | Gelöscht-Ordner | Eigentum an den Dokumenten, wie unten beschrieben | sieht sie sofort im Papierkorb von Paperless |
-| Nextcloud-Eingang | **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben | lädt die Dateien des Eingangs hoch und erfährt, ob Paperless sie importiert hat |
+| [`{{ owner_username }}`](#variablen-der-pfadvorlage) in der Pfadvorlage | **Anzeigen** für Benutzer | findet den Benutzernamen des Eigentümers jedes Dokuments |
+| Benutzerdefinierte Felder in der Pfadvorlage, oder [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) | **Anzeigen** für benutzerdefinierte Felder | liest die Namen und die Auswahlwerte der benutzerdefinierten Felder |
+| Nextcloud-Eingang, oder [*An Paperless senden*](#aus-dateien-senden), standardmäßig für die Administratoren an | **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben | lädt die Dateien hoch und erfährt, ob Paperless sie importiert hat |
 | [Tags des Eingangs](#tags-des-eingangs) | **Anzeigen** für Tags, und **Hinzufügen** für Tags mit *Fehlende Tags anlegen* | findet die Tags der Dateien des Eingangs und legt die an, die Paperless fehlen |
 | Verbindungs-Checkliste | **Anzeigen** für UI-Einstellungen | liest die Berechtigungen des Kontos, damit **Verbindung testen** die des Eingangs und das Eigentum an den Dokumenten prüfen kann |
 | [Eigentum je Benutzer](#eigentum-je-benutzer) | **Anzeigen** für Benutzer, **Anzeigen** auf den Dokumenten jedes Benutzers, und mit dem Eingang **Ändern** für Dokumente | findet den Eigentümer jedes Dokuments, spiegelt die Dokumente jedes Benutzers, und gibt dem Dokument eines Uploads den Benutzer von Paperless seines Benutzers |
@@ -235,7 +237,7 @@ Das API-Token wird im Anmeldedaten-Speicher von Nextcloud gespeichert und nie an
 2. Sie legt den Benutzer an, `nextcloud-sync`, wenn du keinen anderen Namen wählst, als keinen Superuser, mit genau diesen Berechtigungen und einem zufälligen Passwort aus 64 Zeichen, das niemand erfährt, fragt Paperless nach dem Token dieses Benutzers und speichert die Einstellungen des Formulars damit, wie **Speichern** ein eingegebenes Token speichert.
 3. Sie zeigt die Verbindungs-Checkliste des neuen Kontos. Was keine Berechtigung eines Kontos geben kann, den Zugriff auf die Dokumente anderer Eigentümer, liegt bei dir: Mach das Konto zu ihrem Eigentümer, wie unten beschrieben, oder gib ihm beim Eigentum je Benutzer **Anzeigen** auf den Dokumenten jedes Benutzers.
 
-Einen Benutzer dieses Namens, den es schon gibt, ändert die App nur, wenn du zustimmst: Die Seite fragt zuerst, und Aktualisieren gibt ihm genau diese Berechtigungen und ein neues zufälliges Passwort, während sein Token gleich bleibt. Einen Superuser übernimmt sie nie. Dein Token geht nur an die Paperless-Adresse des Formulars, für diese Anfragen: Die App speichert es nirgends, protokolliert es nirgends und schickt es nie an den Browser zurück, wie [das Sicherheitskonzept](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) erklärt.
+Einen Benutzer dieses Namens, den es schon gibt, ändert die App nur, wenn du zustimmst: Die Seite fragt zuerst, und Aktualisieren gibt ihm genau diese Berechtigungen und ein neues zufälliges Passwort und nimmt ihm *Admin*, während sein Token und die Berechtigungen seiner Gruppen gleich bleiben. Einen Superuser übernimmt sie nie. Dein Token geht nur an die Paperless-Adresse des Formulars, für diese Anfragen: Die App speichert es nirgends, protokolliert es nirgends und schickt es nie an den Browser zurück, wie [das Sicherheitskonzept](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) erklärt.
 
 Für eine Einrichtung per Skript tut `occ paperless_sync:create-account` dasselbe mit den gespeicherten Einstellungen und gibt die Checkliste aus. Es nimmt das Token des Superusers aus einer Datei, oder mit `--admin-token-file=-` von der Standardeingabe, nie als Argument, das die Liste der Prozesse zeigen würde:
 
@@ -252,13 +254,23 @@ PAPERLESS_URL='https://paperless.example.com'
 SUPERUSER_TOKEN='the API token of a superuser of Paperless'
 ACCOUNT='nextcloud-sync'
 PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-curl --fail-with-body --silent --show-error --output /dev/null \
-  --header "Authorization: Token ${SUPERUSER_TOKEN}" --header 'Content-Type: application/json' \
-  --data "{\"username\": \"${ACCOUNT}\", \"password\": \"${PASSWORD}\", \"is_superuser\": false, \"user_permissions\": [\"view_document\", \"add_document\", \"view_correspondent\", \"view_documenttype\", \"view_storagepath\", \"view_tag\", \"view_paperlesstask\", \"view_uisettings\"]}" \
-  "${PAPERLESS_URL}/api/users/"
-curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
-  --data "{\"username\": \"${ACCOUNT}\", \"password\": \"${PASSWORD}\"}" \
-  "${PAPERLESS_URL}/api/token/"
+# The token and the password go to curl in files of a private folder, never as arguments,
+# which the list of processes would show.
+SECRETS="$(mktemp -d)"
+printf 'Authorization: Token %s\n' "${SUPERUSER_TOKEN}" > "${SECRETS}/header"
+printf '{"username": "%s", "password": "%s", "is_superuser": false, "user_permissions": ["view_document", "add_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_tag", "view_paperlesstask", "view_uisettings"]}' \
+  "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/user.json"
+printf '{"username": "%s", "password": "%s"}' "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/login.json"
+if curl --fail-with-body --silent --show-error --output "${SECRETS}/answer" \
+  --header @"${SECRETS}/header" --header 'Content-Type: application/json' \
+  --data @"${SECRETS}/user.json" "${PAPERLESS_URL}/api/users/"; then
+  curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
+    --data @"${SECRETS}/login.json" "${PAPERLESS_URL}/api/token/"
+else
+  # Why Paperless refused the user, such as a username that it has already.
+  cat "${SECRETS}/answer" >&2
+fi
+rm -rf "${SECRETS}"
 ```
 
 <!-- account-snippet:end -->

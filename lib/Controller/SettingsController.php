@@ -299,7 +299,7 @@ final class SettingsController extends Controller {
 			$account = $this->accountSetup->setUp(PaperlessConnection::of($config, $superuserToken), $username, $permissions, $update);
 		} catch (PaperlessAccountExistsException $exception) {
 			return new JSONResponse([
-				'message' => $this->l10n->t('The user %1$s exists in Paperless already. Updating it gives it exactly these permissions: %2$s. It also gets a new random password, which nobody needs, because the app signs in with its token.', [$exception->username, implode(', ', $labels)]),
+				'message' => $this->l10n->t('The user %1$s exists in Paperless already. Updating it gives it exactly these permissions: %2$s. It also gets a new random password, which nobody needs, because the app signs in with its token. It is no Admin any more, and the permissions of its groups stay.', [$exception->username, implode(', ', $labels)]),
 				'exists' => true,
 			], Http::STATUS_CONFLICT);
 		} catch (InvalidArgumentException $exception) {

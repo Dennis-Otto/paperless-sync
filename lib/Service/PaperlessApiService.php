@@ -358,6 +358,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$answer = $this->change('PATCH', "/api/users/{$id}/", [
 			'password' => $password,
 			'is_active' => true,
+			// An account of the app is no staff, which reads the logs and the status of Paperless.
+			'is_staff' => false,
 			'user_permissions' => $permissions,
 		]);
 		self::requireUserManagement($answer['status']);

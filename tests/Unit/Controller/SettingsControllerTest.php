@@ -608,7 +608,7 @@ final class SettingsControllerTest extends TestCase {
 
 		self::assertSame(Http::STATUS_CONFLICT, $asked->getStatus());
 		self::assertSame([
-			'message' => 'Den Benutzer nextcloud-sync gibt es in Paperless schon. Aktualisieren gibt ihm genau diese Berechtigungen: ' . implode(', ', self::GERMAN_PERMISSIONS) . '. Außerdem bekommt er ein neues zufälliges Passwort, das niemand braucht, weil sich die App mit seinem Token anmeldet.',
+			'message' => 'Den Benutzer nextcloud-sync gibt es in Paperless schon. Aktualisieren gibt ihm genau diese Berechtigungen: ' . implode(', ', self::GERMAN_PERMISSIONS) . '. Außerdem bekommt er ein neues zufälliges Passwort, das niemand braucht, weil sich die App mit seinem Token anmeldet. Er ist dann kein Admin mehr, und die Berechtigungen seiner Gruppen bleiben.',
 			'exists' => true,
 		], $asked->getData());
 		self::assertNull($this->credential);

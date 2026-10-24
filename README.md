@@ -202,7 +202,9 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | Always | **View** for Documents, and access to every document to mirror, best as its owner, as below | lists and downloads the documents |
 | Archive export | **View** for Correspondents, Document Types, Storage Paths and Tags | builds the paths and skips the excluded tags |
 | Deleted folder | ownership of the documents, as below | sees them in the trash of Paperless right away |
-| Nextcloud inbox | **Add** for Documents, and **View** for Paperless Tasks | uploads the files of the inbox, and learns whether Paperless imported them |
+| [`{{ owner_username }}`](#path-template-variables) in the path template | **View** for Users | finds the user name of the owner of each document |
+| Custom fields in the path template, or [metadata next to the archive](#metadata-next-to-the-archive) | **View** for Custom Fields | reads the names and the choices of the custom fields |
+| Nextcloud inbox, or [*Send to Paperless*](#send-from-files), which is on for the administrators by default | **Add** for Documents, and **View** for Paperless Tasks | uploads the files, and learns whether Paperless imported them |
 | [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
 | [Per-user ownership](#per-user-ownership) | **View** for Users, **View** on the documents of every user, and with the inbox **Change** for Documents | finds the owner of each document, mirrors the documents of every user, and gives the document of an upload the user of Paperless of its user |
@@ -228,7 +230,7 @@ The API token is stored in Nextcloud's credentials manager and never returned to
 2. It creates the user, `nextcloud-sync` unless you choose another name, as no superuser, with exactly these permissions and a random password of 64 characters that nobody learns, asks Paperless for the token of that user, and saves the settings of the form with it, as **Save** saves a typed token.
 3. It shows the connection checklist of the new account. What no permission of an account can give, the access to the documents of other owners, is up to you: make the account their owner, as below, or with per-user ownership give it **View** on the documents of every user.
 
-A user of that name that exists already changes only when you agree: the page asks first, and an update gives it exactly these permissions and a new random password, while its token stays the same. A superuser is never taken over. Your token goes only to the Paperless URL of the form, for these requests: the app stores it nowhere, logs it nowhere and never sends it back to the browser, as [the security design](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) explains.
+A user of that name that exists already changes only when you agree: the page asks first, and an update gives it exactly these permissions and a new random password and takes away *Admin*, while its token and the permissions of its groups stay the same. A superuser is never taken over. Your token goes only to the Paperless URL of the form, for these requests: the app stores it nowhere, logs it nowhere and never sends it back to the browser, as [the security design](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) explains.
 
 For a scripted setup, `occ paperless_sync:create-account` does the same with the saved settings, and prints the checklist. It takes the token of the superuser from a file, or with `--admin-token-file=-` from standard input, never as an argument, which the list of processes would show:
 
@@ -245,13 +247,23 @@ PAPERLESS_URL='https://paperless.example.com'
 SUPERUSER_TOKEN='the API token of a superuser of Paperless'
 ACCOUNT='nextcloud-sync'
 PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-curl --fail-with-body --silent --show-error --output /dev/null \
-  --header "Authorization: Token ${SUPERUSER_TOKEN}" --header 'Content-Type: application/json' \
-  --data "{\"username\": \"${ACCOUNT}\", \"password\": \"${PASSWORD}\", \"is_superuser\": false, \"user_permissions\": [\"view_document\", \"add_document\", \"view_correspondent\", \"view_documenttype\", \"view_storagepath\", \"view_tag\", \"view_paperlesstask\", \"view_uisettings\"]}" \
-  "${PAPERLESS_URL}/api/users/"
-curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
-  --data "{\"username\": \"${ACCOUNT}\", \"password\": \"${PASSWORD}\"}" \
-  "${PAPERLESS_URL}/api/token/"
+# The token and the password go to curl in files of a private folder, never as arguments,
+# which the list of processes would show.
+SECRETS="$(mktemp -d)"
+printf 'Authorization: Token %s\n' "${SUPERUSER_TOKEN}" > "${SECRETS}/header"
+printf '{"username": "%s", "password": "%s", "is_superuser": false, "user_permissions": ["view_document", "add_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_tag", "view_paperlesstask", "view_uisettings"]}' \
+  "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/user.json"
+printf '{"username": "%s", "password": "%s"}' "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/login.json"
+if curl --fail-with-body --silent --show-error --output "${SECRETS}/answer" \
+  --header @"${SECRETS}/header" --header 'Content-Type: application/json' \
+  --data @"${SECRETS}/user.json" "${PAPERLESS_URL}/api/users/"; then
+  curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
+    --data @"${SECRETS}/login.json" "${PAPERLESS_URL}/api/token/"
+else
+  # Why Paperless refused the user, such as a username that it has already.
+  cat "${SECRETS}/answer" >&2
+fi
+rm -rf "${SECRETS}"
 ```
 
 <!-- account-snippet:end -->

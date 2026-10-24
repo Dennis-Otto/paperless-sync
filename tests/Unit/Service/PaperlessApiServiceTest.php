@@ -963,7 +963,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
-	/** An update gives the user exactly the permissions and a new password, and makes it active. */
+	/** An update gives the user exactly the permissions and a new password, makes it active, and takes Admin away. */
 	public function testUpdatesAUser(): void {
 		$this->responses[] = [200, ['id' => 7, 'username' => 'nextcloud-sync', 'password' => '**********']];
 
@@ -971,7 +971,7 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		$request = $this->requests[0];
 		self::assertSame(['PATCH', self::URL . '/api/users/7/'], [$request['method'], $request['url']]);
-		self::assertSame(['password' => 'random-password', 'is_active' => true, 'user_permissions' => ['view_document']], $request['options']['json']);
+		self::assertSame(['password' => 'random-password', 'is_active' => true, 'is_staff' => false, 'user_permissions' => ['view_document']], $request['options']['json']);
 	}
 
 	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> the answer, the failure and its message */
