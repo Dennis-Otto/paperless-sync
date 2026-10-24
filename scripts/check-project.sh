@@ -9,7 +9,8 @@
 # pull requests, the explanations of its checks for the PR coach, the check of its
 # package, the JavaScript of the settings and the translations, which have no build
 # step, the thumbnails of the screenshots of the App Store, the language of the pictures
-# of the documentation, and that the German twins of the documentation, README.de.md and
+# of the documentation, their frozen story and the report of their visual check, and that
+# the German twins of the documentation, README.de.md and
 # docs/*.de.md, follow their English pages; the versions check covers README.de.md and
 # docs/index.de.md as well.
 set -euo pipefail
@@ -79,6 +80,14 @@ for path in tests/e2e/contract.py tests/e2e/run-contract.sh tests/e2e/compose.pa
   tests/fixtures/paperless-ngx-3/documents.json; do
   expect skip "$path"
 done
+# The scripts of the pictures alone are the visual check's (visual.yml), whose story shares
+# the mock and the helpers of the browser with the tests.
+for path in tests/e2e/screenshots.sh tests/e2e/screenshots.mjs tests/e2e/frozen.mjs   tests/e2e/frozen.test.mjs tests/e2e/compare.mjs tests/e2e/compare.test.mjs; do
+  expect skip "$path"
+done
+for path in tests/e2e/files-address.mjs tests/e2e/showcase.py tests/e2e/compose.yaml; do
+  expect run "$path"
+done
 
 # Of those, a change that can behave differently on another database or storage runs
 # PostgreSQL, MariaDB and the object store as well.
@@ -100,7 +109,7 @@ for path in lib/Migration/Version000110Date20261008000000.php lib/Service/SyncSt
 done
 for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
   lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
-  tests/e2e/README.md README.md; do
+  tests/e2e/README.md README.md tests/e2e/screenshots.mjs tests/e2e/frozen.mjs tests/e2e/compare.mjs; do
   expect_variants skip "$path"
 done
 
@@ -718,6 +727,13 @@ echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the 
 # Nextcloud links it.
 node --test --test-reporter=dot tests/e2e/files-address.test.mjs
 echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud links, and no browser test opens it at an address of its own."
+# The frozen story of the pictures, so that two runs of tests/e2e/screenshots.sh draw the
+# same pixels, and the report of the visual check, which renders on the paths of the
+# screenshot bot.
+node --test --test-reporter=dot tests/e2e/frozen.test.mjs
+echo "tests/e2e/frozen.mjs shows the moments of the story, an example secret and files that changed a few seconds ago in every picture."
+node --test --test-reporter=dot tests/e2e/compare.test.mjs
+echo "tests/e2e/compare.mjs draws the changed pixels in red, and the visual check renders on the paths of .github/screenshots-paths.txt."
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of the catalog: a text that the code

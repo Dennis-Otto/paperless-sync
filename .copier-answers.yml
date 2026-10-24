@@ -27,6 +27,6 @@ renovate_runner: hub
 sample_code: false
 sponsor: Dennis-Otto
 successor: true
-test_workflows: ''
+test_workflows: Visual check
 topics: dms, document-archive, document-management, homelab, nextcloud, nextcloud-app,
     paperless, paperless-ngx, php, self-hosted, selfhosted, synchronization
