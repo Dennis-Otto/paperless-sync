@@ -1,0 +1,14 @@
+{
+  "body": {
+    "username": [
+      "A user with that username already exists."
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "POST /api/users/",
+  "status": 400
+}

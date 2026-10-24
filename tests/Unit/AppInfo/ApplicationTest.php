@@ -9,6 +9,7 @@ use OCA\PaperlessSync\Activity\Filter;
 use OCA\PaperlessSync\Activity\Provider;
 use OCA\PaperlessSync\Activity\Setting;
 use OCA\PaperlessSync\AppInfo\Application;
+use OCA\PaperlessSync\Command\CreateAccount;
 use OCA\PaperlessSync\Command\Forget;
 use OCA\PaperlessSync\Command\Run;
 use OCA\PaperlessSync\Command\Status;
@@ -74,7 +75,7 @@ final class ApplicationTest extends TestCase {
 		$commands = array_map('strval', iterator_to_array($info->commands->command, false));
 		$jobs = array_map('strval', iterator_to_array($info->{'background-jobs'}->job, false));
 
-		self::assertSame([Run::class, Status::class, Forget::class], $commands);
+		self::assertSame([Run::class, Status::class, Forget::class, CreateAccount::class], $commands);
 		foreach ($commands as $command) {
 			self::assertTrue(is_subclass_of($command, Command::class), $command);
 		}

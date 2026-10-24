@@ -14,6 +14,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessConnection;
+use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
@@ -828,6 +829,202 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->expectExceptionMessage($message);
 
 		$this->service->setOwner(77, 5);
+	}
+
+	/**
+	 * The setup of the account finds its user by the filter of the username, and compares the
+	 * username itself, as Django does, case and all: a Paperless that ignores the filter lists
+	 * every user.
+	 */
+	public function testFindsAUserByItsUsername(): void {
+		$this->responses[] = [200, ['count' => 3, 'next' => null, 'previous' => null, 'results' => [
+			['id' => 3, 'username' => 'Nextcloud-Sync', 'is_superuser' => false],
+			['id' => 'x', 'username' => 'nextcloud-sync'],
+			['id' => 4, 'username' => 'nextcloud-sync', 'is_superuser' => false],
+		]]];
+		$this->responses[] = [200, self::page(0)];
+
+		self::assertSame(['id' => 4, 'superuser' => false], $this->service->user('nextcloud-sync'));
+		self::assertNull($this->service->user('nobody'));
+		self::assertSame(['GET', self::URL . '/api/users/'], [$this->requests[0]['method'], $this->requests[0]['url']]);
+		self::assertSame(['page' => 1, 'page_size' => 1000, 'username__iexact' => 'nextcloud-sync'], $this->requests[0]['options']['query']);
+		self::assertFalse($this->requests[0]['options']['http_errors']);
+	}
+
+	/**
+	 * The setup of the account against the answers of Paperless-ngx 2.x and 3.x that the contract
+	 * tests recorded: no user of the name, the user that it created, which the filter finds, a
+	 * second user of the same name, which Paperless refuses, and the update.
+	 */
+	#[DataProvider('paperlessLines')]
+	public function testTheSetupOfTheAccountReadsTheAnswersOfPaperless(string $line): void {
+		$created = self::recording($line, 'user-created')['body'];
+		self::assertIsArray($created);
+		self::assertIsInt($created['id']);
+		$this->responses[] = self::recorded($line, 'user-missing');
+		$this->responses[] = self::recorded($line, 'user-created');
+		$this->responses[] = self::recorded($line, 'user-found');
+		$this->responses[] = self::recorded($line, 'user-exists');
+		$this->responses[] = self::recorded($line, 'user-updated');
+
+		self::assertNull($this->service->user('contract-setup'));
+		$this->service->createUser('contract-setup', 'random-password', ['view_document', 'view_uisettings']);
+		self::assertSame(['id' => $created['id'], 'superuser' => false], $this->service->user('contract-setup'));
+		try {
+			$this->service->createUser('contract-setup', 'random-password', ['view_document']);
+			self::fail('Paperless refused a second user of the same name, but the client says it created one.');
+		} catch (InvalidSettingException $exception) {
+			self::assertSame('Paperless did not create the user contract-setup: username: A user with that username already exists.', $exception->getMessage());
+		}
+		$this->service->updateUser($created['id'], 'random-password', ['view_document', 'add_document']);
+		self::assertSame(self::recordedQuery($line, 'user-missing'), self::sentQuery($this->requests[0]));
+	}
+
+	/** A superuser, as Paperless-ngx 2.x and 3.x list it, which the setup never takes over. */
+	#[DataProvider('paperlessLines')]
+	public function testNamesASuperuserAsPaperlessListsIt(string $line): void {
+		$this->responses[] = self::recorded($line, 'users');
+
+		$user = $this->service->user('contract-admin');
+
+		self::assertNotNull($user);
+		self::assertTrue($user['superuser']);
+	}
+
+	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> the answer, the failure and its message */
+	public static function refusedUserLists(): array {
+		return [
+			'a token that Paperless doesn\'t know' => [401, ['detail' => 'Invalid token.'], InvalidSettingException::class, 'Paperless refused this token (HTTP 401). Copy the token of a superuser of Paperless, under My Profile in the menu of its account.'],
+			'a token of no superuser' => [403, ['detail' => 'You do not have permission to perform this action.'], InvalidSettingException::class, 'Paperless does not let the account of this token manage users (HTTP 403). Use the token of a superuser of Paperless.'],
+			'an error of Paperless' => [500, '<h1>Server Error (500)</h1>', RuntimeException::class, 'Paperless did not list its users: HTTP 500.'],
+			'no list' => [200, ['detail' => 'Not a list.'], RuntimeException::class, 'Paperless did not list its users: HTTP 200.'],
+		];
+	}
+
+	/** @param class-string<\Throwable> $failure */
+	#[DataProvider('refusedUserLists')]
+	public function testAUserListThatPaperlessRefusesSaysWhy(int $status, mixed $body, string $failure, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		try {
+			$this->service->user('nextcloud-sync');
+			self::fail('Paperless answered no list of users, but the client found one.');
+		} catch (\Throwable $exception) {
+			self::assertInstanceOf($failure, $exception);
+			self::assertSame($message, $exception->getMessage());
+			if ($exception instanceof InvalidSettingException) {
+				self::assertSame('account_token', $exception->setting, 'The page moves the focus to the token of the superuser.');
+			}
+		}
+	}
+
+	/** A new user that is no superuser, with exactly the permissions of the app, by their codenames. */
+	public function testCreatesAUser(): void {
+		$this->responses[] = [201, ['id' => 12, 'username' => 'nextcloud-sync', 'password' => '**********', 'is_superuser' => false]];
+
+		$this->service->createUser('nextcloud-sync', 'random-password', ['view_document', 'view_uisettings']);
+
+		$request = $this->requests[0];
+		self::assertSame(['POST', self::URL . '/api/users/'], [$request['method'], $request['url']]);
+		self::assertSame([
+			'username' => 'nextcloud-sync',
+			'password' => 'random-password',
+			'is_active' => true,
+			'is_staff' => false,
+			'is_superuser' => false,
+			'user_permissions' => ['view_document', 'view_uisettings'],
+		], $request['options']['json']);
+		self::assertSame('Token secret-token', $request['options']['headers']['Authorization']);
+		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
+	}
+
+	/** @return array<string, array{int, mixed, class-string<\Throwable>, string, string}> the answer, the failure, its message and its setting */
+	public static function refusedUsers(): array {
+		return [
+			'a username that exists' => [400, ['username' => ['A user with that username already exists.']], InvalidSettingException::class, 'Paperless did not create the user nextcloud-sync: username: A user with that username already exists.', 'account_username'],
+			'a token of no superuser' => [403, ['detail' => 'You do not have permission to perform this action.'], InvalidSettingException::class, 'Paperless does not let the account of this token manage users (HTTP 403). Use the token of a superuser of Paperless.', 'account_token'],
+			'an error of Paperless' => [500, ['detail' => 'Database is locked.'], RuntimeException::class, 'Paperless did not create the user nextcloud-sync: HTTP 500: Database is locked.', ''],
+		];
+	}
+
+	/** @param class-string<\Throwable> $failure */
+	#[DataProvider('refusedUsers')]
+	public function testAUserThatPaperlessDoesntCreateIsReportedWithItsReason(int $status, mixed $body, string $failure, string $message, string $setting): void {
+		$this->responses[] = [$status, $body];
+
+		try {
+			$this->service->createUser('nextcloud-sync', 'random-password', ['view_document']);
+			self::fail('Paperless created no user, but the client says it did.');
+		} catch (\Throwable $exception) {
+			self::assertInstanceOf($failure, $exception);
+			self::assertSame($message, $exception->getMessage());
+			self::assertSame($setting, $exception instanceof InvalidSettingException ? $exception->setting : '');
+			self::assertStringNotContainsString('random-password', $exception->getMessage());
+		}
+	}
+
+	/** An update gives the user exactly the permissions and a new password, and makes it active. */
+	public function testUpdatesAUser(): void {
+		$this->responses[] = [200, ['id' => 7, 'username' => 'nextcloud-sync', 'password' => '**********']];
+
+		$this->service->updateUser(7, 'random-password', ['view_document']);
+
+		$request = $this->requests[0];
+		self::assertSame(['PATCH', self::URL . '/api/users/7/'], [$request['method'], $request['url']]);
+		self::assertSame(['password' => 'random-password', 'is_active' => true, 'user_permissions' => ['view_document']], $request['options']['json']);
+	}
+
+	/** @return array<string, array{int, mixed, class-string<\Throwable>, string}> the answer, the failure and its message */
+	public static function refusedUpdates(): array {
+		return [
+			'a token that Paperless doesn\'t know' => [401, ['detail' => 'Invalid token.'], InvalidSettingException::class, 'Paperless refused this token (HTTP 401). Copy the token of a superuser of Paperless, under My Profile in the menu of its account.'],
+			'a user that is gone' => [404, ['detail' => 'No User matches the given query.'], RuntimeException::class, 'Paperless did not change the user 7: HTTP 404: No User matches the given query.'],
+			'an answer without a reason' => [502, '', RuntimeException::class, 'Paperless did not change the user 7: HTTP 502.'],
+		];
+	}
+
+	/** @param class-string<\Throwable> $failure */
+	#[DataProvider('refusedUpdates')]
+	public function testAnUpdateThatPaperlessRefusesIsReportedWithItsReason(int $status, mixed $body, string $failure, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		$this->expectException($failure);
+		$this->expectExceptionMessage($message);
+
+		$this->service->updateUser(7, 'random-password', ['view_document']);
+	}
+
+	/** Paperless gives the token of a user for its username and password, as a stream too. */
+	public function testGetsTheTokenOfAUser(): void {
+		$body = fopen('php://memory', 'r+');
+		self::assertIsResource($body);
+		fwrite($body, '{"token": " token-of-the-app "}');
+		rewind($body);
+		$this->responses[] = [200, $body];
+
+		self::assertSame('token-of-the-app', $this->service->userToken('nextcloud-sync', 'random-password'));
+
+		$request = $this->requests[0];
+		self::assertSame(['POST', self::URL . '/api/token/'], [$request['method'], $request['url']]);
+		self::assertSame(['username' => 'nextcloud-sync', 'password' => 'random-password'], $request['options']['json']);
+	}
+
+	/** @return array<string, array{int, mixed, string}> the answer and the message of the failure */
+	public static function refusedTokens(): array {
+		return [
+			'a wrong password' => [400, ['non_field_errors' => ['Unable to log in with provided credentials.']], 'Paperless did not give the token of the user nextcloud-sync: HTTP 400: Unable to log in with provided credentials.'],
+			'an answer without a token' => [200, ['token' => ' '], 'Paperless did not give the token of the user nextcloud-sync: HTTP 200.'],
+		];
+	}
+
+	#[DataProvider('refusedTokens')]
+	public function testATokenThatPaperlessDoesntGiveIsReportedWithItsReason(int $status, mixed $body, string $message): void {
+		$this->responses[] = [$status, $body];
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage($message);
+
+		$this->service->userToken('nextcloud-sync', 'random-password');
 	}
 
 	/** The connection checklist counts the documents of each user of Paperless, and those without an owner. */

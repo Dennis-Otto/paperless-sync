@@ -236,6 +236,45 @@ if ! dav_get "${PATHS[1]}.error.txt" | grep --fixed-strings 'broken.pdf: Error o
 fi
 echo "The inbox passes after ${SECONDS} s."
 
+# The setup of the account of the app, with the token of the superuser of the contract:
+# the app creates the account with the permissions of the settings above, saves them with
+# its token, and the checklist of that token fails nowhere. The token of the superuser is
+# in no answer, not in the configuration of the app, and, as contract.py log checks below,
+# in no line of the log.
+SUPERUSER_TOKEN="$(contract token)"
+nextcloud_request --request POST \
+	--data-urlencode "superuserToken=${SUPERUSER_TOKEN}" \
+	--data-urlencode 'username=contract-nextcloud' \
+	--output "${TMP_DIR}/account.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/account"
+contract account contract-nextcloud < "${TMP_DIR}/account.json"
+if occ config:list paperless_sync --private | grep --fixed-strings "${SUPERUSER_TOKEN}" >/dev/null; then
+	echo "The configuration of the app holds the token of the superuser of Paperless." >&2
+	exit 1
+fi
+
+# The commands of the README that create the account without the settings page, as an
+# administrator runs them, with the first three lines as their environment: curl in the
+# container of Nextcloud, which reaches Paperless. The token that they print passes the
+# checklist with the modules that they grant, the archive and the inbox without its tags.
+sed -n '/<!-- account-snippet:start -->/,/<!-- account-snippet:end -->/p' README.md \
+	| sed -e '/^```/d' -e '/^<!--/d' -e '/^PAPERLESS_URL=/d' -e '/^SUPERUSER_TOKEN=/d' -e '/^ACCOUNT=/d' \
+	> "${TMP_DIR}/account-snippet.sh"
+if ! grep --fixed-strings '/api/token/' "${TMP_DIR}/account-snippet.sh" >/dev/null; then
+	echo "README.md has no commands for the account between its account-snippet markers." >&2
+	exit 1
+fi
+"${COMPOSE[@]}" exec -T --env "PAPERLESS_URL=${PAPERLESS_URL}" --env "SUPERUSER_TOKEN=${SUPERUSER_TOKEN}" \
+	--env ACCOUNT=contract-snippet nextcloud sh -eu < "${TMP_DIR}/account-snippet.sh" > "${TMP_DIR}/account-snippet.out"
+nextcloud_request --request POST \
+	--data-urlencode 'settings[inbox_tags]=' \
+	--data-urlencode 'settings[inbox_create_tags]=0' \
+	--data-urlencode "token=$(contract snippet-token < "${TMP_DIR}/account-snippet.out")" \
+	--output "${TMP_DIR}/account-snippet.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/test"
+contract checklist < "${TMP_DIR}/account-snippet.json"
+echo "The setup of the account and the commands of the README pass after ${SECONDS} s."
+
 nextcloud_request --output "${TMP_DIR}/status.json" "${BASE_URL}/apps/paperless_sync/sync/status"
 contract status < "${TMP_DIR}/status.json"
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \

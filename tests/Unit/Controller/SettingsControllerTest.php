@@ -14,7 +14,10 @@ use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Service\AccountPermissions;
+use OCA\PaperlessSync\Service\AccountSetup;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\ConnectionChecklist;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
@@ -42,6 +45,7 @@ use OCP\Config\IUserConfig;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
+use OCP\Security\ISecureRandom;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -61,6 +65,15 @@ final class SettingsControllerTest extends TestCase {
 	private const TOKEN_REFUSED = 'Paperless hat das API-Token abgelehnt (HTTP 401). Kopiere das Token noch einmal aus Paperless, unter „Mein Profil“ im Menü seines Kontos, und prüfe, ob das Konto aktiv ist.';
 	/** How to save the settings of a schedule that fails, in German. */
 	private const TURN_OFF_THE_SCHEDULE = 'Um die Einstellungen ohne den Test zu speichern, schalte die geplante Synchronisation aus.';
+	/** The random password of every account that the setup creates or updates. */
+	private const PASSWORD = 'random-password-of-the-setup';
+	/** The permissions of the export and the inbox of self::validSettings(), with "Send to Paperless" of its default group. */
+	private const PERMISSIONS = ['view_document', 'add_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_paperlesstask', 'view_uisettings'];
+	/** The same, as the settings of Paperless show them, in German. */
+	private const GERMAN_PERMISSIONS = [
+		'„Anzeigen“ für Dokumente', '„Hinzufügen“ für Dokumente', '„Anzeigen“ für Korrespondenten', '„Anzeigen“ für Dokumenttypen',
+		'„Anzeigen“ für Speicherpfade', '„Anzeigen“ für Tags', '„Anzeigen“ für Paperless-Aufgaben', '„Anzeigen“ für UI-Einstellungen',
+	];
 
 	/** @var PaperlessClientInterface&MockObject */
 	private PaperlessClientInterface $paperless;
@@ -542,6 +555,7 @@ final class SettingsControllerTest extends TestCase {
 			'save' => ['save'],
 			'test' => ['test'],
 			'disconnect' => ['reset'],
+			'the setup of the account' => ['account'],
 		];
 	}
 
@@ -554,6 +568,151 @@ final class SettingsControllerTest extends TestCase {
 	#[DataProvider('changesOfTheConnection')]
 	public function testChangesOfTheConnectionNeedThePassword(string $method): void {
 		self::assertCount(1, (new ReflectionMethod(SettingsController::class, $method))->getAttributes(PasswordConfirmationRequired::class));
+	}
+
+	/**
+	 * The setup of the account: the token of the superuser creates a user with the permissions of
+	 * the modules of the form, the settings are saved with the token of that user, and the
+	 * checklist runs with it. The token of the superuser is neither stored nor answered.
+	 */
+	public function testCreatesTheAccountOfTheAppAndSavesTheSettingsWithItsToken(): void {
+		$this->paperless->method('user')->with('nextcloud-sync')->willReturn(null);
+		$this->paperless->expects(self::once())->method('createUser')->with('nextcloud-sync', self::PASSWORD, self::PERMISSIONS);
+		$this->paperless->expects(self::never())->method('updateUser');
+		$this->paperless->method('userToken')->with('nextcloud-sync', self::PASSWORD)->willReturn('token-of-the-app');
+		$this->storage->expects(self::exactly(2))->method('test')->with('paperless', 'Documents/Paperless');
+
+		$response = $this->controller->account(self::validSettings() + ['batch_size' => 20], ' superuser-token ', '');
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(['superuser-token', 'token-of-the-app'], array_map(static fn (PaperlessConnection $connection): string => $connection->token(), $this->connects));
+		self::assertSame([['https://paperless.example.test', 'token-of-the-app', false]], $this->preflights, 'The checklist checks the new account.');
+		$answer = self::answer($response);
+		self::assertSame(['username' => 'nextcloud-sync', 'created' => true, 'permissions' => self::GERMAN_PERMISSIONS], $answer['account']);
+		self::assertTrue($answer['connectionTested']);
+		self::assertSame(['paperless', 'documents', 'folder'], array_column($answer['checks'], 'id'));
+		self::assertSame(20, $answer['batchSize']);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'token-of-the-app'], $this->credential);
+		self::assertStringNotContainsString('superuser-token', $response->render());
+		self::assertStringNotContainsString('superuser-token', json_encode($this->settings, JSON_THROW_ON_ERROR));
+	}
+
+	/** A user that exists already changes only when the administrator agrees, after the page asked. */
+	public function testAnExistingUserChangesOnlyWithAnUpdate(): void {
+		$this->paperless->method('user')->willReturn(['id' => 7, 'superuser' => false]);
+		$this->paperless->expects(self::never())->method('createUser');
+		$this->paperless->expects(self::once())->method('updateUser')->with(7, self::PASSWORD, self::PERMISSIONS);
+		$this->paperless->expects(self::once())->method('userToken')->willReturn('token-of-the-app');
+
+		$asked = $this->controller->account(self::validSettings(), 'superuser-token', 'nextcloud-sync');
+
+		self::assertSame(Http::STATUS_CONFLICT, $asked->getStatus());
+		self::assertSame([
+			'message' => 'Den Benutzer nextcloud-sync gibt es in Paperless schon. Aktualisieren gibt ihm genau diese Berechtigungen: ' . implode(', ', self::GERMAN_PERMISSIONS) . '. Außerdem bekommt er ein neues zufälliges Passwort, das niemand braucht, weil sich die App mit seinem Token anmeldet.',
+			'exists' => true,
+		], $asked->getData());
+		self::assertNull($this->credential);
+
+		$updated = self::answer($this->controller->account(self::validSettings(), 'superuser-token', 'nextcloud-sync', true));
+
+		self::assertSame(['username' => 'nextcloud-sync', 'created' => false, 'permissions' => self::GERMAN_PERMISSIONS], $updated['account']);
+		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'token-of-the-app'], $this->credential);
+	}
+
+	/** @return array<string, array{array<string, mixed>, string, string, string}> the settings, the token, the message and the setting that it names */
+	public static function refusedSetups(): array {
+		return [
+			'without the token of a superuser' => [[], ' ', 'Gib das API-Token eines Superusers von Paperless ein.', 'account_token'],
+			'with an invalid URL' => [['paperless_url' => 'ftp://paperless.example.test'], 'superuser-token', 'Die Paperless-Adresse muss HTTP oder HTTPS verwenden.', 'paperless_url'],
+		];
+	}
+
+	/** Settings that can't be saved reach no Paperless, and change nothing. */
+	#[DataProvider('refusedSetups')]
+	public function testSettingsThatCantBeSavedReachNoPaperless(array $settings, string $token, string $message, string $setting): void {
+		$response = $this->controller->account($settings + self::validSettings(), $token);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => $message, 'setting' => $setting], $response->getData());
+		self::assertSame([], $this->connects);
+		self::assertSame([], $this->settings);
+	}
+
+	/** Paperless gets no account for a folder in which the target user can't create files. */
+	public function testAFolderThatCannotTakeFilesCreatesNoAccount(): void {
+		$this->storage->method('test')->willThrowException(new InvalidSettingException('Nextcloud user %s does not exist.', ['ghost'], 'target_user'));
+
+		$response = $this->controller->account(self::validSettings(), 'superuser-token');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['folder'], array_column(self::answer($response)['checks'], 'id'));
+		self::assertSame([], $this->connects);
+	}
+
+	/** @return array<string, array{\Throwable, int, array<string, string>}> the failure of Paperless and the answer */
+	public static function failedSetups(): array {
+		return [
+			'a token of no superuser' => [
+				new InvalidSettingException('Paperless does not let the account of this token manage users (HTTP 403). Use the token of a superuser of Paperless.', [], 'account_token'),
+				Http::STATUS_BAD_REQUEST,
+				['message' => 'Paperless lässt das Konto dieses Tokens keine Benutzer verwalten (HTTP 403). Verwende das Token eines Superusers von Paperless.', 'setting' => 'account_token'],
+			],
+			'an address of the local network' => [
+				new PaperlessLocalNetworkException('paperless'),
+				Http::STATUS_BAD_GATEWAY,
+				['message' => (new PaperlessLocalNetworkException('paperless'))->getMessage(), 'setting' => 'paperless_local_network'],
+			],
+			'a Paperless that fails' => [
+				new RuntimeException('Paperless did not list its users: HTTP 500.'),
+				Http::STATUS_BAD_GATEWAY,
+				['message' => 'Paperless hat das Konto nicht eingerichtet: Paperless did not list its users: HTTP 500.'],
+			],
+		];
+	}
+
+	/** What Paperless refused reaches the page, with the field that fixes it, and nothing is saved. */
+	#[DataProvider('failedSetups')]
+	public function testAFailedSetupSaysWhatToDo(\Throwable $failure, int $status, array $answer): void {
+		$this->paperless->method('user')->willThrowException($failure);
+		if ($failure instanceof PaperlessLocalNetworkException) {
+			$answer['message'] = $failure->translated($this->germanL10n());
+		}
+
+		$response = $this->controller->account(self::validSettings(), 'superuser-token');
+
+		self::assertSame($status, $response->getStatus());
+		self::assertSame($answer, $response->getData());
+		self::assertSame([], $this->settings);
+		self::assertNull($this->credential);
+	}
+
+	/**
+	 * A blocking failure of the checklist after the setup refuses the settings, as on save, and
+	 * says that the account is ready, so that a second setup updates it.
+	 */
+	public function testABlockingCheckAfterTheSetupKeepsTheSettingsUnsaved(): void {
+		$this->paperless->method('user')->willReturn(null);
+		$this->paperless->method('userToken')->willReturn('token-of-the-app');
+		$this->checks = [self::tokenRefused()];
+
+		$response = $this->controller->account(self::validSettings(), 'superuser-token');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(self::TOKEN_REFUSED . ' Das Konto nextcloud-sync ist in Paperless bereit: Sobald das behoben ist, richte es noch einmal ein, was es aktualisiert.', self::answer($response)['message']);
+		self::assertNull($this->credential);
+	}
+
+	/** A checklist that fails on its own is reported as on save, and nothing is saved. */
+	public function testAChecklistThatFailsAfterTheSetupIsReported(): void {
+		$this->paperless->method('user')->willReturn(null);
+		$this->paperless->method('userToken')->willReturn('token-of-the-app');
+		$this->preflightFailure = new RuntimeException('Broken.');
+
+		$response = $this->controller->account(self::validSettings(), 'superuser-token');
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Die Konfiguration von Paperless und Nextcloud konnte nicht geprüft werden: Broken.'], $response->getData());
+		self::assertNull($this->credential);
 	}
 
 	/**
@@ -818,16 +977,20 @@ final class SettingsControllerTest extends TestCase {
 			$this->ownerMapping(),
 		);
 
+		$random = $this->createStub(ISecureRandom::class);
+		$random->method('generate')->willReturn(self::PASSWORD);
+
 		return new SettingsController(
 			AppConstants::APP_ID,
 			$this->createStub(IRequest::class),
 			$configService,
 			$this->clients,
-			$this->storage,
+			new ConnectionChecklist($this->clients, $this->storage, $this->ownerMapping(), $this->germanL10n()),
 			$this->germanL10n(),
 			$sync,
 			$paths,
-			$this->ownerMapping(),
+			new AccountPermissions($paths),
+			new AccountSetup($this->clients, $random),
 		);
 	}
 

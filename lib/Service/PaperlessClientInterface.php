@@ -112,6 +112,48 @@ interface PaperlessClientInterface {
 	public function setOwner(int $documentId, int $owner): void;
 
 	/**
+	 * The user of Paperless with this username, as an account that may manage users, such as a
+	 * superuser, sees it: its ID and whether it is a superuser; null when Paperless has none.
+	 *
+	 * @return array{id: int, superuser: bool}|null
+	 * @throws InvalidSettingException when Paperless refuses the token, or doesn't let its account manage users
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless doesn't list its users
+	 */
+	public function user(string $username): ?array;
+
+	/**
+	 * Creates an active user of Paperless that is no superuser, with exactly these permissions,
+	 * such as view_document, and this password.
+	 *
+	 * @param list<string> $permissions
+	 * @throws InvalidSettingException when Paperless refuses the token, the account of the token or the user
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless doesn't create the user
+	 */
+	public function createUser(string $username, #[\SensitiveParameter] string $password, array $permissions): void;
+
+	/**
+	 * Makes the user of Paperless with this ID active, with exactly these permissions and this
+	 * password. The permissions of its groups stay as they are.
+	 *
+	 * @param list<string> $permissions
+	 * @throws InvalidSettingException when Paperless refuses the token, or doesn't let its account manage users
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless doesn't change the user
+	 */
+	public function updateUser(int $id, #[\SensitiveParameter] string $password, array $permissions): void;
+
+	/**
+	 * The API token of a user of Paperless, which Paperless gives for its username and password:
+	 * the one that the user has already, or a new one.
+	 *
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless gives no token
+	 */
+	public function userToken(string $username, #[\SensitiveParameter] string $password): string;
+
+	/**
 	 * The custom fields of Paperless by their IDs, for {{ custom_fields.<name> }}: the name, the
 	 * data type, and the labels of the choices of a select field by their IDs.
 	 *

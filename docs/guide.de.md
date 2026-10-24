@@ -43,6 +43,14 @@ Die Einstellungen stehen unter **Administrationseinstellungen → Paperless Sync
   <img alt="Der Abschnitt Verbindung und Eigentümer: Paperless-Adresse, Paperless-API-Token, Nextcloud-Zielbenutzer-ID und Basisordner" src="images/de/settings-connection-light.png">
 </picture>
 
+**Ein Konto für die App in Paperless anlegen**, darunter zugeklappt, legt das Konto der App mit dem API-Token eines Paperless-Superusers an, das du einmal eingibst: einen Benutzer, der kein Superuser ist, `nextcloud-sync`, wenn du keinen anderen Namen wählst, mit den Berechtigungen, die die Module des Formulars brauchen. **Konto anlegen und speichern** speichert die Einstellungen mit dem Token dieses Kontos und zeigt seine Verbindungs-Checkliste, wie *Das Konto der App* oben beschreibt.
+
+<!-- Das Bild kommt aus tests/e2e/screenshots.mjs, mit einem synthetischen Token. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/settings-account-dark.png">
+  <img alt="Ein Konto für die App in Paperless anlegen, aufgeklappt: was die Einrichtung tut, das API-Token eines Paperless-Superusers, eingegeben und verborgen, der Benutzername des Kontos, nextcloud-sync, und die Schaltfläche Konto anlegen und speichern" src="images/de/settings-account-light.png">
+</picture>
+
 **2 · Zeitplan und Module:** die geplante Synchronisation, der Export nach Nextcloud und der Import aus dem Eingang, jedes für sich, das [Intervall](guide.de.md#hintergrundjobs), von 5 Minuten bis zu einem Tag, und die meisten Änderungen eines Laufs.
 
 <picture>

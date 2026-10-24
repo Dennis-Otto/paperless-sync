@@ -1,0 +1,28 @@
+{
+  "body": {
+    "date_joined": "2026-10-24T22:19:46.643581Z",
+    "email": "",
+    "first_name": "",
+    "groups": [],
+    "id": 5,
+    "inherited_permissions": [],
+    "is_active": true,
+    "is_mfa_enabled": false,
+    "is_staff": false,
+    "is_superuser": false,
+    "last_name": "",
+    "password": "*****************************************************************************************",
+    "user_permissions": [
+      "view_document",
+      "view_uisettings"
+    ],
+    "username": "contract-setup"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "POST /api/users/",
+  "status": 201
+}
