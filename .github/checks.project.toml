@@ -95,12 +95,17 @@ coming Nextcloud breaks the app*, or added this run to it."""
 why = """Nextcloud hasn't released that version yet, so this is no required check and
 blocks nothing; it gives notice while there is time to adapt the app before its users
 update their servers."""
-fix = """Run the canary on your machine with Docker and adapt the app to what the coming
-Nextcloud changed, without breaking the versions that `appinfo/info.xml` supports. Leave
+fix = """Run the canary on your machine with Docker, with `KEEP_E2E=1` to look at the
+coming Nextcloud after the failure, and find out whether its change breaks the app or only
+a test, such as an address or a line of the log that the test expects. Adapt the app or the
+test to it, without breaking the versions that `appinfo/info.xml` supports. Leave
 `max-version` as it is: the upstream bot raises it once Nextcloud releases the version.
 When the coming Nextcloud itself is broken, wait for its next build; the canary closes the
 issue once the tests pass again."""
-commands = ["bash tests/e2e/canary.sh"]
+commands = [
+  "bash tests/e2e/canary.sh",
+  "KEEP_E2E=1 bash tests/e2e/canary.sh  # keeps the coming Nextcloud running after a failure",
+]
 docs = "tests/e2e/README.md#the-coming-nextcloud"
 autofix = """A change of a Nextcloud that isn't released yet needs a person, who decides
 how the app follows it."""
@@ -172,7 +177,9 @@ explanation names a file that is gone. *Check of the package*: a test of
 parse, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
 Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
 the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
-doesn't translate, or `l10n/de.json` lacks a text that the code
+doesn't translate, a test of `tests/e2e/files-address.mjs` fails, because a browser test
+opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, or
+`l10n/de.json` lacks a text that the code
 translates, has one that no code translates, a placeholder of another kind or a text
 twice, or differs from `l10n/de.js`."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
@@ -190,6 +197,8 @@ a new check, fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
 look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`
 in `tests/e2e/screenshots.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
+open Files at `folderAddress(await filesAddress(page), dir)` of
+`tests/e2e/files-address.mjs` until `node --test tests/e2e/files-address.test.mjs` passes,
 and add a new text with its German words to `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
 `check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
 anew. Then run the checks again:"""

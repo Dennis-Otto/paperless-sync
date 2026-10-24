@@ -135,7 +135,7 @@ take_pictures() {
 		node screenshots.mjs
 		tar -C pictures -cf - . >&3
 	'
-	tar -cf - -C "${SCRIPT_DIR}" package.json package-lock.json screenshots.mjs language.mjs thumbnail.mjs fonts.conf \
+	tar -cf - -C "${SCRIPT_DIR}" package.json package-lock.json screenshots.mjs files-address.mjs language.mjs thumbnail.mjs fonts.conf \
 		-C "${REPOSITORY_ROOT}" l10n/de.json \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \

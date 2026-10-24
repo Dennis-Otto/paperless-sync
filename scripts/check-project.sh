@@ -714,6 +714,10 @@ echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail
 # for in its catalog, l10n/de.json.
 node --test --test-reporter=dot tests/e2e/language.test.mjs
 echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German."
+# The address of Files in the browser tests, which Files of Nextcloud 36 routes only as
+# Nextcloud links it.
+node --test --test-reporter=dot tests/e2e/files-address.test.mjs
+echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud links, and no browser test opens it at an address of its own."
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of the catalog: a text that the code
