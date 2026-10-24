@@ -133,6 +133,30 @@ autofix = """Whether the app or the fixtures follow a new answer of Paperless is
 decision of a person, who reads what Paperless changed; the job keeps the answers as its
 artifact paperless-ngx-2 or paperless-ngx-3 for that."""
 
+[check."render (*)"]
+title = "The pictures of the visual check"
+problem = """The visual check could not render the pictures of the documentation and of the App
+Store in this language: Nextcloud, the Paperless mock or the browser of
+`tests/e2e/screenshots.mjs` failed, or a picture that the story waits for never showed.
+The log of the step *Render the pictures with the frozen story* names the step of the
+story and ends with the last lines of the containers. A picture that merely looks
+different fails nothing; the comment of the check lists those."""
+why = """The pictures show the app in the README, on the website and in the App Store, and
+the screenshot bot renders them again after the merge. A change that keeps them from
+rendering leaves them stale, or shows what broke in the app itself."""
+fix = """Run the language that failed on your machine with Docker, keep the containers to
+look inside when it fails again, fix the app or the story of the pictures, and push.
+When a text of the app that the story looks for changed, change it in
+`tests/e2e/screenshots.mjs` or `tests/e2e/language.mjs` too."""
+commands = [
+  "bash tests/e2e/screenshots.sh en  # or de, as the check names it",
+  "KEEP_E2E=1 bash tests/e2e/screenshots.sh en  # keep the containers to look inside",
+]
+docs = "tests/e2e/README.md#the-screenshot-bot-and-the-visual-check"
+autofix = """Why the story of the pictures stopped is for a person to find out, in the log of
+the check; a picture that only looks different needs no fix, since the screenshot bot
+renews it after the merge."""
+
 # ---------------------------------------------------------------- the steps of scripts/check.sh
 
 [step.Package]

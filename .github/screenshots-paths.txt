@@ -1,0 +1,36 @@
+# The files whose change can change the pictures of scripts/screenshots.sh: after a
+# change of main that touches one, the screenshot bot renders them anew. One pattern
+# on each line, as the paths of a workflow: * within a folder, ** through folders, and
+# one that starts with ! leaves files out. The script and this list count on their
+# own. .github/workflows/visual.yml renders the pictures of a pull request on the same
+# paths, which tests/e2e/compare.test.mjs keeps equal.
+
+# The social preview.
+.github/social-preview.html
+.github/social-preview/Dockerfile
+scripts/social-preview.sh
+
+# The app as the pictures show it: its pages, scripts, styles, icons and texts, and its
+# code, which writes the reports, the status and the files of the archive.
+css/**
+img/**
+js/**
+l10n/**
+lib/**
+templates/**
+
+# The story of the pictures: the browser, the frozen clock, the Paperless mock with its
+# household archive, the containers and fonts, and the image of Playwright in run.sh.
+tests/e2e/screenshots.sh
+tests/e2e/screenshots.mjs
+tests/e2e/frozen.mjs
+tests/e2e/files-address.mjs
+tests/e2e/language.mjs
+tests/e2e/thumbnail.mjs
+tests/e2e/showcase.py
+tests/e2e/mock_server.py
+tests/e2e/compose.yaml
+tests/e2e/fonts.conf
+tests/e2e/package.json
+tests/e2e/package-lock.json
+tests/e2e/run.sh

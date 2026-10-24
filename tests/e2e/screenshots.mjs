@@ -13,6 +13,13 @@
 // The story follows the quick start: a dry-run, the first synchronization, the archive
 // in Files, a dry-run a few days later that shows every kind of change, and a run that
 // ends with an error, which the status keeps.
+//
+// Two runs draw the same pixels, so that the screenshot bot changes a picture only when the
+// app looks different: the data of the Paperless mock is fixed (showcase.py), the moments of
+// the runs and the secret of the webhook are those of the story (frozen.mjs), every picture
+// waits until the page stands still, and an animation takes its frames at fixed steps of
+// what it shows, never at moments in time, whose frames would depend on the speed of the
+// machine.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
@@ -21,6 +28,7 @@ import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
+import { freeze, Story } from './frozen.mjs'
 import { pictureLanguage } from './language.mjs'
 import { thumbnail } from './thumbnail.mjs'
 
@@ -48,6 +56,11 @@ const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = `/${L.base}/${L.archive}`
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
+// How long a run that "Synchronize now" queued may take: a background job of Nextcloud runs
+// it, and the page asks for its status every few seconds.
+const QUEUED_RUN = { timeout: 120_000 }
+// The moments of the story, which the pictures show instead of those of the run of the script.
+const story = new Story()
 
 // The address of Files, as Nextcloud links it, which signIn() takes from the first page after
 // the login; files-address.mjs says why.
@@ -127,9 +140,64 @@ async function open(browser, session, theme, url) {
 		locale: L.browserLocale,
 		timezoneId: 'Europe/Berlin',
 	})
+	await freeze(context, story)
 	const page = await context.newPage()
 	await page.goto(url)
 	return { context, page }
+}
+
+// A picture of the page, or of the part of it that options.clip names, once it stands
+// still: its images decoded, its transitions at their end, and two pictures in a row the
+// same, so that an image that shows a moment later, such as an avatar, or a scroll that is
+// still going changes no pixel from run to run.
+async function picture(page, options = {}) {
+	await page.evaluate(() => Promise.all([...document.images].map((image) =>
+		Promise.race([image.decode().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 2000))]))))
+	let last = await page.screenshot({ ...options, animations: 'disabled' })
+	for (let look = 0; look < 20; look++) {
+		const next = await page.screenshot({ ...options, animations: 'disabled' })
+		if (next.equals(last)) {
+			return next
+		}
+		last = next
+	}
+	console.warn('The page never stood still for a picture; its pixels may differ from run to run.')
+	return last
+}
+
+// Waits until no part of the page scrolls any more: the places of all that scrolls stayed
+// the same for five looks, 50 milliseconds apart. The page scrolls smoothly on its own, such
+// as to a new report or checklist, and a picture whose part of the page was taken while it
+// moved would show it at another place on each run.
+async function standStill(page) {
+	await page.evaluate(() => new Promise((resolve) => {
+		const scrolling = [document.scrollingElement, ...document.querySelectorAll('*')].filter((element) =>
+			element === document.scrollingElement
+			|| (element.scrollHeight > element.clientHeight && /auto|scroll/.test(getComputedStyle(element).overflowY)))
+		let last = ''
+		let looks = 0
+		const started = Date.now()
+		const look = () => {
+			const tops = scrolling.map((element) => element.scrollTop).join()
+			looks = tops === last ? looks + 1 : 0
+			last = tops
+			if (looks >= 5 || Date.now() - started > 10_000) {
+				resolve()
+			} else {
+				setTimeout(look, 50)
+			}
+		}
+		look()
+	}))
+}
+
+// Scrolls an element into the window once the page stands still, and waits until it stands
+// still again: a smooth scroll of the page itself would move the element after a scroll that
+// came before its end.
+async function scrollInto(page, locator, block) {
+	await standStill(page)
+	await locator.evaluate((element, block) => element.scrollIntoView({ behavior: 'instant', block }), block)
+	await standStill(page)
 }
 
 // Waits until the page is still: no requests, the fonts loaded, the animations over.
@@ -160,14 +228,14 @@ async function expandFolderTree(page, folders) {
 async function shotFromTo(page, first, last, margin = 16) {
 	await first.evaluate((element) => {
 		element.style.scrollMarginTop = '120px'
-		element.scrollIntoView({ block: 'start' })
 	})
+	await scrollInto(page, first, 'start')
 	const viewport = page.viewportSize()
 	const top = await first.boundingBox()
 	const bottom = await last.boundingBox()
 	const x = Math.max(0, Math.min(top.x, bottom.x) - margin)
 	const y = Math.max(0, top.y - margin)
-	return page.screenshot({
+	return picture(page, {
 		clip: {
 			x,
 			y,
@@ -185,12 +253,12 @@ async function shot(page, locator, margin = 16) {
 	if (height > page.viewportSize().height) {
 		await page.setViewportSize({ width: VIEWPORT.width, height: Math.ceil(height) })
 	}
-	await locator.evaluate((element) => element.scrollIntoView({ block: 'center' }))
+	await scrollInto(page, locator, 'center')
 	const box = await locator.boundingBox()
 	const viewport = page.viewportSize()
 	const x = Math.max(0, box.x - margin)
 	const y = Math.max(0, box.y - margin)
-	return page.screenshot({
+	return picture(page, {
 		clip: {
 			x,
 			y,
@@ -202,6 +270,11 @@ async function shot(page, locator, margin = 16) {
 
 // Records the frames of a GIF: each a picture of the page with how long it shows. A
 // drawn pointer moves to what is clicked, since a picture of the page has none.
+//
+// The frames are the same on every run: each shows the page with its transitions at their
+// end, the animation waits for the server without frames, and a scroll is drawn in fixed
+// steps (glide). A frame taken at a moment in time would catch a page that is still busy or
+// scrolling at another place on each run, as fast as the machine and the server are.
 class Animation {
 	constructor(page) {
 		this.page = page
@@ -210,7 +283,7 @@ class Animation {
 	}
 
 	async frame(delay = 80) {
-		const { width, height, data } = PNG.sync.read(await this.page.screenshot())
+		const { width, height, data } = PNG.sync.read(await picture(this.page))
 		const last = this.frames.at(-1)
 		if (last !== undefined && last.data.equals(data)) {
 			last.delay += delay
@@ -223,23 +296,43 @@ class Animation {
 		await this.frame(milliseconds)
 	}
 
-	// Frames of whatever moves on its own, such as scrolling.
-	async record(milliseconds, interval = 80) {
-		for (let elapsed = 0; elapsed < milliseconds; elapsed += interval) {
-			await this.frame(interval)
-		}
+	// Waits until the promise is settled, such as the end of a run, without frames: what the
+	// page shows meanwhile depends on how fast the server answers.
+	async until(promise) {
+		await promise
 	}
 
-	// Frames until the promise is settled, such as the end of a run.
-	async until(promise, interval = 200) {
-		let done = false
-		const settled = promise.finally(() => {
-			done = true
+	// Remembers where each part of the page that scrolls stands, for glide().
+	async mark() {
+		await this.page.evaluate(() => {
+			const scrolling = [document.scrollingElement, ...document.querySelectorAll('*')].filter((element) =>
+				element === document.scrollingElement
+				|| (element.scrollHeight > element.clientHeight && /auto|scroll/.test(getComputedStyle(element).overflowY)))
+			window.screenshotScrolling = [...new Set(scrolling)].map((element) => ({ element, top: element.scrollTop }))
 		})
-		while (!done) {
-			await this.frame(interval)
+	}
+
+	// Frames of the scroll from where mark() found the page to where it stands once it stands
+	// still, in steps of the same easing as the pointer: the page scrolls smoothly on its own,
+	// as when it shows a report, at a speed that differs from run to run.
+	async glide(steps = 8) {
+		await standStill(this.page)
+		await this.page.evaluate(() => {
+			for (const scrolled of window.screenshotScrolling) {
+				scrolled.end = scrolled.element.scrollTop
+				scrolled.element.scrollTo({ top: scrolled.top, behavior: 'instant' })
+			}
+		})
+		for (let step = 1; step <= steps; step++) {
+			const t = step / steps
+			const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+			await this.page.evaluate((eased) => {
+				for (const { element, top, end } of window.screenshotScrolling) {
+					element.scrollTo({ top: Math.round(top + (end - top) * eased), behavior: 'instant' })
+				}
+			}, eased)
+			await this.frame(60)
 		}
-		await settled
 	}
 
 	async pointer(x, y, pressed = false) {
@@ -280,6 +373,8 @@ class Animation {
 		await this.pointer(this.position.x, this.position.y, true)
 		await this.frame(250)
 		await this.pointer(this.position.x, this.position.y)
+		// Where the page stands before the click, for a scroll that the click starts (glide).
+		await this.mark()
 		await locator.click()
 	}
 
@@ -318,7 +413,12 @@ class Animation {
 	}
 }
 
-const browser = await chromium.launch()
+// Chromium draws the same pixels on every run: it decodes each image as it draws it, instead
+// of later and in other ways from run to run, such as the avatar in the header, and draws a
+// whole tile anew, not the part that changed.
+const browser = await chromium.launch({
+	args: ['--disable-checker-imaging', '--disable-image-animation-resync', '--disable-partial-raster'],
+})
 try {
 	const admin = await signIn(browser, ADMIN)
 	const owner = await signIn(browser, OWNER)
@@ -336,15 +436,20 @@ try {
 		await animation.click(page.locator('#paperless-sync-dry-run'))
 		await animation.until(page.locator('#paperless-sync-report').waitFor({ state: 'visible' }))
 		await animation.until(page.locator('#paperless-sync-dry-run:enabled').waitFor())
-		await animation.record(1000)
+		// The page scrolls the report into view.
+		await animation.glide()
 		await animation.hold(3500)
-		// The button asks first, in a dialog of the browser that no screenshot shows.
+		// A minute later, the first synchronization. The button asks first, in a dialog of the
+		// browser that no screenshot shows.
+		story.to('2026-10-18T10:21:00+02:00')
 		page.once('dialog', (dialog) => dialog.accept())
 		await animation.click(page.locator('#paperless-sync-run'))
-		await animation.until(page.locator('#paperless-sync-message', { hasText: L.t('Synchronization completed.') }).waitFor())
+		await animation.until(page.locator('#paperless-sync-message', { hasText: L.t('Synchronization completed.') }).waitFor(QUEUED_RUN))
+		await animation.glide()
 		await animation.hold(2500)
-		await page.locator('#paperless-sync-settings').evaluate((element) => element.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-		await animation.record(1000)
+		await animation.mark()
+		await page.locator('#paperless-sync-settings').evaluate((element) => element.scrollIntoView({ behavior: 'instant', block: 'start' }))
+		await animation.glide()
 		await animation.hold(3500)
 		save(`${IMAGES}/dry-run.gif`, animation.encode())
 		await context.close()
@@ -355,7 +460,7 @@ try {
 		const { context, page } = await open(browser, admin, theme, SETTINGS)
 		await page.locator('#paperless-sync-settings').waitFor()
 		await settle(page)
-		const overview = await page.screenshot()
+		const overview = await picture(page)
 		save(`${IMAGES}/settings-${theme}.png`, overview)
 		if (theme === 'light') {
 			saveScreenshot('01-admin-settings', overview)
@@ -411,7 +516,7 @@ try {
 		// The excluded tags while a name is typed: a typo that Paperless has no tag of, and the
 		// tags of Paperless that hold the letters typed, in the list below the field.
 		// In the middle of the window, clear of the bar of Nextcloud at its top, with room for the list.
-		await page.locator('[data-tag-picker="excluded_tags"]').evaluate((element) => element.scrollIntoView({ block: 'center' }))
+		await scrollInto(page, page.locator('[data-tag-picker="excluded_tags"]'), 'center')
 		const tags = page.locator('#paperless-sync-excluded-tags-input')
 		await tags.fill('Drfat')
 		await tags.press('Enter')
@@ -423,7 +528,7 @@ try {
 		const field = await page.locator('[data-tag-picker="excluded_tags"]').boundingBox()
 		const list = await page.locator('#paperless-sync-excluded-tags-options').boundingBox()
 		const top = Math.max(0, field.y - 16)
-		save(`${IMAGES}/settings-tags-${theme}.png`, await page.screenshot({
+		save(`${IMAGES}/settings-tags-${theme}.png`, await picture(page, {
 			clip: {
 				x: Math.max(0, field.x - 16),
 				y: top,
@@ -461,7 +566,7 @@ try {
 		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
 		await page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]').waitFor()
 		await expandFolderTree(page, [...L.base.split('/'), L.archive, 'City Utilities', 'Invoice'])
-		const archive = await page.screenshot()
+		const archive = await picture(page)
 		save(`${IMAGES}/archive-${theme}.png`, archive)
 		if (theme === 'light') {
 			saveScreenshot('02-structured-archive', archive)
@@ -485,7 +590,7 @@ try {
 		const menu = await page.getByRole('menuitem', { name: action }).locator('xpath=ancestor::*[@role="menu"][1]').boundingBox()
 		const x = Math.max(0, Math.min(box.x, menu.x) - 16)
 		const y = Math.max(0, box.y - 16)
-		return page.screenshot({
+		return picture(page, {
 			clip: {
 				x,
 				y,
@@ -553,6 +658,7 @@ try {
 
 	// A few days later: a new title, the trash, an excluded tag, new documents and a
 	// finished import, all in the report of a dry-run.
+	story.to('2026-10-18T10:22:00+02:00')
 	await control('scenario/showcase-update')
 	await control('tasks/success')
 	for (const theme of THEMES) {
@@ -580,7 +686,7 @@ try {
 		await page.locator('#paperless-sync-settings').waitFor()
 		page.once('dialog', (dialog) => dialog.accept())
 		await page.locator('#paperless-sync-run').click()
-		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
+		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible', ...QUEUED_RUN })
 		await context.close()
 	}
 	for (const theme of THEMES) {

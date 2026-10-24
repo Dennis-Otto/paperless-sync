@@ -11,6 +11,10 @@
 # click through it in the image of Playwright. The languages to take are the arguments,
 # en and de, both by default.
 #
+# Two runs take the same pixels, with the moments of a fixed story instead of the clock
+# (frozen.mjs), so the screenshot bot (scripts/screenshots.sh) and the visual check of a pull
+# request (.github/workflows/visual.yml) see only what a change of the app changes.
+#
 #   bash tests/e2e/screenshots.sh [en] [de]
 
 set -euo pipefail
@@ -135,9 +139,11 @@ take_pictures() {
 		node screenshots.mjs
 		tar -C pictures -cf - . >&3
 	'
-	tar -cf - -C "${SCRIPT_DIR}" package.json package-lock.json screenshots.mjs files-address.mjs language.mjs thumbnail.mjs fonts.conf \
+	# Git Bash on Windows would turn the paths of the container, such as that of the catalog,
+	# into paths of Windows.
+	tar -cf - -C "${SCRIPT_DIR}" package.json package-lock.json screenshots.mjs files-address.mjs frozen.mjs language.mjs thumbnail.mjs fonts.conf \
 		-C "${REPOSITORY_ROOT}" l10n/de.json \
-		| "${DOCKER_BIN}" run --rm --interactive \
+		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
 			--env E2E_USER=e2e-admin \

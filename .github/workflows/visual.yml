@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Visual check
+
+# Renders the pictures of the documentation and of the App Store for each pull request
+# that can change them, from the Paperless mock with its frozen story
+# (tests/e2e/screenshots.sh), and compares them with the committed ones pixel by pixel.
+# Each language renders on a runner of its own, side by side. It only reports: the
+# summary lists every picture that looks different with the share of its pixels that
+# changed, the artifact visual-en or visual-de holds each one before and after and its
+# changed pixels in red (tests/e2e/compare.mjs), and visual-comment.yml writes the list
+# into one comment on the pull request. An intended change reaches the pictures through
+# the screenshot bot (screenshot-bot.yml) after the merge. A picture that can't be
+# rendered fails the check, and the other language still gets its report.
+#
+# It renders on the paths of .github/screenshots-paths.txt, which the screenshot bot
+# renders on, without the social preview; tests/e2e/compare.test.mjs keeps them equal.
+
+on:
+  pull_request:
+    paths:
+      - css/**
+      - img/**
+      - js/**
+      - l10n/**
+      - lib/**
+      - templates/**
+      - tests/e2e/screenshots.sh
+      - tests/e2e/screenshots.mjs
+      - tests/e2e/frozen.mjs
+      - tests/e2e/files-address.mjs
+      - tests/e2e/language.mjs
+      - tests/e2e/thumbnail.mjs
+      - tests/e2e/showcase.py
+      - tests/e2e/mock_server.py
+      - tests/e2e/compose.yaml
+      - tests/e2e/fonts.conf
+      - tests/e2e/package.json
+      - tests/e2e/package-lock.json
+      - tests/e2e/run.sh
+      - tests/e2e/compare.mjs
+      - .github/screenshots-requirements.txt
+      - .github/workflows/visual.yml
+  workflow_dispatch:
+
+permissions: {}
+
+# A newer push to a pull request replaces the check of the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  render:
+    name: render (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # Nextcloud, the mock and the image of Playwright take about three minutes, the
+    # pictures of a language about four.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      # A language that fails leaves the other one running, for its report.
+      fail-fast: false
+      matrix:
+        language: [en, de]
+    steps:
+      - name: Record the network traffic of the job
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Render the pictures with the frozen story
+        env:
+          LANGUAGE: ${{ matrix.language }}
+        run: bash tests/e2e/screenshots.sh "$LANGUAGE"
+      - name: Install Pillow, which compares the pictures
+        timeout-minutes: 5
+        run: |
+          python3 -m venv "$RUNNER_TEMP/pictures"
+          "$RUNNER_TEMP/pictures/bin/pip" install --quiet --disable-pip-version-check \
+            --require-hashes -r .github/screenshots-requirements.txt
+      # As the screenshot bot does: each picture whose pixels stayed the same gets its
+      # committed file back, and the others go to a folder of their own.
+      - name: Keep the pictures that look different
+        run: |
+          "$RUNNER_TEMP/pictures/bin/python" .github/blueprint.py screenshots keep "$RUNNER_TEMP/kept"
+      - name: Install pngjs, which draws the changed pixels
+        timeout-minutes: 5
+        working-directory: tests/e2e
+        run: npm ci --ignore-scripts --no-audit --no-fund --loglevel=error
+      - name: Put each picture before and after side by side
+        env:
+          LANGUAGE: ${{ matrix.language }}
+        run: |
+          {
+            echo "### Visual check ($LANGUAGE)"
+            echo
+            node tests/e2e/compare.mjs "$LANGUAGE" "$RUNNER_TEMP/kept" "$RUNNER_TEMP/visual"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the pictures before and after, with their changed pixels
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-${{ matrix.language }}
+          path: ${{ runner.temp }}/visual/
+          if-no-files-found: error
+          retention-days: 14
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: render (${{ matrix.language }})
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
