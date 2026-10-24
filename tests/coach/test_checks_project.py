@@ -36,7 +36,10 @@ from blueprint.coach import (  # noqa: E402 - after the folder of blueprint.py
 PROJECT_CATALOG = ROOT / ".github" / "checks.project.toml"
 # The workflows of this app alone, whose jobs explain their failures themselves; the
 # blueprint's workflows do so in the blueprint.
-PROJECT_WORKFLOWS = (ROOT / ".github" / "workflows" / "e2e.yml",)
+PROJECT_WORKFLOWS = (
+    ROOT / ".github" / "workflows" / "e2e.yml",
+    ROOT / ".github" / "workflows" / "visual.yml",
+)
 # The step of scripts/check.sh that runs scripts/check-project.sh.
 PROJECT_STEP = "Checks of this project"
 # The files of the repository that the checks build and Git doesn't track.
@@ -167,7 +170,7 @@ def test_every_job_of_this_project_that_runs_its_code_explains_its_failure() -> 
                 assert entry is not None, f"the check {name} has no explanation"
                 assert entry.key in own, f"the blueprint explains {name} by {entry.key}"
                 explained += 1
-    assert explained >= 5, explained
+    assert explained >= 7, explained
 
 
 def test_the_files_and_headings_that_the_explanations_name_exist() -> None:
