@@ -60,6 +60,8 @@ final class AdminSettings implements ISettings {
 			'status' => $status,
 			'saveUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.save'),
 			'testUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.test'),
+			// The setup of the account of the app in Paperless, with the token of a superuser.
+			'accountUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.account'),
 			'resetUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.reset'),
 			'runUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.run'),
 			'statusUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.sync.status'),

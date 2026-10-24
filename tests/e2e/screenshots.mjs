@@ -478,6 +478,14 @@ try {
 		for (const [index, card] of CARDS.entries()) {
 			save(`${IMAGES}/settings-${card}-${theme}.png`, await shot(page, page.locator('section.paperless-sync-card').nth(index)))
 		}
+		// The setup of the account of the app in Paperless, open, with the token of a superuser
+		// typed, as before the click that creates the account; then it folds away again.
+		const account = page.locator('#paperless-sync-account')
+		await account.locator('summary').click()
+		await page.locator('#paperless-sync-account-token').fill('synthetic-superuser-token')
+		await page.locator('#paperless-sync-account-token').evaluate((input) => input.blur())
+		save(`${IMAGES}/settings-account-${theme}.png`, await shot(page, account))
+		await account.locator('summary').click()
 		// The connection checklist of an account that lacks three permissions, below the
 		// connection settings: lines that passed, failed and have a note.
 		// It is taller than the window of the other pictures, so the window grows for it.

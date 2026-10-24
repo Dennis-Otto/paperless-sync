@@ -65,8 +65,8 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 <!-- --8<-- [start:quick-start] -->
 
 1. Install **Paperless Sync** from the [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) under *Apps*, or with `occ app:install paperless_sync`. Nextcloud's system cron must run.
-2. In Paperless-ngx, create a dedicated account for the app under *Users & Groups*, not a superuser, with the permission **View** for Documents, Correspondents, Document Types, Storage Paths, Tags and UI Settings, and, if you use the inbox, **Add** for Documents and **View** for Paperless Tasks. Make it the owner of the documents to mirror, so that their trash reaches the archive right away, and create its API token under *My Profile*.
-3. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL and the token, pick the Nextcloud user who owns the archive from the users that the field offers, and click **Test connection**: the checklist below it shows every permission that the account lacks, and what to grant. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network** first. Leave synchronization disabled, and save; saving runs the same checks.
+2. In Nextcloud, open **Administration settings → Paperless Sync**. Enter the Paperless URL, pick the Nextcloud user who owns the archive from the users that the field offers, and turn on the modules that you want, such as the inbox. For a Paperless at an address of your network, such as `http://paperless:8000`, turn on **Paperless runs in my local network**. Leave synchronization disabled.
+3. Open **Create an account for the app in Paperless**, enter the API token of a Paperless superuser, from *My Profile* in its menu, and click **Create the account and save**. The app creates the user `nextcloud-sync`, no superuser, with only the permissions that your modules need and a random password, saves the settings with the token of that user, never with yours, and shows the connection checklist. Then make the account the owner of the documents to mirror, so that their trash reaches the archive right away, as the checklist says. To keep the token of your superuser out of Nextcloud, create the account by hand, as *The account of the app* under *Configuration* describes, enter its token in **Paperless API token** and click **Test connection** instead.
 4. Start a **dry run** and read its summary: it lists what a run would change, without changing anything.
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Documents/Paperless/Archive` of that user.
 
@@ -202,7 +202,9 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | Always | **View** for Documents, and access to every document to mirror, best as its owner, as below | lists and downloads the documents |
 | Archive export | **View** for Correspondents, Document Types, Storage Paths and Tags | builds the paths and skips the excluded tags |
 | Deleted folder | ownership of the documents, as below | sees them in the trash of Paperless right away |
-| Nextcloud inbox | **Add** for Documents, and **View** for Paperless Tasks | uploads the files of the inbox, and learns whether Paperless imported them |
+| [`{{ owner_username }}`](#path-template-variables) in the path template | **View** for Users | finds the user name of the owner of each document |
+| Custom fields in the path template, or [metadata next to the archive](#metadata-next-to-the-archive) | **View** for Custom Fields | reads the names and the choices of the custom fields |
+| Nextcloud inbox, or [*Send to Paperless*](#send-from-files), which is on for the administrators by default | **Add** for Documents, and **View** for Paperless Tasks | uploads the files, and learns whether Paperless imported them |
 | [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
 | [Per-user ownership](#per-user-ownership) | **View** for Users, **View** on the documents of every user, and with the inbox **Change** for Documents | finds the owner of each document, mirrors the documents of every user, and gives the document of an upload the user of Paperless of its user |
@@ -218,7 +220,55 @@ Only the owner of a document or a superuser can change its owner. The Paperless 
 
 Without ownership, the trash still reaches the archive, only later: a document in the trash that the account can't see counts as missing, and its copy moves to the deleted folder after the configured number of complete scans. Keep *Also delete copies of documents that disappeared without passing the Paperless trash* off in that case: with it and permanent deletion both on, such a copy is deleted then, although the document can still be restored in Paperless. A dry-run shows a notice when documents go missing while the trash lists none (`TRASH EMPTY` on the command line), and the [connection checklist](#connection-checklist) counts the documents that the account sees without owning them.
 
-The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings, **Test connection** and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+The API token is stored in Nextcloud's credentials manager and never returned to the browser. It goes only to the Paperless URL that it was saved with: to connect to another URL, enter the token again. This holds also when the URL changes past the settings page, with `occ` or Nextcloud's provisioning API; synchronization then waits for the token. Saving the settings, **Test connection**, the setup of the account and disconnecting ask for your password, unless you confirmed it in the last 30 minutes.
+
+#### The account of the app
+
+**Create an account for the app in Paperless**, in the card *Connection and ownership*, sets up the account of the app with the API token of a Paperless superuser, which you enter once:
+
+1. The app takes the permissions that the modules of the form need from the table above, and no more, so set the modules first.
+2. It creates the user, `nextcloud-sync` unless you choose another name, as no superuser, with exactly these permissions and a random password of 64 characters that nobody learns, asks Paperless for the token of that user, and saves the settings of the form with it, as **Save** saves a typed token.
+3. It shows the connection checklist of the new account. What no permission of an account can give, the access to the documents of other owners, is up to you: make the account their owner, as below, or with per-user ownership give it **View** on the documents of every user.
+
+A user of that name that exists already changes only when you agree: the page asks first, and an update gives it exactly these permissions and a new random password and takes away *Admin*, while its token and the permissions of its groups stay the same. A superuser is never taken over. Your token goes only to the Paperless URL of the form, for these requests: the app stores it nowhere, logs it nowhere and never sends it back to the browser, as [the security design](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) explains.
+
+For a scripted setup, `occ paperless_sync:create-account` does the same with the saved settings, and prints the checklist. It takes the token of the superuser from a file, or with `--admin-token-file=-` from standard input, never as an argument, which the list of processes would show:
+
+```sh
+occ paperless_sync:create-account --admin-token-file=/run/secrets/paperless-admin-token
+```
+
+Without a token of a superuser for Nextcloud, create the account yourself: in Paperless under *Users & Groups*, with the permissions of the table above, then its token under *My Profile* while you are signed in as that user. Or run these commands on a machine of yours, after you filled in the first three lines; they create the account with the permissions of the archive and the inbox:
+
+<!-- account-snippet:start -->
+
+```sh
+PAPERLESS_URL='https://paperless.example.com'
+SUPERUSER_TOKEN='the API token of a superuser of Paperless'
+ACCOUNT='nextcloud-sync'
+PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# The token and the password go to curl in files of a private folder, never as arguments,
+# which the list of processes would show.
+SECRETS="$(mktemp -d)"
+printf 'Authorization: Token %s\n' "${SUPERUSER_TOKEN}" > "${SECRETS}/header"
+printf '{"username": "%s", "password": "%s", "is_superuser": false, "user_permissions": ["view_document", "add_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_tag", "view_paperlesstask", "view_uisettings"]}' \
+  "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/user.json"
+printf '{"username": "%s", "password": "%s"}' "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/login.json"
+if curl --fail-with-body --silent --show-error --output "${SECRETS}/answer" \
+  --header @"${SECRETS}/header" --header 'Content-Type: application/json' \
+  --data @"${SECRETS}/user.json" "${PAPERLESS_URL}/api/users/"; then
+  curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
+    --data @"${SECRETS}/login.json" "${PAPERLESS_URL}/api/token/"
+else
+  # Why Paperless refused the user, such as a username that it has already.
+  cat "${SECRETS}/answer" >&2
+fi
+rm -rf "${SECRETS}"
+```
+
+<!-- account-snippet:end -->
+
+The last command prints `{"token":"…"}`: enter that token in **Paperless API token**, and click **Test connection**. For the other modules, add their permissions to the list, as the table above names them: `"add_tag"` for *Create missing tags*, `"view_user"` for per-user ownership and `{{ owner_username }}`, `"change_document"` for per-user ownership with uploads, and `"view_customfield"` for custom fields.
 
 #### Connection checklist
 
@@ -797,6 +847,7 @@ Nextcloud's `occ` runs the app from the shell, for scripts, cron jobs of your ow
 | `occ paperless_sync:run --dry-run` | The changes that a run would make, without making them. |
 | `occ paperless_sync:run --batch-size=1000` | A run with a batch size of its own; `--unlimited` makes every change that is due, such as for the first import of a large archive. |
 | `occ paperless_sync:status` | The status of the last run, as the settings page shows it, with its report. `--exit-code` tells by the exit code how it ended, for a check of a monitoring. |
+| `occ paperless_sync:create-account --admin-token-file=FILE` | Creates the account of the app in Paperless with the token of a superuser in the file, or with `-` from standard input, with the permissions of the modules of the saved settings, stores its token and prints the connection checklist; `--username` names the account, `--update` updates a user that exists. It exits with 0 when every check passed, 1 when a check failed, and 2 when it failed, with no token stored. [The account of the app](#the-account-of-the-app) has the details. |
 | `occ paperless_sync:forget 123 P124` | The next runs download these documents again and write each in place of its copy, such as after a copy was damaged; `--all` for every copy, such as after an incident of the storage. A copy keeps its path, its file ID, its shares and its versions, and an edit in Nextcloud gets the content of Paperless again. |
 
 `--output=json` prints the report of a run, or the status, as the JSON that the settings page reads, on one line, and `--output=json_pretty` indented; messages about failures go to standard error. A run on the command line counts in the status and the log as any other run, and holds the same lock, so it never runs beside a scheduled run or one of *Synchronize now*.

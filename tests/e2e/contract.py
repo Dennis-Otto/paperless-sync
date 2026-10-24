@@ -21,6 +21,11 @@ container of the mock, inside the network of Compose, with Python alone:
                                       checks the sidecar of a document on standard input
     python contract.py status         checks the status of the app on standard input
     python contract.py log            checks the log of Nextcloud on standard input
+    python contract.py account NAME   checks the answer of the setup of the account NAME on standard
+                                      input, and the account in Paperless
+    python contract.py checklist      checks that no line of the checklist on standard input failed
+    python contract.py snippet-token  the token in the output of the commands of the README on
+                                      standard input
     python contract.py shapes DIR     compares the shapes of the answers with the fixtures in DIR,
                                       and fails when a field is gone or has another type
     python contract.py fixtures       the recorded answers, as a tar archive on standard output
@@ -570,6 +575,7 @@ def api(url, line):
     check(restored["deleted_at"] is None, f"The restored document has {restored['deleted_at']!r}.")
 
     per_user(paperless, url)
+    setup(paperless, url)
 
     save_state({"url": url, "line": line, "token": paperless.token, "version": version, "ids": ids})
     print(f"Paperless-ngx {version} answers as the app reads it.")
@@ -614,6 +620,101 @@ def per_user(paperless, url):
     check(document not in [item["id"] for item in unowned["results"]], f"A document with an owner counts as without one: {unowned!r}")
     paperless.request("DELETE", f"/api/documents/{document}/", expect=204)
     paperless.request("POST", "/api/trash/", {"action": "empty", "documents": [document]})
+
+
+# The permissions that the setup of the account grants for the settings of run-contract.sh:
+# the archive with its metadata, the inbox with tags that it creates, and "Send to Paperless"
+# (AccountPermissions::of()).
+SETUP_PERMISSIONS = {
+    "view_document",
+    "add_document",
+    "view_correspondent",
+    "view_documenttype",
+    "view_storagepath",
+    "view_tag",
+    "add_tag",
+    "view_customfield",
+    "view_paperlesstask",
+    "view_uisettings",
+}
+
+
+def setup(paperless, url):
+    """The requests of the setup of the account of the app, as AccountSetup sends them with the
+    token of a superuser: the user by the filter of its username, which compares without case,
+    a new user that is no superuser with its permissions by their codenames, an update with a
+    new password and other permissions, and the token of the user for its password, which stays
+    the one that it had. The user goes again, so that the setup of the app later meets no user
+    of its own."""
+    name = "contract-setup"
+    users = f"/api/users/?page=1&page_size=1000&username__iexact={name}"
+    expect_page("The users of a username that Paperless doesn't have", paperless.get(users, record="user-missing"), 0)
+    permissions = ["view_document", "view_uisettings"]
+    fields = {"username": name, "password": PASSWORD, "is_active": True, "is_staff": False, "is_superuser": False}
+    _, _, created = paperless.request(
+        "POST", "/api/users/", {**fields, "user_permissions": permissions}, expect=201, record="user-created"
+    )
+    expect_fields("The new user", created, {"id": is_id, "username": is_text, "is_superuser": lambda value: value is False})
+    found = paperless.get(users.replace(name, name.upper()), record="user-found")
+    expect_page("The users of a username", found, 1)
+    check([user["id"] for user in found["results"]] == [created["id"]], f"The filter of the username found {found!r}.")
+    expect_fields("The user", found["results"][0], {"id": is_id, "username": is_text, "is_superuser": lambda value: value is False})
+    status, _, refused = paperless.request("POST", "/api/users/", {**fields, "user_permissions": permissions}, expect=None, record="user-exists")
+    check(status == 400 and "username" in refused, f"A second user of the same name answered HTTP {status}: {refused!r}")
+    app = Paperless(url)
+    _, _, first = app.request("POST", "/api/token/", {"username": name, "password": PASSWORD})
+    changed = [*permissions, "add_document"]
+    _, _, updated = paperless.request(
+        "PATCH",
+        f"/api/users/{created['id']}/",
+        {"password": PASSWORD + "-new", "is_active": True, "is_staff": False, "user_permissions": changed},
+        record="user-updated",
+    )
+    check(updated.get("is_staff") is False, f"The updated user is staff: {updated!r}")
+    _, _, second = app.request("POST", "/api/token/", {"username": name, "password": PASSWORD + "-new"})
+    check(is_text(second.get("token")) and second["token"] == first["token"], "A new password gave the user another token.")
+    app.request("POST", "/api/token/", {"username": name, "password": PASSWORD}, expect=400)
+    app.token = second["token"]
+    granted = {permission.split(".")[-1] for permission in app.get("/api/ui_settings/")["permissions"]}
+    check(granted >= set(changed), f"The updated user has the permissions {sorted(granted)!r}, not {changed!r}.")
+    paperless.request("DELETE", f"/api/users/{created['id']}/", expect=204)
+
+
+def account(name):
+    """The answer of the setup of the account of the app: the settings saved with the token of
+    the new account, a checklist in which no line failed, and nowhere the token of the
+    superuser. In Paperless, the account is no superuser and has exactly the permissions of
+    the settings."""
+    state, paperless = connect()
+    payload = json.load(sys.stdin)
+    check(state["token"] not in json.dumps(payload), "The answer of the setup shows the token of the superuser.")
+    check(payload.get("account", {}).get("username") == name and payload["account"].get("created") is True, f"The setup answered {payload!r}")
+    check(payload.get("tokenConfigured") is True and payload.get("connectionTested") is True, f"The setup saved nothing: {payload!r}")
+    expect_checklist(payload)
+    found = paperless.get(f"/api/users/?page=1&page_size=1000&username__iexact={name}")["results"]
+    check(len(found) == 1 and found[0]["is_superuser"] is False and found[0]["is_active"] is True, f"The account in Paperless is {found!r}.")
+    granted = {permission.split(".")[-1] for permission in found[0]["user_permissions"]}
+    check(granted == SETUP_PERMISSIONS, f"The account has the permissions {sorted(granted)!r}, not {sorted(SETUP_PERMISSIONS)!r}.")
+
+
+def expect_checklist(payload):
+    lines = payload.get("checks")
+    check(isinstance(lines, list) and lines, f"The answer has no checklist: {payload!r}")
+    failed = [line for line in lines if line.get("status") == "failed"]
+    check(not failed, f"The checklist of the account failed: {failed!r}")
+
+
+def checklist():
+    expect_checklist(json.load(sys.stdin))
+
+
+def snippet_token():
+    """The token that the last command of the snippet of the README prints, as JSON."""
+    lines = [line for line in sys.stdin.read().splitlines() if line.strip()]
+    check(lines, "The commands of the README printed nothing.")
+    token = json.loads(lines[-1]).get("token")
+    check(is_text(token) and token, f"The commands of the README printed no token: {lines[-1]!r}")
+    print(token)
 
 
 def connect():
@@ -883,6 +984,12 @@ def main(arguments):
         status()
     elif command == "log":
         log()
+    elif command == "account":
+        account(rest[0])
+    elif command == "checklist":
+        checklist()
+    elif command == "snippet-token":
+        snippet_token()
     elif command == "shapes":
         return shapes(*rest)
     elif command == "fixtures":

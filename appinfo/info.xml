@@ -115,6 +115,7 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 		<command>OCA\PaperlessSync\Command\Run</command>
 		<command>OCA\PaperlessSync\Command\Status</command>
 		<command>OCA\PaperlessSync\Command\Forget</command>
+		<command>OCA\PaperlessSync\Command\CreateAccount</command>
 	</commands>
 	<settings>
 		<admin>OCA\PaperlessSync\Settings\AdminSettings</admin>

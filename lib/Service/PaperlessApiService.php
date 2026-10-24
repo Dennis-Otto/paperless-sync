@@ -316,6 +316,69 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/** @psalm-suppress MixedAssignment */
+	public function user(string $username): ?array {
+		// The filter of the list of users of Paperless; the username is compared here as well, so
+		// that a Paperless that ignores the filter answers right too.
+		$answer = $this->probe('/api/users/', ['page' => 1, 'page_size' => self::PAGE_SIZE, 'username__iexact' => $username]);
+		self::requireUserManagement($answer['status']);
+		if (self::listed($answer) === null) {
+			throw new RuntimeException("Paperless did not list its users: HTTP {$answer['status']}.");
+		}
+		/** @var array{results: list<mixed>} $data what listed() checked */
+		$data = $answer['data'];
+		foreach ($data['results'] as $user) {
+			$id = is_array($user) ? ($user['id'] ?? null) : null;
+			if (is_array($user) && ($user['username'] ?? null) === $username && is_int($id)) {
+				return ['id' => $id, 'superuser' => ($user['is_superuser'] ?? false) === true];
+			}
+		}
+
+		return null;
+	}
+
+	public function createUser(string $username, #[\SensitiveParameter] string $password, array $permissions): void {
+		$answer = $this->change('POST', '/api/users/', [
+			'username' => $username,
+			'password' => $password,
+			'is_active' => true,
+			'is_staff' => false,
+			'is_superuser' => false,
+			'user_permissions' => $permissions,
+		]);
+		self::requireUserManagement($answer['status']);
+		if ($answer['status'] === 400) {
+			throw new InvalidSettingException('Paperless did not create the user %1$s: %2$s', [$username, $answer['reason']], 'account_username');
+		}
+		if ($answer['status'] < 200 || $answer['status'] >= 300) {
+			throw new RuntimeException("Paperless did not create the user {$username}: HTTP {$answer['status']}" . ($answer['reason'] !== '' ? ": {$answer['reason']}" : '.'));
+		}
+	}
+
+	public function updateUser(int $id, #[\SensitiveParameter] string $password, array $permissions): void {
+		$answer = $this->change('PATCH', "/api/users/{$id}/", [
+			'password' => $password,
+			'is_active' => true,
+			// An account of the app is no staff, which reads the logs and the status of Paperless.
+			'is_staff' => false,
+			'user_permissions' => $permissions,
+		]);
+		self::requireUserManagement($answer['status']);
+		if ($answer['status'] < 200 || $answer['status'] >= 300) {
+			throw new RuntimeException("Paperless did not change the user {$id}: HTTP {$answer['status']}" . ($answer['reason'] !== '' ? ": {$answer['reason']}" : '.'));
+		}
+	}
+
+	public function userToken(string $username, #[\SensitiveParameter] string $password): string {
+		$answer = $this->change('POST', '/api/token/', ['username' => $username, 'password' => $password]);
+		$token = $answer['data']['token'] ?? null;
+		if ($answer['status'] !== 200 || !is_string($token) || trim($token) === '') {
+			throw new RuntimeException("Paperless did not give the token of the user {$username}: HTTP {$answer['status']}" . ($answer['reason'] !== '' ? ": {$answer['reason']}" : '.'));
+		}
+
+		return trim($token);
+	}
+
+	/** @psalm-suppress MixedAssignment */
 	public function customFields(): array {
 		$fields = [];
 		foreach ($this->getAll('/api/custom_fields/') as $id => $field) {
@@ -774,7 +837,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * answer, its JSON, and the version of Paperless that its header X-Version names. An answer
 	 * with an error comes back as well, for the line of the checklist that it decides.
 	 *
-	 * @param array<string, int> $query
+	 * @param array<string, int|string> $query
 	 * @return array{status: int, data: array<array-key, mixed>|null, version: string}
 	 * @throws PaperlessRequestException when no answer arrives
 	 */
@@ -801,6 +864,57 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			'data' => is_array($data) ? $data : null,
 			'version' => self::serverVersion($response),
 		];
+	}
+
+	/**
+	 * A request that changes Paperless, with $fields as its JSON: the status of the answer, its
+	 * JSON, and the reason of an error in it, in one line. An answer with an error comes back as
+	 * well, so that the caller tells a refused token from a refused value.
+	 *
+	 * @param 'POST'|'PATCH' $method
+	 * @param array<string, mixed> $fields
+	 * @return array{status: int, data: array<array-key, mixed>|null, reason: string}
+	 * @throws PaperlessRequestException when no answer arrives
+	 */
+	private function change(string $method, string $path, #[\SensitiveParameter] array $fields): array {
+		$response = $this->send(
+			$method,
+			$path,
+			[
+				'json' => $fields,
+				'connect_timeout' => 10,
+				'timeout' => 30,
+				'http_errors' => false,
+			],
+		);
+		$body = $response->getBody();
+		if (is_resource($body)) {
+			$body = stream_get_contents($body);
+		}
+		$body = is_string($body) ? $body : '';
+		/** @psalm-suppress MixedAssignment */
+		$data = json_decode($body, true);
+		$status = $response->getStatusCode();
+
+		return [
+			'status' => $status,
+			'data' => is_array($data) ? $data : null,
+			'reason' => $status >= 200 && $status < 300 ? '' : $this->errorReason($body),
+		];
+	}
+
+	/**
+	 * Refuses an answer that says that the token can't manage the users of Paperless: a token that
+	 * Paperless doesn't know, or one of an account without the permissions, which only a superuser
+	 * has at once.
+	 */
+	private static function requireUserManagement(int $status): void {
+		if ($status === Http::STATUS_UNAUTHORIZED) {
+			throw new InvalidSettingException('Paperless refused this token (HTTP 401). Copy the token of a superuser of Paperless, under My Profile in the menu of its account.', [], 'account_token');
+		}
+		if ($status === Http::STATUS_FORBIDDEN) {
+			throw new InvalidSettingException('Paperless does not let the account of this token manage users (HTTP 403). Use the token of a superuser of Paperless.', [], 'account_token');
+		}
 	}
 
 	/**
@@ -979,8 +1093,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 					: 'The first upload from the inbox shows it; the account needs the permissions Add for Documents and View for Paperless Tasks.',
 			);
 		}
-		$add = $account['superuser'] || self::permitted('add_document', $account['permissions']);
-		$tasks = $account['superuser'] || self::permitted('view_paperlesstask', $account['permissions']);
+		$add = $account['superuser'] || self::permitted(AccountPermissions::ADD_DOCUMENT, $account['permissions']);
+		$tasks = $account['superuser'] || self::permitted(AccountPermissions::VIEW_PAPERLESS_TASK, $account['permissions']);
 
 		return match (true) {
 			$add && $tasks => ConnectionCheck::passed(ConnectionCheck::UPLOAD, 'The account may add documents and view the tasks that import them.'),
@@ -1023,8 +1137,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 					: 'The first upload from the inbox shows it; the tags of the inbox need the permission View for Tags, and Add for Tags to create the missing ones.',
 			);
 		}
-		$view = $account['superuser'] || self::permitted('view_tag', $account['permissions']);
-		$add = $account['superuser'] || self::permitted('add_tag', $account['permissions']);
+		$view = $account['superuser'] || self::permitted(AccountPermissions::VIEW_TAG, $account['permissions']);
+		$add = $account['superuser'] || self::permitted(AccountPermissions::ADD_TAG, $account['permissions']);
 
 		return match (true) {
 			$view && $add && $create => ConnectionCheck::passed(ConnectionCheck::INBOX_TAGS, 'The account may view and create the tags that the inbox gives its files.'),

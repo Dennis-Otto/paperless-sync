@@ -68,8 +68,8 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 <!-- --8<-- [start:quick-start] -->
 
 1. Installiere **Paperless Sync** aus dem [Nextcloud App Store](https://apps.nextcloud.com/apps/paperless_sync) unter *Apps* oder mit `occ app:install paperless_sync`. Der System-Cron von Nextcloud muss laufen.
-2. Lege in Paperless-ngx unter *Benutzer & Gruppen* ein eigenes Konto für die App an, keinen Superuser, mit der Berechtigung **Anzeigen** für Dokumente, Korrespondenten, Dokumenttypen, Speicherpfade, Tags und UI-Einstellungen und, wenn du den Eingang nutzt, **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben. Mach es zum Eigentümer der zu spiegelnden Dokumente, damit ihr Papierkorb das Archiv sofort erreicht, und erstelle sein API-Token unter *Mein Profil*.
-3. Öffne in Nextcloud **Administrationseinstellungen → Paperless Sync**. Gib die Paperless-Adresse und das Token ein, wähle den Nextcloud-Benutzer, dem das Archiv gehört, aus den Benutzern, die das Feld anbietet, und klicke auf **Verbindung testen**: Die Checkliste darunter zeigt jede Berechtigung, die dem Konto fehlt, und was zu vergeben ist. Für ein Paperless unter einer Adresse deines Netzwerks, etwa `http://paperless:8000`, schalte zuerst **Paperless läuft in meinem lokalen Netzwerk** ein. Lass die Synchronisation ausgeschaltet und speichere; das Speichern führt dieselben Prüfungen aus.
+2. Öffne in Nextcloud **Administrationseinstellungen → Paperless Sync**. Gib die Paperless-Adresse ein, wähle den Nextcloud-Benutzer, dem das Archiv gehört, aus den Benutzern, die das Feld anbietet, und schalte die Module ein, die du möchtest, etwa den Eingang. Für ein Paperless unter einer Adresse deines Netzwerks, etwa `http://paperless:8000`, schalte **Paperless läuft in meinem lokalen Netzwerk** ein. Lass die Synchronisation ausgeschaltet.
+3. Öffne **Ein Konto für die App in Paperless anlegen**, gib das API-Token eines Paperless-Superusers ein, aus *Mein Profil* in seinem Menü, und klicke auf **Konto anlegen und speichern**. Die App legt den Benutzer `nextcloud-sync` an, keinen Superuser, mit nur den Berechtigungen, die deine Module brauchen, und einem zufälligen Passwort, speichert die Einstellungen mit dem Token dieses Benutzers, nie mit deinem, und zeigt die Verbindungs-Checkliste. Mach das Konto danach zum Eigentümer der zu spiegelnden Dokumente, damit ihr Papierkorb das Archiv sofort erreicht, wie es die Checkliste sagt. Um das Token deines Superusers aus Nextcloud herauszuhalten, lege das Konto von Hand an, wie *Das Konto der App* unter *Konfiguration* beschreibt, gib sein Token in **Paperless-API-Token** ein und klicke stattdessen auf **Verbindung testen**.
 4. Starte einen **Testlauf** und lies seine Zusammenfassung: Er listet auf, was ein Lauf ändern würde, ohne etwas zu ändern.
 5. Schalte die Synchronisation ein und speichere. Der Cron von Nextcloud führt sie im eingestellten Intervall aus, und die Dokumente erscheinen in `Dokumente/Paperless/Archiv` dieses Benutzers, auf einem Nextcloud mit der Standardsprache Deutsch; sonst in `Documents/Paperless/Archive`.
 
@@ -207,7 +207,9 @@ Verwende ein eigenes Dienstkonto in Paperless, das kein Superuser ist, mit nur d
 | Immer | **Anzeigen** für Dokumente, und Zugriff auf jedes zu spiegelnde Dokument, am besten als sein Eigentümer, wie unten beschrieben | listet die Dokumente auf und lädt sie herunter |
 | Archivexport | **Anzeigen** für Korrespondenten, Dokumenttypen, Speicherpfade und Tags | bildet die Pfade und überspringt die ausgeschlossenen Tags |
 | Gelöscht-Ordner | Eigentum an den Dokumenten, wie unten beschrieben | sieht sie sofort im Papierkorb von Paperless |
-| Nextcloud-Eingang | **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben | lädt die Dateien des Eingangs hoch und erfährt, ob Paperless sie importiert hat |
+| [`{{ owner_username }}`](#variablen-der-pfadvorlage) in der Pfadvorlage | **Anzeigen** für Benutzer | findet den Benutzernamen des Eigentümers jedes Dokuments |
+| Benutzerdefinierte Felder in der Pfadvorlage, oder [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) | **Anzeigen** für benutzerdefinierte Felder | liest die Namen und die Auswahlwerte der benutzerdefinierten Felder |
+| Nextcloud-Eingang, oder [*An Paperless senden*](#aus-dateien-senden), standardmäßig für die Administratoren an | **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben | lädt die Dateien hoch und erfährt, ob Paperless sie importiert hat |
 | [Tags des Eingangs](#tags-des-eingangs) | **Anzeigen** für Tags, und **Hinzufügen** für Tags mit *Fehlende Tags anlegen* | findet die Tags der Dateien des Eingangs und legt die an, die Paperless fehlen |
 | Verbindungs-Checkliste | **Anzeigen** für UI-Einstellungen | liest die Berechtigungen des Kontos, damit **Verbindung testen** die des Eingangs und das Eigentum an den Dokumenten prüfen kann |
 | [Eigentum je Benutzer](#eigentum-je-benutzer) | **Anzeigen** für Benutzer, **Anzeigen** auf den Dokumenten jedes Benutzers, und mit dem Eingang **Ändern** für Dokumente | findet den Eigentümer jedes Dokuments, spiegelt die Dokumente jedes Benutzers, und gibt dem Dokument eines Uploads den Benutzer von Paperless seines Benutzers |
@@ -223,7 +225,57 @@ Nur der Eigentümer eines Dokuments oder ein Superuser kann seinen Eigentümer �
 
 Ohne Eigentum erreicht der Papierkorb das Archiv trotzdem, nur später: Ein Dokument im Papierkorb, das das Konto nicht sehen kann, gilt als fehlend, und seine Kopie wandert nach der eingestellten Zahl vollständiger Scans in den Gelöscht-Ordner. Lass in diesem Fall *Auch Kopien von Dokumenten löschen, die ohne den Paperless-Papierkorb verschwunden sind* aus: Ist es zusammen mit dem endgültigen Löschen an, wird eine solche Kopie dann gelöscht, obwohl sich das Dokument in Paperless noch wiederherstellen lässt. Ein Testlauf zeigt einen Hinweis, wenn Dokumente fehlen, während der Papierkorb keine führt (`TRASH EMPTY` auf der Kommandozeile), und die [Verbindungs-Checkliste](#verbindungs-checkliste) zählt die Dokumente, die das Konto sieht, ohne dass sie ihm gehören.
 
-Das API-Token wird im Anmeldedaten-Speicher von Nextcloud gespeichert und nie an den Browser zurückgegeben. Es geht nur an die Paperless-Adresse, mit der es gespeichert wurde: Um dich mit einer anderen Adresse zu verbinden, gib das Token erneut ein. Das gilt auch, wenn sich die Adresse an der Einstellungsseite vorbei ändert, mit `occ` oder der Provisioning-API von Nextcloud; die Synchronisation wartet dann auf das Token. Speichern, **Verbindung testen** und Trennen fragen nach deinem Passwort, außer du hast es in den letzten 30 Minuten bestätigt.
+Das API-Token wird im Anmeldedaten-Speicher von Nextcloud gespeichert und nie an den Browser zurückgegeben. Es geht nur an die Paperless-Adresse, mit der es gespeichert wurde: Um dich mit einer anderen Adresse zu verbinden, gib das Token erneut ein. Das gilt auch, wenn sich die Adresse an der Einstellungsseite vorbei ändert, mit `occ` oder der Provisioning-API von Nextcloud; die Synchronisation wartet dann auf das Token. Speichern, **Verbindung testen**, das Einrichten des Kontos und Trennen fragen nach deinem Passwort, außer du hast es in den letzten 30 Minuten bestätigt.
+
+<a id="the-account-of-the-app"></a>
+
+#### Das Konto der App
+
+**Ein Konto für die App in Paperless anlegen**, in der Karte *Verbindung und Eigentümer*, richtet das Konto der App mit dem API-Token eines Paperless-Superusers ein, das du einmal eingibst:
+
+1. Die App nimmt die Berechtigungen, die die Module des Formulars brauchen, aus der Tabelle oben, und keine weiteren; stelle also zuerst die Module ein.
+2. Sie legt den Benutzer an, `nextcloud-sync`, wenn du keinen anderen Namen wählst, als keinen Superuser, mit genau diesen Berechtigungen und einem zufälligen Passwort aus 64 Zeichen, das niemand erfährt, fragt Paperless nach dem Token dieses Benutzers und speichert die Einstellungen des Formulars damit, wie **Speichern** ein eingegebenes Token speichert.
+3. Sie zeigt die Verbindungs-Checkliste des neuen Kontos. Was keine Berechtigung eines Kontos geben kann, den Zugriff auf die Dokumente anderer Eigentümer, liegt bei dir: Mach das Konto zu ihrem Eigentümer, wie unten beschrieben, oder gib ihm beim Eigentum je Benutzer **Anzeigen** auf den Dokumenten jedes Benutzers.
+
+Einen Benutzer dieses Namens, den es schon gibt, ändert die App nur, wenn du zustimmst: Die Seite fragt zuerst, und Aktualisieren gibt ihm genau diese Berechtigungen und ein neues zufälliges Passwort und nimmt ihm *Admin*, während sein Token und die Berechtigungen seiner Gruppen gleich bleiben. Einen Superuser übernimmt sie nie. Dein Token geht nur an die Paperless-Adresse des Formulars, für diese Anfragen: Die App speichert es nirgends, protokolliert es nirgends und schickt es nie an den Browser zurück, wie [das Sicherheitskonzept](https://dennis-otto.github.io/paperless-sync/security.html#the-setup-of-the-account) erklärt.
+
+Für eine Einrichtung per Skript tut `occ paperless_sync:create-account` dasselbe mit den gespeicherten Einstellungen und gibt die Checkliste aus. Es nimmt das Token des Superusers aus einer Datei, oder mit `--admin-token-file=-` von der Standardeingabe, nie als Argument, das die Liste der Prozesse zeigen würde:
+
+```sh
+occ paperless_sync:create-account --admin-token-file=/run/secrets/paperless-admin-token
+```
+
+Ohne ein Token eines Superusers für Nextcloud legst du das Konto selbst an: in Paperless unter *Benutzer & Gruppen*, mit den Berechtigungen der Tabelle oben, dann sein Token unter *Mein Profil*, während du als dieser Benutzer angemeldet bist. Oder führe diese Befehle auf einem Rechner von dir aus, nachdem du die ersten drei Zeilen ausgefüllt hast; sie legen das Konto mit den Berechtigungen des Archivs und des Eingangs an:
+
+<!-- account-snippet:start -->
+
+```sh
+PAPERLESS_URL='https://paperless.example.com'
+SUPERUSER_TOKEN='the API token of a superuser of Paperless'
+ACCOUNT='nextcloud-sync'
+PASSWORD="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+# The token and the password go to curl in files of a private folder, never as arguments,
+# which the list of processes would show.
+SECRETS="$(mktemp -d)"
+printf 'Authorization: Token %s\n' "${SUPERUSER_TOKEN}" > "${SECRETS}/header"
+printf '{"username": "%s", "password": "%s", "is_superuser": false, "user_permissions": ["view_document", "add_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_tag", "view_paperlesstask", "view_uisettings"]}' \
+  "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/user.json"
+printf '{"username": "%s", "password": "%s"}' "${ACCOUNT}" "${PASSWORD}" > "${SECRETS}/login.json"
+if curl --fail-with-body --silent --show-error --output "${SECRETS}/answer" \
+  --header @"${SECRETS}/header" --header 'Content-Type: application/json' \
+  --data @"${SECRETS}/user.json" "${PAPERLESS_URL}/api/users/"; then
+  curl --fail-with-body --silent --show-error --header 'Content-Type: application/json' \
+    --data @"${SECRETS}/login.json" "${PAPERLESS_URL}/api/token/"
+else
+  # Why Paperless refused the user, such as a username that it has already.
+  cat "${SECRETS}/answer" >&2
+fi
+rm -rf "${SECRETS}"
+```
+
+<!-- account-snippet:end -->
+
+Der letzte Befehl gibt `{"token":"…"}` aus: Gib dieses Token in **Paperless-API-Token** ein und klicke auf **Verbindung testen**. Für die anderen Module ergänze ihre Berechtigungen in der Liste, wie die Tabelle oben sie nennt: `"add_tag"` für *Fehlende Tags anlegen*, `"view_user"` für das Eigentum je Benutzer und `{{ owner_username }}`, `"change_document"` für das Eigentum je Benutzer mit Uploads und `"view_customfield"` für benutzerdefinierte Felder.
 
 #### Verbindungs-Checkliste
 
@@ -826,6 +878,7 @@ Das `occ` von Nextcloud führt die App aus der Shell aus, für Skripte, eigene C
 | `occ paperless_sync:run --dry-run` | Die Änderungen, die ein Lauf machen würde, ohne sie zu machen. |
 | `occ paperless_sync:run --batch-size=1000` | Ein Lauf mit eigener Batchgröße; `--unlimited` macht jede fällige Änderung, etwa für den ersten Import eines großen Archivs. |
 | `occ paperless_sync:status` | Der Status des letzten Laufs, wie ihn die Einstellungsseite zeigt, mit seinem Bericht. `--exit-code` sagt mit dem Exit-Code, wie er endete, für eine Prüfung einer Überwachung. |
+| `occ paperless_sync:create-account --admin-token-file=FILE` | Legt das Konto der App in Paperless mit dem Token eines Superusers aus der Datei an, oder mit `-` von der Standardeingabe, mit den Berechtigungen der Module der gespeicherten Einstellungen, speichert sein Token und gibt die Verbindungs-Checkliste aus; `--username` benennt das Konto, `--update` aktualisiert einen Benutzer, den es schon gibt. Es endet mit 0, wenn jede Prüfung bestanden ist, mit 1, wenn eine Prüfung fehlschlug, und mit 2, wenn es fehlschlug, ohne gespeichertes Token. [Das Konto der App](#the-account-of-the-app) hat die Einzelheiten. |
 | `occ paperless_sync:forget 123 P124` | Die nächsten Läufe laden diese Dokumente erneut herunter und schreiben jedes an die Stelle seiner Kopie, etwa nachdem eine Kopie beschädigt wurde; `--all` für jede Kopie, etwa nach einem Vorfall des Speichers. Eine Kopie behält ihren Pfad, ihre Datei-ID, ihre Freigaben und ihre Versionen, und eine Bearbeitung in Nextcloud bekommt wieder den Inhalt von Paperless. |
 
 `--output=json` gibt den Bericht eines Laufs oder den Status als das JSON aus, das die Einstellungsseite liest, in einer Zeile, und `--output=json_pretty` eingerückt; Meldungen über Fehler gehen auf die Standardfehlerausgabe. Ein Lauf auf der Kommandozeile zählt im Status und im Protokoll wie jeder andere Lauf und hält dieselbe Sperre, also läuft er nie neben einem geplanten Lauf oder einem von *Jetzt synchronisieren*.

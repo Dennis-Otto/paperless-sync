@@ -65,6 +65,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertNull($this->initialState['status']['nextRun']);
 		self::assertSame('/route/paperless_sync.settings.save', $parameters['saveUrl']);
 		self::assertSame('/route/paperless_sync.settings.test', $parameters['testUrl']);
+		self::assertSame('/route/paperless_sync.settings.account', $parameters['accountUrl']);
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
@@ -191,7 +192,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(13, $links[1], 'Each of the six sections, each warning of the setup checks, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(14, $links[1], 'Each of the six sections, each warning of the setup checks, the setup of the account of the app, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);

@@ -141,6 +141,7 @@ accessibility() {
 			--env "E2E_PASSWORD=${PASSWORD}" \
 			--env E2E_TOKEN=e2e-only-token \
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
+			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs && node flow.mjs'
 }
@@ -1370,6 +1371,59 @@ if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	accessibility
 	echo "The accessibility check passes after ${SECONDS} s."
 fi
+
+# The setup of the account of the app with the token of a superuser of Paperless: the app
+# creates the account with the permissions of the saved modules, saves the settings with its
+# token and answers the checklist, in which nothing fails. A second setup changes the user
+# only with update. The token of the superuser reaches no answer, which assert_json.py
+# checks, not the configuration of the app, and no line of the log, which assert_log.py
+# checks below. Then the runs go on with the token of the account of the README.
+account_setup() {
+	output="$1"
+	shift
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'superuserToken=e2e-superuser-only-token' \
+		--data-urlencode 'username=e2e-app' \
+		"$@" \
+		--output "${output}" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/settings/account"
+}
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-created.json")"
+if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+	echo "The setup of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-created.json")" >&2
+	exit 1
+fi
+assert_json account-created "${TMP_DIR}/account-created.json"
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-exists.json")"
+if [[ "${ACCOUNT_STATUS}" != "409" ]]; then
+	echo "A second setup of the account changed the user without update: HTTP ${ACCOUNT_STATUS}, $(cat "${TMP_DIR}/account-exists.json")" >&2
+	exit 1
+fi
+assert_json account-exists "${TMP_DIR}/account-exists.json"
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-updated.json" --data-urlencode 'update=1')"
+if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+	echo "The update of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-updated.json")" >&2
+	exit 1
+fi
+assert_json account-updated "${TMP_DIR}/account-updated.json"
+if occ config:list paperless_sync --private | grep --fixed-strings e2e-superuser-only-token >/dev/null; then
+	echo "The configuration of the app holds the token of the superuser of Paperless." >&2
+	exit 1
+fi
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/account-restored.json" \
+	"${BASE_URL}/apps/paperless_sync/settings"
+echo "The setup of the account in Paperless passes after ${SECONDS} s."
 
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
