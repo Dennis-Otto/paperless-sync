@@ -36,10 +36,12 @@ jobs:
     steps:
       # The job may comment, so it reaches GitHub's API alone; Harden-Runner itself
       # allows the storage of the reports, which the artifacts of the check keep.
+      # Without sudo and Docker no step can lift the block.
       - name: Block every host that the job doesn't need
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: block
+          disable-sudo-and-containers: true
           allowed-endpoints: >
             api.github.com:443
       - name: Write the comment from the reports of the check
