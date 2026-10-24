@@ -1,0 +1,23 @@
+flowchart TB
+    accTitle: How the pictures stay current
+    accDescr: A pull request that changes the app or the story of the pictures, the files of .github/screenshots-paths.txt, gets the visual check: it renders the English and the German pictures from the Paperless mock with its frozen story, side by side, keeps each picture whose pixels stayed the same, and comments on the pull request with the pictures that look different and the share of their changed pixels; the artifact holds each one before and after, with its changed pixels in red. It only reports. Once the pull request is merged, and after every release and every week, the screenshot bot renders the pictures of main the same way; when pixels changed, it opens the pull request docs update the screenshots from the branch bot/screenshots as the release app, which merges itself once every check passes. Your steps are orange, the checks and the bots blue, and the pictures green.
+
+    change["A pull request changes<br>the app or the story"]
+    visual["Visual check<br>renders English and German,<br>side by side"]
+    comment["Comment on the pull request:<br>the pictures that look different,<br>before and after in the artifact"]
+    merge["You merge the<br>pull request"]
+    bot["Screenshot bot<br>after a merge, a release<br>and every week"]
+    same{"Pixels<br>changed?"}
+    keep(["Every picture<br>keeps its file"])
+    renew(["docs: update the screenshots<br>merges itself once<br>every check passes"])
+
+    change --> visual --> comment --> merge --> bot --> same
+    same -- "no" --> keep
+    same -- "yes" --> renew
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class change,merge yours
+    class visual,comment,bot,same check
+    class keep,renew result

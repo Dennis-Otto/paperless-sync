@@ -143,6 +143,29 @@ Each screenshot of the App Store gets a small thumbnail next to it, `screenshots
 
 The GIFs show a drawn pointer, since a screenshot has none, and share one palette across their frames. The image of Playwright has no font for the interface of Nextcloud, so the script installs Inter (`fonts.conf`). `E2E_PORT` (default `18084`), `E2E_PROJECT_NAME` and `KEEP_E2E=1` work as for `run.sh`. Look at every picture before committing it.
 
+### The same pixels on every run
+
+Two runs of the script draw the same pixels, so that a picture changes only when the app looks different. The data of the mock is fixed, and `frozen.mjs` freezes everything else that the server writes anew on each run, in the answers that the browser gets and never in what the server keeps: each moment of a run shows the moment of the story at which the browser first saw it, 10:20 for the first dry-run, 10:21 for the first synchronization and 10:22 for the runs a few days later, the new secret of the webhook shows as an example secret, and every file in Files changed "a few seconds ago". Every picture, and every frame of an animation, waits until the page stands still: no part of it scrolling any more, such as to a new report, its images decoded, its transitions at their end, and two pictures in a row the same; and Chromium decodes each image as it draws it and draws each tile whole (`--disable-checker-imaging`, `--disable-partial-raster`), without which it drew the avatar in the header in one of two ways from run to run. An animation takes its frames at fixed steps of what it shows: it waits for the server without frames, and draws a scroll of the page, such as the one to a new report, in eight fixed steps. `scripts/check-project.sh` tests the frozen clock with `node --test frozen.test.mjs`.
+
+## The screenshot bot and the visual check
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/how-the-pictures-stay-current.dark.svg">
+  <img src="../../docs/images/diagrams/how-the-pictures-stay-current.svg" alt="How the pictures stay current: A pull request that changes the app or the story of the pictures, the files of .github/screenshots-paths.txt, gets the visual check: it renders the English and the German pictures from the Paperless mock with its frozen story, side by side, keeps each picture whose pixels stayed the same, and comments on the pull request with the pictures that look different and the share of their changed pixels; the artifact holds each one before and after, with its changed pixels in red. It only reports. Once the pull request is merged, and after every release and every week, the screenshot bot renders the pictures of main the same way; when pixels changed, it opens the pull request docs update the screenshots from the branch bot/screenshots as the release app, which merges itself once every check passes. Your steps are orange, the checks and the bots blue, and the pictures green.">
+</picture>
+
+`scripts/screenshots.sh` turns on the screenshot bot of the blueprint (`.github/workflows/screenshot-bot.yml`): it renders the social preview and runs this script for both languages. After a change of `main` that touches a file of `.github/screenshots-paths.txt`, after every release, every week and when started by hand, the bot runs it, gives every picture whose pixels stayed the same its committed file back, and opens or updates the pull request *docs: update the screenshots* from the branch `bot/screenshots`, as the release app, with the pictures that changed. It merges itself once every check passes, and the bot closes it when `main` looks as rendered without it.
+
+A pull request that touches a file of that list, without the social preview, gets the visual check (`.github/workflows/visual.yml`): the jobs *render (en)* and *render (de)* run this script for their language side by side, keep the pictures that look different (`python3 .github/blueprint.py screenshots keep`) and put each one before and after side by side, with a third picture of its changed pixels in red (`compare.mjs`), in the artifact `visual-en` or `visual-de`. `visual-comment.yml` then writes one comment on the pull request with those pictures and the share of their changed pixels; it never runs the code of the pull request. The check only reports, and fails only when the pictures can't be rendered. `node --test compare.test.mjs` keeps the paths of the check equal to those of the list.
+
+To see on your machine what a change of yours changes:
+
+```bash
+bash scripts/screenshots.sh                       # or: bash tests/e2e/screenshots.sh de
+python3 -m pip install --require-hashes -r .github/screenshots-requirements.txt
+python3 .github/blueprint.py screenshots restore  # gives each picture that looks the same its file back
+```
+
 ## The coming Nextcloud
 
 Every Monday, and when started by hand, the workflow also runs the suite against the coming Nextcloud:

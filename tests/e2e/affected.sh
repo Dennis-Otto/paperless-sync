@@ -23,11 +23,13 @@
 
 # A file whose change can make the end-to-end tests pass or fail: the code, the
 # metadata and the assets of the app, the tests themselves and their workflow. The
-# contract tests against a real Paperless are no part of them. appinfo/info.xml counts
-# only with info_xml_change_affects_app.
+# contract tests against a real Paperless are no part of them, and neither are the
+# scripts of the pictures alone, which the visual check renders (visual.yml).
+# appinfo/info.xml counts only with info_xml_change_affects_app.
 path_affects_app() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
 		lib/* | appinfo/* | templates/* | js/* | css/* | l10n/* | img/* | composer.json | tests/e2e/*) return 0 ;;
 		.github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
@@ -41,7 +43,7 @@ path_affects_app() {
 # appinfo/info.xml, such as a new max-version, counts as for path_affects_app.
 path_affects_variants() {
 	case "$1" in
-		tests/e2e/*.md) return 1 ;;
+		tests/e2e/*.md | tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
 		lib/Migration/* | lib/Service/SyncStateRepository* | lib/Service/NextcloudStorage*) return 0 ;;
 		lib/Service/PaperlessApiService.php | tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
