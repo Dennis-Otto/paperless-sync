@@ -261,7 +261,7 @@ if [[ "${INSTALLED_VERSION}" != "${UPGRADE_VERSION}" ]]; then
 fi
 # Every migration of the package ran, and none that it lacks.
 MIGRATIONS="$(tar --list --gzip --file - <"${E2E_PACKAGE}" |
-	sed -nE 's|^paperless_sync/lib/Migration/Version([^/]+)\.php$|\1|p' | tr '\n' ' ')"
+	sed -nE 's|^paperless_sync/lib/Migration/Version([^/]+)\.php$|\1|p' | sort | tr '\n' ' ')"
 upgrade_state "${TMP_DIR}/state-upgraded.json"
 "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_upgrade.py migrations "${MIGRATIONS}" \
 	<"${TMP_DIR}/state-upgraded.json"

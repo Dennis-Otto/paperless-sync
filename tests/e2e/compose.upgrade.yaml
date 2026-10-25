@@ -10,3 +10,8 @@ services:
   nextcloud:
     volumes: !override
       - nextcloud_html:/var/www/html
+    # A quarter of the weight of the CPU of the other containers: run-all.sh runs the
+    # upgrade beside the scenario of the other variants on the four cores of a runner of
+    # the CI, and the upgrade, which ends sooner, yields to them instead of making the job
+    # wait for the scenario.
+    cpu_shares: 256
