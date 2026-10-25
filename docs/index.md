@@ -94,6 +94,14 @@ The [guide](guide.md) describes the configuration in detail: the Paperless accou
 
     [:octicons-arrow-right-24: Read the guide](guide.md)
 
+- :material-cellphone-text:{ .lg .middle } **Using the archive**
+
+    ---
+
+    For the people who read and send the documents: find them, send files to Paperless, scan with the phone, keep them offline and share them.
+
+    [:octicons-arrow-right-24: Use the archive](use.md)
+
 - :material-lifebuoy:{ .lg .middle } **FAQ and troubleshooting**
 
     ---
