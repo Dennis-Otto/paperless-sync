@@ -43,16 +43,18 @@ if [[ -z "$image" || "$image" != "$package" ]]; then
 fi
 echo "The image of Playwright and playwright-core are both at version $package."
 
-# The krankerl that builds the package of the commit for the upgrade test, in the job
-# variants of e2e.yml, is the one of the CI and of the release, whose package users get.
-krankerl_pin() {
-  sed -nE "s/^[[:space:]]*KRANKERL_$1:[[:space:]]*([^[:space:]]+).*/\1/p" "$2" | sort -u | tr '\n' ' '
-}
+# The job variants of e2e.yml reads the krankerl that builds the package of the commit
+# for the upgrade test from ci.yml, the one of the CI and of the release, whose package
+# users get. It needs exactly one of each pin there, and no copy of its own that the
+# blueprint's updates of ci.yml would leave behind.
 for pin in VERSION SHA256; do
-  expected="$(krankerl_pin "$pin" .github/workflows/ci.yml)"
-  actual="$(krankerl_pin "$pin" .github/workflows/e2e.yml)"
-  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
-    echo ".github/workflows/e2e.yml pins KRANKERL_$pin ${actual:-?}, but .github/workflows/ci.yml ${expected:-?}; keep them equal, as the upgrade test installs the package that the release builds."
+  count="$(grep -cE "^[[:space:]]*KRANKERL_$pin:[[:space:]]*[^[:space:]]+" .github/workflows/ci.yml || true)"
+  if [[ "$count" != 1 ]]; then
+    echo ".github/workflows/ci.yml names KRANKERL_$pin $count times, but the upgrade test in .github/workflows/e2e.yml reads exactly one pin from it; ci.yml belongs to the blueprint, so fix it there."
+    exit 1
+  fi
+  if grep -qE "^[[:space:]]*KRANKERL_$pin:" .github/workflows/e2e.yml; then
+    echo ".github/workflows/e2e.yml pins KRANKERL_$pin itself; remove that pin, as the job variants reads the one of .github/workflows/ci.yml, which the blueprint keeps up to date."
     exit 1
   fi
 done

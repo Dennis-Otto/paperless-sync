@@ -199,8 +199,8 @@ stray file may be a secret, and a missing one a file that the app needs."""
 problem = """A check of this app alone in `scripts/check-project.sh` failed; the line
 `== NAME` above its message names it. *Browser of the end-to-end tests*: the image of
 Playwright in `tests/e2e/run.sh` and playwright-core in `tests/e2e/package.json` differ,
-or the krankerl of the upgrade test in `.github/workflows/e2e.yml` is not that of
-`.github/workflows/ci.yml`. *Changes that run the end-to-end tests*: a rule of
+or `.github/workflows/e2e.yml` pins a krankerl of its own, or `.github/workflows/ci.yml`
+doesn't pin exactly one, which the upgrade test reads. *Changes that run the end-to-end tests*: a rule of
 `tests/e2e/affected.sh` decides otherwise than its sample. *Downloads that a script runs*: a pipe of a shell script
 hands a download to a program, such as `curl … | bash` or `curl … | "${COMPOSE[@]}" exec
 … python`, which Scorecard reports as a download that runs without a pinned hash, or the
@@ -231,8 +231,8 @@ would fail the workflow Findings on `main`, the website, the README and its Germ
 with the versions of `appinfo/info.xml`, the labels of pull requests, the explanations of
 the checks, the package of a release and the German words of the app."""
 fix = """The message names the file and what to change: keep the image of Playwright and
-playwright-core at one version, and the krankerl of `.github/workflows/e2e.yml` at that of
-`.github/workflows/ci.yml`, change a rule of `tests/e2e/affected.sh` together with
+playwright-core at one version, leave the pin of krankerl to `.github/workflows/ci.yml`,
+which the blueprint updates and the upgrade test reads, change a rule of `tests/e2e/affected.sh` together with
 its sample, save a download into a file with `curl --output` and give that file to the
 program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
 `appinfo/info.xml` rather than in the text, give the three descriptions the same

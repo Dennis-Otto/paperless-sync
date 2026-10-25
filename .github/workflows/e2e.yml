@@ -116,12 +116,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-    env:
-      # The same krankerl as the CI's and the release workflow's, for the package of the
-      # commit that the upgrade installs; scripts/check-project.sh compares them.
-      # renovate: datasource=github-releases depName=ChristophWurst/krankerl extractVersion=^v(?<version>.+)$
-      KRANKERL_VERSION: 0.14.0
-      KRANKERL_SHA256: 9bee5a756a83c5a6b1f040e9a2ade9e902e4a57211afc174cd8ac5c4f913958f
     steps:
       - name: Record the network traffic of the job
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -136,6 +130,15 @@ jobs:
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
+      # The same krankerl as the CI's and the release workflow's, for the package of the
+      # commit that the upgrade installs: its pin is read from ci.yml, which the blueprint
+      # updates, so there is no copy here to fall behind; scripts/check-project.sh checks
+      # that ci.yml names exactly one of each.
+      - name: Use the krankerl of the CI and of the release
+        if: steps.changes.outputs.upgrade != 'false'
+        run: |
+          sed -nE 's/^[[:space:]]*(KRANKERL_(VERSION|SHA256)):[[:space:]]*([^[:space:]]+).*/\1=\3/p' \
+            .github/workflows/ci.yml >> "$GITHUB_ENV"
       # krankerl comes from the cache once a run has downloaded it, as in the CI, and
       # its package is checked by its sha256 either way.
       - name: Restore krankerl from the cache

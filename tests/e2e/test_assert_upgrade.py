@@ -199,10 +199,23 @@ def test_the_retry_still_waits_after_the_run() -> None:
 
 
 def test_every_migration_of_the_package_ran() -> None:
-    passes("migrations", STATE, "000100Date20260826000000 000110Date20261008000000 ")
-    fails("migrations", STATE, "didn't execute the migration 000120Date20261014000000", "000100Date20260826000000 000110Date20261008000000 000120Date20261014000000")
-    fails("migrations", STATE, "executed the migration 000110Date20261008000000, which the package doesn't have", "000100Date20260826000000")
-    fails("migrations", STATE, "proves nothing", "")
+    same = {"before": STATE, "after": STATE}
+    passes("migrations", same, "000100Date20260826000000 000110Date20261008000000 ")
+    fails("migrations", same, "didn't execute the migration 000120Date20261014000000", "000100Date20260826000000 000110Date20261008000000 000120Date20261014000000")
+    fails("migrations", same, "executed the migration 000110Date20261008000000, which the package doesn't have", "000100Date20260826000000")
+    fails("migrations", same, "proves nothing", "")
+
+
+def test_the_migrations_report_names_only_those_newer_than_the_release() -> None:
+    versions = "000100Date20260826000000 000110Date20261008000000 "
+    result = run("migrations", {"before": STATE, "after": STATE}, versions)
+    assert result.returncode == 0, result.stderr
+    assert "No migration of the package is newer than the release" in result.stdout, result.stdout
+    before = copy.deepcopy(STATE)
+    before["migrations"].remove("000110Date20261008000000")
+    result = run("migrations", {"before": before, "after": STATE}, versions)
+    assert result.returncode == 0, result.stderr
+    assert "executed the migrations 000110Date20261008000000 on the rows of the release" in result.stdout, result.stdout
 
 
 def test_an_unknown_mode_fails() -> None:

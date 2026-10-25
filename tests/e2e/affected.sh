@@ -250,9 +250,15 @@ if ((${#reaching[@]} > 0)); then
 		echo "${#varying[@]} of them can behave differently on another database or storage, so PostgreSQL, MariaDB and the object store run as well."
 		variants=true
 	else
-		message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
-		echo "${message}"
-		summary "E2E on SQLite with local storage only" "${message}"
+		if ((${#upgrading[@]} > 0)); then
+			message="None of them can behave differently on another database or storage, so the scenarios run on SQLite with local storage only, but ${#upgrading[@]} can break the upgrade of an installation in use, so the upgrade from the last release runs on PostgreSQL and MariaDB; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
+			echo "${message}"
+			summary "E2E on SQLite with local storage, and the upgrade from the last release on PostgreSQL and MariaDB" "${message}"
+		else
+			message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
+			echo "${message}"
+			summary "E2E on SQLite with local storage only" "${message}"
+		fi
 		variants=false
 	fi
 	if [[ "${upgrade}" == true ]]; then

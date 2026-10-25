@@ -23,9 +23,10 @@ It reads a JSON object from standard input, in one of these modes:
   no request with a wrong token in between.
 - retry: {"before": …, "after": …}, the states before the upgrade and after the run that
   followed it: each import that waited to be tried again still waits, until the same time.
-- migrations VERSIONS: the state right after the upgrade, whose executed migrations must be
-  exactly VERSIONS, those of the files of lib/Migration/ in the package, such as
-  000100Date20260826000000.
+- migrations VERSIONS: {"before": …, "after": …}, the state of the release and the state right
+  after the upgrade, whose executed migrations must be exactly VERSIONS, those of the files of
+  lib/Migration/ in the package, such as 000100Date20260826000000. It prints those that the
+  upgrade executed, the ones newer than the release, which met the rows of the release.
 """
 
 import json
@@ -138,7 +139,12 @@ elif mode == "retry":
             problems.append(f"The import of {key[1]} of {key[0]} waited to be tried again as {row!r}, and after the upgrade and a run as {after.get(key)!r}.")
 elif mode == "migrations":
     expected = set(argument.split())
-    executed = set(payload["migrations"])
+    executed = set(payload["after"]["migrations"])
+    newer = sorted(executed - set(payload["before"]["migrations"]))
+    if newer:
+        print(f"The upgrade executed the migrations {' '.join(newer)} on the rows of the release.")
+    else:
+        print("No migration of the package is newer than the release, so the upgrade executed none.")
     if not expected:
         problems.append("The package has no migrations, so the check proves nothing.")
     for version in sorted(expected - executed):

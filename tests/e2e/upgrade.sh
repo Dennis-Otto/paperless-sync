@@ -20,7 +20,8 @@
 #    waits to be sent.
 # 3. The package of the commit replaces it, at a higher version than the release when the commit
 #    still has the version of the release, as the next release will, and occ upgrade runs.
-# 4. Every migration must have run, the version be that of the package, and the upgrade must keep
+# 4. Every migration of the package must have run (those newer than the release on its rows; the
+#    test names them, or says that none is newer), the version be that of the package, and the upgrade must keep
 #    every row of the tables of the app, every value of its configuration, its credentials, every
 #    file below the base folder with its ID, the settings and the webhook. The next run must
 #    work with the stored token, download nothing again and still wait with the retry; the secret
@@ -263,11 +264,17 @@ fi
 MIGRATIONS="$(tar --list --gzip --file - <"${E2E_PACKAGE}" |
 	sed -nE 's|^paperless_sync/lib/Migration/Version([^/]+)\.php$|\1|p' | sort | tr '\n' ' ')"
 upgrade_state "${TMP_DIR}/state-upgraded.json"
-"${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_upgrade.py migrations "${MIGRATIONS}" \
-	<"${TMP_DIR}/state-upgraded.json"
+# It names the migrations newer than the release, the ones that met the rows of the release.
+NEWER="$({
+	printf '{"before": '
+	cat "${TMP_DIR}/state-release.json"
+	printf ', "after": '
+	cat "${TMP_DIR}/state-upgraded.json"
+	printf '}'
+} | "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_upgrade.py migrations "${MIGRATIONS}")"
 # The web server loads the new code, as after the next request of a server.
 restart_nextcloud
-echo "occ upgrade to ${UPGRADE_VERSION} ran after ${SECONDS} s, and Nextcloud executed the migrations ${MIGRATIONS% }."
+echo "occ upgrade to ${UPGRADE_VERSION} ran after ${SECONDS} s, and Nextcloud has executed every migration of the package, ${MIGRATIONS% }. ${NEWER}"
 
 # 4. What the upgrade keeps, and the release's installation working on.
 {
@@ -297,4 +304,4 @@ if [[ "${WEBHOOK_STATUS}" != "200" ]]; then
 	echo "The webhook refuses its secret after the upgrade: HTTP ${WEBHOOK_STATUS}, $(cat "${TMP_DIR}/upgraded-webhook.json")" >&2
 	exit 1
 fi
-echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: the upgrade from the release ${RELEASE_VERSION} to ${UPGRADE_VERSION} after ${SECONDS} s, with the package of the release intact and a changed copy refused, every migration run on the rows of an installation in use, every row, setting, credential and file ID kept, the stored token working, nothing downloaded again, the retry of the inbox still waiting, the import of the release finished and the secret of the webhook accepted."
+echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: the upgrade from the release ${RELEASE_VERSION} to ${UPGRADE_VERSION} after ${SECONDS} s, with the package of the release intact and a changed copy refused, every migration newer than the release run on the rows of an installation in use, every row, setting, credential and file ID kept, the stored token working, nothing downloaded again, the retry of the inbox still waiting, the import of the release finished and the secret of the webhook accepted."
