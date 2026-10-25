@@ -1,0 +1,36 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How the upgrade test runs
+    accDescr: The upgrade test installs the signed package of the last release, which occ integrity:check-app must find intact while a copy with one changed file fails, and uses it as an administrator does, with the token, per-user ownership, the webhook, the copies of two owners, an import, a retry and a file to send. It records every row, setting, credential, migration and file ID. Then the package of the commit, which krankerl builds as the release does, replaces the release, and occ upgrade runs every new migration on those rows. A migration that fails turns the test red, as it would leave every server in maintenance mode. Otherwise everything recorded must be unchanged, and the next run must work with the stored token, download nothing, keep waiting with the retry and finish the import of the release.
+
+    release["The last release,<br>signed as in<br>the App Store"]
+    intact{"occ integrity:<br>check-app"}
+    use["In use: token,<br>per-user owners,<br>webhook, copies,<br>import, retry,<br>file to send"]
+    before["Recorded: rows,<br>settings,<br>credentials,<br>migrations,<br>file IDs"]
+    commit["The package of<br>the commit,<br>by krankerl"]
+    upgrade{"occ upgrade:<br>every migration<br>meets the rows"}
+    after["Unchanged; the<br>next run fetches<br>nothing, keeps<br>the retry, ends<br>the import"]
+    failed["Failed: servers<br>would stay in<br>maintenance mode"]
+
+    release --> intact
+    intact -- "intact; a changed<br>copy fails" --> use
+    use --> before
+    before --> commit
+    commit --> upgrade
+    upgrade -- "passed" --> after
+    upgrade -- "a migration fails" --> failed
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef data fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class release,commit paperless
+    class intact,upgrade check
+    class use,before data
+    class after done
+    class failed refused

@@ -13,9 +13,11 @@
 #   bash tests/e2e/affected.sh [BASE [HEAD]]
 #
 # It names the changed files that reach the app and writes affected=true or
-# affected=false to $GITHUB_OUTPUT, and variants=true or variants=false: whether the
+# affected=false to $GITHUB_OUTPUT, variants=true or variants=false: whether the
 # change can also behave differently on another database or storage, so that
-# run-all.sh runs PostgreSQL, MariaDB and the object store as well. With
+# run-all.sh runs PostgreSQL, MariaDB and the object store as well, and upgrade=true or
+# upgrade=false: whether it can break the upgrade of an installation in use from the last
+# release, so that run-all.sh runs that on PostgreSQL and MariaDB too (upgrade.sh). With
 # E2E_QUESTION=contract, it asks instead whether the change can alter what the app asks
 # Paperless or how it reads the answers, and writes contract=true or contract=false, for
 # the contract tests against a real Paperless-ngx (run-contract.sh).
@@ -46,6 +48,23 @@ path_affects_variants() {
 		tests/e2e/*.md | tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
 		lib/Migration/* | lib/Service/SyncStateRepository* | lib/Service/NextcloudStorage*) return 0 ;;
 		lib/Service/PaperlessApiService.php | tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# A file whose change can break the upgrade of an installation in use from the last release
+# (upgrade.sh): the migrations, which meet the rows of the release there alone, the settings
+# and the state that the release stored, the secret of the webhook, what goes into the package
+# that the upgrade installs, and the upgrade test itself and its workflow; not the checks in
+# the browser or the contract tests, which it doesn't run. appinfo/info.xml counts as for
+# path_affects_app.
+path_affects_upgrade() {
+	case "$1" in
+		tests/e2e/*.md | tests/e2e/*.mjs | tests/e2e/package.json | tests/e2e/package-lock.json) return 1 ;;
+		tests/e2e/screenshots.* | tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		lib/Migration/* | lib/Service/ConfigService.php | lib/Service/SyncStateRepository* | lib/Model/SyncConfig.php) return 0 ;;
+		lib/Service/WebhookService.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;
+		tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -142,14 +161,15 @@ BASE="${1:-HEAD^1}"
 HEAD="${2:-HEAD}"
 QUESTION="${E2E_QUESTION:-app}"
 
-# The answers for the end-to-end tests, or with E2E_QUESTION=contract its third one alone.
+# The answers for the end-to-end tests, affected, variants and upgrade, or with
+# E2E_QUESTION=contract the fourth one alone.
 decide() {
 	if [[ -z "${GITHUB_OUTPUT:-}" ]]; then
 		return
 	elif [[ "${QUESTION}" == contract ]]; then
-		printf 'contract=%s\n' "$3" >>"${GITHUB_OUTPUT}"
+		printf 'contract=%s\n' "$4" >>"${GITHUB_OUTPUT}"
 	else
-		printf 'affected=%s\nvariants=%s\n' "$1" "$2" >>"${GITHUB_OUTPUT}"
+		printf 'affected=%s\nvariants=%s\nupgrade=%s\n' "$1" "$2" "$3" >>"${GITHUB_OUTPUT}"
 	fi
 }
 
@@ -162,7 +182,7 @@ summary() {
 if ! git rev-parse --quiet --verify "${BASE}^{commit}" >/dev/null ||
 	! git rev-parse --quiet --verify "${HEAD}^{commit}" >/dev/null; then
 	echo "The commits ${BASE} and ${HEAD} aren't both here, so all end-to-end tests run."
-	decide true true true
+	decide true true true true
 	exit 0
 fi
 
@@ -175,6 +195,7 @@ git diff --name-only -z --no-renames "${BASE}" "${HEAD}" >"${CHANGED}"
 count=0
 reaching=()
 varying=()
+upgrading=()
 contracting=()
 while IFS= read -r -d '' path; do
 	count=$((count + 1))
@@ -183,11 +204,17 @@ while IFS= read -r -d '' path; do
 		if info_xml_change_affects_app <<<"${info}"; then
 			reaching+=("${path}")
 			varying+=("${path}")
+			upgrading+=("${path}")
 		fi
-	elif path_affects_app "${path}"; then
-		reaching+=("${path}")
-		if path_affects_variants "${path}"; then
-			varying+=("${path}")
+	else
+		if path_affects_app "${path}"; then
+			reaching+=("${path}")
+			if path_affects_variants "${path}"; then
+				varying+=("${path}")
+			fi
+		fi
+		if path_affects_upgrade "${path}"; then
+			upgrading+=("${path}")
 		fi
 	fi
 	if path_affects_contract "${path}"; then
@@ -199,16 +226,20 @@ if [[ "${QUESTION}" == contract ]]; then
 	if ((${#contracting[@]} > 0)); then
 		echo "${#contracting[@]} of the ${count} changed file(s) can alter how the app talks to Paperless, so the contract tests against a real Paperless-ngx run:"
 		printf '  %s\n' "${contracting[@]:0:20}"
-		decide true true true
+		decide true true true true
 	else
 		message="None of the ${count} changed file(s) can alter what the app asks Paperless or how it reads the answers: not its client of Paperless, the mock, the recorded answers or the contract tests. They can't fail here, so they don't run; they run every Monday against the current releases of Paperless-ngx."
 		echo "${message}"
 		summary "Contract tests skipped: the change cannot alter how the app talks to Paperless" "${message}"
-		decide true true false
+		decide true true true false
 	fi
 	exit 0
 fi
 
+upgrade=false
+if ((${#upgrading[@]} > 0)); then
+	upgrade=true
+fi
 if ((${#reaching[@]} > 0)); then
 	echo "${#reaching[@]} of the ${count} changed file(s) can affect the app, so the end-to-end tests run:"
 	printf '  %s\n' "${reaching[@]:0:20}"
@@ -217,17 +248,32 @@ if ((${#reaching[@]} > 0)); then
 	fi
 	if ((${#varying[@]} > 0)); then
 		echo "${#varying[@]} of them can behave differently on another database or storage, so PostgreSQL, MariaDB and the object store run as well."
-		decide true true
+		variants=true
 	else
 		message="None of them can behave differently on another database or storage, so the tests run on SQLite with local storage only; main runs PostgreSQL, MariaDB and the object store after the merge, and every night."
 		echo "${message}"
 		summary "E2E on SQLite with local storage only" "${message}"
-		decide true false
+		variants=false
 	fi
+	if [[ "${upgrade}" == true ]]; then
+		echo "${#upgrading[@]} of them can break the upgrade of an installation in use, so the upgrade from the last release runs on PostgreSQL and MariaDB as well."
+	else
+		echo "None of them can break the upgrade of an installation in use from the last release; main runs it after the merge, and every night."
+	fi
+	decide true "${variants}" "${upgrade}"
+	exit 0
+fi
+
+if [[ "${upgrade}" == true ]]; then
+	message="None of the ${count} changed file(s) can affect the app as it runs, but ${#upgrading[@]} can change the package that users install, so the upgrade from the last release runs on PostgreSQL and MariaDB, and the other end-to-end tests don't."
+	echo "${message}"
+	printf '  %s\n' "${upgrading[@]:0:20}"
+	summary "E2E: the upgrade from the last release only" "${message}"
+	decide false false true
 	exit 0
 fi
 
 message="None of the ${count} changed file(s) can affect the app: no code, metadata or asset of the app, no end-to-end test and not their workflow, and in appinfo/info.xml at most the version of a release. The end-to-end tests can't fail here, so they don't run; main runs them after the merge, and every night."
 echo "${message}"
 summary "E2E skipped: the change cannot affect the app" "${message}"
-decide false false
+decide false false false

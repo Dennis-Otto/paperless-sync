@@ -46,6 +46,15 @@ case "${E2E_OBJECTSTORE}" in
 		exit 1
 		;;
 esac
+# E2E_UPGRADE=1 runs the upgrade of an installation in use instead of the scenario below
+# (upgrade.sh): Nextcloud gets the package of the last release, E2E_RELEASE_PACKAGE, uses it,
+# and is then upgraded to the package of the commit, E2E_PACKAGE, as an administrator does.
+# Without them, packages.sh downloads the release and packs the commit. compose.upgrade.yaml
+# keeps the checkout out of the folder of the app.
+E2E_UPGRADE="${E2E_UPGRADE:-0}"
+if [[ "${E2E_UPGRADE}" == "1" ]]; then
+	COMPOSE+=(--file "${SCRIPT_DIR}/compose.upgrade.yaml")
+fi
 # E2E_ACCESSIBILITY=0 leaves out the checks in the browser at the end, accessibility.mjs and
 # settings.mjs, which don't depend on the database or the storage; run-all.sh runs them once
 # for every version.
@@ -547,6 +556,10 @@ ERROR_PATH='Documents/Paperless/Errors/broken.pdf'
 STATEMENT_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Annual%20statement%20%5BP124%5D.pdf'
 
 cd "${REPOSITORY_ROOT}"
+if [[ "${E2E_UPGRADE}" == "1" ]]; then
+	E2E_RELEASE_PACKAGE="${E2E_RELEASE_PACKAGE:-$(bash "${SCRIPT_DIR}/packages.sh" release "${TMP_DIR}")}"
+	E2E_PACKAGE="${E2E_PACKAGE:-$(bash "${SCRIPT_DIR}/packages.sh" commit "${TMP_DIR}")}"
+fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
 # The seconds since the start at the end of each phase show where a slow run spends them.
@@ -600,6 +613,14 @@ for user in sync-target e2e-other; do
 	"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \
 		php occ user:add --password-from-env "${user}" >/dev/null
 done
+
+if [[ "${E2E_UPGRADE}" == "1" ]]; then
+	# The upgrade from the last release takes the place of the scenario of the commit, which
+	# the release couldn't run, and ends the tests.
+	# shellcheck source=tests/e2e/upgrade.sh disable=SC1091
+	source "${SCRIPT_DIR}/upgrade.sh"
+	exit 0
+fi
 
 # The coming Nextcloud of canary.sh is newer than max-version of appinfo/info.xml:
 # --force enables the app there anyway, without making it compatible.

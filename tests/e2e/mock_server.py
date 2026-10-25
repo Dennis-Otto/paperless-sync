@@ -156,6 +156,10 @@ def reset_state():
                 "invalidAuth": 0,
                 "uploads": [],
                 "refusedUploads": [],
+                # Whether the upload of a document answers 503, as Paperless behind a proxy whose
+                # worker is down does (/control/uploads/unavailable), and the uploads it refused so.
+                "uploadsUnavailable": False,
+                "unavailableUploads": [],
                 # The tags that the app created, with the fields that it sent.
                 "createdTags": [],
                 "tasks": {},
@@ -639,6 +643,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, {"end": end})
             return
+        if match := re.fullmatch(r"/control/uploads/(available|unavailable)", parsed.path):
+            # An upload that fails for a while, which the app tries again later: /control/uploads/unavailable.
+            with LOCK:
+                STATE["uploadsUnavailable"] = match.group(1) == "unavailable"
+            self._json(200, {"uploads": match.group(1)})
+            return
         if parsed.path == "/control/reset":
             reset_state()
             self._json(200, {"status": "reset"})
@@ -668,6 +678,13 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         match = re.search(br'filename="([^"]+)"', body)
         filename = match.group(1).decode("utf-8", "replace") if match else "unknown"
+        with LOCK:
+            unavailable = STATE["uploadsUnavailable"]
+            if unavailable:
+                STATE["unavailableUploads"].append(filename)
+        if unavailable:
+            self._json(503, {"detail": "Service unavailable"})
+            return
         refusal = None
         if length == 0:
             refusal = "No file was submitted."

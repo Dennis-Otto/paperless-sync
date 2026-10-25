@@ -14,15 +14,19 @@ name: Docker E2E
 # store as its primary storage, on a runner of its own: the five installations in one
 # job took more than five minutes on the four cores of a runner, the versions alone
 # keep nextcloud as fast as before. It is a required check too, as decision 0007 says.
+# Beside them, it upgrades an installation in use on PostgreSQL and on MariaDB from the
+# last release to the package of the commit, which krankerl builds as the release does
+# (tests/e2e/upgrade.sh, decision 0028): the only test where the migrations meet rows.
 #
 # In a pull request, the versions run only when the change can affect the app
-# (tests/e2e/affected.sh), and the databases and S3 only when it can behave
-# differently there: a change of the migrations, the state, the files in Nextcloud,
-# the uploads, appinfo/info.xml or the tests. A change of the documentation or of
-# other workflows alone, or a release, which only writes its version, passes both
-# required checks at once. Every push to main runs them all, and so does
-# every night, as the images of the versions move with each point release of
-# Nextcloud.
+# (tests/e2e/affected.sh), the databases and S3 only when it can behave differently
+# there: a change of the migrations, the state, the files in Nextcloud, the uploads,
+# appinfo/info.xml or the tests, and the upgrade only when it can break that: a change
+# of the migrations, the stored settings and state, the package, appinfo/info.xml or
+# the tests. A change of the documentation or of other workflows alone, or a release,
+# which only writes its version, passes both required checks at once. Every push to
+# main runs them all, and so does every night, as the images of the versions move with
+# each point release of Nextcloud.
 #
 # Every Monday, and when started by hand, they also run against the coming Nextcloud
 # (tests/e2e/canary.sh): the beta or release candidate of the next major version, or
@@ -112,6 +116,12 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      # The same krankerl as the CI's and the release workflow's, for the package of the
+      # commit that the upgrade installs; scripts/check-project.sh compares them.
+      # renovate: datasource=github-releases depName=ChristophWurst/krankerl extractVersion=^v(?<version>.+)$
+      KRANKERL_VERSION: 0.14.0
+      KRANKERL_SHA256: 9bee5a756a83c5a6b1f040e9a2ade9e902e4a57211afc174cd8ac5c4f913958f
     steps:
       - name: Record the network traffic of the job
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -122,16 +132,46 @@ jobs:
           persist-credentials: false
           # The merge commit of a pull request and its base, which affected.sh compares.
           fetch-depth: 2
-      - name: Find out whether the change can behave differently on another database or storage
+      - name: Find out whether the change can behave differently on another database or storage, or break the upgrade
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
-      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, and on MariaDB with S3
-        # Without a pull request, the step changes doesn't run, and so this one does.
-        if: steps.changes.outputs.variants != 'false'
+      # krankerl comes from the cache once a run has downloaded it, as in the CI, and
+      # its package is checked by its sha256 either way.
+      - name: Restore krankerl from the cache
+        if: steps.changes.outputs.upgrade != 'false'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/krankerl
+          key: krankerl-${{ env.KRANKERL_VERSION }}-${{ env.KRANKERL_SHA256 }}
+      - name: Install krankerl, which builds the package of the commit for the upgrade
+        if: steps.changes.outputs.upgrade != 'false'
+        run: |
+          deb="$RUNNER_TEMP/krankerl/krankerl_${KRANKERL_VERSION}_amd64.deb"
+          if [[ ! -f "$deb" ]]; then
+            mkdir -p "$RUNNER_TEMP/krankerl"
+            curl --fail --location --silent --show-error --retry 5 --retry-all-errors \
+              --connect-timeout 15 --max-time 300 --output "$deb" \
+              "https://github.com/ChristophWurst/krankerl/releases/download/v$KRANKERL_VERSION/krankerl_${KRANKERL_VERSION}_amd64.deb"
+          fi
+          echo "$KRANKERL_SHA256  $deb" | sha256sum --check --strict
+          sudo dpkg --install "$deb"
+      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, and the upgrade from the last release
+        # Without a pull request, the step changes doesn't run, and so this one runs all.
+        if: steps.changes.outputs.variants != 'false' || steps.changes.outputs.upgrade != 'false'
         env:
           E2E_VERSIONS: none
-        run: bash tests/e2e/run-all.sh
+          VARIANTS: ${{ steps.changes.outputs.variants }}
+          UPGRADE: ${{ steps.changes.outputs.upgrade }}
+        run: |
+          variants=()
+          if [[ "$VARIANTS" != false ]]; then
+            variants+=(pgsql mysql+s3)
+          fi
+          if [[ "$UPGRADE" != false ]]; then
+            variants+=(pgsql+upgrade mysql+upgrade)
+          fi
+          E2E_VARIANTS="${variants[*]}" bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
