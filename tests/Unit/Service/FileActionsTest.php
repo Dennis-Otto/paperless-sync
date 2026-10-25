@@ -93,7 +93,7 @@ final class FileActionsTest extends TestCase {
 	public function testAFileThatPaperlessHasStaysOut(): void {
 		$copy = $this->file('Downloads/Invoice [P123].pdf');
 
-		self::assertSame(1, $this->send([$copy])['skipped']);
+		self::assertSame(1, $this->send([$copy, $copy])['skipped'], 'A file selected twice counts once.');
 		self::assertSame([], $this->state->sends);
 	}
 
@@ -232,6 +232,14 @@ final class FileActionsTest extends TestCase {
 		self::assertSame([], $this->state->sends);
 	}
 
+	public function testAFolderWithAsManyFilesAsABatchIsQueued(): void {
+		foreach (['a', 'b', 'c'] as $name) {
+			$this->file("Scans/{$name}.pdf");
+		}
+
+		self::assertSame(3, $this->send([$this->storage->folderId('Scans', self::SENDER)])['queued']);
+	}
+
 	public function testMoreFilesThanABatchAreRefused(): void {
 		$ids = array_map(fn (string $name): int => $this->file("Scans/{$name}.pdf"), ['a', 'b', 'c', 'd']);
 
@@ -241,9 +249,10 @@ final class FileActionsTest extends TestCase {
 	/** A file in a sent folder and sent by itself as well goes once, with the folder of the first. */
 	public function testAFileOfAFolderAndOfTheSelectionIsQueuedOnce(): void {
 		$file = $this->file('Taxes/2026/receipt.pdf');
+		$this->file('Taxes/2026/statement.pdf');
 		$folder = $this->storage->folderId('Taxes', self::SENDER);
 
-		self::assertSame(1, $this->send([$file, $folder])['queued']);
+		self::assertSame(2, $this->send([$file, $folder])['queued'], 'The other files of the folder go as well.');
 		self::assertSame('', $this->state->findSend(self::SENDER, $file)['folder'] ?? null);
 	}
 
