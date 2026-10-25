@@ -28,7 +28,7 @@ With the default path template, a copy is at a path such as `Archive/Example Gmb
 
 ### Search, tags and favorites
 
-- **By its name:** the search of Nextcloud, at the top of every page, and the filter of Files find a copy by its title, its correspondent or its date, since all three are in its path.
+- **By its name:** the search of Nextcloud, at the top of every page, and the filter of Files find a copy by its title or its date, which are in its name, and a correspondent or a type by its folder; the filter of Files narrows the folder that is open.
 - **By its text:** Paperless reads the text of every document, and the copy, the archive PDF of Paperless as a rule, carries that text. The viewer of Nextcloud finds a word in an open PDF, and so does every PDF app on your computer or phone. A search through the text of every copy at once needs the full-text search of Nextcloud, which an administrator sets up, or the app [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search), which brings the search of Paperless into the search of Nextcloud and works with the same markers.
 - **By its tags:** when your administrator turned on the [tags in Nextcloud](guide.md#tags-in-nextcloud), each copy carries the tags of its document, such as *Tax 2026*. The view *Tags* of Files lists every file with a tag, and the search of Nextcloud finds them.
 - **As a favorite:** the star of a copy marks it as a favorite, and *Favorites* in Files lists it. The favorite stays when the copy moves after a change in Paperless.
@@ -46,14 +46,14 @@ On the phone, the button with the three dots of a copy opens its menu:
 
 ## Send documents to Paperless
 
-A new document goes to Paperless through Nextcloud, without the web page of Paperless: put it into the inbox folder, or send it from the menu of a file. Paperless reads its text, sorts it with its rules and names the new document after the file, so a name such as `Insurance letter 2026-10.pdf` makes a good title; the next run brings its copy into the archive.
+A new document goes to Paperless through Nextcloud, without the web page of Paperless: put it into the inbox folder, or send it from the menu of a file. Paperless reads its text, sorts it with its rules and names the new document after the file, so a name such as `Insurance letter 2026-10.pdf` makes a good title. Its copy comes into the archive once the document has left the inbox of Paperless, that is, once someone finished it there, and only when the archive mirrors it: with *Skip Paperless inbox documents* on, as it is by default, a document with an inbox tag of Paperless waits, and an archive that mirrors only certain tags leaves out a document without them.
 
 ### The inbox folder
 
 Every file that you put into `Documents/Paperless/Inbox`, or, as a rule, into a folder below it, goes to Paperless with the next run of the app, which your administrator sets to an interval of 5 minutes by default.
 
-- **Once Paperless imported it,** the file leaves the inbox, unless your administrator keeps it there, and its copy appears in the archive with one of the next runs.
-- **When the import fails,** such as for a document that Paperless has already, the file moves into `Failed imports`, next to a `.error.txt` with the reason.
+- **Once Paperless imported it,** the file leaves the inbox, unless your administrator keeps it there, and its copy appears in the archive with the next run after the document has left the inbox of Paperless, as [above](#send-documents-to-paperless).
+- **When the import fails,** such as for a damaged PDF or a task that Paperless cancelled, the file moves into `Failed imports`, next to a `.error.txt` with the reason.
 - **When Paperless refuses the file at once,** such as one of a type that it doesn't take, the file stays in the inbox, and the next runs leave it there until you save it anew, rename or replace it.
 - **The owner of the inbox hears of both,** with a notification that gives the reason: you, when the inbox is your own, or else the owner of the archive.
 - **A folder below the inbox can name tags:** with *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026* in Paperless. Your administrator says whether that is on.
@@ -87,7 +87,7 @@ The Nextcloud apps for Android and iOS have a document scanner: it finds the edg
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/how-a-scan-on-the-phone-reaches-paperless.dark.svg">
-  <img src="images/diagrams/how-a-scan-on-the-phone-reaches-paperless.svg" alt="How a scan on the phone reaches Paperless: On the phone, the scanner of the Nextcloud app saves the pages as a PDF into the folder Inbox, or the auto upload of the app takes a file from a folder of the phone into it. With the next run of Paperless Sync, at the interval that the administrator set, 5 minutes by default, the file goes to Paperless, which reads its text and makes it a document. When Paperless imports it, the file leaves the inbox, and the next run writes the copy of the new document into the archive, in the folders of its correspondent, its type and its year, with the marker of its ID, such as [P123], in its name; the phone finds it there. When the import fails, such as for a document that Paperless has already, the file moves to the folder Failed imports, next to a .error.txt that gives the reason; a file that Paperless refuses at once, such as one of a type that it doesn't take, stays in the inbox until it changes. Your steps are orange, Nextcloud blue, Paperless-ngx green and a failed import red.">
+  <img src="images/diagrams/how-a-scan-on-the-phone-reaches-paperless.svg" alt="How a scan on the phone reaches Paperless: On the phone, the scanner of the Nextcloud app saves the pages as a PDF into the folder Inbox, or the auto upload of the app takes a file from a folder of the phone into it. With the next run of Paperless Sync, at the interval that the administrator set, 5 minutes by default, the file goes to Paperless, which reads its text and makes it a document. When Paperless imports it, the file leaves the inbox; once the document has left the inbox of Paperless too, when someone finished it there, the next run writes the copy of the new document into the archive, in the folders of its correspondent, its type and its year, with the marker of its ID, such as [P123], in its name; the phone finds it there. When the import fails, such as for a damaged PDF, the file moves to the folder Failed imports, next to a .error.txt that gives the reason; a file that Paperless refuses at once, such as one of a type that it doesn't take, stays in the inbox until it changes. Your steps are orange, Nextcloud blue, Paperless-ngx green and a failed import red.">
 </picture>
 
 The names of the menus differ a little between the versions of the apps. Paperless reads the text of the scan itself, so the text recognition of the app may stay off.
@@ -133,7 +133,7 @@ Whoever may share a folder of the archive, its owner or someone that it was shar
 - **With a user or a group of Nextcloud:** type the name and choose **View only**, so that nobody edits a copy that the next change in Paperless replaces.
 - **With someone without an account,** such as a tax adviser: **Share link** makes a public link. Choose **View only**, set an **expiration date** and a **password**, and send the password another way than the link. Whoever has the link sees the files, not Paperless.
 
-A share of a copy stays with it when it moves after a change in Paperless. A share of a folder shows what the path template puts into that folder: with the default template, the folder of a year holds the documents of one correspondent and one type, so a tax adviser who needs every document of a year gets a link to each folder, or your administrator chooses a path template, or a storage path of Paperless, that collects them.
+A share of a copy stays with it when it moves after a change in Paperless. A share of a folder shows what the path template puts into that folder: with the default template, the folder of a year holds the documents of one correspondent and one type, and a share of such a folder, which the path template builds, disappears when a change in Paperless or of the template moves all its copies away, and with it its link. So share the folder `Archive` itself, which the template doesn't change, or ask your administrator for a path template, or a storage path of Paperless, whose top folder collects what you share, such as the documents of a tax return. The [FAQ](faq.md#can-i-change-the-path-template-later) explains why.
 
 ## What edits, renames and deletions do
 
@@ -144,6 +144,6 @@ The archive is a mirror of Paperless: nothing that you do with a copy in Nextclo
 | Edit a copy | The edit stays while its document stays the same in Paperless. When the document changes there, the next run may write the copy anew, depending on the change, and your edit then remains as an earlier version, under *Versions* in the details of the file, unless your administrator chose to keep your edit and report a conflict. |
 | Rename or move a copy | It stays where you put it, as a file of your own, and the next run writes the document anew at its path in the archive. |
 | Delete a copy | It goes into your trash bin, and the next run writes it anew. To remove a document, delete it in Paperless. |
-| Put a file into the inbox | It goes to Paperless, and its copy comes back into the archive. |
+| Put a file into the inbox | It goes to Paperless, and its copy comes into the archive once the document is finished there. |
 
 When a document goes to the trash of Paperless, its copy moves into the folder `_Deleted` of the archive, and when it comes back from there, so does its copy. The [FAQ](faq.md#the-archive-in-nextcloud) answers more: [what happens to an edit](faq.md#what-happens-when-i-edit-a-mirrored-file), [where deleted files go](faq.md#where-do-deleted-files-go) and [whether a change reaches Paperless](faq.md#do-my-changes-in-nextcloud-reach-paperless).

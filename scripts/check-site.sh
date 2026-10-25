@@ -42,8 +42,13 @@ leads_to_page() {
   fi
 }
 
-# The addresses of the website in appinfo/info.xml, one on each line.
-mapfile -t addresses < <(grep -oE "${website//./\\.}[^<\"[:space:]]*" appinfo/info.xml | sort -u)
+# The addresses of the website in the text on stdin, one on each line. An address ends at
+# a quote, a tag, a space or the end of a Markdown link, as the <description> is Markdown.
+addresses_in() {
+  { grep -oE "${website//./\\.}[^<\"')[:space:]]*" || true; } | sort -u
+}
+
+mapfile -t addresses < <(addresses_in <appinfo/info.xml)
 if ((${#addresses[@]} == 0)); then
   echo "appinfo/info.xml links no page of the website, ${website}; the App Store shows its <documentation> as the links of the app."
   exit 1
@@ -72,6 +77,11 @@ expect_broken() {
   fi
 }
 leads_to_page "$sample" "${website}use.html#usage"
+found="$(printf '%s\n' "[the guide](${website}use.html#usage), <a href=\"${website}faq.html\">" | addresses_in)"
+if [[ "$found" != "${website}faq.html"$'\n'"${website}use.html#usage" ]]; then
+  echo "The check of the addresses in appinfo/info.xml should find the address of a Markdown link and of a tag, but finds: ${found:-nothing}"
+  exit 1
+fi
 expect_broken "${website}guide.html" 'has no page guide.html'
 expect_broken "${website}use.html#configuration" 'use.html has no element with the id "configuration"'
-echo "The check of the addresses reports a page that the website lacks and an anchor that its page lacks."
+echo "The check of the addresses finds them in Markdown links and in tags, and reports a page that the website lacks and an anchor that its page lacks."
