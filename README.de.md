@@ -57,7 +57,7 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 
 | Getestet mit | Versionen | Wie |
 | --- | --- | --- |
-| Nextcloud | <span data-app="nextcloud">33–35</span>, jeweils das aktuelle Release | die End-to-End-Tests in Docker, jede Nacht und bei jeder Änderung der App, auf SQLite, PostgreSQL, MariaDB und S3-Objektspeicher |
+| Nextcloud | <span data-app="nextcloud">33–35</span>, jeweils das aktuelle Release | die End-to-End-Tests in Docker, jede Nacht und bei jeder Änderung der App, auf SQLite, PostgreSQL, MariaDB und S3-Objektspeicher, und das Update vom letzten Release auf PostgreSQL und MariaDB |
 | Paperless-ngx | 2.20, das letzte Release von 2.x, und das aktuelle Release von 3.x | die [Vertragstests](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx) gegen ein echtes Paperless in Docker, jede Woche und bei jeder Änderung daran, wie die App mit Paperless spricht |
 
 <!-- --8<-- [end:requirements] -->

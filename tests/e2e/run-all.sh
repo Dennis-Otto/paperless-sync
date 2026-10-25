@@ -14,10 +14,14 @@
 #   bash tests/e2e/run-all.sh
 #
 # Every version runs on SQLite with local storage, as compose.yaml has it. The variants
-# run besides, on the newest version: E2E_VARIANTS, by default "pgsql mysql+s3", names
-# each by its database, sqlite, mysql (MariaDB) or pgsql (PostgreSQL), with +s3 for an
-# object store as primary storage; E2E_VARIANTS=none runs none. They leave out the
-# accessibility check, which every version runs.
+# run besides, on the newest version: E2E_VARIANTS, by default
+# "pgsql mysql+s3 pgsql+upgrade mysql+upgrade", names each by its database, sqlite, mysql
+# (MariaDB) or pgsql (PostgreSQL), with +s3 for an object store as primary storage, and
+# +upgrade for the upgrade from the last release to the package of the commit instead of
+# the scenario (upgrade.sh); E2E_VARIANTS=none runs none. They leave out the accessibility
+# check, which every version runs. An upgrade runs on the newest version that the release
+# supports as well, as its users have it, and all of them share one download of the release
+# and one package of the commit (packages.sh).
 #
 # E2E_VERSIONS="33 35" chooses the versions instead, and E2E_VERSIONS=none runs only
 # the variants, on max-version; the CI runs those in a job of their own, next to the
@@ -67,7 +71,7 @@ done
 
 variants=()
 case "${E2E_VARIANTS:-}" in
-	"") variants=(pgsql mysql+s3) ;;
+	"") variants=(pgsql mysql+s3 pgsql+upgrade mysql+upgrade) ;;
 	none) ;;
 	*) read -ra variants <<<"${E2E_VARIANTS}" ;;
 esac
@@ -89,9 +93,36 @@ database_name() {
 	esac
 }
 
+LOG_DIR="$(mktemp -d)"
+trap 'rm -rf "${LOG_DIR}"' EXIT
+
+# The packages of the upgrade, once for every variant with +upgrade: the last release from
+# GitHub and the package of the commit. The upgrade runs on the newest version that both the
+# release and the commit support, as the users of the release have it before they update.
+release_version=""
+upgrade_newest="${newest}"
+for variant in "${variants[@]}"; do
+	if [[ "${variant}" == *+upgrade && -z "${release_version}" ]]; then
+		E2E_RELEASE_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" release "${LOG_DIR}/packages")"
+		E2E_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" commit "${LOG_DIR}/packages")"
+		export E2E_RELEASE_PACKAGE E2E_PACKAGE
+		read -r release_version release_low release_high <<<"$(bash "${SCRIPT_DIR}/packages.sh" info "${E2E_RELEASE_PACKAGE}")"
+		range="$(supported)"
+		low="${range%%$'\n'*}"
+		if ((release_high < upgrade_newest)); then
+			upgrade_newest="${release_high}"
+		fi
+		if ((upgrade_newest < low || upgrade_newest < release_low)); then
+			echo "The last release ${release_version} supports Nextcloud ${release_low} to ${release_high}, and the commit ${low} to ${newest}: no installation can update the app without updating Nextcloud first, so there is no upgrade to test." >&2
+			exit 1
+		fi
+	fi
+done
+
 # Every run: its key, which names its log and its Compose project, its version, its
-# database and storage, its port, whether it checks accessibility, and its title.
-keys=() run_versions=() databases=() storages=() ports=() accessibility=() titles=()
+# database and storage, its port, whether it checks accessibility, whether it upgrades
+# from the last release, and its title.
+keys=() run_versions=() databases=() storages=() ports=() accessibility=() upgrades=() titles=()
 add_run() {
 	keys+=("$1")
 	run_versions+=("$2")
@@ -99,31 +130,38 @@ add_run() {
 	storages+=("$4")
 	ports+=("$5")
 	accessibility+=("$6")
-	titles+=("$7")
+	upgrades+=("$7")
+	titles+=("$8")
 }
 for version in "${versions[@]}"; do
-	add_run "${version}" "${version}" sqlite local "$((18080 + version))" 1 "Nextcloud ${version}"
+	add_run "${version}" "${version}" sqlite local "$((18080 + version))" 1 0 "Nextcloud ${version}"
 done
 for index in "${!variants[@]}"; do
 	variant="${variants[index]}"
-	if [[ ! "${variant}" =~ ^(sqlite|mysql|pgsql)(\+s3)?$ ]]; then
-		echo "${variant} is no variant such as pgsql or mysql+s3: a database, sqlite, mysql or pgsql, and +s3 for an object store." >&2
+	if [[ ! "${variant}" =~ ^(sqlite|mysql|pgsql)(\+s3)?(\+upgrade)?$ ]]; then
+		echo "${variant} is no variant such as pgsql, mysql+s3 or pgsql+upgrade: a database, sqlite, mysql or pgsql, +s3 for an object store and +upgrade for the upgrade from the last release." >&2
 		exit 1
 	fi
-	database="${variant%+s3}"
+	database="${BASH_REMATCH[1]}"
 	storage=local
-	title="Nextcloud ${newest} on $(database_name "${database}")"
-	if [[ "${variant}" == *+s3 ]]; then
+	version="${newest}"
+	upgrade=0
+	if [[ -n "${BASH_REMATCH[3]}" ]]; then
+		version="${upgrade_newest}"
+		upgrade=1
+	fi
+	title="Nextcloud ${version} on $(database_name "${database}")"
+	if [[ -n "${BASH_REMATCH[2]}" ]]; then
 		storage=s3
 		title="${title} with S3"
 	fi
+	if ((upgrade)); then
+		title="${title}, upgraded from ${release_version}"
+	fi
 	# Ports of 100 apart, so that they don't meet those of the versions.
-	add_run "${newest}-${variant/+/-}" "${newest}" "${database}" "${storage}" \
-		"$((18080 + newest + 100 * (index + 1)))" 0 "${title}"
+	add_run "${version}-${variant//+/-}" "${version}" "${database}" "${storage}" \
+		"$((18080 + newest + 100 * (index + 1)))" 0 "${upgrade}" "${title}"
 done
-
-LOG_DIR="$(mktemp -d)"
-trap 'rm -rf "${LOG_DIR}"' EXIT
 
 # The limit of one run: timeout of coreutils, which Git Bash has too, ends run.sh,
 # whose cleanup still shows the state of its containers. Where there is none, as on
@@ -144,6 +182,7 @@ run() {
 		E2E_DATABASE="${databases[index]}" \
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
+		E2E_UPGRADE="${upgrades[index]}" \
 		"${limit[@]}" bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${key}.log" 2>&1 &
 	echo "$!" >"${LOG_DIR}/${key}.pid"
 	wait "$!" || status=$?
@@ -226,7 +265,11 @@ for index in "${!keys[@]}"; do
 	if [[ "${storages[index]}" == s3 ]]; then
 		storage=S3
 	fi
-	rows+=("| ${run_versions[index]} | $(database_name "${databases[index]}") | ${storage} | ${release:-?} | ${result} | $(duration "${seconds}") |")
+	app="the commit"
+	if [[ "${upgrades[index]}" == 1 ]]; then
+		app="upgraded from ${release_version}"
+	fi
+	rows+=("| ${run_versions[index]} | $(database_name "${databases[index]}") | ${storage} | ${app} | ${release:-?} | ${result} | $(duration "${seconds}") |")
 
 	title="${titles[index]} (${release:-?}): ${result} after $(duration "${seconds}")"
 	show "${key}" "${title}"
@@ -241,8 +284,8 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 	{
 		echo "### Docker E2E"
 		echo
-		echo "| Nextcloud | Database | Storage | Release | Result | Time |"
-		echo "| --- | --- | --- | --- | --- | --- |"
+		echo "| Nextcloud | Database | Storage | App | Release | Result | Time |"
+		echo "| --- | --- | --- | --- | --- | --- | --- |"
 		printf '%s\n' "${rows[@]}"
 	} >>"${GITHUB_STEP_SUMMARY}"
 fi
@@ -258,6 +301,9 @@ if ((${#failed[@]} > 0)); then
 		fi
 		if [[ "${storages[index]}" != local ]]; then
 			again="${again} E2E_OBJECTSTORE=${storages[index]}"
+		fi
+		if [[ "${upgrades[index]}" == 1 ]]; then
+			again="${again} E2E_UPGRADE=1"
 		fi
 		echo "  ${titles[index]}, again with: ${again} bash tests/e2e/run.sh" >&2
 	done
