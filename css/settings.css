@@ -842,8 +842,11 @@
 
 /* A control that the focus moves to stays above the bar, which would cover it where the browser
    scrolls it to the bottom edge of the window, as Tab does (WCAG 2.4.11). settings.js keeps the
-   height of the bar, which grows with its message and on a narrow screen, in the variable. */
-.paperless-sync-settings :is(a, button, input, select, textarea, summary, [tabindex]) {
+   height of the bar, which grows with its message and on a narrow screen, in the variable. The
+   controls in the bar itself keep no margin: the bar is always in view, and a margin as high as
+   the bar would scroll the page by that much at every focus there, such as the message that an
+   error focuses. */
+.paperless-sync-settings :is(a, button, input, select, textarea, summary, [tabindex]):not(.paperless-sync-actions *) {
 	scroll-margin-block-end: calc(var(--paperless-sync-actions-height, 80px) + 24px);
 }
 

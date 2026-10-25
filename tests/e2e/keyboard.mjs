@@ -8,7 +8,8 @@
 //   CSS pixels wide, and of a phone, 320 pixels wide, in the order in which the page shows them:
 //   from the top to the bottom and on a line from the left to the right (WCAG 2.1.1, 2.4.3). No
 //   control that has the focus is hidden behind another, such as behind the buttons that stick
-//   to the bottom of the window (2.4.11 of WCAG 2.2).
+//   to the bottom of the window (2.4.11 of WCAG 2.2), and a control in such a bar, which is always
+//   in view, takes the focus without scrolling the page away under it.
 // - Each control shows that it has the focus, in the light and in the dark theme: around it,
 //   the look changes by a contrast of at least 3:1, on as many pixels as a line of one pixel
 //   around it has (2.4.7, 1.4.11).
@@ -109,8 +110,14 @@ function focused(selector) {
 	]
 	const hits = points.map(([x, y]) => document.elementFromPoint(x, y))
 	const hidden = box.width > 0 && box.height > 0 && !hits.some(related)
+	let stuck = false
+	for (let node = element; node !== null && node !== root; node = node.parentElement) {
+		stuck ||= ['sticky', 'fixed'].includes(getComputedStyle(node).position)
+	}
 	return {
 		inside: true,
+		stuck,
+		scrollY: window.scrollY,
 		index: window.e2eControls.indexOf(element),
 		name: window.e2eName(element),
 		box: { left: box.left - origin.left, top: box.top - origin.top, right: box.right - origin.left, bottom: box.bottom - origin.top },
@@ -157,12 +164,16 @@ async function walk(page, label) {
 	const order = []
 	let previous = null
 	for (let step = 0; step <= expected.length + 10; step++) {
+		const scrollY = await page.evaluate(() => window.scrollY)
 		await page.keyboard.press('Tab')
 		const focus = await page.evaluate(focused, SCOPE)
 		if (!focus.inside) {
 			break
 		}
 		order.push(focus.index)
+		if (focus.stuck && focus.scrollY !== scrollY) {
+			problems.push(`${label}: ${focus.name} sticks in view, but the focus on it scrolls the page by ${Math.round(focus.scrollY - scrollY)} px.`)
+		}
 		if (focus.hiddenBy !== null) {
 			problems.push(`${label}: ${focus.name} has the focus but is hidden behind ${focus.hiddenBy}.`)
 		}
@@ -236,8 +247,9 @@ async function focusIndicators(page, order, label) {
 
 // The check checks itself first, on a page with a control of every kind that it must fail: a
 // button and a field without a visible focus, a button behind a bar that sticks to the bottom
-// of the window, and two buttons that the page shows in the other order than Tab reaches them.
-// A button with an outline passes.
+// of the window, a button in a bar that sticks there and scrolls the page when it takes the focus,
+// and two buttons that the page shows in the other order than Tab reaches them. A button with an
+// outline passes.
 async function seeded(browser) {
 	const context = await browser.newContext({ viewport: WIDE })
 	try {
@@ -247,6 +259,8 @@ async function seeded(browser) {
 			<p><button type="button" class="outlined">Visible</button></p>
 			<p><button type="button">Invisible</button> <input type="text" aria-label="Faint" style="border: 1px solid #ccc"></p>
 			<p style="display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 20px"><button type="button" class="outlined">First</button><button type="button" class="outlined">Second</button></p>
+			<div style="height: 1500px"></div>
+			<p style="position: sticky; bottom: 100px; margin: 0"><button type="button" class="outlined" style="scroll-margin-block-end: 200px">Jumping</button></p>
 			<p style="position: fixed; bottom: 0; margin: 0"><button type="button" class="outlined">Covered</button></p>
 			<div style="position: fixed; inset: auto 0 0; height: 80px; background: #fff">A bar</div>
 		</div>
@@ -257,10 +271,10 @@ async function seeded(browser) {
 		const found = problems.splice(before)
 		const fails = (name, kind) => found.some((problem) => problem.includes(name) && problem.includes(kind))
 		expect(
-			fails('Invisible', 'the focus shows') && fails('Faint', 'the focus shows') && fails('Covered', 'hidden behind') && fails('Second', 'against the order') && !fails('Visible', ''),
+			fails('Invisible', 'the focus shows') && fails('Faint', 'the focus shows') && fails('Covered', 'hidden behind') && fails('Jumping', 'scrolls the page') && fails('Second', 'against the order') && !fails('Visible', ''),
 			`The check must fail the seeded controls, and only them: ${found.join(' ')}`,
 		)
-		console.log('Keyboard: the check fails a seeded button and field without a visible focus, a button behind a bar and a focus against the order of the page.')
+		console.log('Keyboard: the check fails a seeded button and field without a visible focus, a button behind a bar, a button in a bar that scrolls the page and a focus against the order of the page.')
 	} finally {
 		await context.close()
 	}

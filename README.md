@@ -131,7 +131,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - In English and German: the settings, their messages, their *Help* links to the guide and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
 - [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
 - [`occ` commands](#command-line) for scripts, cron jobs and monitoring: a run or a dry-run with a batch size of its own or none, the status, and copies written again, with JSON output and exit codes
-- Accessible: the settings, the actions in Files and the form of the rule in Flow meet WCAG 2.1 AA in the light and the dark theme, on a computer and on a phone 320 pixels wide, where the settings and the form fit without scrolling sideways, and the settings work by keyboard alone, with a focus that shows and that the bar of the buttons never covers; the end-to-end tests check it in every change of the app
+- Accessible: the settings, the actions in Files and the form of the rule in Flow are checked with axe-core against WCAG 2.1 AA, with no serious or critical finding, in the light and the dark theme, on a computer and on a phone 320 pixels wide, where the settings and the form fit without scrolling sideways, and the settings work by keyboard alone, with a focus that shows and that the bar of the buttons never covers; the end-to-end tests check it in every change of the app
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
 
 <!-- --8<-- [end:features] -->
