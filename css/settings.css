@@ -26,6 +26,145 @@
 	color: var(--color-text-maxcontrast);
 }
 
+/* "Show getting started" on the right of the hero, once the first run has succeeded. */
+.paperless-sync-getting-started-show {
+	margin-inline-start: auto;
+}
+
+/*
+ * The getting-started checklist under the hero, until the first run has succeeded: a step that
+ * is done has a check mark, the next one the color of the app and a bar at its start, and each
+ * says its state in words as well, never by its color alone.
+ */
+.paperless-sync-getting-started {
+	margin: 0 0 18px;
+	padding: 18px 20px;
+	border: 1px solid color-mix(in srgb, var(--color-primary-element) 35%, var(--color-border));
+	border-radius: var(--border-radius-large);
+	background: color-mix(in srgb, var(--color-primary-element) 5%, var(--color-main-background));
+}
+
+.paperless-sync-getting-started-heading {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.paperless-sync-getting-started-heading h3 {
+	margin: 0;
+	font-size: 19px;
+}
+
+.paperless-sync-getting-started > .settings-hint {
+	margin: 6px 0 14px;
+}
+
+.paperless-sync-getting-started-steps {
+	display: grid;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.paperless-sync-getting-started-step {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 6px 14px;
+	align-items: center;
+	padding: 10px 14px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	background: var(--color-main-background);
+}
+
+.paperless-sync-getting-started-step[data-state="next"] {
+	border-color: var(--color-primary-element);
+	box-shadow: inset 4px 0 0 var(--color-primary-element);
+}
+
+.paperless-sync-getting-started-marker {
+	display: inline-flex;
+	box-sizing: border-box;
+	width: 28px;
+	height: 28px;
+	align-items: center;
+	justify-content: center;
+	border: 2px solid var(--color-border-maxcontrast);
+	border-radius: 50%;
+	color: var(--color-main-text);
+	font-weight: 700;
+}
+
+.paperless-sync-getting-started-step[data-state="next"] .paperless-sync-getting-started-marker {
+	border-color: var(--color-primary-element);
+	background: var(--color-primary-element);
+	color: var(--color-primary-element-text);
+}
+
+/* A step that is done shows a check mark in place of its number. */
+.paperless-sync-getting-started-step[data-state="done"] .paperless-sync-getting-started-marker {
+	border-color: var(--color-success-text);
+	background: color-mix(in srgb, var(--color-success) 14%, var(--color-main-background));
+	color: var(--color-success-text);
+	font-size: 0;
+}
+
+.paperless-sync-getting-started-step[data-state="done"] .paperless-sync-getting-started-marker::before {
+	content: "✓";
+	font-size: 16px;
+}
+
+.paperless-sync-getting-started-title {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 10px;
+	align-items: baseline;
+}
+
+.paperless-sync-getting-started-state {
+	padding: 1px 8px;
+	border: 1px solid currentcolor;
+	border-radius: var(--border-radius-pill, 999px);
+	color: var(--color-text-maxcontrast);
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.paperless-sync-getting-started-step[data-state="done"] .paperless-sync-getting-started-state {
+	color: var(--color-success-text);
+}
+
+.paperless-sync-getting-started-step[data-state="next"] .paperless-sync-getting-started-state {
+	border-color: var(--color-primary-element);
+	background: var(--color-primary-element);
+	color: var(--color-primary-element-text);
+}
+
+.paperless-sync-getting-started-hint {
+	display: block;
+	margin-top: 2px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.paperless-sync-getting-started-complete {
+	margin: 14px 0 0;
+	color: var(--color-success-text);
+	font-weight: 600;
+}
+
+/* The list and its button hide with the attribute hidden, which the display of a button of
+   Nextcloud would otherwise outweigh. */
+.paperless-sync-getting-started[hidden],
+.paperless-sync-getting-started-show[hidden],
+.paperless-sync-getting-started-complete[hidden] {
+	display: none;
+}
+
 .paperless-sync-status {
 	margin-bottom: 18px;
 }
@@ -1000,5 +1139,19 @@ a.paperless-sync-entry-file {
 
 	#paperless-sync-reset {
 		margin-inline-start: 0;
+	}
+
+	.paperless-sync-hero {
+		flex-wrap: wrap;
+	}
+
+	/* The button of a step goes below its text. */
+	.paperless-sync-getting-started-step {
+		grid-template-columns: auto minmax(0, 1fr);
+	}
+
+	.paperless-sync-getting-started-step > button {
+		grid-column: 2;
+		justify-self: start;
 	}
 }

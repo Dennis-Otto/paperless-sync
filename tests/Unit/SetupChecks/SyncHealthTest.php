@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\IDateTimeFormatter;
+use OCP\IURLGenerator;
 use OCP\SetupCheck\SetupResult;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -26,6 +27,8 @@ final class SyncHealthTest extends TestCase {
 	use InMemoryConfiguration;
 
 	private const GUIDE = AppConstants::GERMAN_GUIDE_URL . '#being-notified';
+	/** The settings of the app, as Nextcloud links to a section of its administration settings. */
+	private const SETTINGS = 'https://cloud.example.test/index.php/settings/admin/paperless_sync';
 
 	private TestClock $clock;
 	private StatusService $status;
@@ -36,13 +39,30 @@ final class SyncHealthTest extends TestCase {
 		$this->status = $this->statusService($this->clock);
 		$formatter = $this->createStub(IDateTimeFormatter::class);
 		$formatter->method('formatTimeSpan')->willReturnCallback(fn (int $timestamp): string => 'vor ' . intdiv($this->clock->time - $timestamp, 60) . ' Minuten');
-		$this->check = new SyncHealth($this->status, $this->configService(), $this->germanL10n(), $formatter);
+		$urlGenerator = $this->createStub(IURLGenerator::class);
+		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route, array $parameters = []): string => $route === 'settings.AdminSettings.index' && $parameters === ['section' => AppConstants::APP_ID] ? self::SETTINGS : 'https://cloud.example.test/elsewhere');
+		$this->check = new SyncHealth($this->status, $this->configService(), $this->germanL10n(), $formatter, $urlGenerator);
 		$this->configService()->save(['enabled' => true, 'sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 	}
 
 	public function testTheCheckBelongsToTheSystem(): void {
 		self::assertSame('system', $this->check->getCategory());
 		self::assertSame('Paperless Sync', $this->check->getName());
+	}
+
+	/**
+	 * An installation without the URL of Paperless, its token or the target user, which no run can
+	 * use, says so and links to its settings, which lead through the first steps: a new one, and
+	 * one whose token Disconnect deleted, also after runs that failed.
+	 */
+	public function testAnInstallationThatIsNotSetUpLeadsToItsSettings(): void {
+		$this->settings = [];
+		self::assertResult(SetupResult::INFO, 'Paperless Sync ist installiert, aber noch nicht eingerichtet. Seine Einstellungen führen durch die ersten Schritte.', self::SETTINGS, $this->check->run());
+
+		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->status->failed(new RuntimeException('Paperless is down.'));
+		$this->configService()->reset();
+		self::assertResult(SetupResult::INFO, 'Paperless Sync ist installiert, aber noch nicht eingerichtet. Seine Einstellungen führen durch die ersten Schritte.', self::SETTINGS, $this->check->run());
 	}
 
 	public function testScheduledRunsThatAreOffAreFine(): void {

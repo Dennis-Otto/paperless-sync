@@ -136,6 +136,7 @@ final class SettingsControllerTest extends TestCase {
 		], $answer['checks'], 'The checklist ends with the folder of the target user.');
 		self::assertSame(20, $this->settings['batch_size']);
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+		self::assertTrue($this->connectionPassed(), 'A checklist without a failed line completes the connection of Getting started.');
 	}
 
 	/**
@@ -431,6 +432,29 @@ final class SettingsControllerTest extends TestCase {
 			$answer['checks'][2],
 		);
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'secret-token'], $this->credential);
+		self::assertFalse($this->connectionPassed(), 'A failed line leaves the connection of Getting started next.');
+	}
+
+	/**
+	 * A test with the saved token tells Getting started whether the connection passes now, such as
+	 * after the permissions were fixed in Paperless; a test with a token entered, which is not
+	 * saved, tells it nothing.
+	 */
+	public function testATestWithTheSavedTokenMarksTheConnection(): void {
+		$this->checks[] = ConnectionCheck::failed(ConnectionCheck::TAGS, 'The account may not view them (HTTP 403).', [], 'In Paperless, under Users & Groups, give the account the permission View for Tags.');
+		$this->controller->save(self::validSettings(), 'secret-token');
+		self::assertFalse($this->connectionPassed());
+
+		$this->checks = [];
+		$this->controller->test(self::validSettings(), 'another-token');
+		self::assertFalse($this->connectionPassed(), 'A token that is not saved.');
+
+		$this->controller->test(self::validSettings());
+		self::assertTrue($this->connectionPassed(), 'The saved token passes now.');
+
+		$this->checks[] = ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', ['0'], 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.');
+		$this->controller->test(self::validSettings());
+		self::assertTrue($this->connectionPassed(), 'A note is no failure.');
 	}
 
 	/** The test of the connection allows the local network as the form asks, before it is saved. */
@@ -593,6 +617,7 @@ final class SettingsControllerTest extends TestCase {
 		self::assertSame(['paperless', 'documents', 'folder'], array_column($answer['checks'], 'id'));
 		self::assertSame(20, $answer['batchSize']);
 		self::assertSame(['url' => 'https://paperless.example.test', 'token' => 'token-of-the-app'], $this->credential);
+		self::assertTrue($this->connectionPassed(), 'The setup of the account completes the connection of Getting started.');
 		self::assertStringNotContainsString('superuser-token', $response->render());
 		self::assertStringNotContainsString('superuser-token', json_encode($this->settings, JSON_THROW_ON_ERROR));
 	}
@@ -733,6 +758,8 @@ final class SettingsControllerTest extends TestCase {
 		self::assertTrue($config->permanentDelete);
 		self::assertSame(20, $config->batchSize);
 		self::assertNull($this->credential);
+		self::assertFalse($this->connectionPassed(), 'Disconnect forgets the checklist of Getting started.');
+		self::assertSame('', $this->settings['status_connection_url']);
 	}
 
 	/**
@@ -991,7 +1018,13 @@ final class SettingsControllerTest extends TestCase {
 			$paths,
 			new AccountPermissions($paths),
 			new AccountSetup($this->clients, $random),
+			$status,
 		);
+	}
+
+	/** Whether Getting started counts the connection to the URL of validSettings() as done. */
+	private function connectionPassed(): bool {
+		return $this->statusService(new TestClock())->connectionPassed('https://paperless.example.test');
 	}
 
 	/** @return array<string, mixed> the data of an answer, decoded as the page receives it */

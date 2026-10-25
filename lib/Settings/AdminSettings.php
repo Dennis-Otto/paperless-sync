@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Settings;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\GettingStarted;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\StatusTranslation;
 use OCA\PaperlessSync\Service\WebhookService;
@@ -39,6 +40,7 @@ final class AdminSettings implements ISettings {
 		private BackgroundJobMode $backgroundJobMode,
 		private WebhookService $webhookService,
 		private IL10N $l10n,
+		private GettingStarted $gettingStarted,
 	) {
 	}
 
@@ -46,7 +48,12 @@ final class AdminSettings implements ISettings {
 		$config = $this->configService->get();
 		// The page shows the status, its error and its report from the start, as after a refresh: in
 		// the language of the administrator, as SyncController answers, and without the records.
-		$status = StatusTranslation::status($this->statusService->overview($config), $this->l10n);
+		$overview = $this->statusService->overview($config);
+		$status = StatusTranslation::status($overview, $this->l10n);
+		// The getting-started checklist, which the page shows until the first successful run and
+		// updates with every status that it reads (SyncController::status()).
+		$setup = $this->gettingStarted->progress($config, $overview);
+		$status['setup'] = $setup;
 		$this->initialState->provideInitialState('status', $status);
 		// The stored configuration, without the token, which the form compares with what it shows
 		// to tell unsaved changes, as after a save or a disconnect.
@@ -58,6 +65,7 @@ final class AdminSettings implements ISettings {
 		return new TemplateResponse(AppConstants::APP_ID, 'settings', [
 			'config' => $config,
 			'status' => $status,
+			'setup' => $setup,
 			'saveUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.save'),
 			'testUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.test'),
 			// The setup of the account of the app in Paperless, with the token of a superuser.

@@ -84,7 +84,7 @@ Ja. Die App schreibt über die Datei-API von Nextcloud, die verbirgt, wo die Dat
 
 ### Wie lange dauert die erste Synchronisation?
 
-Etwa die Zahl der Dokumente geteilt durch die Batchgröße, mal das Intervall: Mit den Standardwerten, einem Batch von 100 und 5 Minuten, brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Ein größerer Batch, bis zu 1.000, macht es schneller; dann lädt jeder Lauf mehr auf einmal herunter. Jeder Lauf nimmt die Dokumente, die Paperless zuletzt hinzugefügt hat, zuerst, sodass neue Dokumente nicht hinter dem Rückstau warten, und sein Bericht zählt die Dokumente, die auf den nächsten Lauf warten, als übersprungen. Jeder spätere Lauf ändert nur, was sich in Paperless geändert hat.
+Etwa die Zahl der Dokumente geteilt durch die Batchgröße, mal das Intervall: Mit den Standardwerten, einem Batch von 100 und 5 Minuten, brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Bis der erste Lauf erfolgreich war, macht [Erste Schritte](guide.de.md#getting-started-in-the-settings) in den Einstellungen diese Schätzung nach einem Testlauf für dein Archiv. Ein größerer Batch, bis zu 1.000, macht es schneller; dann lädt jeder Lauf mehr auf einmal herunter. Jeder Lauf nimmt die Dokumente, die Paperless zuletzt hinzugefügt hat, zuerst, sodass neue Dokumente nicht hinter dem Rückstau warten, und sein Bericht zählt die Dokumente, die auf den nächsten Lauf warten, als übersprungen. Jeder spätere Lauf ändert nur, was sich in Paperless geändert hat.
 
 Um ein großes Archiv in einem Zug zu importieren, lass die geplante Synchronisation aus und führe auf dem Server `occ paperless_sync:run --unlimited` aus: Es macht jede fällige Änderung, so lange es dauert, und die [Kommandozeile](guide.de.md#kommandozeile) erklärt den Rest.
 

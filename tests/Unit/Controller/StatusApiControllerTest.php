@@ -105,6 +105,16 @@ final class StatusApiControllerTest extends TestCase {
 		self::assertSame(['Paperless answered 401 again.', 2, TestClock::START], [$data['error'], $data['failedRuns'], $data['failingSince']]);
 	}
 
+	/** A new installation is no alarm either: it is not set up yet. */
+	public function testANewInstallationIsHealthyAndUnconfigured(): void {
+		$this->settings = [];
+		$this->credential = null;
+
+		$data = $this->controller->status()->getData();
+
+		self::assertSame([true, 'unconfigured', false], [$data['healthy'], $data['health'], $data['enabled']]);
+	}
+
 	public function testScheduledRunsThatAreOffAreNoAlarm(): void {
 		$this->configService()->save(['enabled' => false] + self::validSettings(), 'secret-token');
 

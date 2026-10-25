@@ -98,6 +98,17 @@ const PAGES = [
 		},
 	},
 	{
+		// Getting started, which hides after the first successful run of run.sh and comes back
+		// on request, with steps that are done and the next one.
+		name: 'getting started',
+		path: '/index.php/settings/admin/paperless_sync',
+		scope: '#paperless-sync-settings',
+		async prepare(page) {
+			await page.locator('#paperless-sync-getting-started-show').click()
+			await page.locator('#paperless-sync-getting-started [aria-current="step"]').waitFor()
+		},
+	},
+	{
 		// The dry-run over the larger archive of the mock lists more changes than the
 		// report shows at once, so the list scrolls.
 		name: 'report of a dry-run',

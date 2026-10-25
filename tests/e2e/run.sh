@@ -636,12 +636,24 @@ for attribute in \
 	'data-variable="created_month_name"' \
 	'id="initial-state-paperless_sync-status"' \
 	'id="initial-state-paperless_sync-config"' \
-	'data-setting="paperless_local_network"'; do
+	'data-setting="paperless_local_network"' \
+	'data-step="connect" data-state="next" aria-current="step"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
 	fi
 done
+# A new installation walks through the getting-started checklist, as the settings page reads
+# it with every status: the connection first, while Administration → Overview says that the app
+# is not set up yet. The steps after it follow the save, the first dry-run, the first run and
+# the schedule below.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-new.json" 'next todo todo todo todo'
+occ setupchecks >"${TMP_DIR}/setupchecks-new.txt" 2>&1 || true
+if ! grep --fixed-strings 'Paperless Sync is installed but not set up yet.' "${TMP_DIR}/setupchecks-new.txt" >/dev/null; then
+	echo "occ setupchecks does not say that Paperless Sync is not set up yet:" >&2
+	cat "${TMP_DIR}/setupchecks-new.txt" >&2
+	exit 1
+fi
 
 # The navigation of the administration settings lists the app's own section on
 # every page (Dennis-Otto/paperless-unified-search#25): Nextcloud 33 as links,
@@ -723,10 +735,12 @@ if occ config:app:get paperless_sync paperless_url >/dev/null 2>&1; then
 	exit 1
 fi
 # Saving goes on with a permission that one module lacks, so that it can be granted in
-# Paperless afterwards, and the answer lists the same checklist. The save below replaces
-# the token with the one of the full account.
+# Paperless afterwards, and the answer lists the same checklist. The connection of the
+# getting-started checklist stays next, as a line of its checklist failed, while the owner is
+# done. The save below replaces the token with the one of the full account.
 checklist settings "${TMP_DIR}/saved-with-failures.json"
 assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'next done todo todo todo'
 # Without the permission View for UI Settings, Paperless doesn't tell the checklist the
 # permissions of the account: the lines of the trash and the inbox name that permission.
 checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
@@ -760,9 +774,12 @@ curl --fail-with-body --silent --show-error \
 	--output "${TMP_DIR}/config.json" \
 	"${BASE_URL}/apps/paperless_sync/settings"
 assert_json config "${TMP_DIR}/config.json"
+# The token of the full account passes every line, which completes the connection.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-connected.json" 'done done next todo todo'
 
 sync_run true "${TMP_DIR}/dry-run.json"
 assert_json dry-run "${TMP_DIR}/dry-run.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-dry-run.json" 'done done done next todo'
 occ paperless_sync:run --dry-run --output=json > "${TMP_DIR}/dry-run-occ.json"
 assert_json dry-run "${TMP_DIR}/dry-run-occ.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
@@ -810,6 +827,8 @@ assert_json queued "${TMP_DIR}/queued.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
 assert_status_soon status-export "${TMP_DIR}/export.json"
+# The first run succeeded while the schedule is off, which a step still asks for.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-first-run.json" 'done done done next done'
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
 # One entry for the run, with the link of the file that it wrote.
 activities "${TMP_DIR}/activity-export.json"
@@ -950,6 +969,7 @@ assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive docum
 # With the schedule on, saving tests the connection first.
 save_settings "${TMP_DIR}/enabled.json" enabled=1
 assert_json enabled "${TMP_DIR}/enabled.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-done.json" 'done done done done done'
 sync_run true "${TMP_DIR}/dry-run-before-job.json"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
 assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
@@ -1393,12 +1413,17 @@ account_setup() {
 		--write-out '%{http_code}' \
 		"${BASE_URL}/apps/paperless_sync/settings/account"
 }
+# The setup completes the connection of the getting-started checklist, as a save does: here
+# after a checklist that failed, as the mark of the app says.
+occ config:app:set paperless_sync status_connection_passed --value=false --type=boolean --lazy >/dev/null
+assert_status_soon getting-started "${TMP_DIR}/getting-started-account-before.json" 'next done done todo done'
 ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-created.json")"
 if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
 	echo "The setup of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-created.json")" >&2
 	exit 1
 fi
 assert_json account-created "${TMP_DIR}/account-created.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-account.json" 'done done done next done'
 ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-exists.json")"
 if [[ "${ACCOUNT_STATUS}" != "409" ]]; then
 	echo "A second setup of the account changed the user without update: HTTP ${ACCOUNT_STATUS}, $(cat "${TMP_DIR}/account-exists.json")" >&2
