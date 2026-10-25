@@ -137,7 +137,7 @@ final class OwnerMapping {
 			)];
 		}
 		foreach ($owners->unmatched as $name) {
-			$checks[] = new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, 'The table names %s, but Paperless has no user of that name.', [$name], 'Check the name of the user of Paperless in "Paperless users with another Nextcloud ID".', [], false, 'user_map');
+			$checks[] = new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, 'The table names %s, but Paperless has no user of that name.', [$name], 'Check the name of the user of Paperless in "Paperless users with another Nextcloud ID".', setting: 'user_map');
 		}
 		foreach (array_slice(array_values(array_diff($owners->users(), [$config->targetUser])), 0, self::CHECKED_USERS) as $user) {
 			try {
@@ -160,8 +160,8 @@ final class OwnerMapping {
 			Owners::NAME, Owners::TABLE => ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s → %2$s, documents: %3$s', [$route['name'], (string)$route['user'], $documents]),
 			Owners::NONE => ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s → %2$s, the target user, as Nextcloud has no user with this ID; documents: %3$s', [$route['name'], $targetUser, $documents]),
 			Owners::OUTSIDE_GROUP => ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s → %2$s, the target user, as %3$s is no member of the group; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents]),
-			Owners::UNKNOWN => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as Nextcloud has no user %3$s; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents], 'Correct the line of the user in "Paperless users with another Nextcloud ID".', [], false, 'user_map'),
-			default => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → nobody, as other users of Paperless have the user of Nextcloud %2$s as well, so their documents stay where their copies are; documents: %3$s', [$route['name'], $route['detail'], $documents], 'Give each user of Paperless a user of Nextcloud of its own in "Paperless users with another Nextcloud ID".', [], false, 'user_map'),
+			Owners::UNKNOWN => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → %2$s, the target user, as Nextcloud has no user %3$s; documents: %4$s', [$route['name'], $targetUser, $route['detail'], $documents], 'Correct the line of the user in "Paperless users with another Nextcloud ID".', setting: 'user_map'),
+			default => new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, '%1$s → nobody, as other users of Paperless have the user of Nextcloud %2$s as well, so their documents stay where their copies are; documents: %3$s', [$route['name'], $route['detail'], $documents], 'Give each user of Paperless a user of Nextcloud of its own in "Paperless users with another Nextcloud ID".', setting: 'user_map'),
 		};
 	}
 

@@ -31,6 +31,7 @@ use OCA\PaperlessSync\Tests\Doubles\TestTimeZones;
 use OCP\Config\IUserConfig;
 use OCP\Lock\ILockingProvider;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -236,6 +237,27 @@ final class PerUserOwnershipTest extends TestCase {
 		self::assertSame([], array_filter($this->storage->calls, static fn (array $call): bool => $call[0] === 'prepare' && $call[1] === 'bob'), 'A user who gets no documents gets no new folders.');
 	}
 
+	/**
+	 * A user who gets no documents now, such as after they left the group of the setting, keeps the
+	 * files of their inbox: the run reaches their archive for the copies that leave it, not their
+	 * inbox. It tests the folder of each user once, also of one who gets documents and has copies.
+	 */
+	public function testTheInboxOfAUserWhoGetsNoDocumentsStaysAsItIs(): void {
+		$this->membersOfGroups = ['scanners' => ['alice', 'bob']];
+		$this->configService->save(self::validSettings() + ['ownership' => SyncConfig::PER_USER, 'user_group' => 'scanners']);
+		$this->sync([$this->document(1, self::ALICE), $this->document(2, self::BOB)]);
+		$this->membersOfGroups = ['scanners' => ['bob']];
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->storage->calls = [];
+
+		$report = $this->sync([$this->document(1, self::ALICE), $this->document(2, self::BOB)]);
+
+		self::assertSame([], $this->paperless->uploads);
+		self::assertArrayHasKey(self::INBOX . '/scan.pdf', $this->filesOf('alice'));
+		self::assertSame(['[paperless] EXPORT P1: ' . $this->path(1), '[alice] REMOVE REASSIGNED P1: ' . $this->path(1)], $report->actions);
+		self::assertSame(['paperless', 'bob', 'alice'], array_column(array_values(array_filter($this->storage->calls, static fn (array $call): bool => $call[0] === 'test')), 1));
+	}
+
 	/** The states of a user whom Nextcloud no longer has stay as they are: the files went with the user. */
 	public function testTheStatesOfAUserWhoIsGoneStayAsTheyAre(): void {
 		$this->state->exportsOfOthers['ghost'] = [1 => ['document_id' => 1, 'path' => $this->path(1), 'fingerprint' => 'x', 'state' => 'active']];
@@ -338,6 +360,25 @@ final class PerUserOwnershipTest extends TestCase {
 		self::assertSame(['[bob] EXPORT P2: ' . $this->path(2)], $report->actions);
 	}
 
+	/** Paperless may give an owner as a string of digits: the document of the account waits for its owner all the same. */
+	public function testADocumentOfTheAccountWithItsOwnerAsDigitsWaitsForItsOwner(): void {
+		$this->state->saveSend('alice', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+
+		$report = $this->sync([['owner' => (string)self::ACCOUNT] + $this->document(77, null), $this->document(2, self::BOB)]);
+
+		self::assertSame(['[bob] EXPORT P2: ' . $this->path(2)], $report->actions);
+	}
+
+	/** The upload of the user of Nextcloud whose user of Paperless is the account keeps the account as the owner, so it holds nothing. */
+	public function testAnUploadOfTheUserOfTheAccountHoldsNothing(): void {
+		$this->usersOfNextcloud[] = 'paperless-sync';
+		$this->state->saveSend('paperless-sync', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+
+		$report = $this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertSame(['[paperless-sync] EXPORT P5: ' . $this->path(5)], $report->actions);
+	}
+
 	/** An upload that keeps the account as the owner, such as one of the target user without a user of Paperless, holds nothing. */
 	public function testAnUploadWithoutAnotherOwnerHoldsNothing(): void {
 		$this->state->saveSend('paperless', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
@@ -402,6 +443,57 @@ final class PerUserOwnershipTest extends TestCase {
 		$this->sync([['id' => 'x', 'owner' => null] + $this->document(1, null)]);
 	}
 
+	/** @return array<string, array{mixed}> */
+	public static function invalidIds(): array {
+		return [
+			'no number' => ['x'],
+			'zero' => [0],
+		];
+	}
+
+	/** A document without a valid ID fails the export of the target user, whoever owns it, before a copy changes. */
+	#[DataProvider('invalidIds')]
+	public function testADocumentWithoutAValidIdFailsTheExportOfTheTargetUser(mixed $id): void {
+		try {
+			$this->sync([['id' => $id] + $this->document(1, self::ALICE), $this->document(4, null)]);
+			self::fail('A document without a valid ID fails the run.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless returned a document without a valid ID.', $exception->getMessage());
+		}
+
+		self::assertSame([[], []], [$this->storage->files, $this->filesOf('alice')]);
+	}
+
+	/** A run that fails after the inboxes still shows each user what changed for them. */
+	public function testARunThatFailsAfterTheInboxesShowsEachUserTheirUploads(): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+
+		try {
+			$this->sync([['id' => 'x'] + $this->document(1, null)]);
+			self::fail('A document without a valid ID fails the run.');
+		} catch (RuntimeException) {
+		}
+
+		self::assertSame(['scan.pdf'], array_keys($this->paperless->uploads));
+		self::assertSame(['alice'], array_map(static fn (TestActivityEvent $event): string => $event->getAffectedUser(), $this->activities));
+	}
+
+	/**
+	 * A dry-run says so when documents go missing while the trash of Paperless lists none, as in
+	 * single ownership, with the missing documents of every archive.
+	 */
+	public function testADryRunCountsTheMissingDocumentsOfEveryArchive(): void {
+		$this->sync([$this->document(1, self::ALICE), $this->document(2, self::BOB), $this->document(3, null)]);
+		$this->paperless->documents = [$this->document(3, null)];
+
+		$report = $this->service->run(true);
+
+		self::assertSame(['2'], array_map(
+			static fn (string $action): string => (string)preg_replace('/^TRASH EMPTY: documents of the archive are gone from Paperless \((\d+)\).*$/s', '$1', $action),
+			array_values(array_filter($report->actions, static fn (string $action): bool => str_starts_with($action, 'TRASH EMPTY:'))),
+		));
+	}
+
 	/** A dry-run shows the changes of each user and changes nothing, nor prepares the folders of the users. */
 	public function testADryRunShowsTheChangesOfEachUser(): void {
 		$this->paperless->documents = [$this->document(1, self::ALICE)];
@@ -452,6 +544,17 @@ final class PerUserOwnershipTest extends TestCase {
 		self::assertSame(['alice', 'bob'], array_map(static fn (TestActivityEvent $event): string => $event->getAffectedUser(), $this->activities), 'The target user, whose archive the run does not reach, gets no entry.');
 	}
 
+	/** Paperless may give the ID of a document as a string of digits: the run of that document reaches the same archives. */
+	public function testTheRunOfADocumentWithItsIdAsDigitsReachesTheArchivesThatGetItOrHaveACopy(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings() + ['ownership' => SyncConfig::PER_USER]);
+		$this->sync([$this->document(1, self::ALICE)]);
+		$this->paperless->documents = [['id' => '1'] + $this->document(1, self::BOB)];
+
+		$report = $this->service->syncDocument(1);
+
+		self::assertSame(['[alice] REMOVE REASSIGNED P1: ' . $this->path(1), '[bob] EXPORT P1: ' . $this->path(1)], $report->actions);
+	}
+
 	/** The webhook names a document that Paperless doesn't show the account: no archive changes. */
 	public function testTheRunOfADocumentThatPaperlessDoesNotShowChangesNothing(): void {
 		$this->configService->save(['enabled' => true] + self::validSettings() + ['ownership' => SyncConfig::PER_USER]);
@@ -464,10 +567,11 @@ final class PerUserOwnershipTest extends TestCase {
 
 	/** "Forget" asks every archive of per-user ownership to write the copies anew. */
 	public function testForgettingReachesTheCopiesOfEveryUser(): void {
-		$this->sync([$this->document(1, self::ALICE), $this->document(2, null)]);
+		$this->sync([$this->document(1, self::ALICE), $this->document(2, null), $this->document(3, self::BOB)]);
 
-		self::assertSame([2, 1], $this->service->forget());
+		self::assertSame([2, 1, 3], $this->service->forget());
 		self::assertSame(DocumentFingerprint::PENDING, $this->state->exportsOfOthers['alice'][1]['fingerprint']);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exportsOfOthers['bob'][3]['fingerprint']);
 		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[2]['fingerprint']);
 	}
 

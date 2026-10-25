@@ -94,21 +94,29 @@ Three kinds of tests check the app: unit tests, which `scripts/check.sh` runs be
 
 - **Unit tests** in `tests/Unit` run every line of `lib/`; `scripts/check.sh` fails when one runs in no test. The synchronization runs as in Nextcloud, against doubles in memory behind the same interfaces. The doubles are strict, so that a test sees what a mistake of the app would do: the files keep each user apart and record every call with its user, the state keeps each owner apart, Paperless serves an original that differs from the archived version and records every download, every connection that a run takes and every test of it, and Nextcloud's clock stands still until a test sets or advances it, so that no test depends on the time it runs at.
 - **End-to-end tests** in `tests/e2e` run the app in every supported version of Nextcloud, in Docker, against a mock of Paperless-ngx ([decision 0005](decisions/0005-end-to-end-tests-where-they-can-fail.md)).
-- **Mutation tests** change the code of `lib/` in more than two thousand small ways with [Infection](https://infection.github.io/) and run the unit tests against each change, a mutant. A mutant that no test notices shows a line that the tests run but don't check. The workflow *Mutation* runs them every week and reports the score, the MSI: the share of the mutants that the tests noticed.
+- **Mutation tests** change the code of `lib/` in more than six thousand small ways with [Infection](https://infection.github.io/) and run the unit tests against each change, a mutant. A mutant that no test notices shows a line that the tests run but don't check. The workflow *Mutation* runs them every week, with the configuration of `infection.json5` in the root of the repository, and reports the score, the MSI: the share of the mutants that the tests noticed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-mutation-tests.dark.svg">
+  <img src="images/diagrams/the-mutation-tests.svg" alt="The mutation tests: Infection changes the code of lib/ in one small way at a time, a mutant, such as a comparison that includes its limit or a call that is left out, and runs the unit tests that cover the changed line. When a test fails, the mutant is killed. When every test passes, the mutant escaped. If the change makes a difference, a test is missing, and a new test or a sharper assertion kills the mutant. If it makes none, it is an equivalent mutant, which infection.json5 lists with the reason. The score counts the killed mutants among all that aren't listed.">
+</picture>
 
 | Measured | Mutants | Noticed | Not noticed | MSI |
 | --- | ---: | ---: | ---: | ---: |
 | 2026-10-14, before [#114](https://github.com/Dennis-Otto/paperless-sync/issues/114) | 2,287 | 2,005 | 282 | 87.7 % |
 | 2026-10-14, after [#114](https://github.com/Dennis-Otto/paperless-sync/issues/114) | 2,295 | 2,205 | 90 | 96.1 % |
+| 2026-10-24, before [#271](https://github.com/Dennis-Otto/paperless-sync/issues/271) | 6,378 | 5,864 | 514 | 91.9 % |
+| 2026-10-25, after [#271](https://github.com/Dennis-Otto/paperless-sync/issues/271), without the 71 equivalent mutants of `infection.json5` | 6,727 | 6,337 | 390 | 94.2 % |
 
-No mutant of the deletion guards of [decision 0004](decisions/0004-delete-only-what-is-confirmed.md) survives. Most of the others change nothing that the app does: a `break` in place of the `continue` at the end of a loop, a cast of a value that is a string already, the default of a key that every row has, or a limit of the wait between uploads that the wait of a day caps anyway. The same run on your computer, with PHP 8.3 and the version and checksum of Infection from `.github/workflows/mutation.yml`. Everything stays in the ignored folder `build/`, because the workflow uses a committed `infection.json5` in place of its own:
+No mutant of the deletion guards of [decision 0004](decisions/0004-delete-only-what-is-confirmed.md) survives, nor one of per-user ownership of [decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) that would give a document to the wrong user, upload the inbox of a user who gets no documents, or skip the test of the base folder in the run of one document ([#271](https://github.com/Dennis-Otto/paperless-sync/issues/271)). Most of the others change nothing that the app does: a `break` in place of the `continue` at the end of a loop, a cast of a value that is a string already, the default of a key that every row has, or a limit of the wait between uploads that the wait of a day caps anyway. `infection.json5` lists those of per-user ownership, of the inbox and of *Send to Paperless*, each by the line it changes and with the reason, so that a change of the line brings it back; the run shows them as ignored and leaves them out of the score.
+
+The same run on your computer, with PHP 8.3 and the version and checksum of Infection from `.github/workflows/mutation.yml`; the reports go to the ignored folder `build/`, and `--filter=lib/Service/SendService.php` runs the mutants of one file:
 
 ```sh
 mkdir -p build
 curl -fsSL -o build/infection.phar https://github.com/infection/infection/releases/download/0.35.6/infection.phar
 echo "3fd4216875260b8e47c48ec1a92473f500d88bd36d8ffec21cc0d24e18d7f0ea  build/infection.phar" | sha256sum --check --strict
-echo '{"bootstrap": "../tests/bootstrap.php", "source": {"directories": ["../lib"]}, "timeout": 30, "logs": {"text": "infection.log"}}' > build/infection.json5
-php build/infection.phar --configuration=build/infection.json5 --threads=max --with-uncovered --min-msi=0 --min-covered-msi=0 --no-progress
+php build/infection.phar --threads=max --with-uncovered --no-progress
 ```
 
 ## Design decisions

@@ -1,0 +1,165 @@
+// The mutation tests of the app: Infection changes the code of lib/ in small ways, one
+// mutant at a time, and runs the unit tests against each. A mutant that no test notices
+// is a gap in the tests, or a change that makes no difference, an equivalent mutant,
+// which this file lists with its reason. The weekly Mutation workflow runs them with
+// this file; locally, with PHP 8.3 or newer and pcov or Xdebug:
+//   php infection.phar --threads=max
+// See "Tests" in docs/architecture.md.
+{
+  "$schema": "https://raw.githubusercontent.com/infection/infection/0.35.6/resources/schema.json",
+  // The classes of Nextcloud that the app uses come from the bootstrap of the unit tests.
+  "bootstrap": "tests/bootstrap.php",
+  "source": {"directories": ["lib"]},
+  "timeout": 30,
+  "logs": {
+    "text": "build/infection.log",
+    "summary": "build/infection-summary.log",
+    "json": "build/infection.json"
+  },
+  "mutators": {
+    "@default": true,
+    // The equivalent mutants, each ignored by the line of code that it changes, so that a
+    // change of that line brings the mutant back for review. A regex matches the whole line.
+    "CastInt": {
+      "ignoreSourceCodeByRegex": [
+        // PHP keeps a numeric key of an array as an integer already; the cast is for Psalm,
+        // which reads the IDs of Paperless as the strings that its lists document.
+        "\\$id = \\(int\\)\\$id;",
+        // The state gives each row with its columns typed (SyncStateRepository::normalizeRow()):
+        // the columns of numbers as int, the others as string. The casts are for Psalm,
+        // which reads a row as int|string|null.
+        "\\$fileId = \\(int\\)\\$send\\['file_id'\\];",
+        "\\$attempts = \\(int\\)\\$send\\['attempts'\\] \\+ 1;",
+        "\\$ruleId = \\(int\\)\\(\\$send\\['rule_id'\\] \\?\\? 0\\);",
+        "\\$documentId = \\(int\\)\\(\\$entry\\['document_id'\\] \\?\\? 0\\);",
+        "\\$attempts\\[\\$path\\] = \\(int\\)\\(\\$pending\\['attempts'\\] \\?\\? 0\\);",
+        // A string of digits finds the same route as its number: PHP keeps the keys of the
+        // routes as integers.
+        "\\$id = is_int\\(\\$owner\\) \\|\\| \\(is_string\\(\\$owner\\) && ctype_digit\\(\\$owner\\)\\) \\? \\(int\\)\\$owner : 0;"
+      ]
+    },
+    "CastString": {
+      "ignoreSourceCodeByRegex": [
+        // The columns of text of a row are strings already, as for CastInt.
+        "\\$status = \\(string\\)\\(\\$send\\['status'\\] \\?\\? ''\\);",
+        "\\$userId = \\(string\\)\\$send\\['user_id'\\];",
+        "\\$path = \\(string\\)\\$send\\['path'\\];",
+        "\\$taskId = \\(string\\)\\$send\\['task_id'\\];",
+        "'(user|path)' => \\(string\\)\\$send\\['(user_id|path)'\\],",
+        "if \\(\\$owner !== null && in_array\\('pending', array_map\\(static fn \\(array \\$import\\): string => \\(string\\)\\(\\$import\\['status'\\] \\?\\? ''\\), .*",
+        "\\$path = \\(string\\)\\(\\$pending\\['path'\\] \\?\\? ''\\);",
+        "\\$status = \\(string\\)\\(\\$pending\\['status'\\] \\?\\? ''\\);",
+        "\\$taskId = \\(string\\)\\(\\$pending\\['task_id'\\] \\?\\? ''\\);",
+        // A route by the name or the table has its user of Nextcloud; only the others have none.
+        "Owners::NAME, Owners::TABLE => ConnectionCheck::passed\\(.*",
+        // The number of the line goes into the message as %s, which writes 2 and '2' alike.
+        "throw new InvalidSettingException\\('.Paperless users with another Nextcloud ID., line %s: .*",
+        // is_string() has checked the title already.
+        "'title' => is_string\\(\\$document\\['title'\\] \\?\\? null\\) \\? \\(string\\)\\$document\\['title'\\] : '',"
+      ]
+    },
+    "DecrementInteger": {
+      "ignoreSourceCodeByRegex": [
+        // The columns of a row of a sent file or of an import are NOT NULL with a default (the
+        // migrations), so the state always has them, and the default after ?? never counts.
+        "if \\(\\(\\$status === self::RETRY && \\(int\\)\\(\\$send\\['retry_at'\\] \\?\\? 0\\) > \\$now\\) .*",
+        "\\} elseif \\(\\$now - \\(int\\)\\(\\$send\\['submitted_at'\\] \\?\\? 0\\) >= ImportPlanner::TASK_TIMEOUT\\) \\{",
+        "\\$ruleId = \\(int\\)\\(\\$send\\['rule_id'\\] \\?\\? 0\\);",
+        "if \\(\\$status === 'retry' && \\$unchangedFile && \\(int\\)\\(\\$pending\\['retry_at'\\] \\?\\? 0\\) <= \\$now\\) \\{",
+        "\\$attempts\\[\\$path\\] = \\(int\\)\\(\\$pending\\['attempts'\\] \\?\\? 0\\);",
+        "if \\(\\$now - \\(int\\)\\(\\$pending\\['submitted_at'\\] \\?\\? 0\\) >= self::TASK_TIMEOUT\\) \\{",
+        // So does the document of each row of an export.
+        "\\$documentId = \\(int\\)\\(\\$entry\\['document_id'\\] \\?\\? 0\\);",
+        // The routes have the IDs of the users of Paperless, which are above 0, so an owner that
+        // is no ID finds no route with -1 either.
+        "\\$id = is_int\\(\\$owner\\) \\|\\| \\(is_string\\(\\$owner\\) && ctype_digit\\(\\$owner\\)\\) \\? \\(int\\)\\$owner : 0;",
+        // The operation of a rule is an object with a list of names: a deeper one holds a name
+        // that is no string, which the check after the decoding refuses, so a depth of 3 or 5
+        // refuses the same operations.
+        "\\$value = json_decode\\(\\$operation, true, 4, JSON_THROW_ON_ERROR\\);",
+        // The run of one document reads a scan that is complete, and the number of the listed
+        // documents counts only in the notice of a scan that is not (SyncService::checkScan()).
+        "\\$documentScan = \\$single \\? new PaperlessScan\\(\\[\\$document\\], true, 1\\) : .*",
+        "\\$trashScan = \\$single \\? new PaperlessScan\\(\\[\\], true, 0\\) : .*",
+        // The run of one document reaches the archives by an ID that PaperlessApiService::document()
+        // has checked, and a scheduled run, without the document, needs no ID.
+        "\\$documentId = \\$document !== null && is_numeric\\(\\$document\\['id'\\] \\?\\? null\\) \\? \\(int\\)\\$document\\['id'\\] : 0;",
+        // A document without a valid ID is the same with -1 as with 0: both are below 1.
+        "\\$documentId = is_numeric\\(\\$document\\['id'\\] \\?\\? null\\) \\? \\(int\\)\\$document\\['id'\\] : 0;"
+      ]
+    },
+    "GreaterThan": {
+      "ignoreSourceCodeByRegex": [
+        // A document with the ID 0 fails the export of the target user, which comes first, before
+        // the route of a document 0 could reach the other archives, which have no copy of one.
+        "if \\(\\$documentId > 0\\) \\{"
+      ]
+    },
+    "IncrementInteger": {
+      "ignoreSourceCodeByRegex": [
+        // As for DecrementInteger.
+        "if \\(\\(\\$status === self::RETRY && \\(int\\)\\(\\$send\\['retry_at'\\] \\?\\? 0\\) > \\$now\\) .*",
+        "\\} elseif \\(\\$now - \\(int\\)\\(\\$send\\['submitted_at'\\] \\?\\? 0\\) >= ImportPlanner::TASK_TIMEOUT\\) \\{",
+        "\\$ruleId = \\(int\\)\\(\\$send\\['rule_id'\\] \\?\\? 0\\);",
+        "if \\(\\$status === 'retry' && \\$unchangedFile && \\(int\\)\\(\\$pending\\['retry_at'\\] \\?\\? 0\\) <= \\$now\\) \\{",
+        "\\$attempts\\[\\$path\\] = \\(int\\)\\(\\$pending\\['attempts'\\] \\?\\? 0\\);",
+        "if \\(\\$now - \\(int\\)\\(\\$pending\\['submitted_at'\\] \\?\\? 0\\) >= self::TASK_TIMEOUT\\) \\{",
+        "\\$documentId = \\(int\\)\\(\\$entry\\['document_id'\\] \\?\\? 0\\);",
+        "\\$value = json_decode\\(\\$operation, true, 4, JSON_THROW_ON_ERROR\\);",
+        "\\$documentScan = \\$single \\? new PaperlessScan\\(\\[\\$document\\], true, 1\\) : .*",
+        "\\$trashScan = \\$single \\? new PaperlessScan\\(\\[\\], true, 0\\) : .*",
+        "\\$documentId = \\$document !== null && is_numeric\\(\\$document\\['id'\\] \\?\\? null\\) \\? \\(int\\)\\$document\\['id'\\] : 0;",
+        // The run of one document reads that document alone, so each archive has one document
+        // to change: a batch of two changes the same as a batch of one.
+        "\\$this->sync(Users|Exports)\\(\\$paperless, \\$config->withBatchSize\\(1\\), .*"
+      ]
+    },
+    "LogicalAnd": {
+      "ignoreSourceCodeByRegex": [
+        // As for DecrementInteger: the ID of the run of one document is a number.
+        "\\$documentId = \\$document !== null && is_numeric\\(\\$document\\['id'\\] \\?\\? null\\) \\? \\(int\\)\\$document\\['id'\\] : 0;",
+        // The export reads the list of a user only for an archive that the run reaches, so a
+        // document of an archive that it doesn't reach lands in a list that nothing reads.
+        "if \\(\\$user !== null && isset\\(\\$archives\\[\\$user\\]\\)\\) \\{"
+      ]
+    },
+    "TrueValue": {
+      "ignoreSourceCodeByRegex": [
+        // isset() counts false as set as well: the names that matched need no value.
+        "\\$matched\\[\\$key\\] = true;",
+        // The owners whose uploads wait are the keys, which array_diff_key() compares alone.
+        "\\$waiting\\[\\$owner\\] = true;",
+        "return array_diff_key\\(\\$waiting, \\[\\$account => true\\]\\) === \\[\\] \\? null : \\$account;"
+      ]
+    },
+    "UnwrapArrayFilter": {
+      "ignoreSourceCodeByRegex": [
+        // A document of which the user has no copy, null here, has no path either, which the
+        // loop of forget() leaves out as well.
+        ": array_values\\(array_filter\\(array_map\\(fn \\(int \\$documentId\\): \\?array => \\$this->state->findExport\\(\\$user, \\$documentId\\), \\$documentIds\\)\\)\\);"
+      ]
+    },
+    "UnwrapArrayUnique": {
+      "ignoreSourceCodeByRegex": [
+        // forget() marks the copies of a user, who may come twice, the same way each time.
+        "\\$users = \\$config->perUser\\(\\) \\? array_values\\(array_unique\\(\\[\\$config->targetUser, \\.\\.\\.\\$this->state->exportOwners\\(\\)\\]\\)\\) : \\[\\$config->targetUser\\];"
+      ]
+    },
+    "UnwrapArrayValues": {
+      "ignoreSourceCodeByRegex": [
+        // implode() joins the names in their order, whatever their keys.
+        "\\$others = array_map\\(static fn \\(int \\$other\\): string => \\$routes\\[\\$other\\]\\['name'\\], array_values\\(array_diff\\(\\$ids, \\[\\$id\\]\\)\\)\\);",
+        "\\$outcome = \\$this->fileActions->sendByRule\\(\\$this->configService->get\\(\\), \\$userId, \\$fileId, array_values\\(\\$tags\\), \\$ruleId\\);",
+        // sort() and usort() number the users and the routes anew.
+        "\\$users = array_values\\(array_filter\\(\\$users, fn \\(string \\$user\\): bool => \\$user !== \\$this->fallback\\)\\);",
+        "\\$routes = array_values\\(\\$this->routes\\);",
+        // array_slice() numbers the users anew.
+        "foreach \\(array_slice\\(array_values\\(array_diff\\(\\$owners->users\\(\\), \\[\\$config->targetUser\\]\\)\\), 0, self::CHECKED_USERS\\) as \\$user\\) \\{",
+        // A loop goes through the values alone.
+        "foreach \\(array_values\\(array_unique\\(\\$fileIds\\)\\) as \\$fileId\\) \\{",
+        "\\$users = \\$config->perUser\\(\\) \\? array_values\\(array_unique\\(\\[\\$config->targetUser, \\.\\.\\.\\$this->state->exportOwners\\(\\)\\]\\)\\) : \\[\\$config->targetUser\\];",
+        ": array_values\\(array_filter\\(array_map\\(fn \\(int \\$documentId\\): \\?array => \\$this->state->findExport\\(\\$user, \\$documentId\\), \\$documentIds\\)\\)\\);"
+      ]
+    }
+  }
+}
