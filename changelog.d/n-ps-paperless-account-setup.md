@@ -1,3 +1,0 @@
-### Features
-
-- **The account of the app in one step:** *Create an account for the app in Paperless*, in the connection settings, takes the API token of a Paperless superuser once and creates the account of the app with it: no superuser, with exactly the permissions that your modules need and a random password that nobody learns. The settings are saved with the token of that account, and the connection checklist shows what is left to do. Your token is neither stored nor logged. `occ paperless_sync:create-account` does the same for scripted setups, and the README has the commands for `curl` for those who create the account themselves.
