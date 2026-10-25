@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: How a scan on the phone reaches Paperless
+    accDescr: On the phone, the scanner of the Nextcloud app saves the pages as a PDF into the folder Inbox, or the auto upload of the app takes a file from a folder of the phone into it. With the next run of Paperless Sync, at the interval that the administrator set, 5 minutes by default, the file goes to Paperless, which reads its text and makes it a document. When Paperless imports it, the file leaves the inbox; once the document has left the inbox of Paperless too, when someone finished it there, the next run writes the copy of the new document into the archive, in the folders of its correspondent, its type and its year, with the marker of its ID, such as [P123], in its name; the phone finds it there. When the import fails, such as for a damaged PDF, the file moves to the folder Failed imports, next to a .error.txt that gives the reason; a file that Paperless refuses at once, such as one of a type that it doesn't take, stays in the inbox until it changes. Your steps are orange, Nextcloud blue, Paperless-ngx green and a failed import red.
+
+    scan["📱 Scan document in the<br>Nextcloud app: the pages<br>as one PDF"]
+    auto["📱 Auto upload of a<br>folder of the phone"]
+    inbox["📂 The file in the folder<br>Inbox in Nextcloud"]
+    paperless{"Paperless reads<br>its text: a new<br>document?"}
+    failed["Failed imports: the<br>file, next to a .error.txt<br>that gives the reason"]
+    refused["Stays in Inbox<br>until it changes"]
+    waiting["Waits in the inbox of<br>Paperless until someone<br>finishes the document"]
+    archive["📄 The copy in Archive:<br>correspondent, type and<br>year, … [P123].pdf, also<br>on the phone"]
+
+    scan -- "save into<br>Inbox" --> inbox
+    auto -- "upload into<br>Inbox" --> inbox
+    inbox -- "next run, 5 minutes<br>by default" --> paperless
+    paperless -- "yes: the file<br>leaves Inbox" --> waiting
+    waiting -- "next run after<br>it is finished" --> archive
+    paperless -- "the import<br>fails" --> failed
+    paperless -- "refused, such<br>as its type" --> refused
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class scan,auto yours
+    class inbox,archive nextcloud
+    class paperless,waiting paperless
+    class failed,refused refused

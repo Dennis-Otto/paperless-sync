@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wie ein Scan auf dem Handy zu Paperless kommt
+    accDescr: Auf dem Handy speichert der Scanner der Nextcloud-App die Seiten als PDF in den Ordner Eingang, oder der automatische Upload der App bringt eine Datei aus einem Ordner des Handys dorthin. Mit dem nächsten Lauf von Paperless Sync, im Intervall, das die Administration eingestellt hat, standardmäßig 5 Minuten, geht die Datei an Paperless, das ihren Text liest und ein Dokument daraus macht. Importiert Paperless sie, verlässt die Datei den Eingang; sobald das Dokument auch den Posteingang von Paperless verlassen hat, wenn es dort jemand fertig bearbeitet hat, schreibt der nächste Lauf die Kopie des neuen Dokuments ins Archiv, in die Ordner seines Korrespondenten, seines Typs und seines Jahres, mit der Markierung seiner ID, wie [P123], im Namen; das Handy findet sie dort. Scheitert der Import, etwa bei einem beschädigten PDF, wandert die Datei in den Ordner Fehler, neben eine .error.txt mit dem Grund; eine Datei, die Paperless sofort ablehnt, etwa eine eines Typs, den es nicht annimmt, bleibt im Eingang, bis sie sich ändert. Deine Schritte sind orange, Nextcloud blau, Paperless-ngx grün und ein gescheiterter Import rot.
+
+    scan["📱 Dokument scannen in<br>der Nextcloud-App: die<br>Seiten als ein PDF"]
+    auto["📱 Automatischer Upload<br>eines Ordners des Handys"]
+    inbox["📂 Die Datei im Ordner<br>Eingang in Nextcloud"]
+    paperless{"Paperless liest<br>ihren Text: ein<br>neues Dokument?"}
+    failed["Fehler: die Datei,<br>neben einer .error.txt<br>mit dem Grund"]
+    refused["Bleibt im Eingang,<br>bis sie sich ändert"]
+    waiting["Wartet im Posteingang<br>von Paperless, bis jemand<br>das Dokument fertig<br>bearbeitet"]
+    archive["📄 Die Kopie im Archiv:<br>Korrespondent, Typ und<br>Jahr, … [P123].pdf, auch<br>auf dem Handy"]
+
+    scan -- "in Eingang<br>speichern" --> inbox
+    auto -- "in Eingang<br>hochladen" --> inbox
+    inbox -- "nächster Lauf,<br>standardmäßig<br>5 Minuten" --> paperless
+    paperless -- "ja: die Datei<br>verlässt Eingang" --> waiting
+    waiting -- "nächster Lauf,<br>wenn es fertig ist" --> archive
+    paperless -- "der Import<br>scheitert" --> failed
+    paperless -- "abgelehnt, etwa<br>wegen ihres Typs" --> refused
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef refused fill:#c9302c1f,stroke:#c9302c,stroke-width:2px
+    class scan,auto yours
+    class inbox,archive nextcloud
+    class paperless,waiting paperless
+    class failed,refused refused

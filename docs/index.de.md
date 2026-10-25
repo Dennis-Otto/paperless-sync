@@ -84,7 +84,7 @@ Die [Anleitung](guide.de.md) beschreibt die Konfiguration im Detail: das Paperle
 
 ## Mehr erfahren
 
-Die Anleitung, die FAQ und die Fehlerbehebung gibt es auf Deutsch, die übrigen Seiten auf Englisch.
+Die Anleitung, die Seite zum Nutzen des Archivs, die FAQ und die Fehlerbehebung gibt es auf Deutsch, die übrigen Seiten auf Englisch.
 
 <div class="grid cards" markdown>
 
@@ -95,6 +95,14 @@ Die Anleitung, die FAQ und die Fehlerbehebung gibt es auf Deutsch, die übrigen 
     Installation, alle Funktionen, die Verwendung und jeder Teil der Konfiguration.
 
     [:octicons-arrow-right-24: Zur Anleitung](guide.de.md)
+
+- :material-cellphone-text:{ .lg .middle } **Das Archiv nutzen**
+
+    ---
+
+    Für die Menschen, die die Dokumente lesen und senden: sie finden, Dateien an Paperless senden, mit dem Handy scannen, offline halten und teilen.
+
+    [:octicons-arrow-right-24: Das Archiv nutzen](use.de.md)
 
 - :material-lifebuoy:{ .lg .middle } **FAQ und Fehlerbehebung**
 
