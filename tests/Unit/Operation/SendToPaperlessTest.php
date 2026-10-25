@@ -101,9 +101,11 @@ final class SendToPaperlessTest extends TestCase {
 			'a new rule' => ['', []],
 			'no tags' => ['{"tags":[]}', []],
 			'no member' => ['{}', []],
+			'only spaces' => ['  ', []],
 			'tags' => ['{"tags":["Scans","Family"]}', ['Scans', 'Family']],
 			'spaces around a name' => ['{"tags":["  Scans  "]}', ['Scans']],
 			'a name twice in another case' => ['{"tags":["Scans","scans","Family"]}', ['Scans', 'Family']],
+			'a name beyond ASCII twice in another case' => ['{"tags":["Ärger","ärger"]}', ['Ärger']],
 			'the longest name' => ['{"tags":["' . str_repeat('ä', 128) . '"]}', [str_repeat('ä', 128)]],
 		];
 	}
@@ -211,6 +213,7 @@ final class SendToPaperlessTest extends TestCase {
 		$this->rootFolder->method('getFirstNodeById')->willReturn(null);
 		$matcher = $this->createMock(IRuleMatcher::class);
 		$matcher->expects(self::never())->method('getFlows');
+		$this->logger->expects(self::never())->method('warning');
 
 		$this->operation->onEvent($eventName, $event($this), $matcher);
 
@@ -221,6 +224,7 @@ final class SendToPaperlessTest extends TestCase {
 	public function testAFileThatNoRuleMatchesStays(): void {
 		$id = $this->upload('Scans/receipt.pdf');
 		$this->flows = [];
+		$this->logger->expects(self::never())->method('warning');
 
 		$this->onEvent('\OCP\Files::postCreate', new GenericEvent($this->file($id, self::OWNER)));
 
@@ -233,15 +237,15 @@ final class SendToPaperlessTest extends TestCase {
 		$this->flows = [
 			'no rule',
 			['operation' => '{"tags":["Lost"]}'],
-			['id' => '7', 'operation' => '{"tags":["Scans"]}'],
-			['id' => 8, 'operation' => '{"tags":["scans","Family"]}'],
+			['id' => '7', 'operation' => '{"tags":["Scans","Ärger"]}'],
+			['id' => 8, 'operation' => '{"tags":["scans","ärger","Family"]}'],
 			['id' => 9, 'operation' => 'written by hand'],
 			['id' => 10],
 		];
 
 		$this->onEvent('\OCP\Files::postCreate', new GenericEvent($this->file($id, self::OWNER)));
 
-		self::assertSame(['Scans,Family', 7], [$this->state->findSend(self::OWNER, $id)['tags'] ?? null, $this->state->findSend(self::OWNER, $id)['rule_id'] ?? null]);
+		self::assertSame(['Scans,Ärger,Family', 7], [$this->state->findSend(self::OWNER, $id)['tags'] ?? null, $this->state->findSend(self::OWNER, $id)['rule_id'] ?? null]);
 	}
 
 	/** A file without an owner, as in a group folder, goes for the user who wrote it. */
@@ -257,6 +261,7 @@ final class SendToPaperlessTest extends TestCase {
 	public function testAFileWithoutAnOwnerOutsideARequestStays(): void {
 		$this->sessionUser = null;
 		$id = $this->upload('Scans/receipt.pdf');
+		$this->logger->expects(self::never())->method('warning');
 
 		$this->onEvent('\OCP\Files::postCreate', new GenericEvent($this->file($id, null)));
 
@@ -281,7 +286,7 @@ final class SendToPaperlessTest extends TestCase {
 		$file->method('getId')->willThrowException(new RuntimeException('The file cache is locked.'));
 		$this->logger->expects(self::once())->method('warning')->with(
 			'Paperless Sync could not queue a file of a rule of Flow for Paperless: {error}',
-			self::callback(static fn (array $context): bool => $context['error'] === 'The file cache is locked.' && $context['exception'] instanceof RuntimeException),
+			self::callback(static fn (array $context): bool => $context['app'] === 'paperless_sync' && $context['error'] === 'The file cache is locked.' && $context['exception'] instanceof RuntimeException),
 		);
 
 		$this->onEvent('\OCP\Files::postCreate', new GenericEvent($file));

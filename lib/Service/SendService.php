@@ -173,7 +173,7 @@ final class SendService {
 	 */
 	private function retryLater(SyncConfig $config, array $send, string $path, \Throwable $exception, int $now): void {
 		$error = $exception->getMessage();
-		$attempts = (int)($send['attempts'] ?? 0) + 1;
+		$attempts = (int)$send['attempts'] + 1;
 		if ($attempts >= self::MAX_ATTEMPTS) {
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, $error);
 			$this->logger->warning('Paperless Sync gave up sending {path} of {user} to Paperless after {attempts} failed uploads: {error}', [

@@ -62,7 +62,44 @@ final class OwnersTest extends TestCase {
 		self::assertSame(['paperless'], (new Owners('paperless', []))->users());
 	}
 
+	/** The users who get documents come in the order of their IDs, whatever the order of the users of Paperless. */
+	public function testListsTheUsersWhoGetDocumentsInTheOrderOfTheirIds(): void {
+		$owners = new Owners('paperless', [
+			1 => ['id' => 1, 'name' => 'zoe', 'user' => 'zoe', 'reason' => Owners::NAME, 'detail' => ''],
+			2 => ['id' => 2, 'name' => 'alice', 'user' => 'alice', 'reason' => Owners::NAME, 'detail' => ''],
+		], []);
+
+		self::assertSame(['paperless', 'alice', 'zoe'], $owners->users());
+	}
+
 	public function testListsTheUsersOfPaperlessByTheirNames(): void {
 		self::assertSame(['admin', 'alice', 'Bob', 'carol', 'dave'], array_column($this->owners->routes(), 'name'));
+	}
+
+	/**
+	 * The order of the names holds for letters beyond ASCII whatever their case, and names that
+	 * differ in their case alone come in the order of their IDs.
+	 *
+	 * @return array<string, array{list<string>, list<string>}> the names by their IDs, from 1, and in their order
+	 */
+	public static function namesBeyondAscii(): array {
+		return [
+			'one order' => [['Ölaf', 'Olga', 'öla', 'Zed', 'ärger', 'Ärni', 'ÄRGER'], ['Olga', 'Zed', 'ärger', 'ÄRGER', 'Ärni', 'öla', 'Ölaf']],
+			'the other order' => [['ÄRGER', 'Ärni', 'ärger', 'Zed', 'öla', 'Olga', 'Ölaf'], ['Olga', 'Zed', 'ÄRGER', 'ärger', 'Ärni', 'öla', 'Ölaf']],
+		];
+	}
+
+	/**
+	 * @param list<string> $names
+	 * @param list<string> $expected
+	 */
+	#[DataProvider('namesBeyondAscii')]
+	public function testListsNamesBeyondAsciiByTheirNames(array $names, array $expected): void {
+		$routes = [];
+		foreach ($names as $index => $name) {
+			$routes[$index + 1] = ['id' => $index + 1, 'name' => $name, 'user' => null, 'reason' => Owners::NONE, 'detail' => ''];
+		}
+
+		self::assertSame($expected, array_column((new Owners('paperless', $routes, []))->routes(), 'name'));
 	}
 }

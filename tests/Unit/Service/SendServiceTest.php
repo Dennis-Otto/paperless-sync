@@ -139,6 +139,17 @@ final class SendServiceTest extends TestCase {
 		self::assertSame(['receipt.pdf'], array_keys($this->paperless->uploads));
 	}
 
+	/** A moved file whose upload fails waits for its next attempt at its new place. */
+	public function testAMovedFileWhoseUploadFailsWaitsAtItsNewPlace(): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->storage->move(self::SENDER, 'Scans/receipt.pdf', 'Archive/receipt.pdf', 'replace');
+		$this->paperless->uploadFailures['receipt.pdf'] = new PaperlessUploadException('Paperless answered HTTP 503.', false, 503);
+
+		$this->service->process();
+
+		self::assertSame(['path' => 'Archive/receipt.pdf', 'status' => SendService::RETRY], array_intersect_key($this->send($id), ['path' => 0, 'status' => 0]));
+	}
+
 	/** Paperless-ngx 3.x would import the same content a second time: the sender learns the document that has it. */
 	public function testAFileThatPaperlessHasIsNotUploadedAgain(): void {
 		$id = $this->queue('Scans/receipt.pdf');
@@ -208,13 +219,59 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_REFUSED, $id, 'Scans/notes.bin', null, 'File type application/octet-stream not supported');
 	}
 
+	/**
+	 * A file whose import ends before or with its upload, as it is gone, Paperless has its content
+	 * or refuses it, says nothing about Paperless: the next file of the round goes.
+	 *
+	 * @return array<string, array{\Closure(self): void}>
+	 */
+	public static function endsOfAnUpload(): array {
+		return [
+			'a file that is gone' => [static function (self $test): void {
+				$test->storage->delete(self::SENDER, 'Scans/a.pdf');
+			}],
+			'a content that Paperless has' => [static function (self $test): void {
+				$test->paperless->originals[hash('sha256', 'Synthetic content of Scans/a.pdf')] = 77;
+			}],
+			'a file that Paperless refuses' => [static function (self $test): void {
+				$test->paperless->uploadFailures['a.pdf'] = new PaperlessUploadException('File type application/octet-stream not supported', true, 400);
+			}],
+		];
+	}
+
+	/** @param \Closure(self): void $end */
+	#[DataProvider('endsOfAnUpload')]
+	public function testAFileWhoseImportEndsLetsTheNextFileGo(\Closure $end): void {
+		$first = $this->queue('Scans/a.pdf');
+		$next = $this->queue('Scans/b.pdf');
+		$end($this);
+
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $first));
+		self::assertSame(SendService::PENDING, $this->send($next)['status']);
+	}
+
+	/** An upload that fails closes the file all the same. */
+	public function testAFailedUploadClosesTheFile(): void {
+		$this->queue('Scans/a.pdf');
+		$this->paperless->uploadFailures['a.pdf'] = new RuntimeException('The storage is not available.');
+
+		$this->service->process();
+
+		self::assertCount(2, $this->storage->openedStreams, 'One read for the checksums, one for the upload.');
+		foreach ($this->storage->openedStreams as $stream) {
+			self::assertFalse(is_resource($stream), 'Every stream is closed.');
+		}
+	}
+
 	/** After a failure that may pass, the file waits, and so do the other files of the round, as they would meet it as well. */
 	public function testAFailedUploadWaitsLongerEachTimeAndHoldsBackTheOthers(): void {
 		$first = $this->queue('Scans/a.pdf');
 		$second = $this->queue('Scans/b.pdf');
 		$this->paperless->uploadFailures['a.pdf'] = new PaperlessUploadException('Paperless answered HTTP 503.', false, 503);
 		$this->logger->expects(self::once())->method('log')->with(LogLevel::WARNING, self::stringContains('the next attempt follows in {minutes} minutes'), self::callback(
-			static fn (array $context): bool => $context['attempts'] === 1 && $context['minutes'] === 15 && $context['error'] === 'Paperless answered HTTP 503.',
+			static fn (array $context): bool => $context === ['path' => 'Scans/a.pdf', 'user' => self::SENDER, 'attempts' => 1, 'minutes' => 15, 'error' => 'Paperless answered HTTP 503.'],
 		));
 
 		$this->service->process();
@@ -236,6 +293,63 @@ final class SendServiceTest extends TestCase {
 		self::assertSame(SendService::PENDING, $this->send($id)['status']);
 	}
 
+	/** @return array<string, array{int, int}> the failed uploads of a file before, and the wait after the next one in minutes */
+	public static function waits(): array {
+		return [
+			'after the first failure' => [0, 15],
+			'after the third' => [2, 60],
+			'after the fifth' => [4, 240],
+		];
+	}
+
+	/** The wait for the next attempt doubles with each failure. */
+	#[DataProvider('waits')]
+	public function testTheWaitDoublesWithEachFailure(int $attempts, int $minutes): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => $attempts, 'retry_at' => 0]);
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered HTTP 503.', false, 503);
+		$this->logger->expects(self::once())->method('log')->with(self::anything(), self::anything(), self::callback(static fn (array $context): bool => $context['minutes'] === $minutes));
+
+		$this->service->process();
+
+		self::assertSame(['attempts' => $attempts + 1, 'retry_at' => TestClock::START + 60 * $minutes], array_intersect_key($this->send($id), ['attempts' => 0, 'retry_at' => 0]));
+	}
+
+	/** @return array<string, array{\Closure(self, string): int}> a failure with the error, and the file that meets it */
+	public static function longErrors(): array {
+		return [
+			'of an upload' => [static function (self $test, string $error): int {
+				$test->paperless->uploadFailures['receipt.pdf'] = new PaperlessUploadException($error, false, 503);
+
+				return $test->queue('Scans/receipt.pdf');
+			}],
+			'of the task of an upload' => [static function (self $test, string $error): int {
+				$test->paperless->taskException = new PaperlessRequestException($error);
+
+				return $test->pending('Scans/receipt.pdf');
+			}],
+			'of the owner of a document' => [static function (self $test, string $error): int {
+				$test->usersOfNextcloud = ['paperless', 'alice'];
+				$test->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+				$test->paperless->users = ['5' => 'alice'];
+				$test->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+				$test->paperless->ownerException = new RuntimeException($error);
+
+				return $test->pending('Scans/receipt.pdf');
+			}],
+		];
+	}
+
+	/** The state keeps the first 4,000 characters of a long error, also of one beyond ASCII. */
+	#[DataProvider('longErrors')]
+	public function testTheStateKeepsTheBeginningOfALongError(\Closure $failure): void {
+		$id = $failure($this, str_repeat('ü', 4001));
+
+		$this->service->process();
+
+		self::assertSame(str_repeat('ü', 4000), $this->send($id)['last_error']);
+	}
+
 	/** The attempts after the first are information in the log, and the last ends the import. */
 	public function testTheLastFailedAttemptEndsTheImport(): void {
 		$id = $this->queue('Scans/receipt.pdf');
@@ -245,7 +359,7 @@ final class SendServiceTest extends TestCase {
 		$this->service->process();
 
 		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => SendService::MAX_ATTEMPTS - 1, 'retry_at' => 0]);
-		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('gave up sending {path}'), self::callback(static fn (array $context): bool => $context['attempts'] === SendService::MAX_ATTEMPTS));
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('gave up sending {path}'), self::identicalTo(['path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'attempts' => SendService::MAX_ATTEMPTS, 'error' => 'Paperless answered HTTP 502.']));
 		$this->service->process();
 
 		self::assertNull($this->state->findSend(self::SENDER, $id));
@@ -290,6 +404,40 @@ final class SendServiceTest extends TestCase {
 		self::assertSame(SendService::QUEUED, $this->send($second)['status']);
 	}
 
+	/** A round follows the task of an earlier upload and uploads the files after it. */
+	public function testARoundFollowsATaskAndUploadsTheFilesAfterIt(): void {
+		$pending = $this->pending('Scans/a.pdf');
+		$queued = $this->queue('Scans/b.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $pending));
+		self::assertSame(['b.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame(SendService::PENDING, $this->send($queued)['status']);
+	}
+
+	/**
+	 * A file that waits for its next attempt, or for the next round once the batch is full, leaves
+	 * the round to the files after it, and the round follows the tasks of the earlier uploads all the same.
+	 */
+	public function testARoundGoesPastTheFilesThatWait(): void {
+		$this->configService->save(['batch_size' => 1, 'send_group' => 'scanners'] + self::validSettings());
+		$waiting = $this->queue('Scans/a.pdf');
+		$this->state->saveSend(self::SENDER, $waiting, ['status' => SendService::RETRY, 'attempts' => 1, 'retry_at' => TestClock::START + 60]);
+		$first = $this->queue('Scans/b.pdf');
+		$second = $this->queue('Scans/c.pdf');
+		$pending = $this->queue('Scans/d.pdf');
+		$this->state->saveSend(self::SENDER, $pending, ['status' => SendService::PENDING, 'task_id' => 'task-9', 'submitted_at' => TestClock::START]);
+		$this->paperless->tasks['task-9'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+
+		$this->service->process();
+
+		self::assertSame(['b.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([SendService::RETRY, SendService::PENDING, SendService::QUEUED], [$this->send($waiting)['status'], $this->send($first)['status'], $this->send($second)['status']]);
+		self::assertNull($this->state->findSend(self::SENDER, $pending), 'The import of the earlier upload ended.');
+	}
+
 	public function testARoundUploadsAtMostABatch(): void {
 		$this->configService->save(['batch_size' => 1, 'send_group' => 'scanners'] + self::validSettings());
 		$first = $this->queue('Scans/a.pdf');
@@ -325,6 +473,37 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $first, 'Scans/receipt.pdf', 123);
 	}
 
+	/** The round reads the users of Paperless once, for every document that gets its owner. */
+	public function testARoundReadsTheUsersOfPaperlessOnce(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'alice'];
+		$this->pending('Scans/a.pdf');
+		$second = $this->queue('Scans/b.pdf');
+		$this->state->saveSend(self::SENDER, $second, ['status' => SendService::PENDING, 'task_id' => 'task-2', 'submitted_at' => TestClock::START]);
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+		$this->paperless->tasks['task-2'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 124];
+
+		$this->service->process();
+
+		self::assertSame([[123, 5], [124, 5]], $this->paperless->ownerChanges);
+		self::assertSame(['users'], array_values(array_filter($this->paperless->listsRead, static fn (string $list): bool => $list === 'users')));
+	}
+
+	/** With one target user for every document, the document of a sent file keeps its owner, and the round reads no users of Paperless. */
+	public function testTheDocumentOfASentFileKeepsItsOwnerWithOneTargetUser(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->paperless->users = ['5' => 'alice'];
+		$id = $this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertNotContains('users', $this->paperless->listsRead);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123);
+	}
+
 	/** A sender without a user of Paperless leaves the document to the account of the app. */
 	public function testTheDocumentOfASenderWithoutAUserOfPaperlessKeepsItsOwner(): void {
 		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
@@ -345,7 +524,7 @@ final class SendServiceTest extends TestCase {
 		$id = $this->pending('Scans/receipt.pdf');
 		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
 		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 5 the owner of the document 123: HTTP 403.');
-		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('its owner'));
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('its owner'), self::identicalTo(['document' => 123, 'path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'error' => 'Paperless did not make the user 5 the owner of the document 123: HTTP 403.']));
 
 		$this->service->process();
 		$this->service->process();
@@ -452,7 +631,7 @@ final class SendServiceTest extends TestCase {
 		$id = $this->pending('Scans/receipt.pdf');
 		$this->paperless->taskException = new PaperlessRequestException('cURL error 7: Failed to connect to paperless.example.test');
 		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('could not check the import of {path}'), self::callback(
-			static fn (array $context): bool => $context['user'] === self::SENDER && $context['error'] === 'cURL error 7: Failed to connect to paperless.example.test',
+			static fn (array $context): bool => $context === ['path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'error' => 'cURL error 7: Failed to connect to paperless.example.test'],
 		));
 
 		$this->service->process();

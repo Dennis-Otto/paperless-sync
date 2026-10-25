@@ -67,22 +67,23 @@ final class OwnerMappingTest extends TestCase {
 	}
 
 	public function testOnlyMembersOfTheGroupGetTheirDocuments(): void {
-		$this->membersOfGroups = ['scanners' => ['alice']];
+		$this->membersOfGroups = ['scanners' => ['alice', 'bob.smith']];
 
-		$owners = $this->owners(['user_group' => 'scanners'], ['1' => 'alice', '2' => 'bob']);
+		$owners = $this->owners(['user_group' => 'scanners'], ['1' => 'alice', '2' => 'bob', '3' => 'bob.smith']);
 
-		self::assertSame(['alice', 'paperless'], [$owners->userOf(1), $owners->userOf(2)]);
+		self::assertSame(['alice', 'paperless', 'bob.smith'], [$owners->userOf(1), $owners->userOf(2), $owners->userOf(3)], 'A user outside the group leaves the users after them alone.');
 		self::assertSame(['id' => 2, 'name' => 'bob', 'user' => null, 'reason' => Owners::OUTSIDE_GROUP, 'detail' => 'bob'], $owners->routes()[1]);
 	}
 
 	/** A user of Nextcloud of the table that was deleted after the save gets nothing, and the checklist says so. */
 	public function testAUserOfTheTableThatIsGoneGetsNothing(): void {
 		$config = $this->config(['user_map' => 'alice = bob.smith']);
-		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->usersOfNextcloud = ['paperless', 'alice', 'bob'];
 
-		$owners = $this->ownerMapping()->owners($config, ['1' => 'alice']);
+		$owners = $this->ownerMapping()->owners($config, ['1' => 'alice', '2' => 'bob']);
 
 		self::assertSame('paperless', $owners->userOf(1), 'Nor does the user with the same ID: the table names the user of Paperless.');
+		self::assertSame('bob', $owners->userOf(2), 'The users after them get their documents.');
 		self::assertSame(Owners::UNKNOWN, $owners->routes()[0]['reason']);
 		self::assertSame('bob.smith', $owners->routes()[0]['detail']);
 	}
@@ -92,6 +93,34 @@ final class OwnerMappingTest extends TestCase {
 
 		self::assertSame(['nobody'], $owners->unmatched);
 		self::assertSame('alice', $owners->userOf(1));
+	}
+
+	/**
+	 * A name holds letters beyond ASCII, such as Jürgen, and matches whatever its case: in the
+	 * table, in Paperless and in the ID of a user of Nextcloud, as a backend such as LDAP gives it.
+	 */
+	public function testANameBeyondAsciiMatchesWhateverItsCase(): void {
+		$this->usersOfNextcloud[] = 'Ölaf';
+
+		$owners = $this->owners(['user_map' => "JÜRGEN = bob.smith\nzoë = alice"], ['1' => 'jürgen', '2' => 'ZOË', '3' => 'ölaf']);
+
+		self::assertSame(['bob.smith', 'alice', 'Ölaf'], [$owners->userOf(1), $owners->userOf(2), $owners->userOf(3)]);
+		self::assertSame([Owners::TABLE, Owners::TABLE, Owners::NAME], array_column($owners->routes(), 'reason'));
+		self::assertSame([], $owners->unmatched, 'Each line of the table names a user of Paperless.');
+	}
+
+	/**
+	 * A table that no save checked, such as one that occ config:app:set wrote, may hold a line
+	 * that is no mapping: a run leaves that line out and follows the others.
+	 */
+	public function testARunLeavesOutAStoredLineThatIsNoMapping(): void {
+		$this->config();
+		$this->settings['user_map'] = "jdoe john.doe\nbob = bob.smith\nnobody = alice";
+
+		$owners = $this->ownerMapping()->owners($this->configService()->get(), ['1' => 'jdoe', '2' => 'bob']);
+
+		self::assertSame(['paperless', 'bob.smith'], [$owners->userOf(1), $owners->userOf(2)]);
+		self::assertSame(['nobody'], $owners->unmatched);
 	}
 
 	/** A backend of Nextcloud may find a user by another name, such as an e-mail address; only the same ID counts. */
@@ -119,6 +148,7 @@ final class OwnerMappingTest extends TestCase {
 	public static function linesThatAreNoMapping(): array {
 		return [
 			'without an equals sign' => ["alice = alice\njdoe john.doe", '2'],
+			'before a mapping' => ["jdoe john.doe\nalice = alice", '1'],
 			'without a user of Paperless' => ['= john.doe', '1'],
 			'without a user of Nextcloud' => ['jdoe =', '1'],
 			'with two equals signs' => ['jdoe = john = doe', '1'],
@@ -191,6 +221,61 @@ final class OwnerMappingTest extends TestCase {
 
 		self::assertCount(OwnerMapping::CHECKED_USERS + 2, $checks);
 		self::assertSame(['And %s more users of Paperless, which a run gives to their users of Nextcloud in the same way.', ['2']], [$checks[OwnerMapping::CHECKED_USERS]->message, $checks[OwnerMapping::CHECKED_USERS]->parameters]);
+	}
+
+	public function testTheChecklistNamesEveryUserOfPaperlessUpToItsLimit(): void {
+		$paperless = new TestPaperlessClient();
+		foreach (range(1, OwnerMapping::CHECKED_USERS) as $id) {
+			$paperless->users[(string)$id] = sprintf('user%02d', $id);
+		}
+
+		$checks = $this->ownerMapping()->checks($this->config(), $paperless, new TestStorage());
+
+		self::assertCount(OwnerMapping::CHECKED_USERS + 1, $checks, 'A line for each user, and one for the documents without an owner.');
+		self::assertSame('Without an owner → %1$s, the target user, documents: %2$s', $checks[OwnerMapping::CHECKED_USERS]->message);
+	}
+
+	/** A user of the table gets their line as any other. */
+	public function testTheChecklistShowsTheUserOfTheTable(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['3' => 'carol'];
+		$paperless->documents = [['id' => 1, 'owner' => 3]];
+
+		$check = $this->ownerMapping()->checks($this->config(['user_map' => 'carol = bob.smith']), $paperless, new TestStorage())[0];
+
+		self::assertSame([ConnectionCheck::PASSED, '%1$s → %2$s, documents: %3$s', ['carol', 'bob.smith', '1']], [$check->status, $check->message, $check->parameters]);
+	}
+
+	/**
+	 * The checklist tests the base folder of each user who gets documents, but not that of the
+	 * target user, which a line of its own tests already.
+	 */
+	public function testTheChecklistTestsTheFolderOfEachUserButTheTargetUser(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice', '2' => 'bob', '3' => 'paperless'];
+		$storage = new TestStorage();
+		$storage->testException = new \RuntimeException('The configured Nextcloud base folder is not a writable folder.');
+
+		$checks = $this->ownerMapping()->checks($this->config(), $paperless, $storage);
+
+		self::assertSame([['alice', 'The configured Nextcloud base folder is not a writable folder.'], ['bob', 'The configured Nextcloud base folder is not a writable folder.']], array_map(
+			static fn (ConnectionCheck $check): array => $check->parameters,
+			array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => $check->id === ConnectionCheck::FOLDER)),
+		));
+		self::assertSame(['alice', 'bob'], array_column($storage->calls, 1));
+	}
+
+	/** Each test of a folder may take a while, so the checklist tests those of the first users. */
+	public function testTheChecklistTestsTheFoldersOfTheFirstUsers(): void {
+		$paperless = new TestPaperlessClient();
+		foreach (range(1, OwnerMapping::CHECKED_USERS + 2) as $id) {
+			$this->usersOfNextcloud[] = $paperless->users[(string)$id] = sprintf('user%02d', $id);
+		}
+		$storage = new TestStorage();
+
+		$this->ownerMapping()->checks($this->config(), $paperless, $storage);
+
+		self::assertSame(array_map(static fn (int $id): string => sprintf('user%02d', $id), range(1, OwnerMapping::CHECKED_USERS)), array_column($storage->calls, 1));
 	}
 
 	/** Without the users of Paperless, a run of per-user ownership fails, and the checklist says which permission is missing. */

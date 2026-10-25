@@ -379,6 +379,21 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->exports);
 	}
 
+	/** With the metadata on as well, a custom field of the template that Paperless refuses fails the run before a file moves. */
+	public function testACustomFieldOfTheTemplateThatPaperlessRefusesFailsTheRunAlsoWithTheMetadata(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->configService->save(['path_template' => '{{ custom_fields.Invoice number }} [P{{ id }}]', 'write_metadata' => true]);
+		$this->paperless->customFieldsException = new RuntimeException('HTTP 403.');
+
+		try {
+			$this->service->run();
+			self::fail('The paths of every document would change without the custom fields.');
+		} catch (RuntimeException $exception) {
+			self::assertSame('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: HTTP 403.', $exception->getMessage());
+		}
+		self::assertSame([[], []], [$this->state->exports, $this->storage->files]);
+	}
+
 	public function testACustomFieldThatPaperlessDoesNotHaveFailsTheRunBeforeAFileMoves(): void {
 		$this->paperless->documents = [$this->document()];
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
@@ -425,6 +440,18 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->exports);
 		self::assertSame([], $this->storage->files);
 		self::assertArrayNotHasKey('status_last_started', $this->settings, 'The preview is no run.');
+	}
+
+	/** A document with the first ID of Paperless, or with its ID as a string of digits, has its path in the preview. */
+	public function testThePreviewTakesEveryValidIdOfADocument(): void {
+		$this->paperless->documents = [
+			['id' => 1, 'added' => '2026-09-02T08:00:00+02:00'] + $this->document(),
+			['id' => '2', 'added' => '2026-09-01T08:00:00+02:00'] + $this->document(),
+		];
+
+		$paths = $this->service->previewPaths($this->configService->get(), 5);
+
+		self::assertSame([1, 2], array_column($paths, 'id'));
 	}
 
 	public function testThePreviewOfADocumentWithoutATitleShowsItsPath(): void {
@@ -1235,20 +1262,20 @@ final class SyncServiceTest extends TestCase {
 		self::assertArrayHasKey(123, $this->state->exports);
 	}
 
-	/** A run on the command line may make more or fewer changes than the batch size of the settings. */
+	/** A run on the command line may make more or fewer changes than the batch size of the settings, down to one. */
 	public function testBatchSizeOfARunTakesThePlaceOfThatOfTheSettings(): void {
-		$this->configService->save(['batch_size' => 1]);
+		$this->configService->save(['batch_size' => 2]);
 		$this->paperless->documents = $this->documents(3);
 		$this->paperless->contents = [1 => '%PDF-1', 2 => '%PDF-2', 3 => '%PDF-3'];
 
-		$dryRun = $this->service->run(true, batchSize: 2);
+		$dryRun = $this->service->run(true, batchSize: 1);
 		$report = $this->service->run(false, batchSize: PHP_INT_MAX);
 
-		self::assertSame(2, $dryRun->exported);
-		self::assertSame(1, $dryRun->skipped);
+		self::assertSame(1, $dryRun->exported);
+		self::assertSame(2, $dryRun->skipped);
 		self::assertSame(3, $report->exported);
 		self::assertSame(0, $report->skipped);
-		self::assertSame(1, $this->configService->get()->batchSize, 'The settings keep their batch size.');
+		self::assertSame(2, $this->configService->get()->batchSize, 'The settings keep their batch size.');
 	}
 
 	public function testBatchSizeOfARunIsAtLeastOne(): void {
@@ -4929,6 +4956,32 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->paperless->connections, 'The read of the document is the test of the connection.');
 		self::assertEquals([new PaperlessConnection('https://paperless.example.test', 'test-token', false)], $this->paperless->connects, 'It reads the document and its lists through one connection.');
 		self::assertCount(1, $this->activities, 'The Activity stream of the target user shows the export.');
+	}
+
+	/**
+	 * The run of one document tests the base folder of the target user before it reads Paperless,
+	 * and creates the folders of the enabled directions, as a run does.
+	 */
+	public function testTheRunOfOneDocumentTestsAndPreparesTheFoldersOfTheTargetUser(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+		$this->storage->testException = new \RuntimeException('The configured Nextcloud base folder is not a writable folder.');
+
+		try {
+			$this->service->syncDocument(123);
+			self::fail('A run of one document needs a base folder that Nextcloud can write.');
+		} catch (\RuntimeException $exception) {
+			self::assertSame('The configured Nextcloud base folder is not a writable folder.', $exception->getMessage());
+		}
+		self::assertSame([[], []], [$this->paperless->documentReads, $this->storage->files]);
+
+		$this->storage->testException = null;
+		$this->storage->calls = [];
+		$this->service->syncDocument(123);
+
+		$basePath = $this->configService->get()->basePath;
+		self::assertSame([['test', 'paperless', [$basePath]], ['prepare', 'paperless', [$basePath]]], array_slice($this->storage->calls, 0, 2));
 	}
 
 	/** While another run is active, the run of one document waits, for the background job that the webhook queues. */

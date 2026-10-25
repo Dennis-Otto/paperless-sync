@@ -452,9 +452,10 @@ final class SyncService {
 		foreach ($read['documents'] as $document) {
 			$documentId = is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
 			// A document without a valid ID fails the export of the target user, as in single ownership.
+			// Without a held owner ($held null), no owner equals it.
 			$user = match (true) {
 				$documentId <= 0 => $config->targetUser,
-				$held !== null && is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => null,
+				is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => null,
 				default => self::ownerOf($owners, $document),
 			};
 			if ($documentId > 0) {

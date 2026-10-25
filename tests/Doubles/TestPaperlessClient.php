@@ -172,8 +172,9 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		if ($this->documentException !== null) {
 			throw $this->documentException;
 		}
+		// Paperless may give the ID as a string of digits, which PaperlessApiService::document() takes as well.
 		foreach ($this->documents as $document) {
-			if (($document['id'] ?? null) === $documentId) {
+			if (is_numeric($document['id'] ?? null) && (int)$document['id'] === $documentId) {
 				return $document;
 			}
 		}
