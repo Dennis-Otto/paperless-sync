@@ -144,6 +144,20 @@ jobs:
           path: ${{ runner.temp }}/e2e-artifacts
           if-no-files-found: ignore
           retention-days: 14
+      # The coverage of the JavaScript of the app in the checks in the browser on the newest
+      # Nextcloud, whose table the summary of the check shows: lcov.info and
+      # coverage-final.json show in an editor or with genhtml which lines no check runs. A
+      # failed run keeps it in e2e-nextcloud, with the coverage of each page in v8/.
+      - name: Keep the coverage of the JavaScript
+        if: success() && steps.changes.outputs.affected != 'false'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-coverage
+          path: |
+            ${{ runner.temp }}/e2e-artifacts/*/coverage/
+            !${{ runner.temp }}/e2e-artifacts/*/coverage/v8/
+          if-no-files-found: ignore
+          retention-days: 14
 
   variants:
     name: nextcloud on PostgreSQL, MariaDB and S3

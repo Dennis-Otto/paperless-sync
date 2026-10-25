@@ -64,10 +64,11 @@ Optional environment variables:
 - `E2E_DATABASE`: the database of Nextcloud, `sqlite` by default, `mysql` for MariaDB or `pgsql` for PostgreSQL, see [Databases and object storage](#databases-and-object-storage)
 - `E2E_OBJECTSTORE`: the primary storage of Nextcloud, `local` by default, or `s3` for an object store
 - `E2E_ACCESSIBILITY=0`: leave out the accessibility check at the end
+- `E2E_COVERAGE=1`: measure which lines and branches of `js/*.js` the checks in the browser run, and fail below the floor, see [Coverage of the JavaScript](#coverage-of-the-javascript)
 - `E2E_UPGRADE=1`: run [the upgrade from the last release](#the-upgrade-from-the-last-release) instead of the scenario, with the packages in `E2E_RELEASE_PACKAGE` and `E2E_PACKAGE`, which `packages.sh` downloads and builds when they are empty; `E2E_RELEASE_REPOSITORY`, by default `Dennis-Otto/paperless-sync`, names the repository of the release
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
-- `E2E_ARTIFACTS`: a folder for the evidence of a failure and the traces of the checks in the browser, see [When a run fails](#when-a-run-fails)
+- `E2E_ARTIFACTS`: a folder for the evidence of a failure and the traces of the checks in the browser, see [When a run fails](#when-a-run-fails), and with `E2E_COVERAGE=1` for the reports of the coverage, also when the run passes
 
 All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture, an account that is no superuser, with every permission of a run, and the owner of every document; `e2e-view-only-token`, an account without the permissions for the tags, for adding documents and for their tasks; `e2e-no-ui-settings-token`, an account without **View** for UI Settings; and `e2e-superuser-only-token`, a superuser, which alone may list, create and change users and gives the accounts that it created their tokens, `e2e-token-of-<username>`, for their passwords. It records whether uploads arrived intact. Like Paperless-ngx, it answers each endpoint only with its permission, names the ID and the permissions of the account in `/api/ui_settings/`, and filters the documents by their owner. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.` It plays Paperless-ngx 3.3.0, or 2.20.15 and 2.15.3 after `/control/paperless/<version>`: it serves the versions of the API that each of them serves, by the header `Accept` or its default, refuses the others with `406 Not Acceptable`, names itself in `X-Version` and `X-Api-Version`, and lists tasks in the shapes of their serializers. `/control/tasks/<end>` and `/control/task-of/<file>/<end>` end tasks with `success`, `failure`, `duplicate` or `revoked`, as Paperless-ngx 3.x stores them. After `/control/uploads/unavailable`, it answers every upload with `503`, as a Paperless behind a proxy whose worker is down, until `/control/uploads/available`.
 
@@ -85,7 +86,9 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 - `E2E_VERSION_TIMEOUT`: the time after which a run that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all runs are still printed
 - `E2E_SHARD`: `1` or `2`, one half of the runs, as each [job of the CI](#in-the-ci) runs one: shard 1 the oldest and the newest version, shard 2 the variants, and each version between the shard with the lighter load, where a version, with its browser checks, counts as two runs and a variant as one, shard 2 when both weigh as much; a shard with nothing to run passes
 - `E2E_PLAN=1`: prints the runs that `run-all.sh` would start, and starts none, such as `E2E_PLAN=1 E2E_SHARD=2 bash tests/e2e/run-all.sh`
-- `E2E_ARTIFACTS`: a folder that gets a folder for each run that failed, named by its key, with its log, its title and its evidence, see [When a run fails](#when-a-run-fails)
+- `E2E_ARTIFACTS`: a folder that gets a folder for each run that failed, named by its key, with its log, its title and its evidence, see [When a run fails](#when-a-run-fails); the folder of the newest version also gets the [coverage of the JavaScript](#coverage-of-the-javascript) when the run passes
+
+The run on the newest version measures the [coverage of the JavaScript](#coverage-of-the-javascript), whose table follows that of the runs in the summary of the job.
 
 Ctrl-C ends every run, each with the cleanup of `run.sh`, and prints the logs so far. A failed run names the command that runs it again on its own.
 
@@ -134,6 +137,7 @@ A run that fails leaves what it takes to see why, without running it again. Each
 - `nextcloud.log`: the log of Nextcloud, and `apps.txt`, its apps from `occ app:list`
 - `containers.txt` and `containers.log`: the state and the whole logs of the containers, with their times
 - `browser/`: of each check in the browser that failed, the trace of each of its windows that was still there, `<check>-<window>.trace.zip`, and a screenshot of the whole of each of their pages, `<check>-<window>-<page>.png`
+- `coverage/`: on the newest version, the [coverage of the JavaScript](#coverage-of-the-javascript) up to the failure, with that of each page in `v8/`
 
 The password of the tests is masked in `nextcloud.log`, `apps.txt` and the logs of the containers; the traces show it as the browser typed it, which is harmless, since it exists only in the containers of the tests, like the synthetic tokens of the mock.
 
@@ -212,6 +216,20 @@ Last, `files.mjs` opens Files as its users do. Before the browser, `run.sh` send
 Then `flow.mjs` opens the settings of Flow. Before the browser, `run.sh` saves a rule of *Send to Paperless* through the API of Flow, for every file whose name starts with `scan-` when it is created, with the tags *Private* and *insurance*; a rule with a tag whose name holds a comma must be refused. `e2e-other`, who may not send from Files, uploads `scan-insurance.pdf`, which the rule matches, and `holiday.pdf`, which it doesn't: the background job must upload the first, intact and with both tags, and leave the second, the file must stay where it is, and once the mock ended its task, `e2e-other` must have no notification of the import that worked. In the browser, the settings of Flow must offer *Send to Paperless*, and the form of the rule must show its two tags; a third one typed after them must get the tag *Draft* of the mock as a suggestion, and saving the rule must keep the three tags, as the API of Flow then reads them.
 
 The browser runs in the image of Playwright that `run.sh` names, inside the network of the Compose project, and reaches Nextcloud as `http://nextcloud`; the suite turns off the first-run wizard of Nextcloud, which would cover the pages. `package.json` and `package-lock.json` pin axe-core and playwright-core. Keep playwright-core at the version of the image: Renovate updates both together (`.github/renovate.json5`), and `scripts/check-project.sh` compares them.
+
+## Coverage of the JavaScript
+
+The scripts of the app, `js/settings.js`, `js/files.js` and `js/flow.js`, have no build and no unit tests of their own: the checks in the browser are their tests. On the newest Nextcloud, `run-all.sh` sets `E2E_COVERAGE=1`, and `browser.mjs` then records with the coverage of V8 in Chromium which functions and blocks of the scripts of the app each page runs, from before the check gets the page and through every document that it loads, until the page, its window or the browser closes. For that, Chromium starts with RenderDocument for crashed frames alone, as it had it before: otherwise it gives each document of a page a frame of its own, the coverage of V8 ends with the frame, and a check that loads its page again, as `settings.mjs` does, would count only its last document. After the five checks, `coverage.mjs` merges the coverage of every page per script, as c8 does, turns it into the coverage of Istanbul with v8-to-istanbul and prints a table of the share of the lines, branches and functions of each script that the checks run, with the lines that no check runs, which the summary of the job shows below the table of the runs.
+
+The run fails when a script runs a smaller share of its lines or of its branches than its floor in `coverage-floor.json`, or doesn't run at all; *The coverage of the JavaScript in the browser falls below its floor:* then names each, and `failure.py` names it as the first error. A floor is the share that the checks reached, less a point, so that a run that takes another way through a page, such as a status that arrives later, stays above it; when the checks pass a floor by more than a point, the table says so, and a pull request that adds a test raises it. Lower a floor only for code that no check in the browser can reach, and say why in the pull request; a new script of `js/` gets its floor in the same pull request, 0 until a run has measured it, as `coverage.test.mjs` fails otherwise. A check that fails stops early and runs less, so after one the run only reports the coverage.
+
+V8 counts a branch for each block of a function that runs, such as the side of an `if` or a `catch`, so a function that no check calls counts in the lines and the functions, but adds no branches. With `E2E_ARTIFACTS`, the folder of the run gets the reports in `coverage/`, also when it passes: `lcov.info`, which an editor or `genhtml` shows line by line, `coverage-final.json` of Istanbul, the table as `summary.md`, and the coverage of each page in `v8/`. The job keeps them for 14 days as its artifact `e2e-coverage`, without `v8/`; a run that fails keeps them in `e2e-nextcloud`. On your machine, on the newest version that `appinfo/info.xml` names as `max-version`:
+
+```bash
+NEXTCLOUD_IMAGE=nextcloud:VERSION-apache E2E_COVERAGE=1 E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh
+```
+
+`scripts/check-project.sh` runs `node --test tests/e2e/coverage.test.mjs`, which tests the table, the floor and LCOV without a browser, and checks that every script of `js/` has a floor, and `browser.test.mjs` checks that each page records its coverage and that the coverage of a page that the check closed counts.
 
 ## Screenshots
 

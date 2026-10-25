@@ -1,0 +1,2 @@
+# The packages of npm ci, which scripts/eslint.sh installs when it runs.
+/node_modules/

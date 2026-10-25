@@ -9,7 +9,7 @@
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
 # package, the JavaScript of the settings and the translations, which have no build
-# step, the thumbnails of the screenshots of the App Store, the language of the pictures
+# step, with the rules of ESLint, the thumbnails of the screenshots of the App Store, the language of the pictures
 # of the documentation, their frozen story and the report of their visual check, and that
 # the German twins of the documentation, README.de.md and
 # docs/*.de.md, follow their English pages; the versions check covers README.de.md and
@@ -834,6 +834,50 @@ for script in "${scripts[@]}"; do
   node --check "$script"
 done
 echo "${#scripts[@]} JavaScript file(s) parse."
+# The rules of ESLint, scripts/eslint/eslint.config.mjs, for the JavaScript of the app, of its
+# tests and of its scripts: the recommended ones, and eqeqeq, no-unused-vars,
+# no-implicit-globals, prefer-const and no-var. scripts/eslint.sh installs ESLint with npm ci
+# on its first run.
+bash scripts/eslint.sh
+echo "ESLint finds nothing in the JavaScript of the app, of its tests and of its scripts."
+# And ESLint finds what it must in a seeded script of the app: a variable that nothing uses,
+# a comparison with ==, a function that becomes a global of the page, a var and a let that
+# never changes; --fix then makes the var and the let a const, and leaves the rest to a person.
+root="$PWD"
+eslint_copy="$(mktemp -d)"
+trap 'rm -rf "$eslint_copy"' EXIT
+mkdir "$eslint_copy/js"
+cat >"$eslint_copy/js/seeded.js" <<'SEEDED'
+(function() {
+	'use strict'
+	var count = 1
+	let total = count + 1
+	const unused = total
+	if (total == '2') {
+		window.console.log(total)
+	}
+})()
+function leaked() {}
+SEEDED
+if output="$(cd "$eslint_copy" && bash "$root/scripts/eslint.sh" 2>&1)"; then
+  echo "scripts/eslint.sh should fail on the seeded script, but passes: $output"
+  exit 1
+fi
+for rule in no-unused-vars eqeqeq no-implicit-globals no-var prefer-const; do
+  if [[ "$output" != *" $rule"* ]]; then
+    echo "scripts/eslint.sh should report $rule in the seeded script, but says: $output"
+    exit 1
+  fi
+done
+(cd "$eslint_copy" && bash "$root/scripts/eslint.sh" --fix >/dev/null 2>&1) || true
+fixed="$(sed -n '3,5p' "$eslint_copy/js/seeded.js")"
+if [[ "$fixed" != $'\tconst count = 1\n\tconst total = count + 1\n\tconst unused = total' ]]; then
+  echo "scripts/eslint.sh --fix should make the var and the let of the seeded script a const, but leaves:"
+  cat "$eslint_copy/js/seeded.js"
+  exit 1
+fi
+rm -rf "$eslint_copy"
+echo "ESLint reports an unused variable, ==, an accidental global, var and a let that never changes, and --fix makes the last two a const."
 # The thumbnails of the screenshots of the App Store, which tests/e2e/screenshots.mjs
 # shrinks with tests/e2e/thumbnail.mjs.
 node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
@@ -854,7 +898,12 @@ echo "tests/e2e/a11y.mjs fails a button without a name, a box wider than 320 px,
 # The browser of the checks in the browser, which keeps the traces and the screenshots of a
 # check that fails, and nothing of one that passes.
 node --test --test-reporter=dot tests/e2e/browser.test.mjs
-echo "tests/e2e/browser.mjs keeps the traces and screenshots of a check in the browser that fails, also of a window that it closed, and every check starts its browser through it."
+echo "tests/e2e/browser.mjs keeps the traces and screenshots of a check in the browser that fails, also of a window that it closed, records the coverage of the scripts of the app in every page, and every check starts its browser through it."
+# The coverage of the JavaScript in the browser, which the end-to-end tests on the newest
+# Nextcloud report in the summary of the job and hold to the floor of
+# tests/e2e/coverage-floor.json.
+node --test --test-reporter=dot tests/e2e/coverage.test.mjs
+echo "tests/e2e/coverage.mjs reports the lines, branches and functions of each script that the checks in the browser run, and fails a script below its floor, which every script of js/ has."
 # The frozen story of the pictures, so that two runs of tests/e2e/screenshots.sh draw the
 # same pixels, and the report of the visual check, which renders on the paths of the
 # screenshot bot.

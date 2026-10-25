@@ -189,9 +189,9 @@ def test_the_files_and_headings_that_the_explanations_name_exist() -> None:
 
 
 def test_the_autofix_of_this_project_fixes_what_it_promises() -> None:
-    bash, node = shutil.which("bash"), shutil.which("node")
-    if bash is None or node is None:
-        print("     (skipped: the commands need bash and Node.js, which the CI has)")
+    bash, node, npm = shutil.which("bash"), shutil.which("node"), shutil.which("npm")
+    if bash is None or node is None or npm is None:
+        print("     (skipped: the commands need bash, Node.js and npm, which the CI has)")
         return
     step = Catalog.load(ROOT).step(PROJECT_STEP)
     assert step is not None and step.autofix
@@ -201,10 +201,21 @@ def test_the_autofix_of_this_project_fixes_what_it_promises() -> None:
             shutil.copytree(ROOT / name, copy / name)
         (copy / "scripts").mkdir()
         shutil.copy2(ROOT / "scripts" / "check-l10n.mjs", copy / "scripts")
+        # ESLint, which scripts/eslint.sh installs on its first run, for the copy too.
+        subprocess.run(
+            [bash, "scripts/eslint.sh", "--version"], cwd=ROOT, capture_output=True, check=True
+        )
+        shutil.copy2(ROOT / "scripts" / "eslint.sh", copy / "scripts")
+        shutil.copytree(ROOT / "scripts" / "eslint", copy / "scripts" / "eslint")
+        shutil.copy2(ROOT / ".gitignore", copy)
         # What a pull request may bring: an icon of the website that differs from that
-        # of the app, a text that no code translates, and a copy for the browser with
-        # other words.
+        # of the app, a var in a script of the app, a text that no code translates, and
+        # a copy for the browser with other words.
         (copy / "docs/images/app.svg").write_text("<svg/>\n", encoding="utf-8")
+        flow = copy / "js" / "flow.js"
+        script = flow.read_bytes()
+        assert b"\tconst OPERATION = " in script
+        flow.write_bytes(script.replace(b"\tconst OPERATION = ", b"\tvar OPERATION = "))
         catalog_path = copy / "l10n" / "de.json"
         catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
         catalog["translations"]["A text that no code translates"] = "Ein Text"
@@ -224,6 +235,9 @@ def test_the_autofix_of_this_project_fixes_what_it_promises() -> None:
         assert (copy / "docs/images/app.svg").read_bytes() == (
             ROOT / "img/app.svg"
         ).read_bytes()
+        assert flow.read_bytes() == (ROOT / "js" / "flow.js").read_bytes(), (
+            "js/flow.js differs after the autofix"
+        )
         for name in ("de.json", "de.js"):
             assert (copy / "l10n" / name).read_bytes() == (
                 ROOT / "l10n" / name

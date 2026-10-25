@@ -1,0 +1,12 @@
+{
+  "name": "paperless-sync-eslint",
+  "private": true,
+  "description": "ESLint, which scripts/eslint.sh runs on the JavaScript of the app, of its tests and of its scripts with the rules of eslint.config.mjs; nothing of it ships in the package of the app",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "globals": "17.13.0"
+  }
+}

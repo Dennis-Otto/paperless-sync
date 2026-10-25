@@ -38,7 +38,7 @@
 					return typeof tag === 'string'
 				})
 				: []
-		} catch (error) {
+		} catch {
 			return []
 		}
 	}

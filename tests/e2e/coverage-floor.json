@@ -1,0 +1,5 @@
+{
+	"js/files.js": { "lines": 86, "branches": 62 },
+	"js/flow.js": { "lines": 94, "branches": 81 },
+	"js/settings.js": { "lines": 90, "branches": 79 }
+}
