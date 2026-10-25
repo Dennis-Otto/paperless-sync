@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-13
+- Amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md): the versions run in both required jobs, the oldest and the newest in `nextcloud`
 
 ## Context
 

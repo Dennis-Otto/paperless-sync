@@ -5,13 +5,13 @@ config:
 ---
 flowchart TB
     accTitle: When the end-to-end tests run
-    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.
+    accDescr: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs the oldest and the newest supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 the versions between, and the newest version on those databases and S3 when the change can behave differently there. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.
 
     pr["Pull request"]
     main["Push to main,<br>every night,<br>by hand"]
     affected{"affected.sh:<br>can the change<br>affect the app?"}
-    all["nextcloud:<br>every supported<br>version side by side"]
-    variants["nextcloud on<br>PostgreSQL, MariaDB<br>and S3: the<br>newest version"]
+    all["nextcloud:<br>the oldest and<br>the newest version"]
+    variants["nextcloud on<br>PostgreSQL, MariaDB<br>and S3: the versions<br>between, and the<br>newest version there"]
     skipped["both checks<br>pass in seconds"]
     result["passed<br>or failed"]
     monday["Every Monday,<br>by hand"]
@@ -20,7 +20,7 @@ flowchart TB
 
     pr --> affected
     affected -- "lib/, appinfo/,<br>templates/, js/,<br>css/, l10n/, img/,<br>composer.json,<br>tests/e2e/, e2e.yml" --> all
-    affected -- "the migrations,<br>the state, the storage,<br>the uploads, info.xml,<br>tests/e2e/, e2e.yml" --> variants
+    affected -- "the same; the databases<br>and S3 for the migrations,<br>the state, the storage,<br>the uploads, info.xml,<br>tests/e2e/, e2e.yml" --> variants
     affected -- "documentation,<br>other workflows,<br>the version<br>of a release" --> skipped
     main --> all
     main --> variants

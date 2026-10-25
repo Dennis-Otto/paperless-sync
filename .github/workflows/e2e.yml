@@ -5,15 +5,15 @@ name: Docker E2E
 
 # The end-to-end tests in Docker against the current release of every Nextcloud
 # version that appinfo/info.xml supports, from min-version to max-version, so that
-# raising max-version, as the upstream bot does, tests the new version at once. One
-# job, the required check nextcloud, runs all versions side by side
-# (tests/e2e/run-all.sh): one wait for a runner instead of one for each, and the
-# downloads of one version overlap with the installation of another.
-#
-# A second job runs the newest version on PostgreSQL, and on MariaDB with an S3 object
-# store as its primary storage, on a runner of its own: the five installations in one
-# job took more than five minutes on the four cores of a runner, the versions alone
-# keep nextcloud as fast as before. It is a required check too, as decision 0007 says.
+# raising max-version, as the upstream bot does, tests the new version at once, and
+# against the newest version on PostgreSQL, and on MariaDB with an S3 object store as
+# its primary storage (decision 0007). Two jobs, both required checks, share the work
+# on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
+# runs the oldest and the newest version, nextcloud on PostgreSQL, MariaDB and S3 the
+# databases and S3, and each version between goes to the one with fewer runs, so that
+# a fourth version doesn't make one of them twice as slow. Each job runs its share side
+# by side: one wait for a runner instead of one for each, and the downloads of one run
+# overlap with the installation of another.
 #
 # In a pull request, the versions run only when the change can affect the app
 # (tests/e2e/affected.sh), and the databases and S3 only when it can behave
@@ -88,11 +88,14 @@ jobs:
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
-      - name: Run the Paperless Sync end-to-end tests against every supported Nextcloud version
+      - name: Run the Paperless Sync end-to-end tests against the oldest and the newest supported Nextcloud
         if: steps.changes.outputs.affected != 'false'
         env:
-          # The job variants runs the other databases and S3.
-          E2E_VARIANTS: none
+          # Shard 1: the oldest and the newest version, and the versions between that the
+          # job variants doesn't take. Both jobs get the same variants, so that they
+          # split the runs the same way; the job variants runs them.
+          E2E_SHARD: 1
+          E2E_VARIANTS: ${{ steps.changes.outputs.variants == 'false' && 'none' || '' }}
         run: bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
@@ -122,15 +125,18 @@ jobs:
           persist-credentials: false
           # The merge commit of a pull request and its base, which affected.sh compares.
           fetch-depth: 2
-      - name: Find out whether the change can behave differently on another database or storage
+      - name: Find out whether the change can affect the app, and on another database or storage
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
-      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, and on MariaDB with S3
+      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, and against the versions between
         # Without a pull request, the step changes doesn't run, and so this one does.
-        if: steps.changes.outputs.variants != 'false'
+        if: steps.changes.outputs.affected != 'false'
         env:
-          E2E_VERSIONS: none
+          # Shard 2: the variants when the change can behave differently on another
+          # database or storage, and the versions between that job nextcloud doesn't take.
+          E2E_SHARD: 2
+          E2E_VARIANTS: ${{ steps.changes.outputs.variants == 'false' && 'none' || '' }}
         run: bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.

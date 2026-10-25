@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-13
+- Amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md): the job of the variants also runs the versions between the oldest and the newest, whenever a change can affect the app
 
 ## Context
 

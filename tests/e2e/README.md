@@ -16,7 +16,7 @@ bash tests/e2e/run-all.sh
 bash tests/e2e/run.sh
 ```
 
-Both run in Git Bash on Windows too, with Docker Desktop.
+Both need Docker, and Python 3.11 or newer as `python3` or `python`, which checks the answers on your machine. They run in Git Bash on Windows too, with Docker Desktop.
 
 The scenario verifies:
 
@@ -71,7 +71,7 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 
 ## Every supported version at once
 
-`run-all.sh` starts `run.sh` for every supported version at the same time, each in a Compose project of its own, `paperless_sync_e2e_<version>`, on the port `18080 + <version>`, such as `18113` for Nextcloud 33. Besides, it runs the newest version on PostgreSQL, and on MariaDB with an S3 object store, in the projects `paperless_sync_e2e_<version>_pgsql` and `paperless_sync_e2e_<version>_mysql_s3`, on ports 100 and 200 higher. While one downloads its images, another one installs, so that all take little longer than one. Each `run.sh` of a version also downloads the image of Playwright in the background while Nextcloud installs, and the accessibility check at the end waits for it; the variants of a database or a storage leave that check out, as it doesn't depend on them. When all are done, `run-all.sh` prints the log of each, in a group of its own in the CI, with a table of the results, the database, the storage and the Nextcloud release that each ran, and fails if one of them failed.
+`run-all.sh` starts `run.sh` for every supported version at the same time, each in a Compose project of its own, `paperless_sync_e2e_<version>`, on the port `18080 + <version>`, such as `18113` for Nextcloud 33. Besides, it runs the newest version on PostgreSQL, and on MariaDB with an S3 object store, in the projects `paperless_sync_e2e_<version>_pgsql` and `paperless_sync_e2e_<version>_mysql_s3`, on ports 100 and 200 higher. While one downloads its images, another one installs, so that all take little longer than one. Each `run.sh` of a version also downloads the image of Playwright in the background while Nextcloud installs, and the accessibility check at the end waits for it; the variants of a database or a storage leave that check out, as it doesn't depend on them. When all are done, `run-all.sh` prints the log of each, in a group of its own in the CI, with a table of the results, the database, the storage and the Nextcloud release that each ran, and the time of each of its phases: until its containers run, the setup of Nextcloud and the app, the scenarios, and the checks in the browser. A run that gets slower shows there where it spends the time. `run-all.sh` fails if one of the runs failed.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-run-all-sh-runs-side-by-side.dark.svg">
@@ -81,27 +81,47 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 - `E2E_VERSIONS`: the major versions to run instead, such as `"33 35"`; `none` runs only the variants, on `max-version`
 - `E2E_VARIANTS`: the variants to run besides, on the newest of the versions, by default `"pgsql mysql+s3"`: each a database, `sqlite`, `mysql` or `pgsql`, with `+s3` for an object store; `none` runs none
 - `E2E_VERSION_TIMEOUT`: the time after which a run that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all runs are still printed
+- `E2E_SHARD`: `1` or `2`, one half of the runs, as each [job of the CI](#in-the-ci) runs one: shard 1 the oldest and the newest version, shard 2 the variants, and each version between the shard with fewer runs, shard 2 when both have as many; a shard with nothing to run passes
+- `E2E_PLAN=1`: prints the runs that `run-all.sh` would start, and starts none, such as `E2E_PLAN=1 E2E_SHARD=2 bash tests/e2e/run-all.sh`
 
 Ctrl-C ends every run, each with the cleanup of `run.sh`, and prints the logs so far. A failed run names the command that runs it again on its own.
 
 `KEEP_E2E=1` keeps the containers of every run. In the CI, the suite leaves its containers running, as the runner is thrown away with them. The suite turns off the password policy's look-up of new passwords at Have I Been Pwned: a request to the internet that the tests don't need and that can fail.
 
+## How the suite stays quick
+
+A run of `run.sh` makes about 200 calls into its containers: it checks about 100 answers, controls the mock about 50 times and runs `occ` about 50 times. When several runs share the cores of one runner, each call counts, so each takes the quickest way:
+
+| Call | How | Time of a call, measured on one machine |
+| --- | --- | --- |
+| Into a container | `docker exec` by the ID of the container, which `run.sh` finds after each start, instead of `docker compose exec`, which reads the Compose files again on every call | about 470 ms instead of 630 ms |
+| A check of an answer | `assert_json.py`, `assert_log.py` and the small scripts of `run.sh` in the Python of your machine, instead of the Python in the container of the mock | about 60 ms instead of 590 ms |
+| A control of the mock | `curl` to the mock on a port of `127.0.0.1` that Docker chooses for each run, so that the runs side by side never meet on one | about 55 ms instead of 590 ms |
+| `occ` | the compiled code of Nextcloud in files of the container (`opcache.file_cache_only`, without the JIT of the image), which the official images keep for the web server alone, so that a call doesn't compile all of Nextcloud again | about 500 ms instead of 600 ms |
+
+The web server keeps the settings of the image, so the tests still run Nextcloud as an installation does, and PHP still sees a change of a file, such as `config.php`, by its time. The calls that must come from inside the network of Compose, such as the webhook that Paperless calls, still run in the container of the mock.
+
 ## In the CI
 
-The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in two jobs side by side, each on a runner of its own, and both are required checks of pull requests. `nextcloud` runs every supported version (`E2E_VARIANTS=none`). *nextcloud on PostgreSQL, MariaDB and S3* runs the newest version on [the other databases and S3](#databases-and-object-storage) (`E2E_VERSIONS=none`). In one job, the five installations took more than five minutes on the four cores of a runner; split, the variants finish before the versions, so that a pull request waits no longer than for the versions alone ([decision 0007](../../docs/decisions/0007-end-to-end-tests-on-real-databases-and-storage.md)).
+The workflow `.github/workflows/e2e.yml` runs `run-all.sh` in two jobs side by side, each on a runner of its own, and both are required checks of pull requests. Each runs one shard of the runs (`E2E_SHARD`): `nextcloud` the oldest and the newest supported version, *nextcloud on PostgreSQL, MariaDB and S3* the newest version on [the other databases and S3](#databases-and-object-storage), and each version between goes to the job with fewer runs. Three versions on the four cores of one runner took more than ten minutes, as they slowed each other down, and each new version of Nextcloud would have added about three more; shared, the slower job runs no more than half of the work ([decision 0029](../../docs/decisions/0029-share-the-end-to-end-runs-between-both-required-jobs.md), after [decision 0007](../../docs/decisions/0007-end-to-end-tests-on-real-databases-and-storage.md)). Both jobs get the same versions and variants, so they split them the same way, and `scripts/check-project.sh` checks that the two shards start every run once.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/how-the-two-jobs-share-the-runs.dark.svg">
+  <img src="../../docs/images/diagrams/how-the-two-jobs-share-the-runs.svg" alt="How the two jobs share the runs: run-all.sh splits the runs of the suite into two shards, one for each required check, which runs its runs side by side on a runner of its own. Shard 1, the check nextcloud, holds the oldest and the newest supported version; shard 2, the check nextcloud on PostgreSQL, MariaDB and S3, holds the newest version on PostgreSQL and on MariaDB with S3, when the change can behave differently there. Each version between goes, from the oldest, to the shard with fewer runs, and to shard 2 when both have as many. With Nextcloud 33 to 35, shard 1 runs 33 and 35 and shard 2 runs 34 and both variants.">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/when-the-end-to-end-tests-run.dark.svg">
-  <img src="../../docs/images/diagrams/when-the-end-to-end-tests-run.svg" alt="When the end-to-end tests run: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs every supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 runs the newest version there when the change can behave differently on another database or storage, and passes at once otherwise. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.">
+  <img src="../../docs/images/diagrams/when-the-end-to-end-tests-run.svg" alt="When the end-to-end tests run: A pull request runs the end-to-end tests only when it changes the app, its tests or their workflow; otherwise both required checks pass at once. The check nextcloud then runs the oldest and the newest supported version, and the check nextcloud on PostgreSQL, MariaDB and S3 the versions between, and the newest version on those databases and S3 when the change can behave differently there. Every push to main and every night run both, and every Monday the canary runs the tests against the coming Nextcloud. The contract tests run the app against a real Paperless-ngx 2.x and 3.x every Monday, by hand, and in a pull request that changes how the app talks to Paperless.">
 </picture>
 
 In a pull request, `affected.sh` first compares the merge commit with its base. Only a change of the code, the metadata or the assets of the app (`lib/`, `appinfo/`, `templates/`, `js/`, `css/`, `l10n/`, `img/`, `composer.json`), of the end-to-end tests other than their Markdown and the [contract tests](#contract-tests-against-a-real-paperless-ngx), or of the workflow itself can make the tests fail. In `appinfo/info.xml`, a change that only writes other versions into its lines, as the release bot does in `<version>` and in the addresses of the screenshots and their thumbnails, doesn't count, so a release pull request passes at once, while the upstream bot's change of `max-version`, or a line added or removed, runs the tests. Any other pull request passes the check in seconds, and its summary says *E2E skipped: the change cannot affect the app*.
 
-Of the changes that run the tests, those that can behave differently on another database or storage also run [PostgreSQL, and MariaDB with S3](#databases-and-object-storage): the migrations (`lib/Migration/`), the queries of the state (`lib/Service/SyncStateRepository*`), the files in Nextcloud (`lib/Service/NextcloudStorage*`), the uploads to Paperless (`lib/Service/PaperlessApiService.php`), `appinfo/info.xml` as above, the end-to-end tests and their workflow. For any other change of the app, that job passes at once, and its summary says *E2E on SQLite with local storage only*. `scripts/check-project.sh` tests these rules with sample paths and changes.
+Of the changes that run the tests, those that can behave differently on another database or storage also run [PostgreSQL, and MariaDB with S3](#databases-and-object-storage): the migrations (`lib/Migration/`), the queries of the state (`lib/Service/SyncStateRepository*`), the files in Nextcloud (`lib/Service/NextcloudStorage*`), the uploads to Paperless (`lib/Service/PaperlessApiService.php`), `appinfo/info.xml` as above, the end-to-end tests and their workflow. For any other change of the app, that job runs only the versions between, if there are any, and its summary says *E2E on SQLite with local storage only*. `scripts/check-project.sh` tests these rules with sample paths and changes.
 
 Every push to `main`, a run by hand and every night run both jobs in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
-A job that fails explains itself, as every check does: its summary and, after the checks, the comment of the PR coach on the pull request say what failed, why that matters and how to run it on your machine, from [`.github/checks.project.toml`](../../.github/checks.project.toml), also on a pull request from a fork. The table of the summary names each version, database and storage with its result, and the last lines of the log the command that runs one that failed again on its own.
+A job that fails explains itself, as every check does: its summary and, after the checks, the comment of the PR coach on the pull request say what failed, why that matters and how to run it on your machine, from [`.github/checks.project.toml`](../../.github/checks.project.toml), also on a pull request from a fork. The table of the summary names each version, database and storage with its result and the time of each of its phases, and the last lines of the log the command that runs one that failed again on its own.
 
 ## Databases and object storage
 
