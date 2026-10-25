@@ -148,7 +148,7 @@ The checks in the browser start Chromium through `browser.mjs`. With `E2E_ARTIFA
 npx playwright@1.64.0 show-trace browser/files-1.trace.zip
 ```
 
-After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
+After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
 
 ```bash
 E2E_ARTIFACTS=evidence bash tests/e2e/run-all.sh

@@ -133,6 +133,34 @@ def test_an_assertion_is_the_first_error_and_the_logs_of_the_containers_are_not(
     ), found.text()
 
 
+def test_an_exception_of_occ_is_named_with_its_file_and_line() -> None:
+    # The installation on MariaDB with S3 of the first run of #274, whose object store failed.
+    # occ pads the lines of its box with spaces, which a file here may not end its lines with.
+    pad = " " * 46
+    log = "\n".join([
+        "The containers run after 83 s.",
+        "",
+        "In ObjectStoreStorage.php line 575:",
+        pad,
+        "  Error while writing stream to object store  ",
+        pad,
+        "",
+        "In WrappedHttpHandler.php line 204:",
+        pad,
+        '  Error executing "PutObject" on "http://s3:8333/nextcloud/urn%3Aoid%3A8"; AW  ',
+        "  S HTTP error:  ",
+        "",
+        "maintenance:install [--database DATABASE] [--database-name DATABASE-NAME] [--data-dir DATA-DIR] [--] <command>",
+        "",
+        "The end-to-end tests fail with exit code 1.",
+    ])
+    found = failure.describe("Nextcloud 35 on MariaDB with S3", log)
+    assert found.error == "Error while writing stream to object store (ObjectStoreStorage.php line 575)", found
+    assert found.passed == "The containers run after 83 s.", found
+    bare = failure.describe("Nextcloud 35", "In Manager.php line 12:\n")
+    assert bare.error == "an exception without a message (Manager.php line 12)", bare
+
+
 def test_a_message_of_run_sh_is_the_last_line_before_its_cleanup() -> None:
     found = failure.describe("Nextcloud 34", MESSAGE)
     assert found.error == 'The webhook answered HTTP 500 instead of 200: {"status":"error"}', found

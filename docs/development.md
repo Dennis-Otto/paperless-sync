@@ -43,7 +43,7 @@ bash tests/e2e/run-contract.sh 3
 CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2
 ```
 
-A job of the end-to-end tests that fails names the first error of each run that failed, with the last step that passed, in its summary, and keeps the evidence for 14 days as its artifact: the log of the run, the log of Nextcloud, its apps, the logs of the containers and, of a check in the browser that failed, its Playwright trace and screenshots, which `npx playwright show-trace` opens. `E2E_ARTIFACTS=evidence bash tests/e2e/run-all.sh` keeps the same on your machine ([When a run fails](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#when-a-run-fails)).
+A job of the end-to-end tests that fails names the first error of each run that failed, with the last step that passed, in its summary, and keeps the evidence for 14 days as its artifact: the log of the run, the log of Nextcloud, its apps, the logs of the containers and, of a check in the browser that failed, its Playwright trace and screenshots, which `npx playwright show-trace` opens. `E2E_ARTIFACTS=evidence bash tests/e2e/run-all.sh` keeps the same on your machine, as *When a run fails* in `tests/e2e/README.md` describes.
 
 See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.
 

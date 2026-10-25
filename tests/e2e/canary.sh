@@ -24,6 +24,8 @@ DOWNLOADS="https://download.nextcloud.com/server"
 RELEASE_KEY="28806A878AE423A28372792ED75899B9A724937A"
 TMP_DIR="$(mktemp -d)"
 
+# The trap of EXIT below runs it, which ShellCheck doesn't follow past the exits at the end.
+# shellcheck disable=SC2317,SC2329
 cleanup() {
 	gpgconf --kill all >/dev/null 2>&1 || true
 	rm -rf "${TMP_DIR}"

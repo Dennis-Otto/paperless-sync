@@ -22,7 +22,8 @@ The first error of a log is, in this order:
    files.mjs fails: …", which browser.mjs prints; the checks that fail after it are named
    as well;
 2. after the last step that passed, the first error of Python or Node.js, such as
-   "AssertionError: …" of assert_json.py, or "Contract broken: …" of contract.py;
+   "AssertionError: …" of assert_json.py, "Contract broken: …" of contract.py, or of occ,
+   which names its exception after "In ObjectStoreStorage.php line 575:";
 3. when a signal stopped the run, such as the time limit of run-all.sh, that;
 4. otherwise the last line before "The end-to-end tests fail with exit code …", which run.sh
    prints as its cleanup starts, mostly a message of run.sh itself, such as "The webhook
@@ -45,6 +46,9 @@ from pathlib import Path
 STOPPED = re.compile(r"^The (?:end-to-end|contract) tests fail with exit code (\d+)\.$")
 BROWSER = re.compile(r"^The check in the browser (\S+) fails: (.+)$")
 ERROR = re.compile(r"^(?:Contract broken: .+|(?:[A-Za-z_][\w.]*\.)?[A-Za-z_]*(?:Error|Exception): .+)$")
+# Where occ, a command of Symfony, names the file and the line of an exception, whose
+# message follows in a box of indented lines.
+OCC = re.compile(r"^In (\S+) line (\d+):$")
 # The steps that run.sh names as it passes them.
 PASSED = re.compile(
     r"^(?:The containers run after \d+ s\.|Nextcloud and the app are set up after \d+ s\.|.+ pass(?:es)? after \d+ s\.)$"
@@ -110,6 +114,10 @@ def first_error(lines: list[str], passed: int, exit_code: str) -> tuple[str, str
     for index in after:
         if ERROR.match(lines[index]):
             return lines[index], "", index
+        if match := OCC.match(lines[index]):
+            box = [line.strip() for line in lines[index + 1 :] if line.strip()][:1]
+            message = box[0] if box else "an exception without a message"
+            return f"{message} ({match.group(1)} line {match.group(2)})", "", index
     if exit_code == "143":
         return "Stopped by a signal, such as the time limit of run-all.sh (exit code 143).", "", len(lines)
     rest = [index for index in after if lines[index].strip()]
