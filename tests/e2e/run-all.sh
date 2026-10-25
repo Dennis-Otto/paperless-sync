@@ -42,6 +42,9 @@
 
 set -euo pipefail
 
+# A relative folder is one of the directory that the script started in.
+[[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 

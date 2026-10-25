@@ -74,7 +74,7 @@ commands = [
   "E2E_SHARD=1 bash tests/e2e/run-all.sh  # the versions of this check side by side, as it runs them",
   "E2E_PLAN=1 E2E_SHARD=1 bash tests/e2e/run-all.sh  # which versions this check runs",
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
-  "E2E_ARTIFACTS=evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
+  "E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
   "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
 docs = "tests/e2e/README.md#when-a-run-fails"

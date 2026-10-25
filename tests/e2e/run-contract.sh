@@ -55,6 +55,8 @@ cleanup() {
 	status=$?
 	trap - EXIT
 	if [[ "${status}" -ne 0 ]]; then
+		# The line where tests/e2e/failure.py stops reading: the logs below aren't the tests.
+		echo "The contract tests fail with exit code ${status}." >&2
 		"${COMPOSE[@]}" ps || true
 		"${COMPOSE[@]}" logs --no-color --tail 200 || true
 	fi

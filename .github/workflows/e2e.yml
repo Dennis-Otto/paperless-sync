@@ -379,7 +379,7 @@ jobs:
   # only jobs that may write issues, so they run no code of the repository and reach
   # GitHub alone. A run started by hand on another branch than main reports nothing.
   issue:
-    name: issue about ${{ matrix.subject }}
+    name: issue
     needs: [coming, paperless]
     if: >-
       always() &&
@@ -394,58 +394,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - job: coming
-            subject: the coming Nextcloud
-            title: The coming Nextcloud breaks the app
-            tests: end-to-end tests
-            # Without a version, the job couldn't set the coming Nextcloud up.
-            against: the coming Nextcloud, which the job could not set up
-            about: >-
-              The canary of `.github/workflows/e2e.yml` runs `tests/e2e/canary.sh`: the
-              end-to-end tests against the beta or release candidate of the next major
-              version of Nextcloud, or against the daily build of its master branch while
-              there is none. Nextcloud hasn't released that version yet, so the canary is
-              no required check and blocks nothing; it gives notice before the release,
-              while there is time to adapt the app. `max-version` of `appinfo/info.xml`
-              stays as it is; the upstream bot raises it once Nextcloud releases the version.
-
-
-              The artifact e2e-coming of the run holds the log, `nextcloud.log`, the apps
-              and the logs of the containers and, of a check in the browser that failed,
-              its trace, which `npx playwright show-trace` opens, and its screenshots
-              (`tests/e2e/README.md`, "When a run fails"). `bash tests/e2e/canary.sh` runs
-              the same tests locally.
-
-
-              The canary adds every further failed run here and closes this issue once the
-              tests pass again.
-          - job: paperless
-            subject: Paperless-ngx
-            title: The contract tests against Paperless-ngx fail
-            tests: contract tests
-            against: Paperless-ngx 2.x and 3.x
-            about: >-
-              The job `paperless` of `.github/workflows/e2e.yml` runs
-              `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and
-              the current release of 3.x, whose images Renovate keeps current. It checks
-              every answer of Paperless that the app reads, runs the app against it, and
-              compares the shapes of the answers with the fixtures of the unit tests in
-              `tests/fixtures/`. A failure means that a release of Paperless-ngx answers
-              differently than the app expects, that a field the unit tests read is gone,
-              or that a change of the app (its paths, reports, settings or status) no
-              longer matches what `tests/e2e/contract.py` expects.
-
-
-              The log of the failed job names the answer and the field; its artifact
-              paperless-ngx-2 or paperless-ngx-3 holds the answers of Paperless.
-              `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and
-              `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app
-              reads them.
-
-
-              The job adds every further failed run here and closes this issue once the
-              tests pass again.
+        # The texts of each issue are in the step, so that the names of the runs stay short.
+        job: [coming, paperless]
     steps:
       - name: Allow the network traffic to GitHub alone
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -460,10 +410,54 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TITLE: ${{ matrix.title }}
-          TESTS: ${{ matrix.tests }}
-          AGAINST: ${{ matrix.against }}
-          ABOUT: ${{ matrix.about }}
+          JOB: ${{ matrix.job }}
+          COMING_TITLE: The coming Nextcloud breaks the app
+          COMING_TESTS: end-to-end tests
+          # Without a version, the job couldn't set the coming Nextcloud up.
+          COMING_AGAINST: the coming Nextcloud, which the job could not set up
+          COMING_ABOUT: >-
+            The canary of `.github/workflows/e2e.yml` runs `tests/e2e/canary.sh`: the
+            end-to-end tests against the beta or release candidate of the next major
+            version of Nextcloud, or against the daily build of its master branch while
+            there is none. Nextcloud hasn't released that version yet, so the canary is
+            no required check and blocks nothing; it gives notice before the release,
+            while there is time to adapt the app. `max-version` of `appinfo/info.xml`
+            stays as it is; the upstream bot raises it once Nextcloud releases the version.
+
+
+            The artifact e2e-coming of the run holds the log, `nextcloud.log`, the apps
+            and the logs of the containers and, of a check in the browser that failed,
+            its trace, which `npx playwright show-trace` opens, and its screenshots
+            (`tests/e2e/README.md`, "When a run fails"). `bash tests/e2e/canary.sh` runs
+            the same tests locally.
+
+
+            The canary adds every further failed run here and closes this issue once the
+            tests pass again.
+          PAPERLESS_TITLE: The contract tests against Paperless-ngx fail
+          PAPERLESS_TESTS: contract tests
+          PAPERLESS_AGAINST: Paperless-ngx 2.x and 3.x
+          PAPERLESS_ABOUT: >-
+            The job `paperless` of `.github/workflows/e2e.yml` runs
+            `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and
+            the current release of 3.x, whose images Renovate keeps current. It checks
+            every answer of Paperless that the app reads, runs the app against it, and
+            compares the shapes of the answers with the fixtures of the unit tests in
+            `tests/fixtures/`. A failure means that a release of Paperless-ngx answers
+            differently than the app expects, that a field the unit tests read is gone,
+            or that a change of the app (its paths, reports, settings or status) no
+            longer matches what `tests/e2e/contract.py` expects.
+
+
+            The log of the failed job names the answer and the field; its artifact
+            paperless-ngx-2 or paperless-ngx-3 holds the answers of Paperless.
+            `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and
+            `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app
+            reads them.
+
+
+            The job adds every further failed run here and closes this issue once the
+            tests pass again.
           RESULT: ${{ needs[matrix.job].result }}
           # The outputs of the job: the version of the coming Nextcloud, and the first
           # error of each run that failed, which tests/e2e/failure.py wrote.
@@ -471,6 +465,15 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          case "$JOB" in
+            coming) prefix=COMING ;;
+            *) prefix=PAPERLESS ;;
+          esac
+          for name in TITLE TESTS AGAINST ABOUT; do
+            variable="${prefix}_${name}"
+            printf -v "$name" '%s' "${!variable}"
+          done
+          export TITLE
           number="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
             --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
           version="$(jq -r '.version // empty' <<<"$OUTPUTS")"

@@ -13,7 +13,7 @@ title, title.txt; the job of the contract tests writes both for its line of Pape
 For each such run, this prints a line of Markdown with its title, its first error, the check
 in the browser that failed, if one did, and the last step that passed. In GitHub Actions, it also writes the lines into the
 summary of the job and as an annotation each, and into the output OUTPUT of the step, by
-default first-error, which the job "issue about …" of .github/workflows/e2e.yml puts into
+default first-error, which the job "issue" of .github/workflows/e2e.yml puts into
 its issue and into each further comment.
 
 The first error of a log is, in this order:

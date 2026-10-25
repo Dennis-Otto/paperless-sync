@@ -135,7 +135,7 @@ A run that fails leaves what it takes to see why, without running it again. Each
 - `containers.txt` and `containers.log`: the state and the whole logs of the containers, with their times
 - `browser/`: of each check in the browser that failed, the trace of each of its windows that was still there, `<check>-<window>.trace.zip`, and a screenshot of the whole of each of their pages, `<check>-<window>-<page>.png`
 
-The password of the tests is masked in all of it, and the tokens of the mock are synthetic.
+The password of the tests is masked in `nextcloud.log`, `apps.txt` and the logs of the containers; the traces show it as the browser typed it, which is harmless, since it exists only in the containers of the tests, like the synthetic tokens of the mock.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-a-failed-end-to-end-run-keeps.dark.svg">
@@ -151,8 +151,8 @@ npx playwright@1.64.0 show-trace browser/files-1.trace.zip
 After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
 
 ```bash
-E2E_ARTIFACTS=evidence bash tests/e2e/run-all.sh
-python3 tests/e2e/failure.py evidence
+E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run-all.sh
+python3 tests/e2e/failure.py build/e2e-evidence
 ```
 
 `scripts/check-project.sh` checks both: `node --test tests/e2e/browser.test.mjs` that `browser.mjs` keeps the traces and screenshots of a check that fails and nothing of one that passes, and that every check in the browser starts its browser through it, and `python3 tests/e2e/test_failure.py` that `failure.py` finds the first error in samples of each kind of failure.

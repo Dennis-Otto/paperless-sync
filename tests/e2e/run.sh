@@ -69,6 +69,8 @@ PLAYWRIGHT_PULL=""
 # E2E_ARTIFACTS, a folder, gets the evidence of a failure for the artifact of the job in the
 # CI (keep_evidence below); run-all.sh and canary.sh give each run a folder of its own.
 E2E_ARTIFACTS="${E2E_ARTIFACTS:-}"
+# A relative folder is one of the directory that the script started in.
+[[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
 # What the checks in the browser keep of a failure, which keep_evidence takes along.
 BROWSER_ARTIFACTS="${TMP_DIR}/browser"
 
@@ -109,7 +111,7 @@ cleanup() {
 		# output of the tests.
 		echo "The end-to-end tests fail with exit code ${status}." >&2
 		if [[ -n "${E2E_ARTIFACTS}" ]]; then
-			keep_evidence
+			keep_evidence || echo "The evidence of the failure could not be kept." >&2
 		fi
 		"${COMPOSE[@]}" ps || true
 		"${COMPOSE[@]}" logs --no-color --tail 300 || true

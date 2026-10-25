@@ -195,6 +195,29 @@ def test_a_broken_contract_and_the_colors_of_a_log() -> None:
     assert found.passed == "The setup of the account in Paperless passes after 12 s.", found
 
 
+def test_a_message_of_run_contract_sh_is_not_hidden_by_the_logs_of_the_containers() -> None:
+    found = failure.describe(
+        "Paperless-ngx 2.x",
+        "The setup of the account in Paperless passes after 12 s.\n"
+        "occ paperless_sync:run ended with exit code 1: {}\n"
+        "The contract tests fail with exit code 1.\n"
+        "NAME                 IMAGE     STATUS\n"
+        'nextcloud-1  | 172.18.0.1 - - [25/Oct/2026:01:02:03 +0000] "GET /status.php HTTP/1.1" 200\n',
+    )
+    assert found.error == "occ paperless_sync:run ended with exit code 1: {}", found
+
+
+def test_both_scripts_print_the_line_where_the_report_stops() -> None:
+    for name in ("run.sh", "run-contract.sh"):
+        lines = (SCRIPT.parent / name).read_text(encoding="utf-8").splitlines()
+        printed = [
+            line.strip().removeprefix('echo "').removesuffix('" >&2').replace("${status}", "1")
+            for line in lines
+            if "fail with exit code ${status}." in line
+        ]
+        assert any(failure.STOPPED.match(line) for line in printed), (name, printed)
+
+
 def test_a_long_error_is_cut_and_a_backtick_cannot_end_its_code() -> None:
     found = failure.describe("Nextcloud 33", f"Error: `{'x' * 400}`\n")
     assert len(found.error) == failure.LONGEST and found.error.endswith("…"), found.error
