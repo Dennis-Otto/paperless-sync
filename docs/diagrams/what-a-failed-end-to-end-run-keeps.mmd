@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What a failed end-to-end run keeps
+    accDescr: A run of the end-to-end tests fails, in the scenario or in a check in the browser. Each check in the browser runs, also after one that failed, and keeps the trace and the screenshots of its windows when it fails. The cleanup of run.sh keeps the log of Nextcloud, its apps, the logs of the containers and what the browser kept in the folder of the run in E2E_ARTIFACTS, and run-all.sh or canary.sh add the log of the run. failure.py names the first error and the last step that passed in the summary of the job, as its annotation and in the issue of the canary, and the job keeps the folder as its artifact for 14 days, whose trace npx playwright show-trace opens. You read the first error, open the trace and fix the app or the test. The tests are blue, what they keep green, and you orange.
+
+    fails{"A run of the<br>end-to-end tests fails"}
+    browser["Each check in the browser runs;<br>one that fails keeps its traces<br>and screenshots"]
+    cleanup["The cleanup of run.sh keeps<br>nextcloud.log, the apps and<br>the logs of the containers"]
+    folder[("E2E_ARTIFACTS:<br>a folder for each run,<br>with its log")]
+    first["failure.py names the first error<br>and the last step that passed"]
+    summary(["Summary, annotation<br>and the issue of the canary"])
+    artifact(["The artifact of the job,<br>14 days: show-trace opens it"])
+    you(["You read the first error,<br>open the trace and fix it"])
+
+    fails --> browser --> cleanup --> folder
+    folder --> first --> summary
+    folder --> artifact
+    summary --> you
+    artifact --> you
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bots fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class you yours
+    class fails,browser,cleanup,first bots
+    class folder,summary,artifact result

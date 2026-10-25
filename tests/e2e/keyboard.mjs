@@ -21,9 +21,9 @@
 // a11y.mjs judges, and the check tries it on a seeded page first. run.sh starts it in the image
 // of Playwright after accessibility.mjs; it saves nothing.
 
-import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
 import { NARROW, WIDE, breaksOrder, focusIndicator } from './a11y.mjs'
+import { launch } from './browser.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const USER = process.env.E2E_USER ?? 'e2e-admin'
@@ -374,7 +374,7 @@ async function dialogs(page) {
 }
 
 const started = Date.now()
-const browser = await chromium.launch()
+const browser = await launch('keyboard')
 try {
 	await seeded(browser)
 	const page = await openSettings(browser, await signIn(browser))
@@ -389,6 +389,12 @@ try {
 	await page.emulateMedia({ colorScheme: 'light' })
 	await pickers(page)
 	await dialogs(page)
+	if (problems.length > 0) {
+		await browser.keep(`${problems.length} check(s) by keyboard alone fail, the first: ${problems[0]}`)
+	}
+} catch (error) {
+	await browser.keep(error)
+	throw error
 } finally {
 	await browser.close()
 	for (const problem of problems) {

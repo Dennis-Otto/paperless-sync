@@ -25,7 +25,8 @@
 // Paperless and the saved configuration of run.sh are there, and it leaves that
 // configuration as it found it.
 
-import { chromium, request } from 'playwright-core'
+import { request } from 'playwright-core'
+import { launch } from './browser.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const USER = process.env.E2E_USER ?? 'e2e-admin'
@@ -69,7 +70,7 @@ async function setLanguage(language) {
 	}
 }
 
-const browser = await chromium.launch()
+const browser = await launch('settings')
 try {
 	const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
 	await page.goto(`${BASE_URL}/index.php/login`)
@@ -933,6 +934,9 @@ try {
 	} finally {
 		await setLanguage('en')
 	}
+} catch (error) {
+	await browser.keep(error)
+	throw error
 } finally {
 	await browser.close()
 }

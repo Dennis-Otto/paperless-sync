@@ -45,9 +45,12 @@ problem = """The end-to-end tests in Docker failed against a Nextcloud version o
 `max-version`, and the versions between that the check *nextcloud on PostgreSQL, MariaDB
 and S3* doesn't run, each shard of `tests/e2e/run-all.sh` on a runner of its own. The
 summary of the check has a table with the result and the time of each phase of each
-version, the log a group with the whole output of each, and its last lines the command
-that runs a version that failed again on its own. The flaky-test bot runs a failed job once more by itself, so a
-failure that stays is real. The checks in the browser at the end name each finding with
+version, below it the first error of each run that failed with the last step that passed,
+the log a group with the whole output of each, and its last lines the command that runs a
+version that failed again on its own. The artifact *e2e-nextcloud* of the run keeps, for
+each run that failed, its log, the log of Nextcloud, nextcloud.log, the apps, the logs of the containers and,
+of a check in the browser that failed, its trace and its screenshots, for 14 days. The
+flaky-test bot runs a failed job once more by itself, so a failure that stays is real. The checks in the browser at the end name each finding with
 its element: `tests/e2e/accessibility.mjs` a rule of WCAG 2.1 AA that axe-core found
 violated, at 1280 or 320 px, or an element that reaches past a window of 320 px, and
 `tests/e2e/keyboard.mjs` a control that Tab doesn't reach, reaches against the order of
@@ -56,8 +59,12 @@ why = """These tests run the app as a server runs it: a real Nextcloud with this
 as its app, its settings page in a browser, its background jobs and its files in WebDAV,
 against a mock of Paperless. A change that passes the unit tests can still break the app
 in one of the versions that the App Store promises."""
-fix = """Run the version that failed on your machine with Docker, by the command that the
-log names, fix what its output shows, and push. A finding of the accessibility names its
+fix = """Read the first error in the summary; for a check in the browser, download the
+artifact *e2e-nextcloud* and open the trace of the window that failed, in its folder
+`browser`, with `npx playwright show-trace` or at https://trace.playwright.dev: it shows each
+step with the page before and after, its requests and its console. Run the version that
+failed on your machine with Docker, by the command that the log names, fix what its output
+shows, and push. A finding of the accessibility names its
 fix: a name for a control, a color with more contrast, CSS that lets a wide element wrap
 at 320 px, or an outline for `:focus-visible`. When `main` fails the same way, a new
 point release of Nextcloud, which the image of the version brings, changed what the app
@@ -67,8 +74,10 @@ commands = [
   "E2E_SHARD=1 bash tests/e2e/run-all.sh  # the versions of this check side by side, as it runs them",
   "E2E_PLAN=1 E2E_SHARD=1 bash tests/e2e/run-all.sh  # which versions this check runs",
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
+  "E2E_ARTIFACTS=evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
+  "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
-docs = "tests/e2e/README.md#every-supported-version-at-once"
+docs = "tests/e2e/README.md#when-a-run-fails"
 autofix = """A test of the whole app that fails needs a person, who finds out what the app
 or Nextcloud does differently."""
 
@@ -84,7 +93,9 @@ the tests failed against a version between `min-version` and `max-version`, whic
 check runs on SQLite as well, when its load is not heavier than that of the check
 nextcloud, where a version with its browser checks counts as two runs and a variant as
 one. The summary of the check has a table with the result and the time of each phase of
-each, and the last lines of the log the command that runs one again on its own."""
+each, below it the first error of each run that failed, and the last lines of the log the
+command that runs one again on its own. The artifact *e2e-variants* keeps the log,
+the log of Nextcloud, nextcloud.log, the apps and the logs of the containers of each run that failed."""
 why = """Most servers keep their tables in MariaDB, MySQL or PostgreSQL, and larger ones
 their files in an object store: a query, a migration or a stream of a file can work on
 SQLite and the disk and still fail there, as every upload of the inbox once failed on S3
@@ -112,13 +123,17 @@ differently there."""
 title = "The end-to-end tests against the coming Nextcloud"
 problem = """The weekly canary failed: the end-to-end tests against the beta or release
 candidate of the next major version of Nextcloud, or against the daily build of its
-master branch, or the canary couldn't set that Nextcloud up. It opened the issue *The
-coming Nextcloud breaks the app*, or added this run to it."""
+master branch, or the canary couldn't set that Nextcloud up. The summary names the first
+error and the last step that passed, and the artifact *e2e-coming* keeps the log,
+the log of Nextcloud, nextcloud.log, the apps, the logs of the containers and, of a check in the browser that
+failed, its trace and its screenshots. It opened the issue *The coming Nextcloud breaks the
+app* with the first error, or added this run with its own to it."""
 why = """Nextcloud hasn't released that version yet, so this is no required check and
 blocks nothing; it gives notice while there is time to adapt the app before its users
 update their servers."""
-fix = """Run the canary on your machine with Docker, with `KEEP_E2E=1` to look at the
-coming Nextcloud after the failure, and find out whether its change breaks the app or only
+fix = """Open the trace of a check in the browser that failed from the artifact
+*e2e-coming* with `npx playwright show-trace`, or run the canary on your machine with
+Docker, with `KEEP_E2E=1` to look at the coming Nextcloud after the failure, and find out whether its change breaks the app or only
 a test, such as an address or a line of the log that the test expects. Adapt the app or the
 test to it, without breaking the versions that `appinfo/info.xml` supports. Leave
 `max-version` as it is: the upstream bot raises it once Nextcloud releases the version.
@@ -127,6 +142,7 @@ issue once the tests pass again."""
 commands = [
   "bash tests/e2e/canary.sh",
   "KEEP_E2E=1 bash tests/e2e/canary.sh  # keeps the coming Nextcloud running after a failure",
+  "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
 docs = "tests/e2e/README.md#the-coming-nextcloud"
 autofix = """A change of a Nextcloud that isn't released yet needs a person, who decides
@@ -224,14 +240,18 @@ app belongs to no area of `.github/labeler.yml`, or a rule names no file. *Expla
 of the checks*: a check lacks its explanation in `.github/checks.project.toml`, or an
 explanation names a file that is gone. *Checks of the upgrade test*: a test of
 `tests/e2e/assert_upgrade.py` fails, so the upgrade test would let an upgrade that loses a
-row, a setting, a credential, a file ID or a retry pass. *Check of the package*: a test of
+row, a setting, a credential, a file ID or a retry pass. *First error of a failed
+end-to-end run*: a test of `tests/e2e/failure.py` fails, so the summary of a failed run
+or the issue of the canary would name another line than its first error. *Check of the package*: a test of
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
 parse, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
 Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
 the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
 doesn't translate, a test of `tests/e2e/files-address.mjs` fails, because a browser test
 opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, a test of
-`tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, or
+`tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, a
+test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots of a check in
+the browser that fails, or a check in the browser starts Chromium without it, or
 `l10n/de.json` lacks a text that the code
 translates, has one that no code translates, a placeholder of another kind or a text
 twice, or differs from `l10n/de.js`."""
@@ -250,13 +270,17 @@ program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
 words, follow the English outline in the German twin, give a new file an area, explain
 a new check, fix `tests/e2e/assert_upgrade.py` or its samples in
 `tests/e2e/test_assert_upgrade.py` until `python3 tests/e2e/test_assert_upgrade.py` passes,
+fix `tests/e2e/failure.py` or its samples in `tests/e2e/test_failure.py` until
+`python3 tests/e2e/test_failure.py` passes,
 fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
 look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`
 in `tests/e2e/screenshots.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
 open Files at `folderAddress(await filesAddress(page), dir)` of
 `tests/e2e/files-address.mjs` until `node --test tests/e2e/files-address.test.mjs` passes,
-fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, and add a new text with its German words to `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
+fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, start the browser
+of a check with `launch()` of `tests/e2e/browser.mjs` and keep what it has before it closes
+until `node --test tests/e2e/browser.test.mjs` passes, and add a new text with its German words to `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
 `check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
 anew. Then run the checks again:"""
 commands = [

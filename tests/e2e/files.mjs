@@ -10,7 +10,7 @@
 // it in the image of Playwright after settings.mjs, with the files receipt.pdf and
 // "Invoice [P123].pdf" of e2e-admin and letter.pdf of e2e-other that it uploaded.
 
-import { chromium } from 'playwright-core'
+import { launch } from './browser.mjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
@@ -58,7 +58,7 @@ async function closeMenu(page) {
 	await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
 }
 
-const browser = await chromium.launch()
+const browser = await launch('files')
 try {
 	const admin = await signIn(browser, ADMIN)
 	const own = await actionsOf(admin.page, 'receipt.pdf')
@@ -89,6 +89,9 @@ try {
 	await closeMenu(other.page)
 	await other.context.close()
 	console.log('Files: a user outside the group finds no Send to Paperless.')
+} catch (error) {
+	await browser.keep(error)
+	throw error
 } finally {
 	await browser.close()
 }

@@ -15,8 +15,8 @@
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { chromium } from 'playwright-core'
 import { NARROW, WCAG_TAGS, WIDE, describeViolations, failing, horizontalOverflow } from './a11y.mjs'
+import { launch } from './browser.mjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
@@ -398,16 +398,16 @@ async function check(browser, { session, files }, target) {
 }
 
 const started = Date.now()
-const browser = await chromium.launch()
+const browser = await launch('accessibility')
 let failures = 0
 try {
 	await seeded(browser)
 	const signedIn = await signIn(browser)
 	for (const target of PAGES) {
+		let found = 0
 		for (const { label, violations, passes, overflow } of await check(browser, signedIn, target)) {
-			const found = failing(violations)
-			failures += found.length + overflow.length
-			console.log(`axe-core, ${label}: ${passes.length} rule(s) passed, ${violations.length} violated, ${found.length} of them serious or critical${overflow.length > 0 ? `; ${overflow.length} element(s) reach past the window` : ''}`)
+			found += failing(violations).length + overflow.length
+			console.log(`axe-core, ${label}: ${passes.length} rule(s) passed, ${violations.length} violated, ${failing(violations).length} of them serious or critical${overflow.length > 0 ? `; ${overflow.length} element(s) reach past the window` : ''}`)
 			for (const line of describeViolations(violations)) {
 				console.log(line)
 			}
@@ -415,7 +415,15 @@ try {
 				console.log(`  reflow: ${line}`)
 			}
 		}
+		// The window of the page is still there, so its trace shows each width and theme.
+		if (found > 0) {
+			await browser.keep(`${found} serious or critical violation(s) or element(s) past the window in ${target.name}`)
+		}
+		failures += found
 	}
+} catch (error) {
+	await browser.keep(error)
+	throw error
 } finally {
 	await browser.close()
 }

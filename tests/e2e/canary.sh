@@ -96,4 +96,21 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
 	echo "version=${label}" >>"${GITHUB_OUTPUT}"
 fi
 
-NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 bash "${SCRIPT_DIR}/run.sh"
+if [[ -z "${E2E_ARTIFACTS:-}" ]]; then
+	NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 bash "${SCRIPT_DIR}/run.sh"
+	exit 0
+fi
+
+# With E2E_ARTIFACTS, a failure leaves its evidence in the folder coming of it, as a run of
+# run-all.sh does: its log, run.log, its title, title.txt, and what run.sh keeps, so that
+# tests/e2e/failure.py names its first error in the issue of the canary.
+evidence="${E2E_ARTIFACTS}/coming"
+status=0
+NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 E2E_ARTIFACTS="${evidence}" \
+	bash "${SCRIPT_DIR}/run.sh" 2>&1 | tee "${TMP_DIR}/run.log" || status=$?
+if ((status != 0)); then
+	mkdir -p "${evidence}"
+	cp "${TMP_DIR}/run.log" "${evidence}/run.log"
+	echo "${label}" >"${evidence}/title.txt"
+fi
+exit "${status}"
