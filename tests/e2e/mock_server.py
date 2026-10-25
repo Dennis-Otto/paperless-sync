@@ -23,6 +23,14 @@ VIEW_ONLY_TOKEN = "e2e-view-only-token"
 # The token of an account with every permission of a run but View for UI Settings, so
 # that Paperless doesn't tell the checklist its permissions and its ID.
 NO_UI_SETTINGS_TOKEN = "e2e-no-ui-settings-token"
+# The token of a superuser, which the setup of the account of the app takes once to create the
+# account (POST /api/users/), or to update it (PATCH /api/users/<id>/), and to get its token
+# (POST /api/token/). The app never stores it, logs it or answers it, which assert_log.py and
+# assert_json.py check.
+SUPERUSER_TOKEN = "e2e-superuser-only-token"
+# The ID of the superuser, and the first ID of the accounts that it creates.
+SUPERUSER_ID = 5
+FIRST_CREATED_ID = 20
 FORBIDDEN = {"detail": "You do not have permission to perform this action."}
 # The ID of the account of the app, which owns every document of the mock.
 OWNER_ID = 1
@@ -57,7 +65,15 @@ ACCOUNTS = {
         ["view_document", "view_correspondent", "view_documenttype", "view_storagepath", "view_uisettings"],
     ),
     NO_UI_SETTINGS_TOKEN: account(3, "nextcloud-no-ui-settings", RUN_PERMISSIONS),
+    SUPERUSER_TOKEN: {
+        "user": {"id": SUPERUSER_ID, "username": "e2e-superuser", "is_staff": True, "is_superuser": True, "groups": []},
+        "settings": {},
+        "permissions": [],
+    },
 }
+# The accounts that the superuser created, by their usernames, with their passwords and their
+# tokens, which Paperless gives for the username and the password; reset_state() clears them.
+CREATED_ACCOUNTS = {}
 # The permission that Paperless-ngx asks of an account for each endpoint that the app reads.
 VIEW_PERMISSIONS = {
     "/api/documents/": "view_document",
@@ -103,8 +119,22 @@ PAPERLESS = {
 TASK_ENDS = {"pending", "started", "success", "failure", "duplicate", "revoked"}
 
 
+def account_of(token):
+    """What /api/ui_settings/ says of the account of a token, also of one that the superuser created."""
+    with LOCK:
+        for created in CREATED_ACCOUNTS.values():
+            if created["token"] == token:
+                return account(created["id"], created["username"], created["permissions"])
+    return ACCOUNTS.get(token)
+
+
+def superuser(token):
+    return account_of(token)["user"]["is_superuser"]
+
+
 def reset_state():
     with LOCK:
+        CREATED_ACCOUNTS.clear()
         STATE.clear()
         STATE.update(
             {
@@ -412,10 +442,10 @@ class Handler(BaseHTTPRequestHandler):
         documents, trash = scenario_documents()
         query = parse_qs(parsed.query)
         permission = VIEW_PERMISSIONS.get(parsed.path)
-        if permission is not None and permission not in ACCOUNTS[token]["permissions"]:
+        if permission is not None and not superuser(token) and permission not in account_of(token)["permissions"]:
             self._json(403, FORBIDDEN)
         elif parsed.path == "/api/ui_settings/":
-            self._json(200, ACCOUNTS[token])
+            self._json(200, account_of(token))
         elif parsed.path == "/api/documents/" and "owner__id__none" in query:
             # The filter of the connection checklist: the documents with an owner other than the
             # account. The account of the app owns every document of the mock.
@@ -468,6 +498,13 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 created = [{"id": tag["id"], "name": tag["name"]} for tag in STATE["createdTags"]]
             self._page(showcase.TAGS if self._showcase() else [*TAGS, *created])
+        elif parsed.path == "/api/users/" and superuser(token):
+            # As a superuser sees them, with the filter of their username.
+            username = query.get("username__iexact", [None])[0]
+            with LOCK:
+                created = [{"id": user["id"], "username": user["username"], "is_superuser": False} for user in CREATED_ACCOUNTS.values()]
+            users = [*[{**user, "is_superuser": False} for user in USERS], {"id": SUPERUSER_ID, "username": "e2e-superuser", "is_superuser": True}, *created]
+            self._page([user for user in users if username is None or user["username"].lower() == username.lower()])
         elif parsed.path == "/api/users/":
             self._page(USERS)
         elif parsed.path == "/api/custom_fields/":
@@ -609,13 +646,19 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/tags/":
             self._create_tag()
             return
+        if parsed.path == "/api/users/":
+            self._create_user()
+            return
+        if parsed.path == "/api/token/":
+            self._token()
+            return
         if parsed.path != "/api/documents/post_document/":
             self._json(404, {"detail": "Not found"})
             return
         token = self._authorized()
         if token is None or not self._versioned():
             return
-        if "add_document" not in ACCOUNTS[token]["permissions"]:
+        if "add_document" not in account_of(token)["permissions"]:
             self._json(403, FORBIDDEN)
             return
 
@@ -651,16 +694,20 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, task_id)
 
     def do_PATCH(self):
-        """Changes the owner of a document, as per-user ownership does after an upload; nothing else."""
+        """Changes the owner of a document, as per-user ownership does after an upload, or an account; nothing else."""
         self.api_headers = {}
-        match = re.fullmatch(r"/api/documents/(\d+)/", urlparse(self.path).path)
         token = self._authorized()
         if token is None or not self._versioned():
             return
+        user = re.fullmatch(r"/api/users/(\d+)/", urlparse(self.path).path)
+        if user is not None:
+            self._update_user(token, int(user.group(1)))
+            return
+        match = re.fullmatch(r"/api/documents/(\d+)/", urlparse(self.path).path)
         if match is None:
             self._json(404, {"detail": "Not found"})
             return
-        if "change_document" not in ACCOUNTS[token]["permissions"]:
+        if "change_document" not in account_of(token)["permissions"]:
             self._json(403, FORBIDDEN)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -681,7 +728,7 @@ class Handler(BaseHTTPRequestHandler):
         token = self._authorized()
         if token is None or not self._versioned():
             return
-        if "add_tag" not in ACCOUNTS[token]["permissions"]:
+        if "add_tag" not in account_of(token)["permissions"]:
             self._json(403, FORBIDDEN)
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -702,6 +749,70 @@ class Handler(BaseHTTPRequestHandler):
             STATE["createdTags"].append(tag)
         self._json(201, tag)
 
+    def _fields(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            fields = json.loads(self.rfile.read(length) or b"null")
+        except ValueError:
+            fields = None
+        return fields if isinstance(fields, dict) else {}
+
+    def _create_user(self):
+        """Creates an account as Paperless-ngx does for a superuser: a username of its own, and the permissions by their codenames."""
+        token = self._authorized()
+        if token is None or not self._versioned():
+            return
+        if not superuser(token):
+            self._json(403, FORBIDDEN)
+            return
+        fields = self._fields()
+        username = fields.get("username")
+        permissions = fields.get("user_permissions", [])
+        if not isinstance(username, str) or not username or not isinstance(fields.get("password"), str) or fields.get("is_superuser") is not False:
+            self._json(400, {"username": ["This field is required."]})
+            return
+        with LOCK:
+            if username in CREATED_ACCOUNTS or username in [user["username"] for user in USERS]:
+                self._json(400, {"username": ["A user with that username already exists."]})
+                return
+            created = {
+                "id": FIRST_CREATED_ID + len(CREATED_ACCOUNTS),
+                "username": username,
+                "password": fields["password"],
+                "permissions": permissions,
+                "token": f"e2e-token-of-{username}",
+            }
+            CREATED_ACCOUNTS[username] = created
+        self._json(201, {"id": created["id"], "username": username, "password": "**********", "is_superuser": False, "user_permissions": permissions})
+
+    def _update_user(self, token, user_id):
+        """Changes the password and the permissions of an account, as Paperless-ngx does for a superuser."""
+        if not superuser(token):
+            self._json(403, FORBIDDEN)
+            return
+        fields = self._fields()
+        with LOCK:
+            found = [created for created in CREATED_ACCOUNTS.values() if created["id"] == user_id]
+            if not found:
+                self._json(404, {"detail": "No User matches the given query."})
+                return
+            found[0]["password"] = fields.get("password", found[0]["password"])
+            found[0]["permissions"] = fields.get("user_permissions", found[0]["permissions"])
+        self._json(200, {"id": user_id, "username": found[0]["username"], "password": "**********", "is_superuser": False})
+
+    def _token(self):
+        """The token of an account for its username and password, as /api/token/ of Paperless-ngx gives it."""
+        if self._authorized() is None or not self._versioned():
+            return
+        fields = self._fields()
+        with LOCK:
+            created = CREATED_ACCOUNTS.get(fields.get("username"))
+            valid = created is not None and created["password"] == fields.get("password")
+        if not valid:
+            self._json(400, {"non_field_errors": ["Unable to log in with provided credentials."]})
+            return
+        self._json(200, {"token": created["token"]})
+
     def _showcase(self):
         return self._scenario() in showcase.SCENARIOS
 
@@ -715,7 +826,7 @@ class Handler(BaseHTTPRequestHandler):
         token = authorization.removeprefix("Token ")
         valid = (
             authorization.startswith("Token ")
-            and token in ACCOUNTS
+            and account_of(token) is not None
             and self.headers.get("User-Agent", "").startswith("Nextcloud-Paperless-Sync/")
         )
         if not valid:

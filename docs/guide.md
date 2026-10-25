@@ -43,6 +43,14 @@ The settings are in **Administration settings → Paperless Sync**. Until the fi
   <img alt="The section Connection and ownership: Paperless URL, Paperless API token, Nextcloud target user ID and base folder" src="images/settings-connection-light.png">
 </picture>
 
+**Create an account for the app in Paperless**, folded away below them, creates the account of the app with the API token of a Paperless superuser, which you enter once: a user that is no superuser, `nextcloud-sync` unless you choose another name, with the permissions that the modules of the form need. **Create the account and save** saves the settings with the token of that account and shows its connection checklist, as *The account of the app* above describes.
+
+<!-- The picture comes from tests/e2e/screenshots.mjs, with a synthetic token typed. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/settings-account-dark.png">
+  <img alt="Create an account for the app in Paperless, open: what the setup does, the API token of a Paperless superuser, typed and hidden, the username of the account, nextcloud-sync, and the button Create the account and save" src="images/settings-account-light.png">
+</picture>
+
 **2 · Schedule and modules:** the scheduled synchronization, the export to Nextcloud and the import from the inbox, each on its own, the [interval](guide.md#background-jobs), from 5 minutes to a day, and the most changes of one run.
 
 <picture>

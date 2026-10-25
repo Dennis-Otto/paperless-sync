@@ -141,6 +141,7 @@ accessibility() {
 			--env "E2E_PASSWORD=${PASSWORD}" \
 			--env E2E_TOKEN=e2e-only-token \
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
+			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs && node flow.mjs'
 }
@@ -635,7 +636,8 @@ for attribute in \
 	'data-variable="created_month_name"' \
 	'id="initial-state-paperless_sync-status"' \
 	'id="initial-state-paperless_sync-config"' \
-	'data-setting="paperless_local_network"' 	'data-step="connect" data-state="next" aria-current="step"'; do
+	'data-setting="paperless_local_network"' \
+	'data-step="connect" data-state="next" aria-current="step"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
@@ -733,11 +735,12 @@ if occ config:app:get paperless_sync paperless_url >/dev/null 2>&1; then
 	exit 1
 fi
 # Saving goes on with a permission that one module lacks, so that it can be granted in
-# Paperless afterwards, and the answer lists the same checklist. The save below replaces
-# the token with the one of the full account.
+# Paperless afterwards, and the answer lists the same checklist. The connection of the
+# getting-started checklist stays next, as a line of its checklist failed, while the owner is
+# done. The save below replaces the token with the one of the full account.
 checklist settings "${TMP_DIR}/saved-with-failures.json"
 assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
-assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'done done next todo todo'
+assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'next done todo todo todo'
 # Without the permission View for UI Settings, Paperless doesn't tell the checklist the
 # permissions of the account: the lines of the trash and the inbox name that permission.
 checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
@@ -771,6 +774,8 @@ curl --fail-with-body --silent --show-error \
 	--output "${TMP_DIR}/config.json" \
 	"${BASE_URL}/apps/paperless_sync/settings"
 assert_json config "${TMP_DIR}/config.json"
+# The token of the full account passes every line, which completes the connection.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-connected.json" 'done done next todo todo'
 
 sync_run true "${TMP_DIR}/dry-run.json"
 assert_json dry-run "${TMP_DIR}/dry-run.json"
@@ -1386,6 +1391,64 @@ if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	accessibility
 	echo "The accessibility check passes after ${SECONDS} s."
 fi
+
+# The setup of the account of the app with the token of a superuser of Paperless: the app
+# creates the account with the permissions of the saved modules, saves the settings with its
+# token and answers the checklist, in which nothing fails. A second setup changes the user
+# only with update. The token of the superuser reaches no answer, which assert_json.py
+# checks, not the configuration of the app, and no line of the log, which assert_log.py
+# checks below. Then the runs go on with the token of the account of the README.
+account_setup() {
+	output="$1"
+	shift
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'superuserToken=e2e-superuser-only-token' \
+		--data-urlencode 'username=e2e-app' \
+		"$@" \
+		--output "${output}" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/settings/account"
+}
+# The setup completes the connection of the getting-started checklist, as a save does: here
+# after a checklist that failed, as the mark of the app says.
+occ config:app:set paperless_sync status_connection_passed --value=false --type=boolean --lazy >/dev/null
+assert_status_soon getting-started "${TMP_DIR}/getting-started-account-before.json" 'next done done todo done'
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-created.json")"
+if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+	echo "The setup of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-created.json")" >&2
+	exit 1
+fi
+assert_json account-created "${TMP_DIR}/account-created.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-account.json" 'done done done next done'
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-exists.json")"
+if [[ "${ACCOUNT_STATUS}" != "409" ]]; then
+	echo "A second setup of the account changed the user without update: HTTP ${ACCOUNT_STATUS}, $(cat "${TMP_DIR}/account-exists.json")" >&2
+	exit 1
+fi
+assert_json account-exists "${TMP_DIR}/account-exists.json"
+ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-updated.json" --data-urlencode 'update=1')"
+if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+	echo "The update of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-updated.json")" >&2
+	exit 1
+fi
+assert_json account-updated "${TMP_DIR}/account-updated.json"
+if occ config:list paperless_sync --private | grep --fixed-strings e2e-superuser-only-token >/dev/null; then
+	echo "The configuration of the app holds the token of the superuser of Paperless." >&2
+	exit 1
+fi
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'token=e2e-only-token' \
+	--output "${TMP_DIR}/account-restored.json" \
+	"${BASE_URL}/apps/paperless_sync/settings"
+echo "The setup of the account in Paperless passes after ${SECONDS} s."
 
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py

@@ -680,6 +680,23 @@ final class StatusServiceTest extends TestCase {
 	}
 
 	/**
+	 * With the schedule on, settings that became incomplete, such as a URL that occ changed and the
+	 * token does not follow, make every scheduled run fail: the failure stays the health, so that a
+	 * monitor keeps alarming, until a run failed no more.
+	 */
+	public function testAScheduleWithIncompleteSettingsThatFailsStaysFailed(): void {
+		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->settings['paperless_url'] = 'https://elsewhere.example.test';
+		$config = $this->configService()->get();
+		self::assertTrue($config->enabled && !$config->complete());
+		self::assertSame('unconfigured', $this->service->health($config), 'Before a run failed.');
+
+		$this->service->failed(new RuntimeException('Paperless Sync is not completely configured.'), new SyncReport(false, TestClock::START));
+
+		self::assertSame('failed', $this->service->health($config));
+	}
+
+	/**
 	 * The last dry-run that completed, also with errors, stays with the documents that Paperless
 	 * listed to it, through later runs of either kind; a dry-run that failed completed nothing.
 	 */

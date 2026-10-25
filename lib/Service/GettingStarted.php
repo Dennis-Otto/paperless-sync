@@ -25,7 +25,7 @@ use OCP\IL10N;
  * @psalm-type Progress = array{complete: bool, steps: list<Step>, estimate: string}
  */
 final class GettingStarted {
-	/** The URL of Paperless and its token are saved: saving a token tests the connection first. */
+	/** The URL of Paperless and its token are saved, and the connection checklist passed with them. */
 	public const CONNECT = 'connect';
 	/** The target user is saved, who gets the documents, or with per-user ownership those without a user. */
 	public const OWNER = 'owner';
@@ -61,10 +61,11 @@ final class GettingStarted {
 			$dryRun = ['ended' => $status['lastCompleted'], 'documents' => $documents];
 		}
 		$done = [
-			// SettingsController::save() tests a token that is entered and refuses one that fails a
-			// check that blocks, and a new URL needs the token again, so a saved token passed the
-			// connection checklist with the saved URL.
-			self::CONNECT => $config->paperlessUrl !== '' && $config->tokenConfigured,
+			// SettingsController::save() saves a token whose checklist failed only for one module,
+			// such as a missing permission for the tags, so the step needs the mark of a checklist in
+			// which no line failed, with the saved URL: a save, a test or the setup of the account
+			// keeps it.
+			self::CONNECT => $config->paperlessUrl !== '' && $config->tokenConfigured && $this->status->connectionPassed($config->paperlessUrl),
 			self::OWNER => $config->targetUser !== '',
 			self::DRY_RUN => $dryRun['ended'] > 0,
 			self::SCHEDULE => $config->enabled,
@@ -81,26 +82,34 @@ final class GettingStarted {
 		return [
 			'complete' => $done[self::FIRST_RUN],
 			'steps' => $steps,
-			'estimate' => $this->estimate($config, $dryRun['documents']),
+			'estimate' => $this->estimate($config, $dryRun),
 		];
 	}
 
 	/**
 	 * How long the first synchronization takes, from the documents that the last dry-run found: a
-	 * run takes up to the batch size of them, one run each interval, as docs/faq.md explains.
+	 * run takes up to the batch size of them, one run each interval, as docs/faq.md explains. A
+	 * batch size below 1, which occ can store, counts as 1.
+	 *
+	 * @param array{ended: int, documents: int} $dryRun
 	 */
-	private function estimate(SyncConfig $config, int $documents): string {
+	private function estimate(SyncConfig $config, array $dryRun): string {
+		$documents = $dryRun['documents'];
 		if ($documents <= 0) {
-			return $this->l10n->t('A dry-run counts the documents in Paperless; then this step says how long the first synchronization takes.');
+			return $dryRun['ended'] > 0
+				// Paperless is empty, or the export module is off, so the dry-run counted nothing.
+				? $this->l10n->t('The last dry-run found no document to mirror; the first run takes about one interval.')
+				: $this->l10n->t('A dry-run counts the documents in Paperless; then this step says how long the first synchronization takes.');
 		}
-		$runs = intdiv($documents + $config->batchSize - 1, $config->batchSize);
+		$batchSize = max(1, $config->batchSize);
+		$runs = intdiv($documents + $batchSize - 1, $batchSize);
 		if ($runs === 1) {
 			return $this->l10n->n('Paperless has %n document, which the first run mirrors.', 'Paperless has %n documents, which the first run mirrors at once.', $documents);
 		}
 
 		return $this->l10n->t('Paperless has %1$s documents: with %2$s in each run and a run every %3$s minutes, the first synchronization takes about %4$s runs, %5$s.', [
 			(string)$documents,
-			(string)$config->batchSize,
+			(string)$batchSize,
 			(string)$config->syncIntervalMinutes,
 			(string)$runs,
 			$this->duration($runs * $config->syncIntervalMinutes),

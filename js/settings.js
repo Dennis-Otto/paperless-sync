@@ -284,6 +284,12 @@
 		const schedule = root.querySelector('[data-setting="enabled"]')
 		const save = element('save')
 		const test = element('test')
+		// The setup of the account of the app in Paperless: the token of a superuser of Paperless,
+		// which no setting holds, and the username of the account.
+		const accountToken = element('account-token')
+		const account = element('account')
+		const accountUsername = element('account-username')
+		const accountCreate = element('account-create')
 		const checks = element('checks')
 		const checksList = element('checks-list')
 		const dryRun = element('dry-run')
@@ -334,7 +340,7 @@
 		const gettingStartedComplete = element('getting-started-complete')
 		const gettingStartedAnnouncement = element('getting-started-announcement')
 		const statusRegion = element('status')
-		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
+		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
 		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group']
 		// While a run is queued or active, the page asks for its status: after a change of the state
@@ -809,7 +815,16 @@
 		function stepTarget(step) {
 			switch (step) {
 			case 'connect':
-				return paperlessUrl.value.trim() === '' || tokenConfigured ? paperlessUrl : token
+				// The URL first; without a saved token the setup of the account of the app, which
+				// opens; with one, whose checklist failed, the test that lists the lines again.
+				if (paperlessUrl.value.trim() === '') {
+					return paperlessUrl
+				}
+				if (!tokenConfigured) {
+					account.open = true
+					return accountToken
+				}
+				return test
 			case 'owner':
 				return targetUser
 			case 'dry-run':
@@ -2103,6 +2118,83 @@
 				setBusy(false)
 			}
 		})
+
+		// The setup of the account asks for the settings of the form and the token of a superuser of
+		// Paperless, which the page sends for this request alone; the token of the app stays out.
+		function accountRequest(sent, update) {
+			return { settings: sent.settings, superuserToken: accountToken.value, username: accountUsername.value, update }
+		}
+
+		// The fields of the setup, by the setting that an answer names as the way out.
+		const accountFields = { account_token: accountToken, account_username: accountUsername }
+
+		// Creates the account of the app in Paperless, saves the settings of the form with its token
+		// and shows the checklist, as a save does. A user that exists already changes only when the
+		// administrator agrees, because it gets new permissions and a new password.
+		accountCreate.addEventListener('click', async function() {
+			addTypedTags()
+			setBusy(true)
+			showMessage(translate('Creating the account in Paperless…'), 'progress')
+			const sent = snapshot()
+			let saved = false
+			try {
+				let answer
+				try {
+					answer = await request(root.dataset.accountUrl, 'POST', accountRequest(sent, false))
+				} catch (error) {
+					if (error.status !== 409 || !window.confirm(error.message)) {
+						throw error
+					}
+					showMessage(translate('Updating the account in Paperless…'), 'progress')
+					answer = await request(root.dataset.accountUrl, 'POST', accountRequest(sent, true))
+				}
+				accountToken.value = ''
+				applyConfig(answer, sent)
+				const counts = revealChecks(answer.checks)
+				const username = answer.account.username
+				const done = answer.account.created
+					? translate('Paperless Sync created the account {username} in Paperless and saved the settings with its token.', { username })
+					: translate('Paperless Sync updated the account {username} in Paperless and saved the settings with its token.', { username })
+				if (counts.failed > 0) {
+					showMessage(done + ' ' + translatePlural('%n check failed. The connection checklist says what to do.', '%n checks failed. The connection checklist says what to do.', counts.failed), 'error')
+				} else if (counts.warning > 0) {
+					showMessage(done + ' ' + translate('Read the notes of the connection checklist.'), 'success')
+				} else {
+					showMessage(done, 'success')
+				}
+				saved = true
+			} catch (error) {
+				revealChecks(error.checks)
+				const field = accountFields[error.setting]
+				if (error.status === 409) {
+					// The administrator kept the user as it is.
+					showMessage(translate('The user exists in Paperless already and stays as it is. Choose another username, or update it.'), 'progress')
+					focusSetting(accountUsername)
+				} else if (field) {
+					showMessage(error.message, 'error')
+					focusSetting(field)
+				} else {
+					showError(error, translate('Could not set up the account in Paperless.'))
+				}
+			} finally {
+				setBusy(false)
+			}
+			if (saved) {
+				await refreshQuietly()
+				updatePreview()
+			}
+		})
+		// Enter in a field of the setup sets up the account, instead of saving the form without it.
+		for (const field of [accountToken, accountUsername]) {
+			field.addEventListener('keydown', function(event) {
+				if (event.key === 'Enter') {
+					event.preventDefault()
+					if (!accountCreate.disabled) {
+						accountCreate.click()
+					}
+				}
+			})
+		}
 
 		dryRun.addEventListener('click', function() {
 			addTypedTags()

@@ -696,6 +696,23 @@
 	font-weight: 600;
 }
 
+/* The setup of the account of the app in Paperless, folded away for those who set it up by hand. */
+.paperless-sync-account {
+	margin-top: 16px;
+	padding: 12px 16px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large, 10px);
+}
+
+.paperless-sync-account summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.paperless-sync-account[open] summary {
+	margin-bottom: 8px;
+}
+
 .paperless-sync-webhook-guide ol {
 	margin: 10px 0 0;
 	padding-inline-start: 22px;
@@ -706,9 +723,11 @@
 	margin-bottom: 6px;
 }
 
-/* Test connection, at the end of the connection settings, with its checklist below it, and the
-   buttons of the secret of the webhook with its state. */
+/* Test connection, at the end of the connection settings, with its checklist below it, the
+   button of the setup of the account with what comes next, and the buttons of the secret of the
+   webhook with its state. */
 .paperless-sync-test,
+.paperless-sync-account-actions,
 .paperless-sync-webhook-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -718,6 +737,7 @@
 }
 
 .paperless-sync-test .settings-hint,
+.paperless-sync-account-actions .settings-hint,
 .paperless-sync-webhook-actions .settings-hint {
 	flex: 1 1 260px;
 	margin: 0;

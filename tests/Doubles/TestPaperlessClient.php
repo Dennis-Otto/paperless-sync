@@ -116,6 +116,18 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public ?int $accountId = null;
 	/** How often a run asked for the ID of the account. */
 	public int $accountReads = 0;
+	/**
+	 * The accounts that a superuser manages, by their usernames, with their passwords and tokens.
+	 *
+	 * @var array<string, array{id: int, superuser: bool, password: string, permissions: list<string>, token: string}>
+	 */
+	public array $accounts = [];
+	/** The failure of every request of the management of the users, such as a token of no superuser. */
+	public ?\Throwable $accountsException = null;
+	/** @var list<ConnectionCheck>|null the lines of the checklist of Paperless, by default one that passes */
+	public ?array $preflightChecks = null;
+	/** The failure of the checklist of Paperless itself. */
+	public ?\Throwable $preflightException = null;
 
 	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
 		$this->connects[] = $connection;
@@ -135,7 +147,11 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	}
 
 	public function preflight(SyncConfig $config): array {
-		return [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
+		if ($this->preflightException !== null) {
+			throw $this->preflightException;
+		}
+
+		return $this->preflightChecks ?? [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
 	}
 
 	public function documents(bool $notes = false): PaperlessScan {
@@ -232,6 +248,44 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 				$this->documents[$index]['owner'] = $owner;
 			}
 		}
+	}
+
+	public function user(string $username): ?array {
+		if ($this->accountsException !== null) {
+			throw $this->accountsException;
+		}
+		$account = $this->accounts[$username] ?? null;
+
+		return $account === null ? null : ['id' => $account['id'], 'superuser' => $account['superuser']];
+	}
+
+	/** Creates the user with the next ID and a token of its own, as Paperless gives it on the first request. */
+	public function createUser(string $username, #[\SensitiveParameter] string $password, array $permissions): void {
+		if ($this->accountsException !== null) {
+			throw $this->accountsException;
+		}
+		$id = 10 + count($this->accounts);
+		$this->accounts[$username] = ['id' => $id, 'superuser' => false, 'password' => $password, 'permissions' => $permissions, 'token' => "token-of-{$username}"];
+	}
+
+	public function updateUser(int $id, #[\SensitiveParameter] string $password, array $permissions): void {
+		if ($this->accountsException !== null) {
+			throw $this->accountsException;
+		}
+		foreach ($this->accounts as $username => $account) {
+			if ($account['id'] === $id) {
+				$this->accounts[$username] = ['password' => $password, 'permissions' => $permissions] + $account;
+			}
+		}
+	}
+
+	public function userToken(string $username, #[\SensitiveParameter] string $password): string {
+		$account = $this->accounts[$username] ?? null;
+		if ($account === null || $account['password'] !== $password) {
+			throw new \RuntimeException("Paperless did not give the token of the user {$username}: HTTP 400: Unable to log in with provided credentials.");
+		}
+
+		return $account['token'];
 	}
 
 	public function customFields(): array {

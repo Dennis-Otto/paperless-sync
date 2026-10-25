@@ -12,14 +12,16 @@ namespace OCA\PaperlessSync\Controller;
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\PaperlessConnection;
-use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Service\AccountPermissions;
+use OCA\PaperlessSync\Service\AccountSetup;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\ConnectionChecklist;
 use OCA\PaperlessSync\Service\InvalidSettingException;
-use OCA\PaperlessSync\Service\NextcloudStorageInterface;
-use OCA\PaperlessSync\Service\OwnerMapping;
+use OCA\PaperlessSync\Service\PaperlessAccountExistsException;
 use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -45,11 +47,13 @@ final class SettingsController extends Controller {
 		IRequest $request,
 		private ConfigService $configService,
 		private PaperlessClientFactoryInterface $clients,
-		private NextcloudStorageInterface $storage,
+		private ConnectionChecklist $checklist,
 		private IL10N $l10n,
 		private SyncService $syncService,
 		private PathTemplateService $pathTemplate,
-		private OwnerMapping $ownerMapping,
+		private AccountPermissions $permissions,
+		private AccountSetup $accountSetup,
+		private StatusService $status,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -125,7 +129,7 @@ final class SettingsController extends Controller {
 			$tested = $config->enabled || $tokenEntered;
 			if ($tested) {
 				$onlyForTheSchedule = !$tokenEntered;
-				$checks = $this->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
+				$checks = $this->checklist->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
 				foreach ($checks as $check) {
 					if ($check->blocks()) {
 						return $this->refusal($check, $checks, $onlyForTheSchedule);
@@ -135,8 +139,13 @@ final class SettingsController extends Controller {
 				$onlyForTheSchedule = false;
 			}
 
+			$saved = $this->configService->save($settings, $token);
+			if ($tested) {
+				$this->status->checkedConnection($saved->paperlessUrl, self::passed($checks));
+			}
+
 			return new JSONResponse([
-				...$this->configService->save($settings, $token)->jsonSerialize(),
+				...$saved->jsonSerialize(),
 				'connectionTested' => $tested,
 				'checks' => $this->translated($checks),
 			]);
@@ -170,9 +179,14 @@ final class SettingsController extends Controller {
 	public function test(array $settings = [], #[\SensitiveParameter] string $token = ''): JSONResponse {
 		try {
 			$config = $this->configService->validate($settings, $token);
-			$checks = $this->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
+			$checks = $this->checklist->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
 		} catch (InvalidArgumentException $exception) {
 			return $this->invalid($exception);
+		}
+		if (trim($token) === '') {
+			// The saved token, which goes only to its saved URL: the test tells the getting-started
+			// checklist whether the connection passes now, such as after the permissions were fixed.
+			$this->status->checkedConnection($config->paperlessUrl, self::passed($checks));
 		}
 
 		return new JSONResponse(['checks' => $this->translated($checks)]);
@@ -253,37 +267,87 @@ final class SettingsController extends Controller {
 	#[FrontpageRoute(verb: 'DELETE', url: '/settings')]
 	#[PasswordConfirmationRequired]
 	public function reset(): JSONResponse {
+		$this->status->checkedConnection('', false);
+
 		return new JSONResponse($this->configService->reset());
 	}
 
 	/**
-	 * The connection checklist: the checks of Paperless, with $token to the URL of $config and its
-	 * local network, in per-user ownership who gets the documents of whom, once Paperless
-	 * answered, then whether the target user may create files in the base folder, which every
-	 * run needs, whatever Paperless answered.
+	 * Creates the account of the app in Paperless with the token of a superuser of Paperless,
+	 * $superuserToken, or, with $update, updates the user $username that exists already
+	 * (decision 0027). The account gets the permissions that the modules of the settings in the form
+	 * need, as AccountPermissions lists them; then the checklist runs with its token, and the
+	 * settings are saved with that token, as a save with a typed token saves them.
 	 *
-	 * @return list<ConnectionCheck>
+	 * The token of the superuser goes only to the Paperless URL of the form, for the requests of the
+	 * setup: it is never stored, logged or answered. So Nextcloud asks for the password of the
+	 * administrator first, as for a save.
+	 *
+	 * The settings are checked first, and the folder of the target user, so that Paperless gets no
+	 * account for settings that can't be saved. A user that exists already is changed only with
+	 * $update: the answer is 409 then, with what an update changes, for the page to ask. A blocking
+	 * failure of the checklist refuses the settings, as on save; the account is ready then, and the
+	 * setup can update it once the failure is fixed.
+	 *
+	 * @param array<string, mixed> $settings
 	 */
-	private function checks(SyncConfig $config, #[\SensitiveParameter] string $token): array {
-		$paperless = $this->clients->connect(PaperlessConnection::of($config, $token));
-		$checks = $paperless->preflight($config);
-		if ($config->perUser() && array_filter($checks, static fn (ConnectionCheck $check): bool => $check->blocks()) === []) {
-			array_push($checks, ...$this->ownerMapping->checks($config, $paperless, $this->storage));
+	#[FrontpageRoute(verb: 'POST', url: '/settings/account')]
+	#[PasswordConfirmationRequired]
+	public function account(array $settings = [], #[\SensitiveParameter] string $superuserToken = '', string $username = '', bool $update = false): JSONResponse {
+		$superuserToken = trim($superuserToken);
+		try {
+			if ($superuserToken === '') {
+				throw new InvalidSettingException('Enter the API token of a superuser of Paperless.', [], 'account_token');
+			}
+			$config = $this->configService->validate($settings, $superuserToken);
+		} catch (InvalidArgumentException $exception) {
+			return $this->invalid($exception);
+		}
+		$folder = $this->checklist->folder($config);
+		if ($folder->blocks()) {
+			return $this->refusal($folder, [$folder], false);
+		}
+		$permissions = $this->permissions->of($config);
+		$labels = AccountPermissions::labels($permissions, $this->l10n);
+		try {
+			$account = $this->accountSetup->setUp(PaperlessConnection::of($config, $superuserToken), $username, $permissions, $update);
+		} catch (PaperlessAccountExistsException $exception) {
+			return new JSONResponse([
+				'message' => $this->l10n->t('The user %1$s exists in Paperless already. Updating it gives it exactly these permissions: %2$s. It also gets a new random password, which nobody needs, because the app signs in with its token. It is no Admin any more, and the permissions of its groups stay.', [$exception->username, implode(', ', $labels)]),
+				'exists' => true,
+			], Http::STATUS_CONFLICT);
+		} catch (InvalidArgumentException $exception) {
+			return $this->invalid($exception);
+		} catch (PaperlessLocalNetworkException $exception) {
+			return new JSONResponse(['message' => $exception->translated($this->l10n), 'setting' => PaperlessLocalNetworkException::SETTING], Http::STATUS_BAD_GATEWAY);
+		} catch (\Throwable $exception) {
+			return new JSONResponse(['message' => $this->l10n->t('Paperless did not set up the account: %s', [$exception->getMessage()])], Http::STATUS_BAD_GATEWAY);
 		}
 		try {
-			$this->storage->test($config->targetUser, $config->basePath);
-			$checks[] = ConnectionCheck::passed(ConnectionCheck::FOLDER, '%s may create files in %s.', [$config->targetUser, $config->basePath]);
-		} catch (\Throwable $exception) {
-			$checks[] = ConnectionCheck::failed(
-				ConnectionCheck::FOLDER,
-				'Nextcloud cannot store the files there: %s',
-				[$this->message($exception)],
-				'Check the target user ID, and that the base folder is a folder in which that user may create files.',
-				true,
-			);
-		}
+			$checks = $this->checklist->checks($config, $account['token']);
+			foreach ($checks as $check) {
+				if ($check->blocks()) {
+					$refusal = $this->refusal($check, $checks, false);
+					/** @var array{message: string} $answer */
+					$answer = $refusal->getData();
+					$answer['message'] .= ' ' . $this->l10n->t('The account %s is ready in Paperless: once this is fixed, set it up again, which updates it.', [$account['username']]);
 
-		return $checks;
+					return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
+				}
+			}
+
+			$saved = $this->configService->save($settings, $account['token']);
+			$this->status->checkedConnection($saved->paperlessUrl, self::passed($checks));
+
+			return new JSONResponse([
+				...$saved->jsonSerialize(),
+				'connectionTested' => true,
+				'checks' => $this->translated($checks),
+				'account' => ['username' => $account['username'], 'created' => $account['created'], 'permissions' => $labels],
+			]);
+		} catch (\Throwable $exception) {
+			return new JSONResponse(['message' => $this->l10n->t('Could not validate the Paperless and Nextcloud configuration: %s', [$this->message($exception)])], Http::STATUS_BAD_REQUEST);
+		}
 	}
 
 	/**
@@ -306,6 +370,22 @@ final class SettingsController extends Controller {
 		}
 
 		return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
+	}
+
+	/**
+	 * Whether no line of the checklist failed, notes allowed, as the getting-started checklist
+	 * asks of its first step.
+	 *
+	 * @param list<ConnectionCheck> $checks
+	 */
+	private static function passed(array $checks): bool {
+		foreach ($checks as $check) {
+			if ($check->status === ConnectionCheck::FAILED) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

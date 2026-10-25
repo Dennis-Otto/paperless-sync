@@ -25,6 +25,8 @@ final class GettingStartedTest extends TestCase {
 
 	private const UNKNOWN = 'Ein Testlauf zählt die Dokumente in Paperless; dann sagt dieser Schritt, wie lange die erste Synchronisation dauert.';
 
+	private const NONE = 'Der letzte Testlauf hat kein Dokument zum Spiegeln gefunden; der erste Lauf dauert etwa ein Intervall.';
+
 	private TestClock $clock;
 	private StatusService $status;
 	private GettingStarted $gettingStarted;
@@ -45,7 +47,9 @@ final class GettingStartedTest extends TestCase {
 		self::assertSame(self::UNKNOWN, $this->progress()['estimate'], 'Before a dry-run, the documents are unknown.');
 
 		$this->configService()->save(['enabled' => false] + self::validSettings(), 'secret-token');
-		self::assertSame(['done', 'done', 'next', 'todo', 'todo'], $this->states(), 'Saving the token and the target user completes the first two steps at once.');
+		self::assertSame(['next', 'done', 'todo', 'todo', 'todo'], $this->states(), 'A saved token without a checklist that passed is no connection yet.');
+		$this->status->checkedConnection('https://paperless.example.test', true);
+		self::assertSame(['done', 'done', 'next', 'todo', 'todo'], $this->states(), 'Saving the token and the target user, with a checklist that passed, completes the first two steps at once.');
 
 		$this->status->completed($this->dryRun(5000));
 		self::assertSame(['done', 'done', 'done', 'next', 'todo'], $this->states());
@@ -73,7 +77,7 @@ final class GettingStartedTest extends TestCase {
 	 * the connection is next again, while the target user and the dry-run stay done.
 	 */
 	public function testAStepThatIsDoneStaysDoneWhenAnEarlierOneIsNot(): void {
-		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->connect(['enabled' => true] + self::validSettings());
 		$this->status->completed($this->dryRun(40));
 
 		$this->configService()->reset();
@@ -83,7 +87,7 @@ final class GettingStartedTest extends TestCase {
 
 	/** Runs that failed or completed with errors are no success, so the last step stays next. */
 	public function testOnlyASuccessfulRunCompletesTheList(): void {
-		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->connect(['enabled' => true] + self::validSettings());
 		$this->status->completed($this->dryRun(40));
 		$this->status->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, $this->clock->time));
 		$withErrors = new SyncReport(false, $this->clock->time, $this->clock->time + 60);
@@ -96,7 +100,7 @@ final class GettingStartedTest extends TestCase {
 
 	/** A dry-run with errors completed as well: its report says what to fix. One that failed did not. */
 	public function testADryRunWithErrorsCountsAndOneThatFailedDoesNot(): void {
-		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->connect(self::validSettings());
 		$this->status->failed(new RuntimeException('Paperless is down.'), new SyncReport(true, $this->clock->time));
 		self::assertSame('next', $this->states()[2]);
 
@@ -114,7 +118,7 @@ final class GettingStartedTest extends TestCase {
 	 */
 	#[DataProvider('estimates')]
 	public function testTheLastStepEstimatesTheFirstSynchronization(int $documents, array $settings, string $estimate): void {
-		$this->configService()->save($settings + self::validSettings(), 'secret-token');
+		$this->connect($settings + self::validSettings());
 		$this->status->completed($this->dryRun($documents));
 
 		self::assertSame($estimate, $this->progress()['estimate']);
@@ -131,13 +135,44 @@ final class GettingStartedTest extends TestCase {
 		yield 'a last batch that is not full' => [2001, ['batch_size' => 1000, 'sync_interval_minutes' => 60], 'Paperless hat 2001 Dokumente: Mit 1000 je Lauf und einem Lauf alle 60 Minuten dauert die erste Synchronisation etwa 3 Läufe, 3 Stunden.'];
 	}
 
-	/** A dry-run that found no document, such as of an empty Paperless, gives no estimate. */
-	public function testADryRunWithoutDocumentsGivesNoEstimate(): void {
-		$this->configService()->save(self::validSettings(), 'secret-token');
+	/**
+	 * A dry-run that found no document, such as of an empty Paperless or with the export off, says
+	 * so, instead of asking for the dry-run that just completed.
+	 */
+	public function testADryRunWithoutDocumentsSaysSo(): void {
+		$this->connect(self::validSettings());
 		$this->status->completed($this->dryRun(0));
 
 		self::assertSame('done', $this->states()[2]);
-		self::assertSame(self::UNKNOWN, $this->progress()['estimate']);
+		self::assertSame(self::NONE, $this->progress()['estimate']);
+	}
+
+	/** A batch size of 0, which occ can store, counts as 1 instead of dividing by zero. */
+	public function testABatchSizeOfZeroCountsAsOne(): void {
+		$this->connect(self::validSettings());
+		$this->settings['batch_size'] = 0;
+		$this->status->completed($this->dryRun(3));
+
+		self::assertSame('Paperless hat 3 Dokumente: Mit 1 je Lauf und einem Lauf alle 5 Minuten dauert die erste Synchronisation etwa 3 Läufe, 15 Minuten.', $this->progress()['estimate']);
+	}
+
+	/**
+	 * The connection is done only when the checklist passed with the saved token and URL: a line
+	 * that failed, such as a missing permission for the tags, which a save keeps, or a checklist of
+	 * another URL, such as one that occ changed, leaves it next.
+	 */
+	public function testTheConnectionNeedsAChecklistThatPassedWithTheSavedUrl(): void {
+		$this->connect(self::validSettings());
+		self::assertSame('done', $this->states()[0]);
+
+		$this->status->checkedConnection('https://paperless.example.test', false);
+		self::assertSame('next', $this->states()[0], 'A checklist with a failed line.');
+
+		$this->status->checkedConnection('https://other.example.test', true);
+		self::assertSame('next', $this->states()[0], 'A checklist of another URL.');
+
+		$this->status->checkedConnection('', true);
+		self::assertSame('next', $this->states()[0], 'Disconnect forgets the checklist.');
 	}
 
 	/**
@@ -145,7 +180,7 @@ final class GettingStartedTest extends TestCase {
 	 * completed, it counts, with the documents of its summary, which an unreadable one lacks.
 	 */
 	public function testADryRunOfAnEarlierVersionCounts(): void {
-		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->connect(self::validSettings());
 		$this->settings['status_last_state'] = 'dry-run-completed';
 		$this->settings['status_last_completed'] = TestClock::START;
 		$this->settings['status_last_summary'] = '{"dryRun":true,"activeDocuments":300}';
@@ -155,10 +190,20 @@ final class GettingStartedTest extends TestCase {
 
 		$this->settings['status_last_summary'] = '{"dryRun":true,"activeDocuments":"300"}';
 		self::assertSame('done', $this->states()[2]);
-		self::assertSame(self::UNKNOWN, $this->progress()['estimate']);
+		self::assertSame(self::NONE, $this->progress()['estimate']);
 
 		$this->settings['status_last_state'] = 'completed';
 		self::assertSame('next', $this->states()[2], 'Another kind of run tells nothing about a dry-run of an earlier version.');
+	}
+
+	/**
+	 * Saves the settings with a token whose connection checklist passed, as SettingsController does.
+	 *
+	 * @param array<string, bool|int|string> $settings
+	 */
+	private function connect(array $settings): void {
+		$saved = $this->configService()->save($settings, 'secret-token');
+		$this->status->checkedConnection($saved->paperlessUrl, true);
 	}
 
 	private function dryRun(int $documents): SyncReport {

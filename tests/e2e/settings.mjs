@@ -34,6 +34,8 @@ const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
 const TOKEN = process.env.E2E_TOKEN ?? 'e2e-only-token'
 // The synthetic token of an account of the mock that may neither view the tags nor add documents.
 const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
+// The synthetic token of the superuser of the mock, which the setup of the account takes once.
+const SUPERUSER_TOKEN = process.env.E2E_SUPERUSER_TOKEN ?? 'e2e-superuser-only-token'
 const PAGE = '/index.php/settings/admin/paperless_sync'
 const SETTINGS = '/apps/paperless_sync/settings'
 const RUN = '/apps/paperless_sync/sync/run'
@@ -151,8 +153,8 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 13 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
-		`Getting started, every section, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
+		helpLinks.length === 14 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Getting started, every section, the setup of the account, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
 
@@ -165,8 +167,9 @@ try {
 	expect(await focused(page.locator('#paperless-sync-getting-started-title')), 'The focus must move to the heading of the list.')
 	await expectSteps(['done', 'done', 'done', 'next', 'done'], 'After the runs of run.sh, with the schedule off')
 	expect(await page.locator('#paperless-sync-getting-started-complete').isVisible(), 'The list must say that the first run succeeded.')
-	// Each step leads to its place on the page, in view: the connection to its URL, as the token is saved.
-	const targets = { connect: '#paperless-sync-paperless-url', owner: '#paperless-sync-target-user', 'dry-run': '#paperless-sync-dry-run', schedule: '[data-setting="enabled"]', 'first-run': '#paperless-sync-status' }
+	// Each step leads to its place on the page, in view: the connection to the test of the
+	// connection, as the token is saved.
+	const targets = { connect: '#paperless-sync-test', owner: '#paperless-sync-target-user', 'dry-run': '#paperless-sync-dry-run', schedule: '[data-setting="enabled"]', 'first-run': '#paperless-sync-status' }
 	for (const [step, target] of Object.entries(targets)) {
 		await page.locator(`[data-step-target="${step}"]`).click()
 		expect(await focused(page.locator(target)), `The button of the step ${step} must move the focus to ${target}.`)
@@ -766,6 +769,13 @@ try {
 	// stay done, such as the dry-run, stay done.
 	await showGettingStarted.click()
 	await expectSteps(['next', 'done', 'done', 'todo', 'done'], 'After Disconnect')
+	// Without a token, the connection leads to the setup of the account of the app, which opens.
+	await page.locator('[data-step-target="connect"]').click()
+	expect(
+		await focused(page.locator('#paperless-sync-account-token')) && await page.locator('#paperless-sync-account').evaluate((details) => details.open),
+		'Without a saved token, the button of the connection must open the setup of the account and move the focus to its token.',
+	)
+	await page.locator('#paperless-sync-account').evaluate((details) => { details.open = false })
 
 	await token.fill(TOKEN)
 	await localNetwork.check()
@@ -816,6 +826,51 @@ try {
 	expect(await webhookSecret.isHidden() && !(await page.content()).includes(secret), 'After a reload, the page has the secret no more.')
 	expect((await page.locator('#paperless-sync-webhook-state').textContent()) === 'The webhook accepts calls with its secret.', 'The webhook keeps its new secret.')
 	console.log('Settings: a new secret of the webhook replaces the old one, shows once, and a reload has it no more.')
+
+	// The setup of the account of the app in Paperless: Enter in its fields sets the account up
+	// instead of saving the form without it, the settings are saved with the token of the new
+	// account, and the token of the superuser leaves its field. A second setup asks before it
+	// changes the user, and a token that Paperless refuses gets the focus.
+	const accountToken = page.locator('#paperless-sync-account-token')
+	const accountUsername = page.locator('#paperless-sync-account-username')
+	const accountCreate = page.locator('#paperless-sync-account-create')
+	expect((await accountUsername.inputValue()) === 'nextcloud-sync', 'The setup suggests the username nextcloud-sync.')
+	await page.locator('#paperless-sync-account summary').click()
+	await accountUsername.fill('e2e-browser')
+	await accountToken.fill(SUPERUSER_TOKEN)
+	await accountToken.press('Enter')
+	const created = await messageAfter('Creating the account in Paperless…')
+	await settle()
+	expect(created.startsWith('Paperless Sync created the account e2e-browser in Paperless and saved the settings with its token.'), `The setup must say what it did: ${created}`)
+	expect((await accountToken.inputValue()) === '' && !(await page.content()).includes(SUPERUSER_TOKEN), 'The token of the superuser leaves the page.')
+	expect(await checklist.isVisible() && (await page.locator('.paperless-sync-check--failed').count()) === 0, 'The checklist of the new account fails nowhere.')
+	expect(await unsaved.isHidden() && !(await required()), 'The settings are saved, with a token.')
+	let existing = ''
+	page.once('dialog', (dialog) => {
+		existing = dialog.message()
+		dialog.dismiss()
+	})
+	await accountToken.fill(SUPERUSER_TOKEN)
+	await accountCreate.click()
+	await settle()
+	expect(existing.startsWith('The user e2e-browser exists in Paperless already. Updating it gives it exactly these permissions: View for Documents,'), `A second setup must ask first: ${existing}`)
+	expect((await message.textContent()).startsWith('The user exists in Paperless already and stays as it is.') && await focused(accountUsername), 'Dismissing the question keeps the user.')
+	page.once('dialog', (dialog) => dialog.accept())
+	await accountCreate.click()
+	await settle()
+	expect((await message.textContent()).startsWith('Paperless Sync updated the account e2e-browser in Paperless'), `Agreeing updates the user: ${await message.textContent()}`)
+	await accountToken.fill('e2e-unknown-token')
+	await accountCreate.click()
+	await settle()
+	expect((await message.textContent()).startsWith('Paperless refused this token (HTTP 401).') && await focused(accountToken), `A refused token must get the focus: ${await message.textContent()}`)
+	await accountToken.fill('')
+	await page.locator('#paperless-sync-account summary').click()
+	// The checks after this one use the token of the account of the README again.
+	await token.fill(TOKEN)
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED, `The token of the README must connect again: ${await message.textContent()}`)
+	console.log('Settings: the setup of the account creates it, asks before it updates a user, and keeps no token of the superuser.')
 
 	// The questions of the page are in the language of the administrator.
 	await setLanguage('de')

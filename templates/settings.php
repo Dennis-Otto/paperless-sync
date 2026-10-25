@@ -6,10 +6,11 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Service\AccountSetup;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCP\Util;
@@ -34,7 +35,7 @@ $setupStates = [
 	'todo' => $l->t('To do'),
 ];
 $setupSteps = [
-	'connect' => [$l->t('Connect to Paperless'), $l->t('Enter the URL of Paperless and the API token of its account, then save: saving tests the connection first.'), $l->t('Go to the connection')],
+	'connect' => [$l->t('Connect to Paperless'), $l->t('Enter the URL of Paperless, then create an account for the app in Paperless, or enter the API token of an account of its own and save. The step is done when no line of the connection checklist fails.'), $l->t('Go to the connection')],
 	'owner' => [$l->t('Choose who gets the documents'), $l->t('The target user of Nextcloud gets the archive, or with per-user ownership each user gets the documents that they own in Paperless.'), $l->t('Go to the target user')],
 	'dry-run' => [$l->t('Try a dry-run'), $l->t('A dry-run lists in its report every change that a run would make, without changing a file. Read it before you go on.'), $l->t('Go to the dry-run')],
 	'schedule' => [$l->t('Turn on scheduled synchronization'), $l->t('Turn it on and save: the background jobs of Nextcloud then synchronize at the interval of the schedule.'), $l->t('Go to the schedule')],
@@ -93,6 +94,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	class="section paperless-sync-settings"
 	data-save-url="<?php p($_['saveUrl']); ?>"
 	data-test-url="<?php p($_['testUrl']); ?>"
+	data-account-url="<?php p($_['accountUrl']); ?>"
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
 	data-status-url="<?php p($_['statusUrl']); ?>"
@@ -250,6 +252,25 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				} ?>> <span><?php p($l->t('Paperless runs in my local network')); ?></span></label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-local-network-hint"><?php p($l->t('Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.')); ?></p>
+			<!-- The setup of the account of the app in Paperless, with the token of a superuser, which is never stored. Its fields are no settings: they have no data-setting. -->
+			<details id="paperless-sync-account" class="paperless-sync-account">
+				<summary><?php p($l->t('Create an account for the app in Paperless')); ?></summary>
+				<p class="settings-hint" id="paperless-sync-account-hint"><?php p($l->t('Enter the API token of a superuser of Paperless once. The app creates a user that is no superuser, with only the permissions that the modules of this form need, and a random password that nobody learns. It saves the settings with the token of that user, and runs the connection checklist. Your token is used for these requests alone, and is neither stored nor logged. Set the URL and the modules first, because they decide the permissions.')); ?> <?php $help('the-account-of-the-app', $l->t('The account of the app')); ?></p>
+				<div class="paperless-sync-grid">
+					<label class="paperless-sync-field">
+						<span><?php p($l->t('API token of a Paperless superuser')); ?></span>
+						<input id="paperless-sync-account-token" type="password" autocomplete="new-password" aria-describedby="paperless-sync-account-hint" autocapitalize="none" spellcheck="false">
+					</label>
+					<label class="paperless-sync-field">
+						<span><?php p($l->t('Username of the account')); ?></span>
+						<input id="paperless-sync-account-username" type="text" value="<?php p(AccountSetup::USERNAME); ?>" maxlength="150" autocomplete="off" autocapitalize="none" spellcheck="false">
+					</label>
+				</div>
+				<div class="paperless-sync-account-actions">
+					<button id="paperless-sync-account-create" type="button" aria-describedby="paperless-sync-account-next"><?php p($l->t('Create the account and save')); ?></button>
+					<p class="settings-hint" id="paperless-sync-account-next"><?php p($l->t('Then give the account access to the documents to mirror, best as their owner, as the checklist says.')); ?></p>
+				</div>
+			</details>
 			<div class="paperless-sync-test">
 				<button id="paperless-sync-test" type="button" aria-describedby="paperless-sync-test-hint"><?php p($l->t('Test connection')); ?></button>
 				<p class="settings-hint" id="paperless-sync-test-hint"><?php p($l->t('Checks every Paperless permission that the enabled modules need, and the base folder, without saving.')); ?></p>

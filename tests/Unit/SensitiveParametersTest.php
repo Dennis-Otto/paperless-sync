@@ -38,9 +38,10 @@ final class SensitiveParametersTest extends TestCase {
 				}
 				foreach ($method->getParameters() as $parameter) {
 					$type = $parameter->getType();
-					// A string named after the token, such as $token or $tokenCandidate, or after the secret
-					// of the webhook, which comes in the header Authorization; $tokenConfigured is a bool.
-					if ($type instanceof ReflectionNamedType && $type->getName() === 'string' && preg_match('/token|secret|authorization/i', $parameter->getName()) === 1) {
+					// A string named after the token, such as $token or $tokenCandidate, after the secret
+					// of the webhook, which comes in the header Authorization, or after the password of the
+					// account that the setup creates in Paperless; $tokenConfigured is a bool.
+					if ($type instanceof ReflectionNamedType && $type->getName() === 'string' && preg_match('/token|secret|authorization|password/i', $parameter->getName()) === 1) {
 						$parameters[self::label($method, $parameter->getName())] = [$class, $method->getName(), $parameter->getName()];
 					}
 				}
@@ -49,6 +50,9 @@ final class SensitiveParametersTest extends TestCase {
 		// The options of a request carry the token in the header Authorization.
 		$send = new ReflectionMethod(PaperlessApiService::class, 'send');
 		$parameters[self::label($send, 'options')] = [PaperlessApiService::class, 'send', 'options'];
+		// The fields of a change of Paperless carry the password of the account that the setup creates.
+		$change = new ReflectionMethod(PaperlessApiService::class, 'change');
+		$parameters[self::label($change, 'fields')] = [PaperlessApiService::class, 'change', 'fields'];
 		ksort($parameters);
 
 		return $parameters;
@@ -71,12 +75,20 @@ final class SensitiveParametersTest extends TestCase {
 			'ConfigService::save($tokenCandidate)',
 			'ConfigService::storeToken($token)',
 			'ConfigService::validate($tokenCandidate)',
+			'ConnectionChecklist::checks($token)',
+			'PaperlessApiService::change($fields)',
+			'PaperlessApiService::createUser($password)',
 			'PaperlessApiService::failureMessage($token)',
 			'PaperlessApiService::headersForToken($token)',
 			'PaperlessApiService::send($options)',
+			'PaperlessApiService::updateUser($password)',
+			'PaperlessApiService::userToken($password)',
+			'PaperlessClientInterface::createUser($password)',
+			'PaperlessClientInterface::updateUser($password)',
+			'PaperlessClientInterface::userToken($password)',
 			'PaperlessConnection::__construct($token)',
 			'PaperlessConnection::of($token)',
-			'SettingsController::checks($token)',
+			'SettingsController::account($superuserToken)',
 			'SettingsController::save($token)',
 			'SettingsController::test($token)',
 			'WebhookService::verify($authorization)',

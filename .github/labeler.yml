@@ -18,6 +18,10 @@
           - lib/Model/ConnectionCheck.php
           - lib/Model/Owners.php
           - lib/Service/OwnerMapping.php
+          - lib/Service/ConnectionChecklist.php
+          - lib/Service/AccountPermissions.php
+          - lib/Service/AccountSetup.php
+          - lib/Service/PaperlessAccountExistsException.php
           - lib/Migration/Version000111Date20261013000000.php
           - lib/Migration/Version000130Date20261014120000.php
           - js/settings.js
@@ -31,6 +35,8 @@
           - tests/Unit/Model/ConnectionCheckTest.php
           - tests/Unit/Model/OwnersTest.php
           - tests/Unit/Service/OwnerMappingTest.php
+          - tests/Unit/Service/AccountPermissionsTest.php
+          - tests/Unit/Service/AccountSetupTest.php
           - tests/Unit/Migration/Version000111*
           - tests/Unit/Migration/Version000130*
 "area: archive":

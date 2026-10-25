@@ -14,7 +14,10 @@ argument = sys.argv[2] if len(sys.argv) > 2 else ""
 payload = json.load(sys.stdin)
 serialized = json.dumps(payload, sort_keys=True)
 
-if any(token in serialized for token in ("e2e-only-token", "e2e-view-only-token", "e2e-no-ui-settings-token")):
+# The tokens of the accounts of the mock, the token of its superuser, which the setup of the
+# account takes once, and the start of the tokens of the accounts that the setup creates.
+TOKENS = ("e2e-only-token", "e2e-view-only-token", "e2e-no-ui-settings-token", "e2e-superuser-only-token", "e2e-token-of-")
+if any(token in serialized for token in TOKENS):
     raise AssertionError("A response exposed a synthetic Paperless token")
 
 
@@ -206,7 +209,8 @@ elif mode == "getting-started":
     if " ".join(states) != argument or setup.get("complete") is not (states[4] == "done"):
         raise AssertionError(f"getting-started: expected the states {argument}, got {setup!r}")
     estimate = setup.get("estimate", "")
-    if not estimate.startswith("Paperless has " if states[2] == "done" else "A dry-run counts the documents"):
+    expected = ("Paperless has ", "The last dry-run found no document") if states[2] == "done" else ("A dry-run counts the documents",)
+    if not estimate.startswith(expected):
         raise AssertionError(f"getting-started: the estimate doesn't match the dry-run: {estimate!r}")
 elif mode == "status-export":
     # The run that the background job made, as the status of the settings page shows it.
@@ -313,6 +317,24 @@ elif mode == "import-success":
     expect("errors", 0)
     # The ID of the document that Paperless created, from the result of its task.
     expect_action("IMPORT SUCCESS: Documents/Paperless/Inbox/Insurance/2026/policy.pdf -> P501")
+elif mode in ("account-created", "account-updated"):
+    # The setup of the account saved the settings with the token of the new account, and the
+    # checklist of that token, with the permissions that the setup granted, fails nowhere.
+    account = payload.get("account") or {}
+    if account.get("username") != "e2e-app" or account.get("created") is not (mode == "account-created"):
+        raise AssertionError(f"{mode}: the answer names another account: {account!r}")
+    if "View for Documents" not in account.get("permissions", []) or "View for UI Settings" not in account.get("permissions", []):
+        raise AssertionError(f"{mode}: the account lacks the permissions of every run: {account!r}")
+    expect("tokenConfigured", True)
+    expect("connectionTested", True)
+    failed = [line for line in checks().values() if line["status"] == "failed"]
+    if failed:
+        raise AssertionError(f"{mode}: the checklist of the new account failed: {failed!r}")
+    expect_line("folder", "passed")
+elif mode == "account-exists":
+    expect("exists", True)
+    if not str(payload.get("message", "")).startswith("The user e2e-app exists in Paperless already."):
+        raise AssertionError(f"{mode}: the answer doesn't ask before it changes the user: {payload!r}")
 elif mode == "inbox-tags-checklist":
     # Test connection checks the permissions of the tags of the inbox: View and Add for Tags.
     expect_line("inbox_tags", "passed", "The account may view and create the tags that the inbox gives its files.")
