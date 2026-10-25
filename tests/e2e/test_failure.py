@@ -168,6 +168,32 @@ def test_a_message_of_run_sh_is_the_last_line_before_its_cleanup() -> None:
     assert found.passed == "The scenarios pass after 300 s.", found
 
 
+def test_a_script_below_its_floor_of_coverage_is_the_first_error() -> None:
+    # The checks in the browser passed, and coverage.mjs printed its table before the floor.
+    log = (
+        SETUP
+        + """Send to Paperless in Flow passes after 410 s.
+### Coverage of the JavaScript in the browser
+
+| Script | Lines | Branches | Functions | Floor |
+| --- | ---: | ---: | ---: | --- |
+| `js/settings.js` | 78.4 % (1520 of 1938) | 70.1 % (610 of 870) | 90 % (180 of 200) | lines 80 %, branches 69 % |
+
+The checks in the browser ran 140 copies of the scripts of the app in 5 check(s).
+The coverage of the JavaScript in the browser falls below its floor: js/settings.js runs 78.4 % of its lines, below its floor of 80 %.
+
+The end-to-end tests fail with exit code 1.
+"""
+    )
+    found = failure.describe("Nextcloud 35", log)
+    assert found.error == (
+        "The coverage of the JavaScript in the browser falls below its floor: js/settings.js runs"
+        " 78.4 % of its lines, below its floor of 80 %."
+    ), found
+    assert found.script == "", found
+    assert found.passed == "Send to Paperless in Flow passes after 410 s.", found
+
+
 def test_an_error_before_the_last_step_that_passed_was_not_the_failure() -> None:
     log = SETUP.replace(
         "The containers run after 41 s.\n",

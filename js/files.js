@@ -38,7 +38,7 @@
 				return character.charCodeAt(0)
 			})
 			return JSON.parse(new TextDecoder().decode(bytes))
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}
@@ -67,7 +67,7 @@
 		if (typeof attributes === 'string') {
 			try {
 				attributes = JSON.parse(attributes)
-			} catch (error) {
+			} catch {
 				attributes = null
 			}
 		}
@@ -92,7 +92,7 @@
 		try {
 			const data = await response.json()
 			return data !== null && typeof data === 'object' && typeof data.message === 'string' && data.message !== '' ? data.message : null
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}
@@ -113,7 +113,7 @@
 					return node.fileid
 				}) }),
 			})
-		} catch (error) {
+		} catch {
 			toast('error', translate('Nextcloud could not be reached. Check the connection and try again.'))
 			return
 		}

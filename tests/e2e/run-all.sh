@@ -39,6 +39,9 @@
 # E2E_ARTIFACTS, a folder, gets a folder for each run that failed, named by its key, such
 # as 35 or 35-pgsql-upgrade, with its log, run.log, its title, title.txt, and the evidence
 # that run.sh keeps; tests/e2e/failure.py names the first error of each from there.
+# The run on the newest version measures the coverage of the JavaScript of the app in the
+# checks in the browser (E2E_COVERAGE=1 of run.sh), whose table follows that of the runs in
+# the summary of the job; its folder in E2E_ARTIFACTS gets the reports, also when it passes.
 
 set -euo pipefail
 
@@ -252,13 +255,18 @@ fi
 # seconds it took. Its process ID, of run.sh or of the timeout around it, lets stop()
 # end it.
 run() {
-	local index="$1" key="${keys[$1]}" started="${SECONDS}" status=0
+	local index="$1" key="${keys[$1]}" started="${SECONDS}" status=0 coverage=0
+	# The run on the newest version measures the coverage of the JavaScript in the browser.
+	if [[ "${key}" == "${newest}" ]]; then
+		coverage=1
+	fi
 	NEXTCLOUD_IMAGE="nextcloud:${run_versions[index]}-apache" \
 		E2E_PORT="${ports[index]}" \
 		E2E_PROJECT_NAME="paperless_sync_e2e_${key//-/_}" \
 		E2E_DATABASE="${databases[index]}" \
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
+		E2E_COVERAGE="${coverage}" \
 		E2E_UPGRADE="${upgrades[index]}" \
 		E2E_ARTIFACTS="${E2E_ARTIFACTS:+${E2E_ARTIFACTS}/${key}}" \
 		"${limit[@]}" bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${key}.log" 2>&1 &
@@ -398,6 +406,15 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 		echo "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 		printf '%s\n' "${rows[@]}"
 	} >>"${GITHUB_STEP_SUMMARY}"
+	# The coverage of the JavaScript in the browser, of the run on the newest version.
+	for key in "${keys[@]}"; do
+		if [[ -n "${E2E_ARTIFACTS:-}" && -f "${E2E_ARTIFACTS}/${key}/coverage/summary.md" ]]; then
+			{
+				echo
+				cat "${E2E_ARTIFACTS}/${key}/coverage/summary.md"
+			} >>"${GITHUB_STEP_SUMMARY}"
+		fi
+	done
 fi
 
 printf '\n'

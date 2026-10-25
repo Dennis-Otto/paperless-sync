@@ -34,7 +34,7 @@
 				if (tag !== '' && Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0) {
 					return tag
 				}
-			} catch (error) {
+			} catch {
 				// Not a language tag, such as a name of Nextcloud that the browser can't read.
 			}
 		}
@@ -53,7 +53,7 @@
 				return character.charCodeAt(0)
 			})
 			return JSON.parse(new TextDecoder().decode(bytes))
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}
@@ -97,7 +97,7 @@
 		try {
 			const data = await response.json()
 			return data !== null && typeof data === 'object' ? data : null
-		} catch (error) {
+		} catch {
 			return null
 		}
 	}
@@ -118,7 +118,7 @@
 				}, options.headers),
 				body: body === undefined ? undefined : JSON.stringify(body),
 			})
-		} catch (error) {
+		} catch {
 			// fetch() fails only when no answer arrives: the network or Nextcloud is down.
 			throw requestError(translate('Nextcloud could not be reached. Check the connection and try again.'), 0)
 		}
@@ -884,7 +884,7 @@
 				polls++
 				try {
 					await refreshStatus()
-				} catch (error) {
+				} catch {
 					watch(state)
 				}
 			}, pollDelay())
@@ -1342,7 +1342,7 @@
 			try {
 				await copyText(reportText(shownReport))
 				showMessage(translate('The report is copied to the clipboard.'), 'success')
-			} catch (error) {
+			} catch {
 				showMessage(translate('The browser did not allow copying the report. Select its lines and copy them yourself.'), 'error')
 			}
 			reportCopy.focus()
@@ -1414,10 +1414,10 @@
 		// PHP carries on with it, or PHP ended without an answer, such as when the web server
 		// stopped it. The status tells which, and follows a run that continues.
 		async function explainGateway(status) {
-			let state = ''
+			let state
 			try {
 				state = await refreshStatus()
-			} catch (error) {
+			} catch {
 				// Neither the run nor the status answered, so how the run ended is unknown: the
 				// status shows the last state that the server sent, and Refresh asks again.
 				showState(serverState)
@@ -1451,7 +1451,7 @@
 			try {
 				await refreshStatus()
 				return true
-			} catch (error) {
+			} catch {
 				return false
 			}
 		}
@@ -1658,7 +1658,7 @@
 				try {
 					await window.navigator.clipboard.writeText(input.value)
 					showMessage(translate('Copied.'), 'success')
-				} catch (error) {
+				} catch {
 					showMessage(translate('Selected: copy it with Ctrl+C, or ⌘+C on a Mac.'), 'progress')
 				}
 			})

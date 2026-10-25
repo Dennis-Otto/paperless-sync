@@ -1,13 +1,15 @@
 {
   "name": "paperless-sync-e2e",
   "private": true,
-  "description": "The browser of the end-to-end tests, which checks the accessibility of the app with axe-core and takes the screenshots of the documentation",
+  "description": "The browser of the end-to-end tests, which checks the accessibility of the app with axe-core, measures which lines and branches of its JavaScript the checks in the browser run and takes the screenshots of the documentation",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "devDependencies": {
+    "@bcoe/v8-coverage": "1.0.2",
     "axe-core": "4.14.0",
     "gifenc": "1.0.3",
     "playwright-core": "1.64.0",
-    "pngjs": "7.0.0"
+    "pngjs": "7.0.0",
+    "v8-to-istanbul": "9.3.0"
   }
 }

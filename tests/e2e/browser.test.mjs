@@ -12,7 +12,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, test } from 'node:test'
-import { launch } from './browser.mjs'
+import { appScript, coverageSwitches, launch } from './browser.mjs'
 
 let folder
 let errors
@@ -28,17 +28,63 @@ afterEach(() => {
 })
 
 // A browser that does what the checks ask of Chromium, and writes a file where Playwright
-// would: the screenshot of a page and the zip of a trace.
-function fakeType({ screenshot = true } = {}) {
+// would: the screenshot of a page and the zip of a trace. Its pages record coverage as
+// Chromium does: scripts(address) gives the entries of V8 of the page at that address,
+// which stopJSCoverage() returns once its startJSCoverage() is done, or throws, as for a
+// page that crashed, when it gives an error.
+function fakeType({ screenshot = true, scripts = defaultScripts } = {}) {
 	const log = []
+	const contexts = []
 	const type = {
 		log,
-		async launch() {
+		async launch(options) {
+			type.options = options
 			return {
+				contexts: () => [...contexts],
 				async newContext(options = {}) {
 					const pages = []
+					const listeners = []
 					let tracing = false
 					log.push(`open ${options.name ?? 'window'}`)
+					function open(address) {
+						let recording = false
+						const page = {
+							url: () => address,
+							async screenshot({ path, fullPage }) {
+								if (!screenshot) {
+									throw new Error('Target page, context or browser has been closed\nCall log:\n  - taking page screenshot')
+								}
+								assert.equal(fullPage, true)
+								writeFileSync(path, 'png')
+							},
+							coverage: {
+								async startJSCoverage({ resetOnNavigation }) {
+									await new Promise((resolve) => setTimeout(resolve, 1))
+									recording = true
+									log.push(`record ${address}: resetOnNavigation ${resetOnNavigation}`)
+								},
+								async stopJSCoverage() {
+									assert.ok(recording, `${address} stops a coverage that it never started`)
+									recording = false
+									log.push(`stop ${address}`)
+									const entries = scripts(address)
+									if (entries instanceof Error) {
+										throw entries
+									}
+									return entries
+								},
+							},
+							async close() {
+								pages.splice(pages.indexOf(page), 1)
+								log.push(`close ${address}`)
+							},
+						}
+						pages.push(page)
+						for (const listener of listeners) {
+							listener(page)
+						}
+						return page
+					}
 					const context = {
 						tracing: {
 							async start(settings) {
@@ -56,26 +102,24 @@ function fakeType({ screenshot = true } = {}) {
 								log.push(settings.path ? `save ${settings.path.slice(folder.length + 1)}` : 'discard')
 							},
 						},
-						pages: () => pages,
+						pages: () => [...pages],
+						on(event, listener) {
+							assert.equal(event, 'page')
+							listeners.push(listener)
+						},
 						async newPage() {
-							const address = `http://nextcloud/${options.name ?? 'window'}/${pages.length + 1}`
-							const page = {
-								url: () => address,
-								async screenshot({ path, fullPage }) {
-									if (!screenshot) {
-										throw new Error('Target page, context or browser has been closed\nCall log:\n  - taking page screenshot')
-									}
-									assert.equal(fullPage, true)
-									writeFileSync(path, 'png')
-								},
-							}
-							pages.push(page)
-							return page
+							return open(`http://nextcloud/${options.name ?? 'window'}/${pages.length + 1}`)
+						},
+						// A page that the site opens, such as the tab of a link with target _blank.
+						popup(address) {
+							return open(address)
 						},
 						async close() {
+							contexts.splice(contexts.indexOf(context), 1)
 							log.push(`close ${options.name ?? 'window'}`)
 						},
 					}
+					contexts.push(context)
 					return context
 				},
 				async newPage(options) {
@@ -89,6 +133,21 @@ function fakeType({ screenshot = true } = {}) {
 		},
 	}
 	return type
+}
+
+// What V8 counts in a page of the settings: a script of the app, served from custom_apps
+// with its version, and one of Nextcloud, which the coverage leaves out.
+function defaultScripts(address) {
+	return [
+		{
+			url: 'http://nextcloud/custom_apps/paperless_sync/js/settings.js?v=0c1e5a',
+			scriptId: '17',
+			source: '(function() {})()\n',
+			functions: [{ functionName: '', isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: 18, count: 1 }] }],
+		},
+		{ url: 'http://nextcloud/core/js/main.js?v=1', scriptId: '3', source: 'OC = {}\n', functions: [] },
+		{ url: `${address}#inline`, scriptId: '4', functions: [] },
+	]
 }
 
 test('a check that passes keeps nothing, and the trace of each window ends unsaved', async () => {
@@ -184,4 +243,98 @@ test('every check in the browser starts its browser here, and keeps what it has 
 		assert.doesNotMatch(source, /chromium\.launch\(/, `${check}.mjs starts Chromium itself`)
 		assert.match(source, /\} catch \(error\) \{\n\tawait browser\.keep\(error\)\n\tthrow error\n\} finally \{\n\tawait browser\.close\(\)/, `${check}.mjs keeps nothing when it fails`)
 	}
+})
+
+test('appScript names the scripts of the app by their path in the repository, and no other script', () => {
+	assert.equal(appScript('http://nextcloud/custom_apps/paperless_sync/js/settings.js?v=0c1e5a'), 'js/settings.js')
+	assert.equal(appScript('https://cloud.example/apps/paperless_sync/js/files.js'), 'js/files.js')
+	assert.equal(appScript('http://nextcloud/index.php/apps/paperless_sync/js/flow.js#start'), 'js/flow.js')
+	for (const other of ['http://nextcloud/core/js/main.js', 'http://nextcloud/custom_apps/paperless_sync/l10n/de.js', 'http://nextcloud/custom_apps/other_app/js/settings.js', 'http://nextcloud/custom_apps/paperless_sync/js/settings.json', '', undefined]) {
+		assert.equal(appScript(other), null, other)
+	}
+})
+
+test('with a folder for the coverage, each page records from before the check gets it until it closes, and the scripts of the app reach <check>.json', async () => {
+	const coverage = join(folder, '..', 'coverage')
+	const type = fakeType()
+	const browser = await launch('files', { folder: '', coverage, type })
+	const page = await browser.newPage({ name: 'admin' })
+	// The page records before the check gets it, so that it counts the first script too.
+	assert.deepEqual(type.log, ['open admin', 'record http://nextcloud/admin/1: resetOnNavigation false'])
+	const other = await browser.newContext({ name: 'other' })
+	const early = await other.newPage()
+	const popup = other.popup('http://paperless/documents/7/details')
+	await other.newPage()
+	// A page that the check closes counts, also when its window closes later.
+	await early.close()
+	await other.close()
+	await page.close()
+	await browser.close()
+	const log = type.log.filter((line) => !line.startsWith('open '))
+	for (const address of ['http://nextcloud/admin/1', 'http://nextcloud/other/1', popup.url(), 'http://nextcloud/other/3']) {
+		assert.equal(log.filter((line) => line === `stop ${address}`).length, 1, `${address} stops once`)
+		assert.ok(log.indexOf(`record ${address}: resetOnNavigation false`) < log.indexOf(`stop ${address}`), address)
+	}
+	assert.ok(log.indexOf('stop http://nextcloud/other/1') < log.indexOf('close http://nextcloud/other/1'))
+	assert.ok(log.indexOf('stop http://nextcloud/other/3') < log.indexOf('close other'))
+	assert.equal(log.at(-1), 'close the browser')
+	const entries = JSON.parse(readFileSync(join(coverage, 'files.json'), 'utf8'))
+	assert.equal(entries.length, 4)
+	assert.deepEqual(entries[0], {
+		file: 'js/settings.js',
+		url: 'http://nextcloud/custom_apps/paperless_sync/js/settings.js?v=0c1e5a',
+		source: '(function() {})()\n',
+		functions: [{ functionName: '', isBlockCoverage: true, ranges: [{ startOffset: 0, endOffset: 18, count: 1 }] }],
+	})
+	assert.ok(entries.every((entry) => entry.file === 'js/settings.js'))
+	assert.deepEqual(errors, [])
+})
+
+test('the coverage counts the windows that the traces keep open, and a second browser of a check writes a file of its own', async () => {
+	const coverage = join(folder, '..', 'coverage')
+	for (const round of [1, 2]) {
+		const type = fakeType()
+		const browser = await launch('settings', { folder, coverage, type })
+		const context = await browser.newContext({ name: `round ${round}` })
+		await context.newPage()
+		// The traces keep the window that the check closed until the browser closes.
+		await context.close()
+		assert.ok(!type.log.includes(`stop http://nextcloud/round ${round}/1`))
+		await browser.close()
+		assert.ok(type.log.includes(`stop http://nextcloud/round ${round}/1`))
+	}
+	assert.deepEqual(readdirSync(coverage).sort(), ['settings-2.json', 'settings.json'])
+	assert.equal(JSON.parse(readFileSync(join(coverage, 'settings-2.json'), 'utf8')).length, 1)
+})
+
+test('a page whose coverage cannot be read is named, and the coverage of the others still counts', async () => {
+	const coverage = join(folder, '..', 'coverage')
+	const scripts = (address) => (address.endsWith('/1') ? new Error('Target crashed\nCall log:\n  - stopping coverage') : defaultScripts(address))
+	const browser = await launch('flow', { folder: '', coverage, type: fakeType({ scripts }) })
+	const context = await browser.newContext({ name: 'flow' })
+	await context.newPage()
+	await context.newPage()
+	await browser.close()
+	assert.deepEqual(errors, ['No coverage of http://nextcloud/flow/1: Target crashed'])
+	assert.equal(JSON.parse(readFileSync(join(coverage, 'flow.json'), 'utf8')).length, 1)
+})
+
+test('without a folder for the coverage, no page records it', async () => {
+	const type = fakeType()
+	const browser = await launch('keyboard', { folder: '', coverage: '', type })
+	const context = await browser.newContext({ name: 'keyboard' })
+	await context.newPage()
+	await browser.close()
+	assert.deepEqual(type.log, ['open keyboard', 'close the browser'])
+})
+
+test('Chromium keeps the frame of a page across its documents for the coverage, with the feature of Playwright for its screenshots', async () => {
+	assert.deepEqual(coverageSwitches({}), ['--enable-features=CDPScreenshotNewSurface,RenderDocument:level/crashed-frame'])
+	assert.deepEqual(coverageSwitches({ PLAYWRIGHT_LEGACY_SCREENSHOT: '1' }), ['--enable-features=RenderDocument:level/crashed-frame'])
+	const measured = fakeType()
+	await launch('settings', { folder: '', coverage: join(folder, '..', 'coverage'), type: measured })
+	assert.deepEqual(measured.options, { args: coverageSwitches() })
+	const plain = fakeType()
+	await launch('settings', { folder, coverage: '', type: plain })
+	assert.deepEqual(plain.options, {})
 })

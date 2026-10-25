@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    wrappingWidth: 400
+    nodeSpacing: 30
+---
+flowchart TB
+    accTitle: How the JavaScript of the app is checked
+    accDescr: The scripts of the app, js/settings.js, js/files.js and js/flow.js, run in the browser as they are written, without a build. scripts/check.sh runs ESLint on them, and on the tests and scripts, with the rules of scripts/eslint/eslint.config.mjs. A finding fails the check with its file, line and rule; the fix bot runs bash scripts/eslint.sh --fix, which turns a var and a let that never changes into a const, and a person fixes the rest. On the newest Nextcloud, the checks in the browser record in Chromium which parts of the scripts each page runs. coverage.mjs merges the coverage of every page and shows the share of the lines, branches and functions of each script in the summary of the job, with the lines that no check runs, and keeps lcov.info in the artifact e2e-coverage. A script that runs a smaller share of its lines or branches than its floor in tests/e2e/coverage-floor.json fails the check, and a new test in the browser raises the floor. The scripts of the app are light blue, the checks and the bot blue, your steps orange, and a check that passes green.
+
+    scripts["js/settings.js, js/files.js, js/flow.js:<br>run in the browser as written,<br>without a build"]
+    eslint["scripts/check.sh: ESLint with the rules<br>of scripts/eslint/eslint.config.mjs"]
+    found{"Does a rule<br>find something?"}
+    fixbot["The fix bot: bash scripts/eslint.sh --fix<br>makes a var and a let that never<br>changes a const"]
+    person["You: use or remove the variable,<br>compare with ===, keep the function<br>inside its script"]
+    browser["The checks in the browser on the newest<br>Nextcloud: settings.mjs, files.mjs, flow.mjs<br>and more, each page recorded by V8"]
+    coverage["coverage.mjs: lines, branches and<br>functions of each script, in the summary<br>of the job, and lcov.info in e2e-coverage"]
+    floor{"Below its floor in<br>tests/e2e/coverage-floor.json?"}
+    test["You: test the new code in the browser,<br>then raise the floor"]
+    passes(["The check passes"])
+
+    scripts --> eslint --> found
+    found -- "yes, var or let" --> fixbot
+    found -- "yes, anything else" --> person
+    found -- "no" --> passes
+    scripts --> browser --> coverage --> floor
+    floor -- "yes" --> test
+    floor -- "no" --> passes
+
+    classDef app fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class scripts app
+    class eslint,fixbot,browser,coverage check
+    class person,test yours
+    class passes done
