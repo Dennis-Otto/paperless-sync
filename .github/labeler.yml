@@ -13,6 +13,7 @@
           - lib/Service/RunsOffException.php
           - lib/Service/PaperlessLocalNetworkException.php
           - lib/Service/UnsavedSettingException.php
+          - lib/Service/GettingStarted.php
           - lib/Model/SyncConfig.php
           - lib/Model/ConnectionCheck.php
           - lib/Model/Owners.php
@@ -26,6 +27,7 @@
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Settings/**
           - tests/Unit/Service/ConfigServiceTest.php
+          - tests/Unit/Service/GettingStartedTest.php
           - tests/Unit/Model/ConnectionCheckTest.php
           - tests/Unit/Model/OwnersTest.php
           - tests/Unit/Service/OwnerMappingTest.php

@@ -326,6 +326,14 @@
 		const webhookLastCall = element('webhook-last-call')
 		const webhookSecretField = element('webhook-secret-field')
 		const webhookSecret = element('webhook-secret')
+		const gettingStarted = element('getting-started')
+		const gettingStartedTitle = element('getting-started-title')
+		const gettingStartedShow = element('getting-started-show')
+		const gettingStartedHide = element('getting-started-hide')
+		const gettingStartedEstimate = element('getting-started-estimate')
+		const gettingStartedComplete = element('getting-started-complete')
+		const gettingStartedAnnouncement = element('getting-started-announcement')
+		const statusRegion = element('status')
 		const buttons = [save, test, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
 		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group']
@@ -385,6 +393,17 @@
 		// Where the cursor was in the path template when it lost the focus, such as to the button
 		// of a variable; null until it had the focus, and a variable then goes to its end.
 		let templateSelection = null
+		// The labels of the states of the getting-started steps, as the template has them, and the
+		// state of each step as the page shows it, by its ID, to announce a step once it is done.
+		const setupStates = {
+			done: translate('Done'),
+			next: translate('Next'),
+			todo: translate('To do'),
+		}
+		const shownSetup = {}
+		gettingStarted.querySelectorAll('[data-step]').forEach(function(item) {
+			shownSetup[item.dataset.step] = item.dataset.state
+		})
 
 		// The settings that the form shows, or a copy of it, as the page sends them.
 		function settings(scope = root) {
@@ -730,6 +749,78 @@
 			}))
 		}
 
+		// Shows the steps of the getting-started checklist as the server sends them with the status
+		// (GettingStarted): the state of each in words, the next one as the current step, and the
+		// estimate of the first synchronization. A screen reader hears when a step is done, and which
+		// one comes next. The list stays shown or hidden as it is: it hides on its own only when the
+		// page loads after the first successful run.
+		function showSetup(setup) {
+			if (!setup || !Array.isArray(setup.steps)) {
+				return
+			}
+			const done = []
+			let next = ''
+			setup.steps.forEach(function(step) {
+				const item = gettingStarted.querySelector('[data-step="' + window.CSS.escape(step.id) + '"]')
+				if (item === null || !(step.state in setupStates)) {
+					return
+				}
+				const title = item.querySelector('strong').textContent
+				if (step.state === 'done' && shownSetup[step.id] !== 'done') {
+					done.push(title)
+				}
+				if (step.state === 'next') {
+					next = title
+					item.setAttribute('aria-current', 'step')
+				} else {
+					item.removeAttribute('aria-current')
+				}
+				item.dataset.state = step.state
+				shownSetup[step.id] = step.state
+				setText(item.querySelector('.paperless-sync-getting-started-state'), setupStates[step.state])
+			})
+			if (typeof setup.estimate === 'string') {
+				setText(gettingStartedEstimate, setup.estimate)
+			}
+			gettingStartedComplete.hidden = setup.complete !== true
+			if (done.length > 0) {
+				const sentences = done.map(function(title) {
+					return translate('Step done: {step}.', { step: title })
+				})
+				sentences.push(next !== '' ? translate('Next step: {step}.', { step: next }) : translate('Every step is done.'))
+				setText(gettingStartedAnnouncement, sentences.join(' '))
+			}
+		}
+
+		// Shows or hides the getting-started checklist, and moves the focus to its heading or back
+		// to the button that shows it again.
+		function showGettingStarted(visible) {
+			gettingStarted.hidden = !visible
+			gettingStartedShow.hidden = visible
+			if (visible) {
+				gettingStartedTitle.focus()
+			} else {
+				gettingStartedShow.focus()
+			}
+		}
+
+		// The place on the page that a step of the checklist leads to: the field of the connection
+		// that is still empty, the target user, the dry-run, the schedule or the status.
+		function stepTarget(step) {
+			switch (step) {
+			case 'connect':
+				return paperlessUrl.value.trim() === '' || tokenConfigured ? paperlessUrl : token
+			case 'owner':
+				return targetUser
+			case 'dry-run':
+				return dryRun
+			case 'schedule':
+				return schedule
+			default:
+				return statusRegion
+			}
+		}
+
 		function updateStatus(status) {
 			const state = status.state || 'never-run'
 			const lastReport = status.report && typeof status.report === 'object' ? status.report : {}
@@ -740,6 +831,7 @@
 			setText(nextRun, formatNextRun(status.nextRun))
 			showPaperless(status)
 			showErrors(status, lastReport)
+			showSetup(status.setup)
 			if (Object.keys(lastReport).length > 0) {
 				showReport(lastReport, false)
 			}
@@ -2057,6 +2149,20 @@
 				await refreshQuietly()
 				updatePreview()
 			}
+		})
+
+		gettingStartedShow.addEventListener('click', function() {
+			showGettingStarted(true)
+		})
+		gettingStartedHide.addEventListener('click', function() {
+			showGettingStarted(false)
+		})
+		gettingStarted.querySelectorAll('[data-step-target]').forEach(function(button) {
+			button.addEventListener('click', function() {
+				const target = stepTarget(button.dataset.stepTarget)
+				target.scrollIntoView({ block: 'center' })
+				target.focus({ preventScroll: true })
+			})
 		})
 
 		form.addEventListener('input', updateForm)

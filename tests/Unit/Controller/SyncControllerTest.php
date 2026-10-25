@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SyncController;
 use OCA\PaperlessSync\Cron\ManualSyncJob;
+use OCA\PaperlessSync\Service\GettingStarted;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
@@ -85,7 +86,7 @@ final class SyncControllerTest extends TestCase {
 		$this->user = $this->createConfiguredStub(IUser::class, ['getUID' => 'admin']);
 		$session = $this->createStub(IUserSession::class);
 		$session->method('getUser')->willReturnCallback(fn (): ?IUser => $this->user);
-		$this->controller = new SyncController(AppConstants::APP_ID, $this->createStub(IRequest::class), $sync, $status, $this->germanL10n(), $configService, $this->jobList, $session);
+		$this->controller = new SyncController(AppConstants::APP_ID, $this->createStub(IRequest::class), $sync, $status, $this->germanL10n(), $configService, $this->jobList, $session, new GettingStarted($status, $this->germanL10n()));
 	}
 
 	public function testDryRunReturnsTheReport(): void {
@@ -294,6 +295,8 @@ final class SyncControllerTest extends TestCase {
 		self::assertSame(0, $status['summary']['errors']);
 		self::assertSame([], $status['report']['errorMessages']);
 		self::assertNull($status['nextRun'], 'Scheduled runs are off until the settings turn them on.');
+		self::assertSame(['done', 'done', 'done', 'next', 'todo'], array_column($status['setup']['steps'], 'state'), 'The getting-started checklist follows the dry-run, as the page reads it with the status.');
+		self::assertFalse($status['setup']['complete']);
 	}
 
 	/**

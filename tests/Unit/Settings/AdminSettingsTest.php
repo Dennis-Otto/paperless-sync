@@ -11,6 +11,8 @@ namespace OCA\PaperlessSync\Tests\Unit\Settings;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCA\PaperlessSync\Model\SyncReport;
+use OCA\PaperlessSync\Service\GettingStarted;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Settings\AdminSection;
 use OCA\PaperlessSync\Settings\AdminSettings;
@@ -108,6 +110,24 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame($status, $parameters['status'], 'The template shows the same status.');
 	}
 
+	/**
+	 * A new installation gets the getting-started checklist from the start, with the connection
+	 * next, in the template and in the status that js/settings.js updates it from, until the first
+	 * successful run.
+	 */
+	public function testThePageLeadsANewInstallationThroughTheFirstSteps(): void {
+		$parameters = $this->adminSettings()->getForm()->getParams();
+
+		self::assertFalse($parameters['setup']['complete']);
+		self::assertSame(['next', 'todo', 'todo', 'todo', 'todo'], array_column($parameters['setup']['steps'], 'state'));
+		self::assertSame($parameters['setup'], $this->initialState['status']['setup']);
+		self::assertSame([], $parameters['health'], 'The checklist leads the way; a missing setup is no warning on top of the page.');
+
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->statusService(new TestClock())->completed(new SyncReport(false, TestClock::START - 60, TestClock::START));
+		self::assertTrue($this->adminSettings()->getForm()->getParams()['setup']['complete'], 'After the first successful run, the list hides.');
+	}
+
 	/** The page shows the address of the webhook and its last call, never its secret. */
 	public function testThePageShowsTheWebhookWithoutItsSecret(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
@@ -191,7 +211,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(13, $links[1], 'Each of the six sections, each warning of the setup checks, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(14, $links[1], 'The getting-started checklist, each of the six sections, each warning of the setup checks, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);
@@ -281,10 +301,11 @@ final class AdminSettingsTest extends TestCase {
 			$status,
 			$this->urlGenerator,
 			$initialState,
-			new SyncHealth($status, $this->configService(), $this->germanL10n(), $formatter),
+			new SyncHealth($status, $this->configService(), $this->germanL10n(), $formatter, $this->urlGenerator),
 			new BackgroundJobMode($this->appConfig(), $this->configService(), $this->germanL10n()),
 			$this->webhookService(new TestClock()),
 			$this->germanL10n(),
+			new GettingStarted($status, $this->germanL10n()),
 		);
 	}
 }

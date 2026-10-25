@@ -33,11 +33,14 @@ use OCP\Lock\ILockingProvider;
  * RunError, which the settings page translates when it reads the status (SyncController).
  *
  * It also counts the runs in a row that did not succeed, from which the notifications, the setup
- * checks and the status API tell a mirror that keeps failing from one that failed once.
+ * checks and the status API tell a mirror that keeps failing from one that failed once, and keeps
+ * the last dry-run that completed, with the documents that it found, for the getting-started
+ * checklist of the settings page (GettingStarted).
  *
  * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
  * @psalm-type Failures = array{runs: int, since: int, failed: bool, errors: int, error: string}
- * @psalm-type Health = 'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
+ * @psalm-type DryRun = array{ended: int, documents: int}
+ * @psalm-type Health = 'unconfigured'|'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
  */
 final class StatusService {
 	/** The most lines of changes that the kept report holds. */
@@ -92,12 +95,19 @@ final class StatusService {
 	 * error. A successful run deletes it.
 	 */
 	private const FAILURES = 'status_failures';
+	/**
+	 * The end of the last dry-run that completed, also with errors, and how many documents
+	 * Paperless listed to it: a later run, of either kind, leaves both as they are.
+	 */
+	private const LAST_DRY_RUN = 'status_last_dry_run';
+	private const LAST_DRY_RUN_DOCUMENTS = 'status_last_dry_run_documents';
 
 	/** Every key of the status. */
 	private const KEYS = [
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
 		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_ERROR_RECORD, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
 		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES, self::LAST_HEARTBEAT,
+		self::LAST_DRY_RUN, self::LAST_DRY_RUN_DOCUMENTS,
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -203,6 +213,9 @@ final class StatusService {
 				// Some documents were not mirrored, so the mirror is not complete either.
 				$this->unsuccessful(false, $report->errors, $report->errorMessages[0] ?? '');
 			}
+		} else {
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN, $report->completedAt, lazy: true);
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN_DOCUMENTS, $report->activeDocuments, lazy: true);
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'), lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
@@ -275,6 +288,19 @@ final class StatusService {
 		];
 	}
 
+	/**
+	 * The last dry-run that completed, also with errors: when it ended and how many documents
+	 * Paperless listed to it; both 0 before the first.
+	 *
+	 * @return DryRun
+	 */
+	public function lastDryRun(): array {
+		return [
+			'ended' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN, 0, lazy: true),
+			'documents' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN_DOCUMENTS, 0, lazy: true),
+		];
+	}
+
 	/** @param array<string, mixed> $values */
 	private static function integer(array $values, string $key): int {
 		return isset($values[$key]) && is_int($values[$key]) ? $values[$key] : 0;
@@ -283,6 +309,8 @@ final class StatusService {
 	/**
 	 * How the mirror is, as the setup checks and the status API say it:
 	 *
+	 * - unconfigured: the settings lack the URL of Paperless, its token or the target user, so no
+	 *   run can start, such as on a new installation or after Disconnect.
 	 * - failed or errors: the last run, not a dry-run, failed or completed with errors, also one by
 	 *   hand while scheduled runs are off: the mirror is incomplete until a run succeeds.
 	 * - off: scheduled runs are off.
@@ -293,6 +321,9 @@ final class StatusService {
 	 * @return Health
 	 */
 	public function health(SyncConfig $config): string {
+		if (!$config->complete()) {
+			return 'unconfigured';
+		}
 		$failures = $this->failures();
 		if ($failures['runs'] > 0) {
 			return $failures['failed'] ? 'failed' : 'errors';

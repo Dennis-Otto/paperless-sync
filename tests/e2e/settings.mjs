@@ -17,7 +17,10 @@
 // a proxy answers with a page of its own. The CSS of Nextcloud, which styles every button
 // and input, leaves Disconnect at the end of the bar and every checkbox next to its label.
 // The target user comes from the users of Nextcloud and the excluded tags from the tags of
-// Paperless, while a tag that Paperless doesn't have yet can still be typed. run.sh starts it in the image of Playwright,
+// Paperless, while a tag that Paperless doesn't have yet can still be typed. Getting started,
+// which run.sh walks through on the new installation, hides after the first successful run,
+// comes back on request, leads each step to its place on the page and follows Disconnect,
+// connecting again and the schedule as they happen. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
 // Paperless and the saved configuration of run.sh are there, and it leaves that
 // configuration as it found it.
@@ -94,6 +97,19 @@ try {
 	const spinner = page.locator('#paperless-sync-running')
 	const required = () => token.evaluate((input) => input.required)
 	const focused = (locator) => locator.evaluate((element) => element === document.activeElement)
+	const gettingStarted = page.locator('#paperless-sync-getting-started')
+	const showGettingStarted = page.locator('#paperless-sync-getting-started-show')
+	const announcement = page.locator('#paperless-sync-getting-started-announcement')
+	// The steps of Getting started as the page shows them: the state of each, its label and the
+	// step that is current, once they are in the states of the server, which a status brings.
+	const expectSteps = async (expected, why) => {
+		const states = expected.join(' ')
+		await page.waitForFunction((wanted) => Array.from(document.querySelectorAll('#paperless-sync-getting-started [data-step]'), (step) => step.dataset.state).join(' ') === wanted, states, { timeout: 5000 }).catch(() => {})
+		const labels = { done: 'Done', next: 'Next', todo: 'To do' }
+		const wanted = ['connect', 'owner', 'dry-run', 'schedule', 'first-run'].map((step, index) => `${step} ${expected[index]} ${labels[expected[index]]}${expected[index] === 'next' ? ' (current)' : ''}`).join(', ')
+		const shown = await gettingStarted.evaluate((panel) => Array.from(panel.querySelectorAll('[data-step]'), (step) => `${step.dataset.step} ${step.dataset.state} ${step.querySelector('.paperless-sync-getting-started-state').textContent}${step.getAttribute('aria-current') === 'step' ? ' (current)' : ''}`).join(', '))
+		expect(shown === wanted, `${why}: Getting started must show ${wanted}, not ${shown}`)
+	}
 	// The buttons are busy until an action has its answer; the save button stays enabled
 	// with unsaved changes, "Synchronize now" doesn't.
 	const settle = () => page.locator('#paperless-sync-save:enabled').waitFor()
@@ -135,10 +151,33 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 12 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
-		`Every section, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
+		helpLinks.length === 13 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Getting started, every section, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
+
+	// After the first successful run of run.sh, Getting started is hidden, and its button brings
+	// it back with the focus on its heading: every step is done but the schedule, which run.sh
+	// turned off again, and the list says that the app is set up.
+	expect(await gettingStarted.isHidden() && await showGettingStarted.isVisible(), 'After the first successful run, Getting started hides behind its button.')
+	await showGettingStarted.click()
+	expect(await gettingStarted.isVisible() && await showGettingStarted.isHidden(), 'Show getting started must show the list.')
+	expect(await focused(page.locator('#paperless-sync-getting-started-title')), 'The focus must move to the heading of the list.')
+	await expectSteps(['done', 'done', 'done', 'next', 'done'], 'After the runs of run.sh, with the schedule off')
+	expect(await page.locator('#paperless-sync-getting-started-complete').isVisible(), 'The list must say that the first run succeeded.')
+	// Each step leads to its place on the page, in view: the connection to its URL, as the token is saved.
+	const targets = { connect: '#paperless-sync-paperless-url', owner: '#paperless-sync-target-user', 'dry-run': '#paperless-sync-dry-run', schedule: '[data-setting="enabled"]', 'first-run': '#paperless-sync-status' }
+	for (const [step, target] of Object.entries(targets)) {
+		await page.locator(`[data-step-target="${step}"]`).click()
+		expect(await focused(page.locator(target)), `The button of the step ${step} must move the focus to ${target}.`)
+		expect(await page.locator(target).evaluate((element) => {
+			const box = element.getBoundingClientRect()
+			return box.top >= 0 && box.bottom <= window.innerHeight
+		}), `The button of the step ${step} must scroll ${target} into view.`)
+	}
+	await page.locator('#paperless-sync-getting-started-hide').click()
+	expect(await gettingStarted.isHidden() && await focused(showGettingStarted), 'Hide getting started must hide the list and leave the focus on the button that shows it again.')
+	console.log('Settings: Getting started hides after the first successful run, comes back on request and leads each step to its place on the page.')
 
 	const savedUrl = await url.inputValue()
 	expect(!(await required()), 'With the saved URL, the stored token must be enough.')
@@ -723,6 +762,11 @@ try {
 	expect(JSON.stringify(await form()) === JSON.stringify(disconnected), 'After a reload, the form shows the same settings as after Disconnect.')
 	console.log('Settings: Disconnect deletes the token and turns off the schedule, and the form shows the settings that stay.')
 
+	// Getting started follows Disconnect: the connection is next again, while the steps that
+	// stay done, such as the dry-run, stay done.
+	await showGettingStarted.click()
+	await expectSteps(['next', 'done', 'done', 'todo', 'done'], 'After Disconnect')
+
 	await token.fill(TOKEN)
 	await localNetwork.check()
 	await save.click()
@@ -730,6 +774,25 @@ try {
 	expect((await message.textContent()) === SAVED, `Connecting again failed: ${await message.textContent()}`)
 	expect(!(await schedule.isChecked()), 'The schedule stays off, as run.sh saved it.')
 	console.log('Settings: connecting again needs the token and the local network.')
+
+	// And connecting again and the schedule as they happen, which a screen reader hears.
+	await expectSteps(['done', 'done', 'done', 'next', 'done'], 'After connecting again')
+	expect(
+		(await announcement.textContent()) === 'Step done: Connect to Paperless. Next step: Turn on scheduled synchronization.',
+		`A screen reader must hear that the connection is done and what comes next: ${await announcement.textContent()}`,
+	)
+	await schedule.check()
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED, `Turning on the schedule failed: ${await message.textContent()}`)
+	await expectSteps(['done', 'done', 'done', 'done', 'done'], 'With the schedule on')
+	expect((await announcement.textContent()) === 'Step done: Turn on scheduled synchronization. Every step is done.', `A screen reader must hear the last step: ${await announcement.textContent()}`)
+	await schedule.uncheck()
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED && !(await schedule.isChecked()), `Turning the schedule off again failed: ${await message.textContent()}`)
+	await expectSteps(['done', 'done', 'done', 'next', 'done'], 'With the schedule off again')
+	console.log('Settings: Getting started follows Disconnect, connecting again and the schedule, and a screen reader hears each step that is done.')
 
 	// The webhook of Paperless, whose secret run.sh created: a new secret replaces it, after a
 	// question, and the page shows it this once, selected for copying; a reload has it no more.

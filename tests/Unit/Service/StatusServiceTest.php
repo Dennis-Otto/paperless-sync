@@ -666,6 +666,39 @@ final class StatusServiceTest extends TestCase {
 		self::assertSame('failed', $this->service->health($this->config(false)), 'Turning scheduled runs off does not complete the mirror.');
 	}
 
+	/**
+	 * Settings that no run can use, without the URL of Paperless, its token or the target user, are
+	 * not set up, whatever the runs before them did: those of a new installation, and those after
+	 * Disconnect, which deletes the token.
+	 */
+	public function testSettingsThatNoRunCanUseAreUnconfigured(): void {
+		self::assertSame('unconfigured', $this->service->health($this->configService()->get()), 'A new installation has neither a URL nor a token.');
+
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(false, TestClock::START));
+		self::assertSame('failed', $this->service->health($this->config(true)));
+		self::assertSame('unconfigured', $this->service->health($this->configService()->reset()), 'No run can follow Disconnect until the token is saved again.');
+	}
+
+	/**
+	 * The last dry-run that completed, also with errors, stays with the documents that Paperless
+	 * listed to it, through later runs of either kind; a dry-run that failed completed nothing.
+	 */
+	public function testKeepsTheLastDryRunThatCompleted(): void {
+		self::assertSame(['ended' => 0, 'documents' => 0], $this->service->lastDryRun());
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(true, TestClock::START));
+		self::assertSame(['ended' => 0, 'documents' => 0], $this->service->lastDryRun(), 'A dry-run that failed completed nothing.');
+
+		$dryRun = new SyncReport(true, TestClock::START, TestClock::START + 60);
+		$dryRun->activeDocuments = 5000;
+		$dryRun->error('P123: the download failed');
+		$this->service->completed($dryRun);
+		self::assertSame(['ended' => TestClock::START + 60, 'documents' => 5000], $this->service->lastDryRun());
+
+		$this->service->completed(new SyncReport(false, TestClock::START + 120, TestClock::START + 180));
+		$this->service->failed(new RuntimeException('Paperless is down.'), new SyncReport(true, TestClock::START + 240));
+		self::assertSame(['ended' => TestClock::START + 60, 'documents' => 5000], $this->service->lastDryRun(), 'A run and a dry-run that failed leave it as it is.');
+	}
+
 	public function testAMirrorIsStaleAfterThreeIntervals(): void {
 		$config = $this->configService()->save(['enabled' => true, 'sync_interval_minutes' => 120] + self::validSettings(), 'secret-token');
 

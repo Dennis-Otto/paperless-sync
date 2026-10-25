@@ -635,12 +635,23 @@ for attribute in \
 	'data-variable="created_month_name"' \
 	'id="initial-state-paperless_sync-status"' \
 	'id="initial-state-paperless_sync-config"' \
-	'data-setting="paperless_local_network"'; do
+	'data-setting="paperless_local_network"' 	'data-step="connect" data-state="next" aria-current="step"'; do
 	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
 		echo "The administration settings render no ${attribute}." >&2
 		exit 1
 	fi
 done
+# A new installation walks through the getting-started checklist, as the settings page reads
+# it with every status: the connection first, while Administration → Overview says that the app
+# is not set up yet. The steps after it follow the save, the first dry-run, the first run and
+# the schedule below.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-new.json" 'next todo todo todo todo'
+occ setupchecks >"${TMP_DIR}/setupchecks-new.txt" 2>&1 || true
+if ! grep --fixed-strings 'Paperless Sync is installed but not set up yet.' "${TMP_DIR}/setupchecks-new.txt" >/dev/null; then
+	echo "occ setupchecks does not say that Paperless Sync is not set up yet:" >&2
+	cat "${TMP_DIR}/setupchecks-new.txt" >&2
+	exit 1
+fi
 
 # The navigation of the administration settings lists the app's own section on
 # every page (Dennis-Otto/paperless-unified-search#25): Nextcloud 33 as links,
@@ -726,6 +737,7 @@ fi
 # the token with the one of the full account.
 checklist settings "${TMP_DIR}/saved-with-failures.json"
 assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'done done next todo todo'
 # Without the permission View for UI Settings, Paperless doesn't tell the checklist the
 # permissions of the account: the lines of the trash and the inbox name that permission.
 checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
@@ -762,6 +774,7 @@ assert_json config "${TMP_DIR}/config.json"
 
 sync_run true "${TMP_DIR}/dry-run.json"
 assert_json dry-run "${TMP_DIR}/dry-run.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-dry-run.json" 'done done done next todo'
 occ paperless_sync:run --dry-run --output=json > "${TMP_DIR}/dry-run-occ.json"
 assert_json dry-run "${TMP_DIR}/dry-run-occ.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
@@ -809,6 +822,8 @@ assert_json queued "${TMP_DIR}/queued.json"
 assert_dav_missing sync-target "${INITIAL_PATH}"
 occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
 assert_status_soon status-export "${TMP_DIR}/export.json"
+# The first run succeeded while the schedule is off, which a step still asks for.
+assert_status_soon getting-started "${TMP_DIR}/getting-started-first-run.json" 'done done done next done'
 assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
 # One entry for the run, with the link of the file that it wrote.
 activities "${TMP_DIR}/activity-export.json"
@@ -949,6 +964,7 @@ assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive docum
 # With the schedule on, saving tests the connection first.
 save_settings "${TMP_DIR}/enabled.json" enabled=1
 assert_json enabled "${TMP_DIR}/enabled.json"
+assert_status_soon getting-started "${TMP_DIR}/getting-started-done.json" 'done done done done done'
 sync_run true "${TMP_DIR}/dry-run-before-job.json"
 occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
 assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
