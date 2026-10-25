@@ -727,6 +727,11 @@ echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the 
 # Nextcloud links it.
 node --test --test-reporter=dot tests/e2e/files-address.test.mjs
 echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud links, and no browser test opens it at an address of its own."
+# What the checks of the accessibility in the browser judge by, with a seeded finding of every
+# kind that must fail them: a button without a name, a box wider than a phone, a focus that
+# can't be seen and a focus against the order of the page.
+node --test --test-reporter=dot tests/e2e/a11y.test.mjs
+echo "tests/e2e/a11y.mjs fails a button without a name, a box wider than 320 px, a faint focus and a focus against the order of the page."
 # The frozen story of the pictures, so that two runs of tests/e2e/screenshots.sh draw the
 # same pixels, and the report of the visual check, which renders on the paths of the
 # screenshot bot.

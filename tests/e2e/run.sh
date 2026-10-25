@@ -46,9 +46,9 @@ case "${E2E_OBJECTSTORE}" in
 		exit 1
 		;;
 esac
-# E2E_ACCESSIBILITY=0 leaves out the checks in the browser at the end, accessibility.mjs and
-# settings.mjs, which don't depend on the database or the storage; run-all.sh runs them once
-# for every version.
+# E2E_ACCESSIBILITY=0 leaves out the checks in the browser at the end, accessibility.mjs,
+# keyboard.mjs and settings.mjs, which don't depend on the database or the storage; run-all.sh
+# runs them once for every version.
 E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
 TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
@@ -119,7 +119,8 @@ mock_state() {
 }
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
-# network of the Compose project, and settings.mjs then uses the settings as an
+# network of the Compose project, at the width of a computer and of a phone, keyboard.mjs
+# walks the settings with the keyboard alone, and settings.mjs then uses the settings as an
 # administrator does: it saves them with the confirmation of the password, tests the
 # connection with the token of an account with too few permissions, disconnects and
 # connects again with the token, and checks what the page says about unsaved changes,
@@ -133,7 +134,7 @@ accessibility() {
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json accessibility.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
 		| "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -143,7 +144,7 @@ accessibility() {
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			"${PLAYWRIGHT_IMAGE}" \
-			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node settings.mjs && node files.mjs && node flow.mjs'
+			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node keyboard.mjs && node settings.mjs && node files.mjs && node flow.mjs'
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -1384,8 +1385,9 @@ assert_json notifications-flow "${TMP_DIR}/notifications-flow.json"
 assert_dav_file e2e-other 'scan-insurance.pdf' 'Synthetic inbox PDF scan'
 echo "Send to Paperless in Flow passes after ${SECONDS} s."
 
-# The administration settings and the report of a dry-run over a larger archive meet
-# WCAG 2.1 AA.
+# The administration settings and the report of a dry-run over a larger archive, the actions
+# of the app in Files and the form of its rule in Flow meet WCAG 2.1 AA, also at 320 px, and
+# the settings work by keyboard alone.
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	control /control/scenario/archive >/dev/null
 	accessibility

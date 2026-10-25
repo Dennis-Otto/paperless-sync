@@ -341,6 +341,15 @@
 		const gettingStartedAnnouncement = element('getting-started-announcement')
 		const statusRegion = element('status')
 		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
+		// The bar of the buttons sticks to the bottom of the window, and css/settings.css keeps its
+		// height free below a control that the focus moves to, so that the bar never covers it. The
+		// bar grows with its message and wraps on a narrow screen, so the page measures it.
+		const actions = root.querySelector('.paperless-sync-actions')
+		if (actions !== null && window.ResizeObserver) {
+			new window.ResizeObserver(function() {
+				root.style.setProperty('--paperless-sync-actions-height', Math.ceil(actions.getBoundingClientRect().height) + 'px')
+			}).observe(actions)
+		}
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
 		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group']
 		// While a run is queued or active, the page asks for its status: after a change of the state

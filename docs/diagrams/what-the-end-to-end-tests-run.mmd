@@ -2,14 +2,15 @@
 config:
   flowchart:
     nodeSpacing: 24
+    wrappingWidth: 240
 ---
 flowchart TB
     accTitle: What the end-to-end tests run
-    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, settings.mjs, files.mjs and screenshots.mjs against Nextcloud. On request, Nextcloud keeps its tables in MariaDB or PostgreSQL instead of SQLite, and its files in an object store with the API of S3.
+    accDescr: run.sh drives a Docker Compose project. It talks to Nextcloud, which runs this checkout as a custom app, through occ, WebDAV and the routes of the app; it sets the scenario and the tasks of the Paperless mock, mock_server.py, which Nextcloud calls through the REST API; and it starts Chromium in the image of Playwright, which runs accessibility.mjs, keyboard.mjs, settings.mjs, files.mjs, flow.mjs and screenshots.mjs against Nextcloud. On request, Nextcloud keeps its tables in MariaDB or PostgreSQL instead of SQLite, and its files in an object store with the API of S3.
 
     run["run.sh"]
     subgraph compose ["Docker Compose project"]
-        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>settings.mjs,<br>files.mjs,<br>screenshots.mjs"]
+        browser["Chromium in<br>the image of<br>Playwright:<br>accessibility.mjs,<br>keyboard.mjs,<br>settings.mjs,<br>files.mjs,<br>flow.mjs,<br>screenshots.mjs"]
         nextcloud["Nextcloud<br>this checkout<br>as a custom app"]
         mock["Paperless mock<br>mock_server.py"]
         database[("MariaDB or<br>PostgreSQL")]
