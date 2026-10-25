@@ -10,7 +10,8 @@ name: Docker E2E
 # its primary storage (decision 0007). Two jobs, both required checks, share the work
 # on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
 # runs the oldest and the newest version, nextcloud on PostgreSQL, MariaDB and S3 the
-# databases and S3, and each version between goes to the one with fewer runs, so that
+# databases and S3, and each version between goes to the one with the lighter load (a
+# version with its browser checks counts as two runs, a variant as one), so that
 # a fourth version doesn't make one of them twice as slow. Each job runs its share side
 # by side: one wait for a runner instead of one for each, and the downloads of one run
 # overlap with the installation of another.

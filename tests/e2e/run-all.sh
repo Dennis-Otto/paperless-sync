@@ -23,7 +23,8 @@
 # the variants, on max-version. E2E_SHARD=1 or 2 runs one half of the runs, for the two
 # jobs of the CI, which each take one: shard 1 holds the oldest and the newest version,
 # shard 2 the variants, and each version between goes, from the oldest, to the shard
-# with fewer runs, to 2 when both have as many. Both jobs get the same versions and
+# with the lighter load, where a version with its browser checks counts as two and a
+# variant as one, to 2 when both weigh as much. Both jobs get the same versions and
 # variants, so they split them the same way. A shard without anything to run passes.
 # E2E_PLAN=1 only prints the runs that it would start.
 # KEEP_E2E=1 keeps the containers of each, as with run.sh.
@@ -84,8 +85,9 @@ case "${E2E_VARIANTS:-}" in
 esac
 
 # The shard of the runs: 1 the oldest and the newest version, 2 the variants, and each
-# version between to the one with fewer runs. The variants still run on the newest of all
-# versions.
+# version between to the one with the lighter load. A version counts twice, as its
+# browser checks take about as long as the rest of its run, and a variant, which has
+# none, once. The variants still run on the newest of all versions.
 case "${E2E_SHARD:-}" in
 	"") ;;
 	1 | 2)
@@ -102,7 +104,7 @@ case "${E2E_SHARD:-}" in
 			if [[ -z "${version}" ]] || ((version == oldest || version == newest)); then
 				continue
 			fi
-			if ((${#second[@]} + ${#variants[@]} <= ${#first[@]})); then
+			if ((2 * ${#second[@]} + ${#variants[@]} <= 2 * ${#first[@]})); then
 				second+=("${version}")
 			else
 				first+=("${version}")

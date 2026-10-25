@@ -270,7 +270,7 @@ runs_of() {
 }
 problems=0
 for versions in "" "33 34 35 36 37" "33 34" none; do
-  for variants in "" none pgsql; do
+  for variants in "" none pgsql "pgsql mysql+s3 mysql sqlite+s3"; do
     if [[ "$versions" == none && "$variants" == none ]]; then
       continue
     fi
@@ -286,7 +286,8 @@ for versions in "" "33 34 35 36 37" "33 34" none; do
   done
 done
 # The split of samples: the oldest and the newest version in shard 1, the variants in
-# shard 2, and each version between in the one with fewer runs.
+# shard 2, and each version between in the one with the lighter load, where a version,
+# with its browser checks, counts as two and a variant as one.
 expect_shard() {
   local versions="$1" variants="$2" shard="$3" expected="$4" actual
   actual="$(runs_of "$versions" "$variants" "$shard")"
@@ -298,15 +299,17 @@ expect_shard() {
 expect_shard "33 34 35" "" 1 "Nextcloud 33;Nextcloud 35"
 expect_shard "33 34 35" "" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3"
 expect_shard "33 34 35" none 2 "Nextcloud 34"
-expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 35;Nextcloud 36"
-expect_shard "33 34 35 36" "" 2 "Nextcloud 34;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 36"
+expect_shard "33 34 35 36" "" 2 "Nextcloud 34;Nextcloud 35;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35" "pgsql mysql+s3 mysql sqlite+s3" 1 "Nextcloud 33;Nextcloud 35"
+expect_shard "33 34 35" "pgsql mysql+s3 mysql sqlite+s3" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3;Nextcloud 35 on MariaDB;Nextcloud 35 on SQLite with S3"
 expect_shard "36 35 34 33" none 1 "Nextcloud 33;Nextcloud 36"
 expect_shard "33 34 35 36" none 2 "Nextcloud 34;Nextcloud 35"
 expect_shard "33 34" none 2 ""
 if ((problems > 0)); then
   exit 1
 fi
-echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with fewer runs."
+echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with the lighter load, where a version counts as two runs and a variant as one."
 
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a

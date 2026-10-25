@@ -6,7 +6,7 @@ config:
 ---
 flowchart TB
     accTitle: How the two jobs share the runs
-    accDescr: run-all.sh splits the runs of the suite into two shards, one for each required check, which runs its runs side by side on a runner of its own. Shard 1, the check nextcloud, holds the oldest and the newest supported version; shard 2, the check nextcloud on PostgreSQL, MariaDB and S3, holds the newest version on PostgreSQL and on MariaDB with S3, when the change can behave differently there. Each version between goes, from the oldest, to the shard with fewer runs, and to shard 2 when both have as many. With Nextcloud 33 to 35, shard 1 runs 33 and 35 and shard 2 runs 34 and both variants.
+    accDescr: run-all.sh splits the runs of the suite into two shards, one for each required check, which runs its runs side by side on a runner of its own. Shard 1, the check nextcloud, holds the oldest and the newest supported version; shard 2, the check nextcloud on PostgreSQL, MariaDB and S3, holds the newest version on PostgreSQL and on MariaDB with S3, when the change can behave differently there. Each version between goes, from the oldest, to the shard with the lighter load, where a version with its browser checks counts as two runs and a variant as one, and to shard 2 when both weigh as much. With Nextcloud 33 to 35, shard 1 runs 33 and 35 and shard 2 runs 34 and both variants.
 
     all["run-all.sh<br>E2E_SHARD"]
     between{"each version<br>between, from<br>the oldest"}
@@ -17,8 +17,8 @@ flowchart TB
     all --> first
     all --> second
     all --> between
-    between -- "shard 2 has<br>fewer runs or<br>as many" --> second
-    between -- "shard 1 has<br>fewer runs" --> first
+    between -- "shard 2 weighs<br>less or as much:<br>a version 2,<br>a variant 1" --> second
+    between -- "shard 1<br>weighs less" --> first
     first ~~~ example
     second ~~~ example
 

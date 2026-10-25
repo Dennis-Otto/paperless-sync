@@ -77,8 +77,9 @@ title = "The end-to-end tests on PostgreSQL, MariaDB and S3, and the versions be
 problem = """The end-to-end tests in Docker failed against the newest supported Nextcloud
 on PostgreSQL, or on MariaDB with an object store of S3 as its primary storage, while
 the check nextcloud runs them on SQLite with local storage; or against a version between
-`min-version` and `max-version`, which this check runs on SQLite as well, when it has
-fewer runs than the check nextcloud. The summary of the check has a table with the
+`min-version` and `max-version`, which this check runs on SQLite as well, when its load
+is not heavier than that of the check nextcloud, where a version with its browser checks
+counts as two runs and a variant as one. The summary of the check has a table with the
 result and the time of each phase of each, and the last lines of the log the command
 that runs one again on its own."""
 why = """Most servers keep their tables in MariaDB, MySQL or PostgreSQL, and larger ones
