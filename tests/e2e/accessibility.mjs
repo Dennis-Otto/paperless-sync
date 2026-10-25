@@ -2,15 +2,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // axe-core checks the pages of the app in Chromium against WCAG 2.1 at levels A and
-// AA, in the light and the dark theme of Nextcloud. It looks only into the element
-// that holds the app's own markup, so what Nextcloud draws around it doesn't count.
-// A serious or critical violation fails the check; the others are listed. run.sh
-// starts it in the image of Playwright, inside the network of the Compose project,
-// after npm ci of package-lock.json.
+// AA, in the light and the dark theme of Nextcloud, each in a window of a computer, 1280
+// CSS pixels wide, and of a phone, 320 pixels wide: the administration settings, the actions
+// of the app in the menu of Files with the messages after sending, and the form of a rule of
+// Flow. It looks only into the elements that hold the app's own markup, so what Nextcloud
+// draws around them doesn't count. A serious or critical violation fails the check; the
+// others are listed. At 320 pixels, the settings, the report and the form of Flow also
+// reflow into the window, with nothing that reaches past its edge (WCAG 1.4.10). a11y.mjs
+// judges, and the check tries it on a seeded page first. run.sh starts it in the image of
+// Playwright, inside the network of the Compose project, after npm ci of package-lock.json,
+// with the files and the rule of Flow that it made for files.mjs and flow.mjs.
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { chromium } from 'playwright-core'
+import { NARROW, WCAG_TAGS, WIDE, describeViolations, failing, horizontalOverflow } from './a11y.mjs'
+import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const USER = process.env.E2E_USER ?? 'e2e-admin'
@@ -18,9 +25,9 @@ const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
 // The synthetic token of an account of the mock that may neither view the tags nor add documents.
 const VIEW_ONLY_TOKEN = process.env.E2E_VIEW_ONLY_TOKEN ?? 'e2e-view-only-token'
 const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
-const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']
-const FAILING = new Set(['serious', 'critical'])
 const THEMES = ['light', 'dark']
+const SIZES = [['1280 px', WIDE], ['320 px', NARROW]]
+const SETTINGS = '/index.php/settings/admin/paperless_sync'
 
 const FAILED_STATUS = {
 	lastStarted: 1791880000,
@@ -91,7 +98,8 @@ const REPORT_STATUS = {
 const PAGES = [
 	{
 		name: 'administration settings',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.locator('.paperless-sync-advanced summary').click()
@@ -101,7 +109,8 @@ const PAGES = [
 		// Getting started, which hides after the first successful run of run.sh and comes back
 		// on request, with steps that are done and the next one.
 		name: 'getting started',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.locator('#paperless-sync-getting-started-show').click()
@@ -112,7 +121,8 @@ const PAGES = [
 		// The dry-run over the larger archive of the mock lists more changes than the
 		// report shows at once, so the list scrolls.
 		name: 'report of a dry-run',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.locator('#paperless-sync-dry-run').click()
@@ -124,7 +134,8 @@ const PAGES = [
 		// The status of a run that failed after errors of single documents, which no run of
 		// the mock leaves: the page gets it as the answer to Refresh.
 		name: 'status of a failed run',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: FAILED_STATUS }))
@@ -136,7 +147,8 @@ const PAGES = [
 		// A report with a change of every kind, its badges, its counts and its filters, one of
 		// them on.
 		name: 'report with every kind of change',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.route('**/apps/paperless_sync/sync/status', (route) => route.fulfill({ json: REPORT_STATUS }))
@@ -149,7 +161,8 @@ const PAGES = [
 		// The connection checklist with lines that passed, failed and have a note: Test
 		// connection with the token of an account with too few permissions.
 		name: 'connection checklist',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.locator('#paperless-sync-token').fill(VIEW_ONLY_TOKEN)
@@ -162,7 +175,8 @@ const PAGES = [
 		// The note about unsaved changes and an error next to the buttons, here the answer
 		// of Nextcloud to a session that ended.
 		name: 'unsaved changes and an error',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			await page.locator('[data-setting="batch_size"]').fill('7')
@@ -177,7 +191,8 @@ const PAGES = [
 		// have, and the open list of the tags of Paperless, with the option that the down arrow
 		// reached.
 		name: 'user and tag pickers',
-		path: '/index.php/settings/admin/paperless_sync',
+		path: SETTINGS,
+		reflow: true,
 		scope: '#paperless-sync-settings',
 		async prepare(page) {
 			const user = page.locator('#paperless-sync-target-user')
@@ -198,10 +213,95 @@ const PAGES = [
 			await page.locator('#paperless-sync-excluded-tags-options [aria-selected="true"]').waitFor()
 		},
 	},
+	{
+		// The actions of the app in the menu of Files, in the folder that run.sh uploaded the
+		// files to, and the messages after sending. Files closes its menu when the window changes
+		// its size, and a message goes after a few seconds, so each part is prepared again for
+		// every width, and the page stays open for all of them.
+		name: 'Files',
+		files: '/',
+		parts: [
+			{
+				// "Open in Paperless" in the menu of a copy of a document of Paperless, whose name
+				// has the marker [P123].
+				name: 'Open in Paperless in the menu of a copy',
+				scope: '[data-cy-files-list-row-action="paperless_sync-open"]',
+				async prepare(page) {
+					await openMenu(page, 'Invoice [P123].pdf')
+				},
+			},
+			{
+				// "Send to Paperless" in the menu of a file of the user's own.
+				name: 'Send to Paperless in the menu of a file',
+				scope: '[data-cy-files-list-row-action="paperless_sync-send"]',
+				async prepare(page) {
+					await openMenu(page, 'receipt.pdf')
+				},
+			},
+			{
+				// The message that the file is on its way and the one of an error, which the page
+				// gets as the answers to Send to Paperless, so that nothing is queued.
+				name: 'messages after sending',
+				scope: '[data-e2e-message]',
+				async prepare(page) {
+					let sent = 0
+					await page.unroute('**/apps/paperless_sync/api/v1/send')
+					await page.route('**/apps/paperless_sync/api/v1/send', (route) => route.fulfill(++sent === 1
+						? { json: { message: 'Paperless Sync sends 1 file to Paperless.' } }
+						: { status: 429, json: { message: 'Too many files were sent in a short time. Wait a minute and try again.' } }))
+					for (const text of ['Paperless Sync sends 1 file to Paperless.', 'Too many files were sent in a short time.']) {
+						await openMenu(page, 'receipt.pdf')
+						await page.locator('[data-cy-files-list-row-action="paperless_sync-send"] button').click()
+						await markMessage(page, text)
+					}
+				},
+			},
+		],
+	},
+	{
+		// The form of the rule of Send to Paperless that run.sh saved, with its tags, in the
+		// settings of Flow.
+		name: 'rule of Flow',
+		path: '/index.php/settings/admin/workflow',
+		scope: 'oca-paperless_sync-send-to-paperless',
+		reflow: true,
+		async prepare(page) {
+			await page.waitForFunction(() => document.querySelector('oca-paperless_sync-send-to-paperless input')?.value === 'Private, insurance')
+		},
+	},
 ]
 
+// Opens the menu of the actions of a file in Files with its button, which a phone has as well,
+// and closes the menu that is open first.
+async function openMenu(page, name) {
+	const row = page.locator(`[data-cy-files-list-row-name=${JSON.stringify(name)}]`)
+	await row.waitFor({ timeout: 60_000 })
+	if (await page.getByRole('menuitem').first().isVisible().catch(() => false)) {
+		await page.keyboard.press('Escape')
+		await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
+	}
+	await row.locator('[data-cy-files-list-row-actions] button[aria-haspopup="menu"]').click()
+	await page.getByRole('menuitem').first().waitFor()
+}
+
+// Marks the message of Nextcloud with the text for axe-core, as its markup differs between the
+// versions: .toastify up to Nextcloud 34, an element with the role status or alert from 35
+// on. The innermost element that shows the text counts, not the list that Nextcloud 34 and
+// newer read out to a screen reader, which shows nothing.
+async function markMessage(page, text) {
+	await page.waitForFunction((text) => {
+		const messages = [...document.querySelectorAll('.toastify, [role="status"], [role="alert"]')]
+			.filter((element) => element.textContent.includes(text) && element.getBoundingClientRect().width > 1 && element.checkVisibility({ visibilityProperty: true }))
+		const innermost = messages.filter((element) => !messages.some((other) => other !== element && element.contains(other)))
+		for (const element of innermost) {
+			element.setAttribute('data-e2e-message', '')
+		}
+		return innermost.length > 0
+	}, text)
+}
+
 // Signs in through the login form, as a person does, and keeps the session for every
-// page and theme.
+// page and theme, with the address of Files that the first page after the login links.
 async function signIn(browser) {
 	const context = await browser.newContext()
 	try {
@@ -211,54 +311,108 @@ async function signIn(browser) {
 		await page.locator('input[name="password"]').fill(PASSWORD)
 		await page.locator('input[name="password"]').press('Enter')
 		await page.waitForURL((url) => !url.pathname.endsWith('/login'))
-		return await context.storageState()
+		return { session: await context.storageState(), files: await filesAddress(page) }
 	} finally {
 		await context.close()
 	}
 }
 
-async function check(browser, session, target, theme) {
-	const context = await browser.newContext({
-		storageState: session,
-		colorScheme: theme,
-		viewport: { width: 1280, height: 900 },
+// Waits until the page is still after a change of the theme or the width: no transition of a
+// color or a size that axe-core would measure halfway, and the next frame drawn.
+async function settle(page) {
+	await page.evaluate(async () => {
+		await Promise.all(document.getAnimations()
+			.filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+			.map((animation) => animation.finished.catch(() => undefined)))
+		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 	})
+}
+
+async function axe(page, scope) {
+	if (await page.evaluate(() => window.axe === undefined)) {
+		await page.evaluate(AXE)
+	}
+	return page.evaluate(
+		({ selector, tags }) => window.axe.run(selector, {
+			runOnly: { type: 'tag', values: tags },
+			resultTypes: ['violations'],
+		}),
+		{ selector: scope, tags: WCAG_TAGS },
+	)
+}
+
+// The check checks itself first: a page with a button without a name and a box wider than the
+// window of a phone must fail it, or a check that can't fail would pass the app.
+async function seeded(browser) {
+	const context = await browser.newContext({ viewport: NARROW })
 	try {
 		const page = await context.newPage()
-		await page.goto(`${BASE_URL}${target.path}`)
-		await page.locator(target.scope).waitFor()
-		await target.prepare(page)
-		await page.waitForLoadState('networkidle')
-		await page.evaluate(AXE)
-		return await page.evaluate(
-			({ scope, tags }) => window.axe.run(scope, {
-				runOnly: { type: 'tag', values: tags },
-				resultTypes: ['violations'],
-			}),
-			{ scope: target.scope, tags: WCAG_TAGS },
-		)
+		await page.setContent('<main id="seeded"><h1>Seeded</h1><button type="button"></button><p style="width: 600px">A line too wide for a phone</p></main>')
+		const { violations } = await axe(page, '#seeded')
+		const overflow = await page.evaluate(horizontalOverflow, '#seeded')
+		if (!failing(violations).some((violation) => violation.id === 'button-name') || overflow.length === 0) {
+			throw new Error(`The check passes a seeded page that it must fail: ${violations.map((violation) => violation.id).join(', ')}; ${overflow.join(' ')}`)
+		}
+		console.log('axe-core and the check of the reflow fail a seeded button without a name and a box too wide for a phone.')
 	} finally {
 		await context.close()
 	}
 }
 
+// Opens a page as a fresh window of the signed-in session, prepares it and checks it at each
+// width in each theme, which the page switches without loading again. A page with parts
+// prepares each part again for every width, on the same page.
+async function check(browser, { session, files }, target) {
+	const context = await browser.newContext({ storageState: session, colorScheme: 'light', viewport: WIDE })
+	const results = []
+	try {
+		const page = await context.newPage()
+		if (target.files) {
+			await page.goto(folderAddress(files, target.files))
+		} else {
+			await page.goto(`${BASE_URL}${target.path}`)
+			await target.prepare(page)
+			await page.waitForLoadState('networkidle')
+		}
+		for (const [size, viewport] of SIZES) {
+			await page.setViewportSize(viewport)
+			for (const part of target.parts ?? [target]) {
+				if (part !== target) {
+					await page.emulateMedia({ colorScheme: THEMES[0] })
+					await part.prepare(page)
+				}
+				await page.locator(part.scope).first().waitFor()
+				for (const theme of THEMES) {
+					await page.emulateMedia({ colorScheme: theme })
+					await settle(page)
+					const { violations, passes } = await axe(page, part.scope)
+					const overflow = part.reflow && viewport === NARROW ? await page.evaluate(horizontalOverflow, part.scope) : []
+					results.push({ label: `${part.name}, ${theme} theme, ${size}`, violations, passes, overflow })
+				}
+			}
+		}
+	} finally {
+		await context.close()
+	}
+	return results
+}
+
+const started = Date.now()
 const browser = await chromium.launch()
 let failures = 0
 try {
-	const session = await signIn(browser)
+	await seeded(browser)
+	const signedIn = await signIn(browser)
 	for (const target of PAGES) {
-		for (const theme of THEMES) {
-			const { violations, passes } = await check(browser, session, target, theme)
-			const failing = violations.filter((violation) => FAILING.has(violation.impact))
-			failures += failing.length
-			console.log(`axe-core, ${target.name}, ${theme} theme: ${passes.length} rule(s) passed, ${violations.length} violated, ${failing.length} of them serious or critical`)
-			for (const violation of violations) {
-				console.log(`  ${violation.impact} ${violation.id}: ${violation.help} (${violation.helpUrl})`)
-				for (const node of violation.nodes) {
-					console.log(`    ${node.target.join(' ')}`)
-					console.log(`      ${node.html}`)
-					console.log(`      ${node.failureSummary.replaceAll('\n', '\n      ')}`)
-				}
+		for (const { label, violations, passes, overflow } of await check(browser, signedIn, target)) {
+			const found = failing(violations)
+			failures += found.length + overflow.length
+			console.log(`axe-core, ${label}: ${passes.length} rule(s) passed, ${violations.length} violated, ${found.length} of them serious or critical${overflow.length > 0 ? `; ${overflow.length} element(s) reach past the window` : ''}`)
+			for (const line of describeViolations(violations)) {
+				console.log(line)
+			}
+			for (const line of overflow.slice(0, 10)) {
+				console.log(`  reflow: ${line}`)
 			}
 		}
 	}
@@ -267,7 +421,7 @@ try {
 }
 
 if (failures > 0) {
-	console.error(`axe-core found ${failures} serious or critical violation(s) of WCAG 2.1 AA in the app.`)
+	console.error(`The accessibility check found ${failures} serious or critical violation(s) of WCAG 2.1 AA, or element(s) that reach past a window of 320 px, in the app.`)
 	process.exit(1)
 }
-console.log('axe-core found no serious or critical violation of WCAG 2.1 AA in the app.')
+console.log(`axe-core found no serious or critical violation of WCAG 2.1 AA in the app, and the settings and the form of Flow reflow at 320 px, after ${Math.round((Date.now() - started) / 1000)} s.`)
