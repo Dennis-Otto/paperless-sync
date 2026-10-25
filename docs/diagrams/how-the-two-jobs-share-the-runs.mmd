@@ -1,0 +1,28 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+    wrappingWidth: 240
+---
+flowchart TB
+    accTitle: How the two jobs share the runs
+    accDescr: run-all.sh splits the runs of the suite into two shards, one for each required check, which runs its runs side by side on a runner of its own. Shard 1, the check nextcloud, holds the oldest and the newest supported version; shard 2, the check nextcloud on PostgreSQL, MariaDB and S3, holds the newest version on PostgreSQL and on MariaDB with S3, when the change can behave differently there, and the upgrade from the last release, when the change can break it. Each version between goes, from the oldest, to the shard with the lighter load, where a version with its browser checks counts as two runs and a variant as one, and to shard 2 when both weigh as much. With Nextcloud 33 to 35, shard 1 runs 33 and 35 and shard 2 runs 34 and the variants.
+
+    all["run-all.sh<br>E2E_SHARD"]
+    between{"each version<br>between, from<br>the oldest"}
+    first["shard 1, nextcloud:<br>the oldest and the<br>newest version"]
+    second["shard 2, nextcloud on<br>PostgreSQL, MariaDB<br>and S3: the newest<br>version there, and<br>the upgrade"]
+    example["Nextcloud 33 to 35:<br>33 and 35 in shard 1,<br>34 and the<br>variants in shard 2"]
+
+    all --> first
+    all --> second
+    all --> between
+    between -- "shard 2 weighs<br>less or as much:<br>a version 2,<br>a variant 1" --> second
+    between -- "shard 1<br>weighs less" --> first
+    first ~~~ example
+    second ~~~ example
+
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class all,between bot
+    class first,second,example done

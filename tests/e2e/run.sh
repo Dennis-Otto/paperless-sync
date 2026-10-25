@@ -5,9 +5,9 @@
 
 set -euo pipefail
 
-# Git Bash on Windows would turn the paths inside the containers, such as
-# /mock/assert_json.py, into paths of Windows before docker sees them.
-export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+${MSYS2_ARG_CONV_EXCL};}/mock/"
+# Git Bash on Windows would turn the path of a setting of PHP inside the container,
+# opcache.file_cache=/tmp of PHP_CLI below, into a path of Windows before docker sees it.
+export MSYS2_ARG_CONV_EXCL="${MSYS2_ARG_CONV_EXCL:+${MSYS2_ARG_CONV_EXCL};}opcache.file_cache="
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
@@ -93,8 +93,63 @@ trap cleanup EXIT
 # cleanup shows the state of the containers.
 trap 'exit 143' TERM
 
+# A suite makes hundreds of calls into its containers and checks as many answers, so each
+# call takes the quickest way (tests/e2e/README.md#how-the-suite-stays-quick):
+# - docker exec into a container by the ID that containers() finds after each start: it
+#   starts in about two thirds of the time of docker compose exec, which reads the Compose
+#   files again on every call;
+# - Python on the host checks the answers, in a tenth of the time of Python in the
+#   container of the mock;
+# - curl controls the mock on a port of 127.0.0.1 that Docker chooses (compose.yaml), so
+#   that the suites of run-all.sh never meet on one;
+# - occ keeps the compiled code of Nextcloud in files of the container (PHP_CLI), as the
+#   official images keep it only for the web server, so that a call doesn't compile it all
+#   again: a call of occ takes about a third less of PHP. Each call is a process of its
+#   own, so the code goes into files alone, and without the JIT of the image, which
+#   would compile it once more for each. PHP still sees a change of a file, such as
+#   config.php, by its time. The web server keeps the settings of the image.
+NEXTCLOUD_CONTAINER=""
+MOCK_CONTAINER=""
+MOCK_URL=""
+PHP_CLI=(php -d opcache.enable_cli=1 -d opcache.jit=disable -d opcache.file_cache=/tmp -d opcache.file_cache_only=1)
+containers() {
+	NEXTCLOUD_CONTAINER="$("${COMPOSE[@]}" ps --quiet nextcloud)"
+	MOCK_CONTAINER="$("${COMPOSE[@]}" ps --quiet paperless-mock)"
+	MOCK_URL="http://$("${COMPOSE[@]}" port paperless-mock 8080)"
+	if [[ -z "${NEXTCLOUD_CONTAINER}" || -z "${MOCK_CONTAINER}" || "${MOCK_URL}" != http://127.0.0.1:* ]]; then
+		echo "The containers of ${PROJECT_NAME} don't run: nextcloud ${NEXTCLOUD_CONTAINER:-?}, paperless-mock ${MOCK_CONTAINER:-?} at ${MOCK_URL}." >&2
+		exit 1
+	fi
+}
+
+# python3, or python where only that one is Python 3, as on Windows.
+PYTHON=""
+for candidate in python3 python; do
+	if "${candidate}" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+		PYTHON="${candidate}"
+		break
+	fi
+done
+if [[ -z "${PYTHON}" ]]; then
+	echo "The end-to-end tests need Python 3.11 or newer on this machine, as python3 or python." >&2
+	exit 1
+fi
+
+# Python on the host, in UTF-8, whose lines end with \n also on Windows, where print ends
+# them with \r\n. A path of the host, such as that of assert_json.py, reaches it as a path
+# of Windows there.
+host_python() {
+	PYTHONUTF8=1 "${PYTHON}" "$@" | tr -d '\r'
+}
+
 occ() {
-	"${COMPOSE[@]}" exec -T --user www-data nextcloud php occ "$@"
+	"${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" "${PHP_CLI[@]}" occ "$@"
+}
+
+# Adds a user of Nextcloud with the password of the tests.
+add_user() {
+	"${DOCKER_BIN}" exec --user www-data --env "OC_PASS=${PASSWORD}" "${NEXTCLOUD_CONTAINER}" \
+		"${PHP_CLI[@]}" occ user:add --password-from-env "$1" >/dev/null
 }
 
 # Checks a JSON file in one of the modes of assert_json.py, some with a value to
@@ -102,12 +157,12 @@ occ() {
 assert_json() {
 	mode="$1"
 	file="$2"
-	"${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_json.py "${mode}" "${@:3}" < "${file}"
+	host_python "${SCRIPT_DIR}/assert_json.py" "${mode}" "${@:3}" < "${file}"
 }
 
 # A value of the JSON on standard input, by its keys and indexes: json_value 0 id.
 json_value() {
-	"${COMPOSE[@]}" exec -T paperless-mock python -c '
+	host_python -c '
 import json, sys
 value = json.load(sys.stdin)
 for key in sys.argv[1:]:
@@ -116,15 +171,12 @@ print(value)' "$@"
 }
 
 control() {
-	path="$1"
-	"${COMPOSE[@]}" exec -T paperless-mock python -c \
-		"import urllib.request; urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8080${path}', method='POST')).read()"
+	curl --fail --silent --show-error --request POST "${MOCK_URL}$1" >/dev/null
 }
 
 # What the Paperless mock has seen: downloads, uploads and refused requests.
 mock_state() {
-	"${COMPOSE[@]}" exec -T paperless-mock python -c \
-		"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8080/control/state').read().decode())"
+	curl --fail --silent --show-error "${MOCK_URL}/control/state"
 }
 
 # axe-core checks the pages of the app in Chromium (accessibility.mjs), inside the
@@ -339,7 +391,7 @@ status_api() {
 # Authorization of $2, none when it is empty, and the JSON body $3. Writes the answer to the
 # file $1 and prints the HTTP status.
 webhook() {
-	{ "${COMPOSE[@]}" exec -T paperless-mock python -c '
+	{ "${DOCKER_BIN}" exec "${MOCK_CONTAINER}" python -c '
 import sys, urllib.error, urllib.request
 headers = {"Content-Type": "application/json"}
 if sys.argv[1]:
@@ -378,7 +430,7 @@ assert_webhook() {
 # The calls with a wrong secret that Nextcloud's brute-force protection counted for the address
 # of the mock, which plays Paperless.
 webhook_attempts() {
-	address="$("${COMPOSE[@]}" exec -T paperless-mock python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')"
+	address="$("${DOCKER_BIN}" exec "${MOCK_CONTAINER}" python -c 'import socket; print(socket.gethostbyname(socket.gethostname()))')"
 	occ security:bruteforce:attempts --output=json "${address}" paperless_sync_webhook \
 		| json_value attempts
 }
@@ -479,8 +531,8 @@ create_tag() {
 
 # The collaborative tags of a file as Files shows them to the user, each as its name and
 # whether users may assign it, such as insurance:false, one per line in the order of the names.
-# The answer goes into a file, which the Python of the mock then reads: Scorecard reports a pipe
-# of curl into exec … python as a download that runs ("Downloads that a script runs" in
+# The answer goes into a file, which Python then reads: Scorecard reports a pipe
+# of curl into python as a download that runs ("Downloads that a script runs" in
 # scripts/check-project.sh). A command substitution, such as that of assert_file_tags, doesn't
 # stop at a failure, so a request that fails returns its status at once.
 file_tags() {
@@ -495,7 +547,7 @@ file_tags() {
 		--data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:display-name/><oc:user-assignable/></d:prop></d:propfind>' \
 		--output "${answer}" \
 		"${BASE_URL}/remote.php/dav/systemtags-relations/files/${file}" || return
-	"${COMPOSE[@]}" exec -T paperless-mock python -c '
+	host_python -c '
 import sys, xml.etree.ElementTree as tree
 ns = {"d": "DAV:", "oc": "http://owncloud.org/ns"}
 tags = []
@@ -563,7 +615,9 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
-# The seconds since the start at the end of each phase show where a slow run spends them.
+containers
+# The seconds since the start at the end of each phase show where a slow run spends them;
+# run-all.sh adds them to the table of its summary.
 echo "The containers run after ${SECONDS} s."
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
@@ -611,8 +665,7 @@ NEXTCLOUD_VERSION="$(occ status --output=json | grep -oE '"versionstring":"[^"]+
 echo "The tests run against Nextcloud ${NEXTCLOUD_VERSION:-?} on ${DATABASE_NAME}, with ${STORAGE_NAME}."
 
 for user in sync-target e2e-other; do
-	"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \
-		php occ user:add --password-from-env "${user}" >/dev/null
+	add_user "${user}"
 done
 
 if [[ "${E2E_UPGRADE}" == "1" ]]; then
@@ -641,6 +694,7 @@ occ background:cron >/dev/null
 occ app:disable firstrunwizard >/dev/null 2>&1 || true
 "${COMPOSE[@]}" restart nextcloud >/dev/null
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
+containers
 echo "Nextcloud and the app are set up after ${SECONDS} s."
 
 # The administration settings render the form with all of its routes.
@@ -696,7 +750,7 @@ fi
 # loaded. The app's attribute routes exist without that, as in a PHP script
 # (Dennis-Otto/paperless-unified-search#25). Scripts link through index.php.
 # shellcheck disable=SC2016
-ROUTES="$("${COMPOSE[@]}" exec -T --user www-data nextcloud php -r '
+ROUTES="$("${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" "${PHP_CLI[@]}" -r '
 	require "/var/www/html/lib/base.php";
 	$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
 	foreach (["settings.save", "settings.test", "settings.reset", "settings.preview", "sync.run", "sync.status"] as $route) {
@@ -1410,9 +1464,11 @@ echo "Send to Paperless in Flow passes after ${SECONDS} s."
 # of the app in Files and the form of its rule in Flow meet WCAG 2.1 AA, also at 320 px, and
 # the settings work by keyboard alone.
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
+	BROWSER_STARTED="${SECONDS}"
 	control /control/scenario/archive >/dev/null
 	accessibility
 	echo "The accessibility check passes after ${SECONDS} s."
+	echo "The checks in the browser took $((SECONDS - BROWSER_STARTED)) s."
 fi
 
 # The setup of the account of the app with the token of a superuser of Paperless: the app
@@ -1473,8 +1529,8 @@ curl --fail-with-body --silent --show-error \
 	"${BASE_URL}/apps/paperless_sync/settings"
 echo "The setup of the account in Paperless passes after ${SECONDS} s."
 
-"${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
-	| "${COMPOSE[@]}" exec -T paperless-mock python /mock/assert_log.py
+"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
+	| host_python "${SCRIPT_DIR}/assert_log.py"
 
 # A Paperless-ngx before 2.16 doesn't serve version 9 of its API, which every request of the app
 # asks for, so a run says which Paperless it needs instead of reading answers of another shape.
@@ -1512,7 +1568,7 @@ fi
 log_count() {
 	# The text to count reaches the shell of the container as its argument $1.
 	# shellcheck disable=SC2016
-	"${COMPOSE[@]}" exec -T nextcloud sh -c 'grep -c -F -e "$1" /var/www/html/data/nextcloud.log || true' sh "$1"
+	"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'grep -c -F -e "$1" /var/www/html/data/nextcloud.log || true' sh "$1"
 }
 "${COMPOSE[@]}" stop paperless-mock >/dev/null
 UNREACHABLE_STATUS="$(curl --silent --show-error \
@@ -1531,6 +1587,8 @@ occ paperless_sync:run > "${TMP_DIR}/unreachable-occ.txt" 2>&1 || UNREACHABLE_CO
 UNREACHABLE_STATE_CODE=0
 occ paperless_sync:status --exit-code >/dev/null || UNREACHABLE_STATE_CODE=$?
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+# A start of the mock may give it another port.
+containers
 if [[ "${UNREACHABLE_STATUS}" != "500" ]]; then
 	echo "A dry-run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
 	exit 1
@@ -1607,6 +1665,8 @@ for attempt in 2 3; do
 	fi
 done
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+# A start of the mock may give it another port.
+containers
 notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
 assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
 assert_status_api_soon status-api-failing "${TMP_DIR}/status-api-failing.json"
@@ -1633,8 +1693,7 @@ assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.jso
 # user had of them leave its archive. The Paperless user E2E-Other gets e2e-other, whatever the
 # case, and e2e-owner a user of its own. The file that e2e-owner puts into their inbox becomes
 # theirs in Paperless, and comes back into their archive. The other users see none of it.
-"${COMPOSE[@]}" exec -T --user www-data --env "OC_PASS=${PASSWORD}" nextcloud \
-	php occ user:add --password-from-env e2e-owner >/dev/null
+add_user e2e-owner
 control /control/scenario/per-user
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
@@ -1657,7 +1716,7 @@ assert_json per-user "${TMP_DIR}/per-user.json"
 # the path, for WebDAV, of each change of a type in a report.
 per_user_files() {
 	type="$1"
-	"${COMPOSE[@]}" exec -T paperless-mock python -c '
+	host_python -c '
 import json, sys
 from urllib.parse import quote
 for entry in json.load(sys.stdin)["entries"]:

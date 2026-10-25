@@ -138,6 +138,8 @@ upgrade_run() {
 restart_nextcloud() {
 	"${COMPOSE[@]}" restart nextcloud >/dev/null
 	"${COMPOSE[@]}" up --detach --wait --wait-timeout 120 >/dev/null
+	# The IDs of the containers and the port of the mock, should Compose have made them anew.
+	containers
 }
 
 # 1. The release, as the App Store gives it.

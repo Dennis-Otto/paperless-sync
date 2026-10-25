@@ -10,9 +10,9 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0002](0002-the-filesystem-api-of-nextcloud.md) | Write the archive through the filesystem API of Nextcloud | accepted, amended by [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) and [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) |
 | [0003](0003-paperless-is-the-source.md) | Paperless is the source of the archive | accepted |
 | [0004](0004-delete-only-what-is-confirmed.md) | Delete only what Paperless has confirmed gone, and only what fits into a run | accepted |
-| [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted |
+| [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted, amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) |
 | [0006](0006-every-file-name-keeps-its-marker.md) | Every file name keeps its marker and its extension, within the bytes of Nextcloud | accepted |
-| [0007](0007-end-to-end-tests-on-real-databases-and-storage.md) | Run the end-to-end tests on the databases and the storage of real installations | accepted |
+| [0007](0007-end-to-end-tests-on-real-databases-and-storage.md) | Run the end-to-end tests on the databases and the storage of real installations | accepted, amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) |
 | [0008](0008-local-network-per-request.md) | Reach a Paperless in the local network per request, never for the whole server | accepted |
 | [0009](0009-checksums-of-paperless-2-and-3.md) | Keep the SHA-256 and the MD5 of every download, for Paperless-ngx 2 and 3 | accepted |
 | [0010](0010-mirrored-files-keep-their-identity.md) | Mirrored files keep their identity: moved, and updated in place | accepted |
@@ -34,3 +34,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) | Every change of files runs in the filesystem of their user, through the setup manager of Nextcloud | accepted |
 | [0027](0027-the-account-of-the-app-from-one-token-of-a-superuser.md) | The settings create the account of the app in Paperless with a token of a superuser that they use once | accepted |
 | [0028](0028-test-the-upgrade-users-run.md) | Test the upgrade that users run: from the last release, on PostgreSQL and MariaDB, with the packages they install | accepted |
+| [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) | Share the end-to-end runs between both required jobs, and make each call of the suite quick | accepted |

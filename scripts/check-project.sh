@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The checks of this app alone, which scripts/check.sh runs last: the browser of the
-# end-to-end tests, the rules that decide when they run, the pipes of the shell scripts,
+# end-to-end tests, the rules that decide when they run and how their two jobs share
+# them, the pipes of the shell scripts,
 # none of which may hand a download to a program, the icon and the hook of the
 # website, the versions in the README, the description of the app, the area labels of
 # pull requests, the explanations of its checks for the PR coach, the check of its
@@ -298,6 +299,61 @@ if ((problems > 0)); then
   exit 1
 fi
 echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, the upgrade from the last release for the migrations, the stored settings and state and the package, and the contract tests against a real Paperless for the client of Paperless."
+
+printf '\n== %s\n' "The shards of the end-to-end tests"
+# The two required jobs of .github/workflows/e2e.yml each run one shard of
+# tests/e2e/run-all.sh (E2E_SHARD): together they start every run of the whole suite,
+# each once, whatever the versions and the variants, and the job nextcloud, shard 1, the
+# oldest and the newest version. E2E_PLAN=1 prints the runs without starting them.
+runs_of() {
+  local versions="$1" variants="$2" shard="$3"
+  E2E_PLAN=1 E2E_VERSIONS="$versions" E2E_VARIANTS="$variants" E2E_SHARD="$shard" \
+    bash tests/e2e/run-all.sh | grep -v '^The shard .* has nothing to run' || true
+}
+problems=0
+for versions in "" "33 34 35 36 37" "33 34" none; do
+  for variants in "" none pgsql "pgsql mysql+s3 mysql sqlite+s3"; do
+    if [[ "$versions" == none && "$variants" == none ]]; then
+      continue
+    fi
+    whole="$(runs_of "$versions" "$variants" "" | sort)"
+    halves="$({
+      runs_of "$versions" "$variants" 1
+      runs_of "$versions" "$variants" 2
+    } | sort)"
+    if [[ "$whole" != "$halves" ]]; then
+      echo "E2E_VERSIONS=\"$versions\" E2E_VARIANTS=\"$variants\": the shards 1 and 2 of tests/e2e/run-all.sh start \"${halves//$'\n'/;}\" instead of every run once: \"${whole//$'\n'/;}\"."
+      problems=$((problems + 1))
+    fi
+  done
+done
+# The split of samples: the oldest and the newest version in shard 1, the variants in
+# shard 2, and each version between in the one with the lighter load, where a version,
+# with its browser checks, counts as two and a variant as one.
+expect_shard() {
+  local versions="$1" variants="$2" shard="$3" expected="$4" actual
+  actual="$(runs_of "$versions" "$variants" "$shard")"
+  if [[ "${actual//$'\n'/;}" != "$expected" ]]; then
+    echo "E2E_VERSIONS=\"$versions\" E2E_VARIANTS=\"$variants\" E2E_SHARD=$shard bash tests/e2e/run-all.sh starts \"${actual//$'\n'/;}\" instead of \"$expected\"."
+    problems=$((problems + 1))
+  fi
+}
+expect_shard "33 34 35" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 35"
+expect_shard "33 34 35" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3"
+expect_shard "33 34 35" none 2 "Nextcloud 34"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 36"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35" "" 1 "Nextcloud 33;Nextcloud 35"
+expect_shard "33 34 35" "" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3;Nextcloud 35 on PostgreSQL, upgraded from the last release;Nextcloud 35 on MariaDB, upgraded from the last release"
+expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 35;Nextcloud 36"
+expect_shard "33 34 35" "pgsql+upgrade mysql+upgrade" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL, upgraded from the last release;Nextcloud 35 on MariaDB, upgraded from the last release"
+expect_shard "36 35 34 33" none 1 "Nextcloud 33;Nextcloud 36"
+expect_shard "33 34 35 36" none 2 "Nextcloud 34;Nextcloud 35"
+expect_shard "33 34" none 2 ""
+if ((problems > 0)); then
+  exit 1
+fi
+echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with the lighter load, where a version counts as two runs and a variant as one."
 
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a
