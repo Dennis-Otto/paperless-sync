@@ -286,6 +286,7 @@ final class SyncControllerTest extends TestCase {
 	}
 
 	public function testStatusOfTheLastRun(): void {
+		$this->statusService(new TestClock())->checkedConnection('https://paperless.example.test', true);
 		$this->controller->run();
 
 		$status = $this->controller->status()->getData();
