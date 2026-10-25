@@ -5,18 +5,20 @@ config:
 ---
 flowchart TB
     accTitle: What run-all.sh runs side by side
-    accDescr: Every supported Nextcloud version, from min-version to max-version, runs on SQLite with local storage and with the accessibility check. The newest version also runs on PostgreSQL, and on MariaDB with an S3 object store, without the accessibility check, which doesn't depend on them.
+    accDescr: Every supported Nextcloud version, from min-version to max-version, runs on SQLite with local storage and with the accessibility check. The newest version also runs on PostgreSQL, and on MariaDB with an S3 object store, without the accessibility check, which doesn't depend on them. The newest version that the last release supports as well upgrades an installation in use from that release to the package of the commit, on PostgreSQL and on MariaDB.
 
     all["run-all.sh"]
     versions["Every version<br>from min-version<br>to max-version:<br>SQLite, local storage,<br>accessibility"]
     pgsql["max-version:<br>PostgreSQL,<br>local storage"]
     mysql["max-version:<br>MariaDB,<br>S3 object store"]
+    upgrade["Upgrade from<br>the last release:<br>PostgreSQL<br>and MariaDB"]
 
     all --> versions
     all --> pgsql
     all --> mysql
+    all --> upgrade
 
     classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     class all bot
-    class versions,pgsql,mysql done
+    class versions,pgsql,mysql,upgrade done

@@ -33,4 +33,5 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted |
 | [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) | Every change of files runs in the filesystem of their user, through the setup manager of Nextcloud | accepted |
 | [0027](0027-the-account-of-the-app-from-one-token-of-a-superuser.md) | The settings create the account of the app in Paperless with a token of a superuser that they use once | accepted |
+| [0028](0028-test-the-upgrade-users-run.md) | Test the upgrade that users run: from the last release, on PostgreSQL and MariaDB, with the packages they install | accepted |
 | [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) | Share the end-to-end runs between both required jobs, and make each call of the suite quick | accepted |

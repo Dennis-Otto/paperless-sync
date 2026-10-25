@@ -7,23 +7,27 @@ name: Docker E2E
 # version that appinfo/info.xml supports, from min-version to max-version, so that
 # raising max-version, as the upstream bot does, tests the new version at once, and
 # against the newest version on PostgreSQL, and on MariaDB with an S3 object store as
-# its primary storage (decision 0007). Two jobs, both required checks, share the work
-# on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
+# its primary storage (decision 0007). Beside them, it upgrades an installation in use
+# on PostgreSQL and on MariaDB from the last release to the package of the commit,
+# which krankerl builds as the release does (tests/e2e/upgrade.sh, decision 0028): the
+# only test where the migrations meet rows. Two jobs, both required checks, share the
+# work on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
 # runs the oldest and the newest version, nextcloud on PostgreSQL, MariaDB and S3 the
-# databases and S3, and each version between goes to the one with the lighter load (a
-# version with its browser checks counts as two runs, a variant as one), so that
-# a fourth version doesn't make one of them twice as slow. Each job runs its share side
-# by side: one wait for a runner instead of one for each, and the downloads of one run
-# overlap with the installation of another.
+# databases, S3 and the upgrades, and each version between goes to the one with the
+# lighter load (a version with its browser checks counts as two runs, a variant as
+# one), so that a fourth version doesn't make one of them twice as slow. Each job runs
+# its share side by side: one wait for a runner instead of one for each, and the
+# downloads of one run overlap with the installation of another.
 #
 # In a pull request, the versions run only when the change can affect the app
-# (tests/e2e/affected.sh), and the databases and S3 only when it can behave
-# differently there: a change of the migrations, the state, the files in Nextcloud,
-# the uploads, appinfo/info.xml or the tests. A change of the documentation or of
-# other workflows alone, or a release, which only writes its version, passes both
-# required checks at once. Every push to main runs them all, and so does
-# every night, as the images of the versions move with each point release of
-# Nextcloud.
+# (tests/e2e/affected.sh), the databases and S3 only when it can behave differently
+# there: a change of the migrations, the state, the files in Nextcloud, the uploads,
+# appinfo/info.xml or the tests, and the upgrade only when it can break that: a change
+# of the migrations, the stored settings and state, the package, appinfo/info.xml or
+# the tests. A change of the documentation or of other workflows alone, or a release,
+# which only writes its version, passes both required checks at once. Every push to
+# main runs them all, and so does every night, as the images of the versions move with
+# each point release of Nextcloud.
 #
 # Every Monday, and when started by hand, they also run against the coming Nextcloud
 # (tests/e2e/canary.sh): the beta or release candidate of the next major version, or
@@ -96,8 +100,17 @@ jobs:
           # job variants doesn't take. Both jobs get the same variants, so that they
           # split the runs the same way; the job variants runs them.
           E2E_SHARD: 1
-          E2E_VARIANTS: ${{ steps.changes.outputs.variants == 'false' && 'none' || '' }}
-        run: bash tests/e2e/run-all.sh
+          VARIANTS: ${{ steps.changes.outputs.variants }}
+          UPGRADE: ${{ steps.changes.outputs.upgrade }}
+        run: |
+          variants=()
+          if [[ "$VARIANTS" != false ]]; then
+            variants+=(pgsql mysql+s3)
+          fi
+          if [[ "$UPGRADE" != false ]]; then
+            variants+=(pgsql+upgrade mysql+upgrade)
+          fi
+          E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -126,19 +139,60 @@ jobs:
           persist-credentials: false
           # The merge commit of a pull request and its base, which affected.sh compares.
           fetch-depth: 2
-      - name: Find out whether the change can affect the app, and on another database or storage
+      - name: Find out whether the change can affect the app, behave differently on another database or storage, or break the upgrade
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
-      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, and against the versions between
-        # Without a pull request, the step changes doesn't run, and so this one does.
-        if: steps.changes.outputs.affected != 'false'
+      # The same krankerl as the CI's and the release workflow's, for the package of the
+      # commit that the upgrade installs: its pin is read from ci.yml, which the blueprint
+      # updates, so there is no copy here to fall behind; scripts/check-project.sh checks
+      # that ci.yml names exactly one of each.
+      - name: Use the krankerl of the CI and of the release
+        if: steps.changes.outputs.upgrade != 'false'
+        run: |
+          sed -nE 's/^[[:space:]]*(KRANKERL_(VERSION|SHA256)):[[:space:]]*([^[:space:]]+).*/\1=\3/p' \
+            .github/workflows/ci.yml >> "$GITHUB_ENV"
+      # krankerl comes from the cache once a run has downloaded it, as in the CI, and
+      # its package is checked by its sha256 either way.
+      - name: Restore krankerl from the cache
+        if: steps.changes.outputs.upgrade != 'false'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/krankerl
+          key: krankerl-${{ env.KRANKERL_VERSION }}-${{ env.KRANKERL_SHA256 }}
+      - name: Install krankerl, which builds the package of the commit for the upgrade
+        if: steps.changes.outputs.upgrade != 'false'
+        run: |
+          deb="$RUNNER_TEMP/krankerl/krankerl_${KRANKERL_VERSION}_amd64.deb"
+          if [[ ! -f "$deb" ]]; then
+            mkdir -p "$RUNNER_TEMP/krankerl"
+            curl --fail --location --silent --show-error --retry 5 --retry-all-errors \
+              --connect-timeout 15 --max-time 300 --output "$deb" \
+              "https://github.com/ChristophWurst/krankerl/releases/download/v$KRANKERL_VERSION/krankerl_${KRANKERL_VERSION}_amd64.deb"
+          fi
+          echo "$KRANKERL_SHA256  $deb" | sha256sum --check --strict
+          sudo dpkg --install "$deb"
+      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, the upgrade from the last release, and the versions between
+        # Without a pull request, the step changes doesn't run, and so this one runs all.
+        if: steps.changes.outputs.affected != 'false' || steps.changes.outputs.upgrade != 'false'
         env:
-          # Shard 2: the variants when the change can behave differently on another
-          # database or storage, and the versions between that job nextcloud doesn't take.
+          # Shard 2: the variants that the change needs, and the versions between that
+          # job nextcloud doesn't take. Both jobs list the same variants, so that they
+          # split the runs the same way. A change that can only break the upgrade, such
+          # as one of the package, runs no version.
           E2E_SHARD: 2
-          E2E_VARIANTS: ${{ steps.changes.outputs.variants == 'false' && 'none' || '' }}
-        run: bash tests/e2e/run-all.sh
+          E2E_VERSIONS: ${{ steps.changes.outputs.affected == 'false' && 'none' || '' }}
+          VARIANTS: ${{ steps.changes.outputs.variants }}
+          UPGRADE: ${{ steps.changes.outputs.upgrade }}
+        run: |
+          variants=()
+          if [[ "$VARIANTS" != false ]]; then
+            variants+=(pgsql mysql+s3)
+          fi
+          if [[ "$UPGRADE" != false ]]; then
+            variants+=(pgsql+upgrade mysql+upgrade)
+          fi
+          E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure

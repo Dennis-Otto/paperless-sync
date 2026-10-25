@@ -44,6 +44,23 @@ if [[ -z "$image" || "$image" != "$package" ]]; then
 fi
 echo "The image of Playwright and playwright-core are both at version $package."
 
+# The job variants of e2e.yml reads the krankerl that builds the package of the commit
+# for the upgrade test from ci.yml, the one of the CI and of the release, whose package
+# users get. It needs exactly one of each pin there, and no copy of its own that the
+# blueprint's updates of ci.yml would leave behind.
+for pin in VERSION SHA256; do
+  count="$(grep -cE "^[[:space:]]*KRANKERL_$pin:[[:space:]]*[^[:space:]]+" .github/workflows/ci.yml || true)"
+  if [[ "$count" != 1 ]]; then
+    echo ".github/workflows/ci.yml names KRANKERL_$pin $count times, but the upgrade test in .github/workflows/e2e.yml reads exactly one pin from it; ci.yml belongs to the blueprint, so fix it there."
+    exit 1
+  fi
+  if grep -qE "^[[:space:]]*KRANKERL_$pin:" .github/workflows/e2e.yml; then
+    echo ".github/workflows/e2e.yml pins KRANKERL_$pin itself; remove that pin, as the job variants reads the one of .github/workflows/ci.yml, which the blueprint keeps up to date."
+    exit 1
+  fi
+done
+echo "The upgrade test builds the package of the commit with the krankerl of the CI and of the release."
+
 printf '\n== %s\n' "Changes that run the end-to-end tests"
 # The rules of tests/e2e/affected.sh, with which a pull request skips the end-to-end
 # tests when it can't affect the app. ShellCheck reads that script anyway, as
@@ -112,6 +129,31 @@ for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
   lib/Controller/SettingsController.php templates/settings.php js/settings.js l10n/de.json \
   tests/e2e/README.md README.md tests/e2e/screenshots.mjs tests/e2e/frozen.mjs tests/e2e/compare.mjs; do
   expect_variants skip "$path"
+done
+
+# The upgrade from the last release runs for a change of the migrations, of the settings and
+# the state that a release stored, of the package that users install, and of the tests.
+expect_upgrade() {
+  local expected="$1" path="$2" actual=skip
+  if path_affects_upgrade "$path"; then
+    actual=run
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    echo "A change of $path should $expected the upgrade from the last release, but tests/e2e/affected.sh says $actual."
+    problems=$((problems + 1))
+  fi
+}
+for path in lib/Migration/Version000130Date20261014120000.php lib/Service/ConfigService.php \
+  lib/Service/SyncStateRepository.php lib/Model/SyncConfig.php lib/Service/WebhookService.php \
+  .nextcloudignore krankerl.toml scripts/check-package.sh tests/e2e/upgrade.sh \
+  tests/e2e/upgrade_state.php tests/e2e/assert_upgrade.py tests/e2e/packages.sh tests/e2e/run.sh \
+  tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml; do
+  expect_upgrade run "$path"
+done
+for path in lib/Service/SyncService.php lib/Service/PaperlessApiService.php templates/settings.php \
+  js/settings.js l10n/de.json README.md tests/e2e/README.md tests/e2e/accessibility.mjs \
+  tests/e2e/package-lock.json tests/e2e/screenshots.sh tests/e2e/contract.py; do
+  expect_upgrade skip "$path"
 done
 
 # The contract tests against a real Paperless-ngx run for a change of what the app asks
@@ -237,11 +279,11 @@ decision() {
   rm -f "$output"
   echo "$result"
 }
-if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true\nvariants=true' ]]; then
+if [[ "$(decision 0000000000000000000000000000000000000000 HEAD)" != $'affected=true\nvariants=true\nupgrade=true' ]]; then
   echo "tests/e2e/affected.sh should run the end-to-end tests when it can't compare the commits."
   problems=$((problems + 1))
 fi
-if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false\nvariants=false' ]]; then
+if git rev-parse --quiet --verify HEAD >/dev/null && [[ "$(decision HEAD HEAD)" != $'affected=false\nvariants=false\nupgrade=false' ]]; then
   echo "tests/e2e/affected.sh HEAD HEAD should find nothing that runs the end-to-end tests."
   problems=$((problems + 1))
 fi
@@ -256,7 +298,7 @@ fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, and the contract tests against a real Paperless for the client of Paperless."
+echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, the upgrade from the last release for the migrations, the stored settings and state and the package, and the contract tests against a real Paperless for the client of Paperless."
 
 printf '\n== %s\n' "The shards of the end-to-end tests"
 # The two required jobs of .github/workflows/e2e.yml each run one shard of
@@ -296,13 +338,15 @@ expect_shard() {
     problems=$((problems + 1))
   fi
 }
-expect_shard "33 34 35" "" 1 "Nextcloud 33;Nextcloud 35"
-expect_shard "33 34 35" "" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3"
+expect_shard "33 34 35" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 35"
+expect_shard "33 34 35" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3"
 expect_shard "33 34 35" none 2 "Nextcloud 34"
-expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 36"
-expect_shard "33 34 35 36" "" 2 "Nextcloud 34;Nextcloud 35;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
-expect_shard "33 34 35" "pgsql mysql+s3 mysql sqlite+s3" 1 "Nextcloud 33;Nextcloud 35"
-expect_shard "33 34 35" "pgsql mysql+s3 mysql sqlite+s3" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3;Nextcloud 35 on MariaDB;Nextcloud 35 on SQLite with S3"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 36"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35" "" 1 "Nextcloud 33;Nextcloud 35"
+expect_shard "33 34 35" "" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3;Nextcloud 35 on PostgreSQL, upgraded from the last release;Nextcloud 35 on MariaDB, upgraded from the last release"
+expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 35;Nextcloud 36"
+expect_shard "33 34 35" "pgsql+upgrade mysql+upgrade" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL, upgraded from the last release;Nextcloud 35 on MariaDB, upgraded from the last release"
 expect_shard "36 35 34 33" none 1 "Nextcloud 33;Nextcloud 36"
 expect_shard "33 34 35 36" none 2 "Nextcloud 34;Nextcloud 35"
 expect_shard "33 34" none 2 ""
@@ -750,6 +794,16 @@ if [[ -n "$python" ]]; then
   "$python" -B tests/coach/test_checks_project.py
 else
   echo "Python 3.11 or newer is not installed here; the CI checks the explanations of the checks."
+fi
+
+printf '\n== %s\n' "Checks of the upgrade test"
+# tests/e2e/assert_upgrade.py, which tells whether the upgrade from the last release kept
+# the rows, the settings, the credentials, the files and the retries of an installation in
+# use: with samples of upgrades that lose each of them, which it must find.
+if [[ -n "$python" ]]; then
+  "$python" -B tests/e2e/test_assert_upgrade.py
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the checks of the upgrade test."
 fi
 
 printf '\n== %s\n' "Check of the package"

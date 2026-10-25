@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The upgrade of an installation in use (upgrade.sh): run.sh adds this file to
+# compose.yaml with E2E_UPGRADE=1. Nextcloud then has no checkout mounted at the folder of
+# the app: the test unpacks the package of the last release there, and later the package
+# of the commit, as an administrator's update does, into the volume of Nextcloud.
+
+services:
+  nextcloud:
+    volumes: !override
+      - nextcloud_html:/var/www/html
+    # A quarter of the weight of the CPU of the other containers: run-all.sh runs the
+    # upgrade beside the scenario of the other variants on the four cores of a runner of
+    # the CI, and the upgrade, which ends sooner, yields to them instead of making the job
+    # wait for the scenario.
+    cpu_shares: 256
