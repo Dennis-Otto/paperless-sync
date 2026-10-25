@@ -806,6 +806,17 @@ else
   echo "Python 3.11 or newer is not installed here; the CI checks the checks of the upgrade test."
 fi
 
+printf '\n== %s\n' "First error of a failed end-to-end run"
+# tests/e2e/failure.py, which names the first error of each run that failed in the summary
+# of the job and in the issue of the canary: with a sample of the log of each kind of
+# failure, a check in the browser, an assertion, a message of run.sh, the time limit and a
+# broken contract.
+if [[ -n "$python" ]]; then
+  "$python" -B tests/e2e/test_failure.py
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the first error of a failed end-to-end run."
+fi
+
 printf '\n== %s\n' "Check of the package"
 # scripts/check-package.sh, which scripts/check.sh runs on the package of krankerl and
 # the release workflow on the package of every release, with the packages it must
@@ -840,6 +851,10 @@ echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud link
 # can't be seen and a focus against the order of the page.
 node --test --test-reporter=dot tests/e2e/a11y.test.mjs
 echo "tests/e2e/a11y.mjs fails a button without a name, a box wider than 320 px, a faint focus and a focus against the order of the page."
+# The browser of the checks in the browser, which keeps the traces and the screenshots of a
+# check that fails, and nothing of one that passes.
+node --test --test-reporter=dot tests/e2e/browser.test.mjs
+echo "tests/e2e/browser.mjs keeps the traces and screenshots of a check in the browser that fails, also of a window that it closed, and every check starts its browser through it."
 # The frozen story of the pictures, so that two runs of tests/e2e/screenshots.sh draw the
 # same pixels, and the report of the visual check, which renders on the paths of the
 # screenshot bot.

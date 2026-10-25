@@ -36,8 +36,14 @@
 # ends after 20 minutes, so that the logs of all are still printed. The table of the
 # results gives the time of each phase of each run, from the lines of its log, so that a
 # run that gets slower shows where.
+# E2E_ARTIFACTS, a folder, gets a folder for each run that failed, named by its key, such
+# as 35 or 35-pgsql-upgrade, with its log, run.log, its title, title.txt, and the evidence
+# that run.sh keeps; tests/e2e/failure.py names the first error of each from there.
 
 set -euo pipefail
+
+# A relative folder is one of the directory that the script started in.
+[[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
@@ -254,6 +260,7 @@ run() {
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
 		E2E_UPGRADE="${upgrades[index]}" \
+		E2E_ARTIFACTS="${E2E_ARTIFACTS:+${E2E_ARTIFACTS}/${key}}" \
 		"${limit[@]}" bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${key}.log" 2>&1 &
 	echo "$!" >"${LOG_DIR}/${key}.pid"
 	wait "$!" || status=$?
@@ -371,6 +378,11 @@ for index in "${!keys[@]}"; do
 
 	title="${titles[index]} (${release:-?}): ${result} after $(duration "${seconds}")"
 	show "${key}" "${title}"
+	if [[ -n "${E2E_ARTIFACTS:-}" && "${result}" != passed ]]; then
+		mkdir -p "${E2E_ARTIFACTS}/${key}"
+		cp "${LOG_DIR}/${key}.log" "${E2E_ARTIFACTS}/${key}/run.log" 2>/dev/null || true
+		echo "${title}" >"${E2E_ARTIFACTS}/${key}/title.txt"
+	fi
 	if [[ "${GITHUB_ACTIONS:-}" == "true" && "${result}" != passed ]]; then
 		echo "::error title=Docker E2E::The end-to-end tests ${result} against ${titles[index]}; the group \"${title}\" of the log shows why."
 	fi

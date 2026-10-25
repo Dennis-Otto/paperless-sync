@@ -67,6 +67,7 @@ Optional environment variables:
 - `E2E_UPGRADE=1`: run [the upgrade from the last release](#the-upgrade-from-the-last-release) instead of the scenario, with the packages in `E2E_RELEASE_PACKAGE` and `E2E_PACKAGE`, which `packages.sh` downloads and builds when they are empty; `E2E_RELEASE_REPOSITORY`, by default `Dennis-Otto/paperless-sync`, names the repository of the release
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
+- `E2E_ARTIFACTS`: a folder for the evidence of a failure and the traces of the checks in the browser, see [When a run fails](#when-a-run-fails)
 
 All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture, an account that is no superuser, with every permission of a run, and the owner of every document; `e2e-view-only-token`, an account without the permissions for the tags, for adding documents and for their tasks; `e2e-no-ui-settings-token`, an account without **View** for UI Settings; and `e2e-superuser-only-token`, a superuser, which alone may list, create and change users and gives the accounts that it created their tokens, `e2e-token-of-<username>`, for their passwords. It records whether uploads arrived intact. Like Paperless-ngx, it answers each endpoint only with its permission, names the ID and the permissions of the account in `/api/ui_settings/`, and filters the documents by their owner. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.` It plays Paperless-ngx 3.3.0, or 2.20.15 and 2.15.3 after `/control/paperless/<version>`: it serves the versions of the API that each of them serves, by the header `Accept` or its default, refuses the others with `406 Not Acceptable`, names itself in `X-Version` and `X-Api-Version`, and lists tasks in the shapes of their serializers. `/control/tasks/<end>` and `/control/task-of/<file>/<end>` end tasks with `success`, `failure`, `duplicate` or `revoked`, as Paperless-ngx 3.x stores them. After `/control/uploads/unavailable`, it answers every upload with `503`, as a Paperless behind a proxy whose worker is down, until `/control/uploads/available`.
 
@@ -84,6 +85,7 @@ All credentials, users, filenames, document content, and metadata are synthetic.
 - `E2E_VERSION_TIMEOUT`: the time after which a run that hangs ends as failed, default `15m`, below the 20 minutes of the job in the CI, so that the logs of all runs are still printed
 - `E2E_SHARD`: `1` or `2`, one half of the runs, as each [job of the CI](#in-the-ci) runs one: shard 1 the oldest and the newest version, shard 2 the variants, and each version between the shard with the lighter load, where a version, with its browser checks, counts as two runs and a variant as one, shard 2 when both weigh as much; a shard with nothing to run passes
 - `E2E_PLAN=1`: prints the runs that `run-all.sh` would start, and starts none, such as `E2E_PLAN=1 E2E_SHARD=2 bash tests/e2e/run-all.sh`
+- `E2E_ARTIFACTS`: a folder that gets a folder for each run that failed, named by its key, with its log, its title and its evidence, see [When a run fails](#when-a-run-fails)
 
 Ctrl-C ends every run, each with the cleanup of `run.sh`, and prints the logs so far. A failed run names the command that runs it again on its own.
 
@@ -123,6 +125,37 @@ Of the changes that run the tests, those that can behave differently on another 
 Every push to `main`, a run by hand and every night run both jobs in any case: the images `nextcloud:<version>-apache` move with each point release of Nextcloud, which the nightly run catches before the next pull request. A newer push to a pull request or to `main` cancels the run of the older one; a run by hand and the scheduled runs go to the end.
 
 A job that fails explains itself, as every check does: its summary and, after the checks, the comment of the PR coach on the pull request say what failed, why that matters and how to run it on your machine, from [`.github/checks.project.toml`](../../.github/checks.project.toml), also on a pull request from a fork. The table of the summary names each version, database and storage with its result and the time of each of its phases, and the last lines of the log the command that runs one that failed again on its own.
+
+## When a run fails
+
+A run that fails leaves what it takes to see why, without running it again. Each job of the end-to-end tests in the CI sets `E2E_ARTIFACTS` to a folder, and its cleanup fills a folder of its own there for each run that failed, named by its key, such as `35` or `35-pgsql-upgrade` (`coming` for the canary). The job keeps them for 14 days as its artifact, `e2e-nextcloud`, `e2e-variants` or `e2e-coming`, which `gh run download RUN --name e2e-nextcloud` downloads:
+
+- `run.log` and `title.txt`: the whole output of the run, as its group in the log of the job, and its title
+- `nextcloud.log`: the log of Nextcloud, and `apps.txt`, its apps from `occ app:list`
+- `containers.txt` and `containers.log`: the state and the whole logs of the containers, with their times
+- `browser/`: of each check in the browser that failed, the trace of each of its windows that was still there, `<check>-<window>.trace.zip`, and a screenshot of the whole of each of their pages, `<check>-<window>-<page>.png`
+
+The password of the tests is masked in `nextcloud.log`, `apps.txt` and the logs of the containers; the traces show it as the browser typed it, which is harmless, since it exists only in the containers of the tests, like the synthetic tokens of the mock.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-a-failed-end-to-end-run-keeps.dark.svg">
+  <img src="../../docs/images/diagrams/what-a-failed-end-to-end-run-keeps.svg" alt="What a failed end-to-end run keeps: A run of the end-to-end tests fails, in the scenario or in a check in the browser. Each check in the browser runs, also after one that failed, and keeps the trace and the screenshots of its windows when it fails. The cleanup of run.sh keeps the log of Nextcloud, its apps, the logs of the containers and what the browser kept in the folder of the run in E2E_ARTIFACTS, and run-all.sh or canary.sh add the log of the run. failure.py names the first error and the last step that passed in the summary of the job, as its annotation and in the issue of the canary, and the job keeps the folder as its artifact for 14 days, whose trace npx playwright show-trace opens. You read the first error, open the trace and fix the app or the test. The tests are blue, what they keep green, and you orange.">
+</picture>
+
+The checks in the browser start Chromium through `browser.mjs`. With `E2E_ARTIFACTS`, each window records a Playwright trace from its start: every action with a screenshot and a snapshot of the page, its requests and what the page logged. When a check fails, by an error or by the findings it counts, it keeps the trace and the screenshots of its windows that are still there, also of one that it closed while it failed, and prints *The check in the browser files.mjs fails:* with the error; a check that passes keeps nothing. All five checks run, also after one that failed, so a run names every page that broke, and the browser fails at the end. Open a trace with the version of Playwright of `package.json`, or drop it on [trace.playwright.dev](https://trace.playwright.dev), which reads it in your browser without uploading it:
+
+```bash
+npx playwright@1.64.0 show-trace browser/files-1.trace.zip
+```
+
+After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
+
+```bash
+E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run-all.sh
+python3 tests/e2e/failure.py build/e2e-evidence
+```
+
+`scripts/check-project.sh` checks both: `node --test tests/e2e/browser.test.mjs` that `browser.mjs` keeps the traces and screenshots of a check that fails and nothing of one that passes, and that every check in the browser starts its browser through it, and `python3 tests/e2e/test_failure.py` that `failure.py` finds the first error in samples of each kind of failure.
 
 ## Databases and object storage
 
@@ -230,7 +263,7 @@ bash tests/e2e/canary.sh
 
 The coming Nextcloud is the newest beta or release candidate of the next major version while Nextcloud publishes one, in `https://download.nextcloud.com/server/prereleases/`, and otherwise the daily build of its master branch, `https://download.nextcloud.com/server/daily/latest-master.tar.bz2`. Nextcloud no longer publishes Docker images of betas and release candidates, so the script checks the signature of the package against the release key of Nextcloud, as the official image does, and puts its code into the image of the newest release, `nextcloud:apache`, which keeps its PHP, Apache and start script. The suite enables the app with `--force`, as `max-version` of `appinfo/info.xml` doesn't name that version yet; the upstream bot raises `max-version` once Nextcloud releases the version.
 
-The canary is no required check and blocks nothing. When it fails, it opens the issue *The coming Nextcloud breaks the app* with a link to the run, adds every further failed run to it, and closes it once the tests pass again.
+The canary is no required check and blocks nothing. When it fails, it opens the issue *The coming Nextcloud breaks the app* with a link to the run and the [first error](#when-a-run-fails) of the run, adds every further failed run to it with its own, and closes it once the tests pass again. Its artifact `e2e-coming` holds the trace of a check in the browser that failed, which shows the page of the coming Nextcloud as the test saw it.
 
 A failure of the canary is either a change of Nextcloud that breaks the app or one that breaks only a test. `KEEP_E2E=1 bash tests/e2e/canary.sh` keeps the coming Nextcloud running at `E2E_PORT` after the failure, so a script of Playwright in the network of the Compose project, as `run.sh` starts it, can look at the page as the test saw it: its errors in the console, its address and what it shows.
 
@@ -238,6 +271,7 @@ Optional environment variables, besides those of `run.sh`:
 
 - `CANARY_BASE_IMAGE`: the image whose code the coming Nextcloud replaces, default `nextcloud:apache`
 - `CANARY_IMAGE`: the local image the script builds, default `paperless-sync-e2e:coming`
+- `E2E_ARTIFACTS`: a folder that gets the folder `coming` when the tests fail, as with `run-all.sh`
 
 ## Contract tests against a real Paperless-ngx
 
@@ -272,7 +306,7 @@ The answers of Paperless are the fixtures of the unit tests, in `tests/fixtures/
 CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3
 ```
 
-In the CI, the jobs *Paperless-ngx 2.x* and *Paperless-ngx 3.x* of `.github/workflows/e2e.yml` run every Monday with the canary, when started by hand, and in a pull request that changes how the app talks to Paperless: its client (`lib/Service/Paperless*`, `lib/Model/DocumentFingerprint.php`), the mock, the fixtures, the contract tests or the workflow (`affected.sh` with `E2E_QUESTION=contract`). Each keeps the answers of Paperless as an artifact of the run, so new fixtures need no Docker. They are no required checks ([decision 0015](../../docs/decisions/0015-check-the-mock-against-a-real-paperless.md)); when they fail on Monday, they open the issue *The contract tests against Paperless-ngx fail*, add every further failed run to it, and close it once they pass again. The contract tests also read the paths, reports, settings and status of the app, so a change there can fail them too; the log of the run says which answer differed.
+In the CI, the jobs *Paperless-ngx 2.x* and *Paperless-ngx 3.x* of `.github/workflows/e2e.yml` run every Monday with the canary, when started by hand, and in a pull request that changes how the app talks to Paperless: its client (`lib/Service/Paperless*`, `lib/Model/DocumentFingerprint.php`), the mock, the fixtures, the contract tests or the workflow (`affected.sh` with `E2E_QUESTION=contract`). Each keeps the answers of Paperless as an artifact of the run, so new fixtures need no Docker. They are no required checks ([decision 0015](../../docs/decisions/0015-check-the-mock-against-a-real-paperless.md)); when they fail on Monday, they open the issue *The contract tests against Paperless-ngx fail* with the first error of each line that failed, add every further failed run to it with its own, and close it once they pass again. The contract tests also read the paths, reports, settings and status of the app, so a change there can fail them too; the log of the run says which answer differed.
 
 On Paperless-ngx 2.x, a task that has just failed first reports `<traceback object at 0x…>` as its result and its reason a moment later; the contract tests wait for the reason, as the app does ([issue #161](https://github.com/Dennis-Otto/paperless-sync/issues/161)).
 

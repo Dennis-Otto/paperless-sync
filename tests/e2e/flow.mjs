@@ -7,7 +7,7 @@
 // and saving the rule keeps the three tags as its operation, as the API of Flow then reads it.
 // run.sh starts it in the image of Playwright after files.mjs.
 
-import { chromium } from 'playwright-core'
+import { launch } from './browser.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const ADMIN = process.env.E2E_USER ?? 'e2e-admin'
@@ -32,7 +32,7 @@ async function savedTags(page) {
 	}, OPERATION)
 }
 
-const browser = await chromium.launch()
+const browser = await launch('flow')
 try {
 	const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1280, height: 900 } })
 	const page = await context.newPage()
@@ -72,6 +72,9 @@ try {
 	expect(JSON.stringify(tags) === JSON.stringify([['Private', 'insurance', 'Draft']]), `Saving the rule keeps its three tags: ${JSON.stringify(tags)}`)
 	console.log('Flow: the form suggests the tags of Paperless, and saving keeps the tags of the rule.')
 	await context.close()
+} catch (error) {
+	await browser.keep(error)
+	throw error
 } finally {
 	await browser.close()
 }

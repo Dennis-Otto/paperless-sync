@@ -14,6 +14,9 @@
 
 set -euo pipefail
 
+# A relative folder is one of the directory that the script started in.
+[[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 # The newest release of Nextcloud, whose image takes the coming code.
@@ -24,6 +27,8 @@ DOWNLOADS="https://download.nextcloud.com/server"
 RELEASE_KEY="28806A878AE423A28372792ED75899B9A724937A"
 TMP_DIR="$(mktemp -d)"
 
+# The trap of EXIT below runs it, which ShellCheck doesn't follow past the exits at the end.
+# shellcheck disable=SC2317,SC2329
 cleanup() {
 	gpgconf --kill all >/dev/null 2>&1 || true
 	rm -rf "${TMP_DIR}"
@@ -96,4 +101,21 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
 	echo "version=${label}" >>"${GITHUB_OUTPUT}"
 fi
 
-NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 bash "${SCRIPT_DIR}/run.sh"
+if [[ -z "${E2E_ARTIFACTS:-}" ]]; then
+	NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 bash "${SCRIPT_DIR}/run.sh"
+	exit 0
+fi
+
+# With E2E_ARTIFACTS, a failure leaves its evidence in the folder coming of it, as a run of
+# run-all.sh does: its log, run.log, its title, title.txt, and what run.sh keeps, so that
+# tests/e2e/failure.py names its first error in the issue of the canary.
+evidence="${E2E_ARTIFACTS}/coming"
+status=0
+NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 E2E_ARTIFACTS="${evidence}" \
+	bash "${SCRIPT_DIR}/run.sh" 2>&1 | tee "${TMP_DIR}/run.log" || status=$?
+if ((status != 0)); then
+	mkdir -p "${evidence}"
+	cp "${TMP_DIR}/run.log" "${evidence}/run.log"
+	echo "${label}" >"${evidence}/title.txt"
+fi
+exit "${status}"

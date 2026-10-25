@@ -32,9 +32,10 @@ name: Docker E2E
 # Every Monday, and when started by hand, they also run against the coming Nextcloud
 # (tests/e2e/canary.sh): the beta or release candidate of the next major version, or
 # the daily build of master. That job is no required check and blocks nothing. When
-# it fails, it opens the issue "The coming Nextcloud breaks the app", or adds the run
-# to it, and closes the issue once the tests pass again. It leaves max-version as it
-# is; the upstream bot raises it when Nextcloud releases the version.
+# it fails, it opens the issue "The coming Nextcloud breaks the app" with the first
+# error of each run that failed, or adds the run with its own to it, and closes the
+# issue once the tests pass again. It leaves max-version as it is; the upstream bot
+# raises it when Nextcloud releases the version.
 #
 # On the same Monday, when started by hand, and in a pull request that changes how the
 # app talks to Paperless (tests/e2e/affected.sh), the contract tests run against a real
@@ -43,12 +44,17 @@ name: Docker E2E
 # and then run the app against it, and they compare the shapes of the answers with the
 # fixtures of the unit tests (tests/fixtures/). They are no required check either; a
 # failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
-# or adds the run to it, and closes it once they pass again.
+# or adds the run to it, each with its first error, and closes it once they pass again.
 #
 # A job that fails says what failed, why that matters and how to fix it, from
 # .github/checks.project.toml: in its summary, as its annotation and, after the checks,
 # in the comment of the PR coach on the pull request, also on one from a fork.
-# tests/coach/test_checks_project.py checks that every job that runs the code does.
+# tests/coach/test_checks_project.py checks that every job that runs the code does. It
+# also names the first error of each run that failed (tests/e2e/failure.py), and a job of
+# the end-to-end tests keeps the evidence for 14 days as its artifact e2e-<job>: the log
+# of each run that failed, nextcloud.log, the apps, the logs of the containers and, of a
+# check in the browser that failed, its trace, which npx playwright show-trace opens, and
+# its screenshots (tests/e2e/README.md#when-a-run-fails).
 
 on:
   push:
@@ -102,6 +108,7 @@ jobs:
           E2E_SHARD: 1
           VARIANTS: ${{ steps.changes.outputs.variants }}
           UPGRADE: ${{ steps.changes.outputs.upgrade }}
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
         run: |
           variants=()
           if [[ "$VARIANTS" != false ]]; then
@@ -111,6 +118,14 @@ jobs:
             variants+=(pgsql+upgrade mysql+upgrade)
           fi
           E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
+      # The first error of each run that failed, in the summary of the check and as its
+      # annotation, from the logs that the step before kept in E2E_ARTIFACTS.
+      - name: Name the first error
+        id: failure
+        if: failure()
+        env:
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
+        run: python3 tests/e2e/failure.py "$E2E_ARTIFACTS"
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -121,6 +136,14 @@ jobs:
           script=.github/blueprint.py
           [[ -f "$script" ]] || script=blueprint.py
           python3 "$script" coach explain "$CHECK"
+      - name: Keep the evidence of the failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-nextcloud
+          path: ${{ runner.temp }}/e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 14
 
   variants:
     name: nextcloud on PostgreSQL, MariaDB and S3
@@ -184,6 +207,7 @@ jobs:
           E2E_VERSIONS: ${{ steps.changes.outputs.affected == 'false' && 'none' || '' }}
           VARIANTS: ${{ steps.changes.outputs.variants }}
           UPGRADE: ${{ steps.changes.outputs.upgrade }}
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
         run: |
           variants=()
           if [[ "$VARIANTS" != false ]]; then
@@ -193,6 +217,14 @@ jobs:
             variants+=(pgsql+upgrade mysql+upgrade)
           fi
           E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
+      # The first error of each run that failed, in the summary of the check and as its
+      # annotation, from the logs that the step before kept in E2E_ARTIFACTS.
+      - name: Name the first error
+        id: failure
+        if: failure()
+        env:
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
+        run: python3 tests/e2e/failure.py "$E2E_ARTIFACTS"
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -203,6 +235,14 @@ jobs:
           script=.github/blueprint.py
           [[ -f "$script" ]] || script=blueprint.py
           python3 "$script" coach explain "$CHECK"
+      - name: Keep the evidence of the failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-variants
+          path: ${{ runner.temp }}/e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 14
 
   coming:
     name: coming Nextcloud
@@ -213,6 +253,7 @@ jobs:
       contents: read
     outputs:
       version: ${{ steps.canary.outputs.version }}
+      first-error: ${{ steps.failure.outputs.first-error }}
     steps:
       - name: Record the network traffic of the job
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -223,7 +264,17 @@ jobs:
           persist-credentials: false
       - name: Run the Paperless Sync end-to-end tests against the coming Nextcloud
         id: canary
+        env:
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
         run: bash tests/e2e/canary.sh
+      # The first error of each run that failed, in the summary of the check and as its
+      # annotation, and for the issue, from the logs that the step before kept in E2E_ARTIFACTS.
+      - name: Name the first error
+        id: failure
+        if: failure()
+        env:
+          E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
+        run: python3 tests/e2e/failure.py "$E2E_ARTIFACTS"
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -234,60 +285,14 @@ jobs:
           script=.github/blueprint.py
           [[ -f "$script" ]] || script=blueprint.py
           python3 "$script" coach explain "$CHECK"
-
-  # The only job that may write issues, and it runs no code of the repository. A run
-  # started by hand on another branch than main reports nothing.
-  coming-issue:
-    name: issue about the coming Nextcloud
-    needs: coming
-    if: >-
-      always() &&
-      (github.event_name == 'schedule' || github.ref_name == github.event.repository.default_branch) &&
-      (needs.coming.result == 'success' || needs.coming.result == 'failure')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      issues: write
-    steps:
-      - name: Record the network traffic of the job
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+      - name: Keep the evidence of the failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          egress-policy: audit
-      - name: Open, update or close the issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          TITLE: The coming Nextcloud breaks the app
-          RESULT: ${{ needs.coming.result }}
-          VERSION: ${{ needs.coming.outputs.version }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          number="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
-            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
-          coming="${VERSION:-the coming Nextcloud, which the job could not set up}"
-          if [[ "$RESULT" == success ]]; then
-            if [[ -n "$number" ]]; then
-              gh issue close "$number" --reason completed \
-                --comment "The end-to-end tests pass again against $coming: $RUN_URL"
-            fi
-            exit 0
-          fi
-          if [[ -n "$number" ]]; then
-            gh issue comment "$number" --body "The end-to-end tests still fail against $coming: $RUN_URL"
-            exit 0
-          fi
-          {
-            printf 'The weekly end-to-end tests fail against %s: %s\n\n' "$coming" "$RUN_URL"
-            cat <<'TEXT'
-          The canary of `.github/workflows/e2e.yml` runs `tests/e2e/canary.sh`: the end-to-end tests against the beta or release candidate of the next major version of Nextcloud, or against the daily build of its master branch while there is none. Nextcloud hasn't released that version yet, so the canary is no required check and blocks nothing; it gives notice before the release, while there is time to adapt the app. `max-version` of `appinfo/info.xml` stays as it is; the upstream bot raises it once Nextcloud releases the version.
-
-          The log of the run shows what failed; `bash tests/e2e/canary.sh` runs the same tests locally.
-
-          The canary adds every further failed run here and closes this issue once the tests pass again.
-          TEXT
-          } > "$RUNNER_TEMP/issue.md"
-          gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"
+          name: e2e-coming
+          path: ${{ runner.temp }}/e2e-artifacts
+          if-no-files-found: ignore
+          retention-days: 14
 
   # The contract tests against a real Paperless-ngx, one line of it in each job:
   # tests/e2e/run-contract.sh. A pull request runs them only when it changes how the app
@@ -301,6 +306,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    # The first error of each line has a name of its own, as a job of a matrix would
+    # overwrite the output of another of the same name.
+    outputs:
+      first-error-2: ${{ steps.failure.outputs.first-error-2 }}
+      first-error-3: ${{ steps.failure.outputs.first-error-3 }}
     strategy:
       # Each line of Paperless tells its own story.
       fail-fast: false
@@ -328,7 +338,22 @@ jobs:
           LINE: ${{ matrix.line }}
           # The answers of Paperless, for the fixtures of the unit tests when they changed.
           CONTRACT_RECORDINGS: ${{ runner.temp }}/paperless-ngx-${{ matrix.line }}
-        run: bash tests/e2e/run-contract.sh "$LINE"
+          # The log and the title of the run, from which failure.py names its first error.
+          RUN_FOLDER: ${{ runner.temp }}/contract/paperless-ngx-${{ matrix.line }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUN_FOLDER"
+          echo "Paperless-ngx $LINE.x" >"$RUN_FOLDER/title.txt"
+          bash tests/e2e/run-contract.sh "$LINE" 2>&1 | tee "$RUN_FOLDER/run.log"
+      # The first error of the line, in the summary of the check, as its annotation and
+      # for the issue.
+      - name: Name the first error
+        id: failure
+        if: failure()
+        env:
+          RUNS: ${{ runner.temp }}/contract
+          OUTPUT: first-error-${{ matrix.line }}
+        run: python3 tests/e2e/failure.py "$RUNS" "$OUTPUT"
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -348,55 +373,129 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # Like the issue about the coming Nextcloud: the only job here that may write issues,
-  # and it runs no code of the repository.
-  paperless-issue:
-    name: issue about Paperless-ngx
-    needs: paperless
+  # The issues about the coming Nextcloud and about Paperless-ngx: one job for each, with
+  # one step that opens the issue with the first error of each run that failed, adds each
+  # further failure with its own, and closes the issue once the tests pass again. The
+  # only jobs that may write issues, so they run no code of the repository and reach
+  # GitHub alone. A run started by hand on another branch than main reports nothing.
+  issue:
+    name: issue
+    needs: [coming, paperless]
     if: >-
       always() &&
       (github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)) &&
-      (needs.paperless.result == 'success' || needs.paperless.result == 'failure')
+      (contains(fromJSON('["success", "failure"]'), needs.coming.result) ||
+      contains(fromJSON('["success", "failure"]'), needs.paperless.result))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # The texts of each issue are in the step, so that the names of the runs stay short.
+        job: [coming, paperless]
     steps:
-      - name: Record the network traffic of the job
+      - name: Allow the network traffic to GitHub alone
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
-          egress-policy: audit
+          egress-policy: block
+          disable-sudo-and-containers: true
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
       - name: Open, update or close the issue
+        if: needs[matrix.job].result == 'success' || needs[matrix.job].result == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TITLE: The contract tests against Paperless-ngx fail
-          RESULT: ${{ needs.paperless.result }}
+          JOB: ${{ matrix.job }}
+          COMING_TITLE: The coming Nextcloud breaks the app
+          COMING_TESTS: end-to-end tests
+          # Without a version, the job couldn't set the coming Nextcloud up.
+          COMING_AGAINST: the coming Nextcloud, which the job could not set up
+          COMING_ABOUT: >-
+            The canary of `.github/workflows/e2e.yml` runs `tests/e2e/canary.sh`: the
+            end-to-end tests against the beta or release candidate of the next major
+            version of Nextcloud, or against the daily build of its master branch while
+            there is none. Nextcloud hasn't released that version yet, so the canary is
+            no required check and blocks nothing; it gives notice before the release,
+            while there is time to adapt the app. `max-version` of `appinfo/info.xml`
+            stays as it is; the upstream bot raises it once Nextcloud releases the version.
+
+
+            The artifact e2e-coming of the run holds the log, `nextcloud.log`, the apps
+            and the logs of the containers and, of a check in the browser that failed,
+            its trace, which `npx playwright show-trace` opens, and its screenshots
+            (`tests/e2e/README.md`, "When a run fails"). `bash tests/e2e/canary.sh` runs
+            the same tests locally.
+
+
+            The canary adds every further failed run here and closes this issue once the
+            tests pass again.
+          PAPERLESS_TITLE: The contract tests against Paperless-ngx fail
+          PAPERLESS_TESTS: contract tests
+          PAPERLESS_AGAINST: Paperless-ngx 2.x and 3.x
+          PAPERLESS_ABOUT: >-
+            The job `paperless` of `.github/workflows/e2e.yml` runs
+            `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and
+            the current release of 3.x, whose images Renovate keeps current. It checks
+            every answer of Paperless that the app reads, runs the app against it, and
+            compares the shapes of the answers with the fixtures of the unit tests in
+            `tests/fixtures/`. A failure means that a release of Paperless-ngx answers
+            differently than the app expects, that a field the unit tests read is gone,
+            or that a change of the app (its paths, reports, settings or status) no
+            longer matches what `tests/e2e/contract.py` expects.
+
+
+            The log of the failed job names the answer and the field; its artifact
+            paperless-ngx-2 or paperless-ngx-3 holds the answers of Paperless.
+            `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and
+            `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app
+            reads them.
+
+
+            The job adds every further failed run here and closes this issue once the
+            tests pass again.
+          RESULT: ${{ needs[matrix.job].result }}
+          # The outputs of the job: the version of the coming Nextcloud, and the first
+          # error of each run that failed, which tests/e2e/failure.py wrote.
+          OUTPUTS: ${{ toJSON(needs[matrix.job].outputs) }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          case "$JOB" in
+            coming) prefix=COMING ;;
+            *) prefix=PAPERLESS ;;
+          esac
+          for name in TITLE TESTS AGAINST ABOUT; do
+            variable="${prefix}_${name}"
+            printf -v "$name" '%s' "${!variable}"
+          done
+          export TITLE
           number="$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
             --jq '[.[] | select(.title == env.TITLE)][0].number // empty')"
+          version="$(jq -r '.version // empty' <<<"$OUTPUTS")"
+          against="${version:-$AGAINST}"
           if [[ "$RESULT" == success ]]; then
             if [[ -n "$number" ]]; then
               gh issue close "$number" --reason completed \
-                --comment "The contract tests pass again against Paperless-ngx 2.x and 3.x: $RUN_URL"
+                --comment "The $TESTS pass again against $against: $RUN_URL"
             fi
             exit 0
           fi
+          errors="$(jq -r '[to_entries[] | select(.key | startswith("first-error")) | select(.value != "")] |
+            sort_by(.key) | map(.value) | join("\n")' <<<"$OUTPUTS")"
+          if [[ -z "$errors" ]]; then
+            errors="The log of the run shows what failed; the job named no first error."
+          fi
           if [[ -n "$number" ]]; then
-            gh issue comment "$number" --body "The contract tests still fail against Paperless-ngx: $RUN_URL"
+            printf 'The %s still fail against %s: %s\n\nThe first error of each run that failed:\n\n%s\n' \
+              "$TESTS" "$against" "$RUN_URL" "$errors" >"$RUNNER_TEMP/comment.md"
+            gh issue comment "$number" --body-file "$RUNNER_TEMP/comment.md"
             exit 0
           fi
-          {
-            printf 'The weekly contract tests against a real Paperless-ngx fail: %s\n\n' "$RUN_URL"
-            cat <<'TEXT'
-          The job `paperless` of `.github/workflows/e2e.yml` runs `tests/e2e/run-contract.sh` against the last release of Paperless-ngx 2.x and the current release of 3.x, whose images Renovate keeps current. It checks every answer of Paperless that the app reads, runs the app against it, and compares the shapes of the answers with the fixtures of the unit tests in `tests/fixtures/`. A failure means that a release of Paperless-ngx answers differently than the app expects, that a field the unit tests read is gone, or that a change of the app (its paths, reports, settings or status) no longer matches what `tests/e2e/contract.py` expects: the log of the run says which.
-
-          The log of the failed job names the answer and the field; its artifact holds the answers of Paperless. `bash tests/e2e/run-contract.sh 2` or `3` runs the same tests locally, and `CONTRACT_RECORD=1` writes the new answers into the fixtures once the app reads them.
-
-          The job adds every further failed run here and closes this issue once the tests pass again.
-          TEXT
-          } > "$RUNNER_TEMP/issue.md"
+          printf 'The weekly %s fail against %s: %s\n\nThe first error of each run that failed:\n\n%s\n\n%s\n' \
+            "$TESTS" "$against" "$RUN_URL" "$errors" "$ABOUT" >"$RUNNER_TEMP/issue.md"
           gh issue create --title "$TITLE" --body-file "$RUNNER_TEMP/issue.md"

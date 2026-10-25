@@ -66,13 +66,53 @@ TMP_DIR="$(mktemp -d)"
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f"
 # The download of that image in the background, while Nextcloud installs.
 PLAYWRIGHT_PULL=""
+# E2E_ARTIFACTS, a folder, gets the evidence of a failure for the artifact of the job in the
+# CI (keep_evidence below); run-all.sh and canary.sh give each run a folder of its own.
+E2E_ARTIFACTS="${E2E_ARTIFACTS:-}"
+# A relative folder is one of the directory that the script started in.
+[[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
+# What the checks in the browser keep of a failure, which keep_evidence takes along.
+BROWSER_ARTIFACTS="${TMP_DIR}/browser"
 
 export E2E_PORT
+
+# The evidence of a failure, in E2E_ARTIFACTS, before the containers go: the log of Nextcloud,
+# its apps, the state and the whole logs of the containers, and what the checks in the
+# browser kept, their traces and screenshots. The password of the tests is synthetic, and
+# stays out of it all the same.
+keep_evidence() {
+	local container file
+	mkdir -p "${E2E_ARTIFACTS}"
+	"${COMPOSE[@]}" ps --all >"${E2E_ARTIFACTS}/containers.txt" 2>&1 || true
+	"${COMPOSE[@]}" logs --no-color --timestamps >"${E2E_ARTIFACTS}/containers.log" 2>&1 || true
+	container="${NEXTCLOUD_CONTAINER:-$("${COMPOSE[@]}" ps --quiet nextcloud 2>/dev/null || true)}"
+	if [[ -n "${container}" ]]; then
+		"${DOCKER_BIN}" exec "${container}" sh -c 'cat /var/www/html/data/nextcloud.log 2>/dev/null' \
+			>"${E2E_ARTIFACTS}/nextcloud.log" || true
+		"${DOCKER_BIN}" exec --user www-data "${container}" php occ app:list \
+			>"${E2E_ARTIFACTS}/apps.txt" 2>&1 || true
+	fi
+	for file in "${E2E_ARTIFACTS}"/*.txt "${E2E_ARTIFACTS}"/*.log; do
+		if [[ -f "${file}" ]]; then
+			sed "s/${PASSWORD}/[the password of the tests]/g" "${file}" >"${file}.masked" && mv "${file}.masked" "${file}"
+		fi
+	done
+	if [[ -d "${BROWSER_ARTIFACTS}" ]] && [[ -n "$(ls -A "${BROWSER_ARTIFACTS}")" ]]; then
+		cp -R "${BROWSER_ARTIFACTS}" "${E2E_ARTIFACTS}/browser"
+	fi
+	echo "The evidence of the failure is in ${E2E_ARTIFACTS}."
+}
 
 cleanup() {
 	status=$?
 	trap - EXIT
 	if [[ "${status}" -ne 0 ]]; then
+		# The first line of the cleanup, which tests/e2e/failure.py reads as the end of the
+		# output of the tests.
+		echo "The end-to-end tests fail with exit code ${status}." >&2
+		if [[ -n "${E2E_ARTIFACTS}" ]]; then
+			keep_evidence || echo "The evidence of the failure could not be kept." >&2
+		fi
 		"${COMPOSE[@]}" ps || true
 		"${COMPOSE[@]}" logs --no-color --tail 300 || true
 	fi
@@ -189,14 +229,43 @@ mock_state() {
 # menu of Files for a member of the group of the setting and for another user, and flow.mjs
 # the form of a rule of "Send to Paperless" in the settings of Flow. The files
 # of the checks reach the browser through standard input, so that npm leaves nothing in
-# the checkout.
+# the checkout. Each check runs, also after one that failed, so that one run names every
+# page that broke, and the browser fails at the end. With E2E_ARTIFACTS, each window records
+# a trace, and what a check that failed kept, its traces and screenshots (browser.mjs), comes
+# back through standard output, as a tar archive, into BROWSER_ARTIFACTS, which keep_evidence
+# takes along; everything the browser says goes to standard error. Unlike a mounted folder,
+# that works with any Docker and leaves no files of root on the runner.
+# The sh of the container expands these variables, not this script.
+# shellcheck disable=SC2016
+BROWSER_CHECKS='
+	set -e
+	exec 3>&1 1>&2
+	mkdir /tmp/browser /tmp/artifacts
+	trap "tar -C /tmp/artifacts -cf - . >&3" EXIT
+	cd /tmp/browser
+	tar -xf -
+	npm ci --ignore-scripts --no-audit --no-fund --loglevel=error
+	if [ "${E2E_KEEP_BROWSER}" = 1 ]; then
+		export E2E_BROWSER_ARTIFACTS=/tmp/artifacts
+	fi
+	failed=""
+	for check in accessibility keyboard settings files flow; do
+		node "${check}.mjs" || failed="${failed} ${check}.mjs"
+	done
+	if [ -n "${failed}" ]; then
+		echo "The checks in the browser fail:${failed}."
+		exit 1
+	fi
+'
 accessibility() {
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
-		| "${DOCKER_BIN}" run --rm --interactive \
+	mkdir -p "${BROWSER_ARTIFACTS}"
+	# Git Bash on Windows would turn the paths of the container into paths of Windows.
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
+		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
 			--env E2E_USER=e2e-admin \
@@ -204,8 +273,10 @@ accessibility() {
 			--env E2E_TOKEN=e2e-only-token \
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
+			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
 			"${PLAYWRIGHT_IMAGE}" \
-			sh -c 'mkdir /tmp/browser && cd /tmp/browser && tar -xf - && npm ci --ignore-scripts --no-audit --no-fund --loglevel=error && node accessibility.mjs && node keyboard.mjs && node settings.mjs && node files.mjs && node flow.mjs'
+			sh -c "${BROWSER_CHECKS}" \
+		| tar -C "${BROWSER_ARTIFACTS}" -xf -
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
