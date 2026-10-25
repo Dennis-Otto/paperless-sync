@@ -6,16 +6,14 @@ All notable changes to this project are documented in this file.
 
 ## [1.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.2.0...v1.3.0) (2026-10-25)
 
-
 ### Features
 
-* **settings:** a getting-started checklist and a setup check that lead a new installation to its first run ([#257](https://github.com/Dennis-Otto/paperless-sync/issues/257)) ([62361c4](https://github.com/Dennis-Otto/paperless-sync/commit/62361c4f6d52e7fffddb16bb184a61b36406394f))
-* **settings:** create the Paperless account of the app from the settings with one admin token ([#253](https://github.com/Dennis-Otto/paperless-sync/issues/253)) ([8e15289](https://github.com/Dennis-Otto/paperless-sync/commit/8e15289da8ff501363865a6df31fec666c3183bf))
-
+- **Getting started in the settings:** until the first run has succeeded, the settings of Paperless Sync open with *Getting started*, the five steps of the quick start in their safe order: connect to Paperless, which is done once no line of the connection checklist fails, choose who gets the documents, try a dry-run, turn on scheduled synchronization, and wait for the first run. Each step says whether it is done, next or still to do, from what Nextcloud stores, and its button leads to its place on the page; a screen reader hears when a step is done. After a dry-run, the last step estimates how long the first synchronization of your archive takes. Once the first run has succeeded, the list hides, and *Show getting started* brings it back. *Administration → Overview* no longer shows a green tick for an installation that was never set up: it says that Paperless Sync is installed but not set up yet, with a link to its settings, and the status API reports the health `unconfigured` for it.
+- **The account of the app in one step:** *Create an account for the app in Paperless*, in the connection settings, takes the API token of a Paperless superuser once and creates the account of the app with it: no superuser, with exactly the permissions that your modules need and a random password that nobody learns. The settings are saved with the token of that account, and the connection checklist shows what is left to do. Your token is neither stored nor logged. `occ paperless_sync:create-account` does the same for scripted setups, and the README has the commands for `curl` for those who create the account themselves.
 
 ### Bug fixes
 
-* **a11y:** show the keyboard focus on checkboxes and keep it above the button bar, checked by keyboard and at 320 px ([#264](https://github.com/Dennis-Otto/paperless-sync/issues/264)) ([2dba613](https://github.com/Dennis-Otto/paperless-sync/commit/2dba613e8ae0c5cffaac20094abeaed470931fe1))
+- **The keyboard focus in the settings:** a checkbox of the settings of Paperless Sync shows an outline when Tab moves the focus to it, in the light and the dark theme; before, nothing showed where the focus was. A control that Tab moves to no longer ends up hidden behind the bar of the buttons at the bottom of the window, also on a phone, where the bar takes several lines. The end-to-end tests now check the settings by keyboard alone and at the width of a phone, and the actions in Files and the form of the rule in Flow for accessibility, so that such a fault can't come back.
 
 ## [1.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.1...v1.2.0) (2026-10-23)
 
