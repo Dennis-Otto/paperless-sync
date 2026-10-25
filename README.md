@@ -71,6 +71,16 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 5. Enable synchronization and save. Nextcloud's cron runs it at the configured interval, and the documents appear in `Documents/Paperless/Archive` of that user.
 
 <!-- --8<-- [end:quick-start] -->
+
+### Getting started in the settings
+
+Until the first run has succeeded, the settings open with **Getting started**, the steps of the quick start in their safe order: connect to Paperless, with the account of the app or a token of your own, until no line of the connection checklist fails, choose who gets the documents, try a dry-run, turn on scheduled synchronization, and wait for the first run. Each step says in words whether it is *Done*, *Next* or *To do*, from what Nextcloud stores rather than from what the page remembers, and its button leads to its place on the page, such as the setup of the account of the app while no token is saved, **Test connection** while a line of the checklist fails, or **Run dry-run**. A screen reader hears when a step is done and which one comes next. After a dry-run, the last step estimates how long the first synchronization takes, from the documents that the dry-run found, the batch size and the interval, as the [FAQ](https://dennis-otto.github.io/paperless-sync/faq.html#how-long-does-the-first-synchronization-take) explains. Once the first run has succeeded, the list hides, and **Show getting started** at the top of the settings brings it back. While the settings lack the URL of Paperless, its token or the target user, *Administration → Overview* says that Paperless Sync is installed but not set up yet, with a link to its settings.
+
+<!-- The picture comes from tests/e2e/screenshots.mjs, on a new installation whose connection is saved. -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-getting-started-dark.png">
+  <img alt="Getting started at the top of the settings of Paperless Sync: Connect to Paperless and Choose who gets the documents are done, with a check mark, Try a dry-run is next and highlighted, Turn on scheduled synchronization and Wait for the first run are still to do, and each step has a button that leads to its place on the page" src="docs/images/settings-getting-started-light.png">
+</picture>
 <!-- --8<-- [end:quick-start-section] -->
 <!-- --8<-- [start:features] -->
 
@@ -797,7 +807,7 @@ A mirror that stops is the worst failure of a backup, and nobody looks at the se
 </picture>
 
 - **Notifications.** Three runs in a row that failed or completed with errors, or fewer once the first of them ended a day ago, as with an interval of a day, send every administrator one notification, with the first 200 characters of the error and a link to the settings: *Paperless Sync failed 3 times in a row*. It comes once for the whole row, also by mail or as a push notification of the Nextcloud apps where the user has turned those on, and the next successful run removes it. Two failed runs, such as during a restart of Paperless, notify nobody. The target user, or with per-user ownership the user whose inbox held the file, gets a notification for each file of the inbox that Paperless could not import or refused, with its reason, and so does the owner of a file that a [rule of Flow](#send-by-a-rule-of-flow) sent. A dry-run notifies nobody.
-- **Setup checks.** *Administration → Overview* and `occ setupchecks` show two checks of the app. *Paperless Sync* is an error when the last run failed, a warning when it completed with errors or when no run succeeded for three intervals, at least an hour, as when the background jobs stopped. *Paperless Sync background job* warns when scheduled runs are on but Nextcloud runs its background jobs with AJAX or Webcron, which start them only while someone uses Nextcloud. The settings page shows their warnings on top.
+- **Setup checks.** *Administration → Overview* and `occ setupchecks` show two checks of the app. *Paperless Sync* is an error when the last run failed, a warning when it completed with errors or when no run succeeded for three intervals, at least an hour, as when the background jobs stopped, and a note with a link to the settings while they lack the URL of Paperless, its token or the target user, as on a new installation or after **Disconnect**. *Paperless Sync background job* warns when scheduled runs are on but Nextcloud runs its background jobs with AJAX or Webcron, which start them only while someone uses Nextcloud. The settings page shows their warnings on top.
 - **The status API** gives a monitor, such as Uptime Kuma or Home Assistant, the health of the mirror. Only administrators may read it; give the monitor an app password of an administrator, from *Personal settings → Security*, here in the variable `APP_PASSWORD`:
 
 ```sh
@@ -816,7 +826,7 @@ It answers, with the counts of `summary` shortened:
   "paperlessVersion": "", "paperlessApiVersion": ""}}}
 ```
 
-`health` is `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, `users` with [per-user ownership](#per-user-ownership) the counts of each user by their ID, such as `{"alice": {"exported": 2, …}}`, and `error` the error of the last run of the row that failed. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
+`health` is `unconfigured` while the settings lack the URL of Paperless, its token or the target user, so that no run can start, then `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, `users` with [per-user ownership](#per-user-ownership) the counts of each user by their ID, such as `{"alice": {"exported": 2, …}}`, and `error` the error of the last run of the row that failed. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
 
 ```yaml
 rest:

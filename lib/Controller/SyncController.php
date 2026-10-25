@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Cron\ManualSyncJob;
 use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\GettingStarted;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\StatusService;
@@ -40,6 +41,7 @@ final class SyncController extends Controller {
 		private ConfigService $configService,
 		private IJobList $jobList,
 		private IUserSession $userSession,
+		private GettingStarted $gettingStarted,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -121,9 +123,18 @@ final class SyncController extends Controller {
 		return new JSONResponse(['queued' => true, 'status' => $this->overview($config)], Http::STATUS_ACCEPTED);
 	}
 
-	/** @return array<string, mixed> */
+	/**
+	 * The status as the settings page shows it, with its errors translated and the steps of its
+	 * getting-started checklist.
+	 *
+	 * @return array<string, mixed>
+	 */
 	private function overview(SyncConfig $config): array {
-		return StatusTranslation::status($this->statusService->overview($config), $this->l10n);
+		$overview = $this->statusService->overview($config);
+		$status = StatusTranslation::status($overview, $this->l10n);
+		$status['setup'] = $this->gettingStarted->progress($config, $overview);
+
+		return $status;
 	}
 
 	private function locked(): JSONResponse {

@@ -14,13 +14,15 @@ use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCP\IDateTimeFormatter;
 use OCP\IL10N;
+use OCP\IURLGenerator;
 use OCP\SetupCheck\ISetupCheck;
 use OCP\SetupCheck\SetupResult;
 
 /**
  * Says under Administration → Overview and on the settings page whether the mirror works, from
  * the health that StatusService keeps: an error when the last run failed, a warning when it
- * completed with errors or when no run succeeded for longer than StatusService::staleAfter().
+ * completed with errors or when no run succeeded for longer than StatusService::staleAfter(), and
+ * a note with the way to the settings while the app is installed but not set up.
  */
 final class SyncHealth implements ISetupCheck {
 	/** The most characters of the error that the result names. */
@@ -32,6 +34,7 @@ final class SyncHealth implements ISetupCheck {
 		private ConfigService $configService,
 		private IL10N $l10n,
 		private IDateTimeFormatter $dateTimeFormatter,
+		private IURLGenerator $urlGenerator,
 	) {
 	}
 
@@ -52,6 +55,10 @@ final class SyncHealth implements ISetupCheck {
 		$lastSuccess = $this->status->get()['lastSuccess'];
 
 		return match ($health) {
+			'unconfigured' => SetupResult::info(
+				$this->l10n->t('Paperless Sync is installed but not set up yet. Its settings lead through the first steps.'),
+				$this->urlGenerator->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => AppConstants::APP_ID]),
+			),
 			'off' => SetupResult::success($this->l10n->t('Scheduled runs of Paperless Sync are off.')),
 			'waiting' => SetupResult::info($this->l10n->t('Paperless Sync has not completed a run yet; the next background job starts one.')),
 			'failed' => SetupResult::error(

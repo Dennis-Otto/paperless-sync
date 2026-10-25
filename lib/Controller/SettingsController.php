@@ -21,6 +21,7 @@ use OCA\PaperlessSync\Service\PaperlessAccountExistsException;
 use OCA\PaperlessSync\Service\PaperlessClientFactoryInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -52,6 +53,7 @@ final class SettingsController extends Controller {
 		private PathTemplateService $pathTemplate,
 		private AccountPermissions $permissions,
 		private AccountSetup $accountSetup,
+		private StatusService $status,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -137,8 +139,13 @@ final class SettingsController extends Controller {
 				$onlyForTheSchedule = false;
 			}
 
+			$saved = $this->configService->save($settings, $token);
+			if ($tested) {
+				$this->status->checkedConnection($saved->paperlessUrl, self::passed($checks));
+			}
+
 			return new JSONResponse([
-				...$this->configService->save($settings, $token)->jsonSerialize(),
+				...$saved->jsonSerialize(),
 				'connectionTested' => $tested,
 				'checks' => $this->translated($checks),
 			]);
@@ -175,6 +182,11 @@ final class SettingsController extends Controller {
 			$checks = $this->checklist->checks($config, $this->configService->resolveToken($token, $config->paperlessUrl));
 		} catch (InvalidArgumentException $exception) {
 			return $this->invalid($exception);
+		}
+		if (trim($token) === '') {
+			// The saved token, which goes only to its saved URL: the test tells the getting-started
+			// checklist whether the connection passes now, such as after the permissions were fixed.
+			$this->status->checkedConnection($config->paperlessUrl, self::passed($checks));
 		}
 
 		return new JSONResponse(['checks' => $this->translated($checks)]);
@@ -255,6 +267,8 @@ final class SettingsController extends Controller {
 	#[FrontpageRoute(verb: 'DELETE', url: '/settings')]
 	#[PasswordConfirmationRequired]
 	public function reset(): JSONResponse {
+		$this->status->checkedConnection('', false);
+
 		return new JSONResponse($this->configService->reset());
 	}
 
@@ -322,8 +336,11 @@ final class SettingsController extends Controller {
 				}
 			}
 
+			$saved = $this->configService->save($settings, $account['token']);
+			$this->status->checkedConnection($saved->paperlessUrl, self::passed($checks));
+
 			return new JSONResponse([
-				...$this->configService->save($settings, $account['token'])->jsonSerialize(),
+				...$saved->jsonSerialize(),
 				'connectionTested' => true,
 				'checks' => $this->translated($checks),
 				'account' => ['username' => $account['username'], 'created' => $account['created'], 'permissions' => $labels],
@@ -353,6 +370,22 @@ final class SettingsController extends Controller {
 		}
 
 		return new JSONResponse($answer, Http::STATUS_BAD_REQUEST);
+	}
+
+	/**
+	 * Whether no line of the checklist failed, notes allowed, as the getting-started checklist
+	 * asks of its first step.
+	 *
+	 * @param list<ConnectionCheck> $checks
+	 */
+	private static function passed(array $checks): bool {
+		foreach ($checks as $check) {
+			if ($check->status === ConnectionCheck::FAILED) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	/**

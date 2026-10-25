@@ -33,11 +33,15 @@ use OCP\Lock\ILockingProvider;
  * RunError, which the settings page translates when it reads the status (SyncController).
  *
  * It also counts the runs in a row that did not succeed, from which the notifications, the setup
- * checks and the status API tell a mirror that keeps failing from one that failed once.
+ * checks and the status API tell a mirror that keeps failing from one that failed once, and keeps
+ * the last dry-run that completed, with the documents that it found, for the getting-started
+ * checklist of the settings page (GettingStarted), as it keeps whether the connection checklist
+ * passed with the saved token.
  *
  * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
  * @psalm-type Failures = array{runs: int, since: int, failed: bool, errors: int, error: string}
- * @psalm-type Health = 'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
+ * @psalm-type DryRun = array{ended: int, documents: int}
+ * @psalm-type Health = 'unconfigured'|'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
  */
 final class StatusService {
 	/** The most lines of changes that the kept report holds. */
@@ -92,12 +96,26 @@ final class StatusService {
 	 * error. A successful run deletes it.
 	 */
 	private const FAILURES = 'status_failures';
+	/**
+	 * The end of the last dry-run that completed, also with errors, and how many documents
+	 * Paperless listed to it: a later run, of either kind, leaves both as they are.
+	 */
+	private const LAST_DRY_RUN = 'status_last_dry_run';
+	private const LAST_DRY_RUN_DOCUMENTS = 'status_last_dry_run_documents';
+	/**
+	 * The URL of Paperless that the connection checklist last checked with the saved token, on a
+	 * save, a test or the setup of the account, and whether every line of it passed: no line
+	 * failed, warnings allowed. Disconnect clears it.
+	 */
+	private const CONNECTION_URL = 'status_connection_url';
+	private const CONNECTION_PASSED = 'status_connection_passed';
 
 	/** Every key of the status. */
 	private const KEYS = [
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
 		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_ERROR_RECORD, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
 		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES, self::LAST_HEARTBEAT,
+		self::LAST_DRY_RUN, self::LAST_DRY_RUN_DOCUMENTS, self::CONNECTION_URL, self::CONNECTION_PASSED,
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -203,6 +221,9 @@ final class StatusService {
 				// Some documents were not mirrored, so the mirror is not complete either.
 				$this->unsuccessful(false, $report->errors, $report->errorMessages[0] ?? '');
 			}
+		} else {
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN, $report->completedAt, lazy: true);
+			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN_DOCUMENTS, $report->activeDocuments, lazy: true);
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, $report->errors > 0 ? 'completed-with-errors' : ($report->dryRun ? 'dry-run-completed' : 'completed'), lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, '', lazy: true);
@@ -275,6 +296,35 @@ final class StatusService {
 		];
 	}
 
+	/**
+	 * The last dry-run that completed, also with errors: when it ended and how many documents
+	 * Paperless listed to it; both 0 before the first.
+	 *
+	 * @return DryRun
+	 */
+	public function lastDryRun(): array {
+		return [
+			'ended' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN, 0, lazy: true),
+			'documents' => $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_DRY_RUN_DOCUMENTS, 0, lazy: true),
+		];
+	}
+
+	/**
+	 * Keeps what the connection checklist found with the saved token and this URL: passed when no
+	 * line of it failed. An empty URL forgets it, as Disconnect does.
+	 */
+	public function checkedConnection(string $url, bool $passed): void {
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::CONNECTION_URL, $url, lazy: true);
+		$this->appConfig->setValueBool(AppConstants::APP_ID, self::CONNECTION_PASSED, $url !== '' && $passed, lazy: true);
+	}
+
+	/** Whether the connection checklist last passed with the saved token and this URL. */
+	public function connectionPassed(string $url): bool {
+		return $url !== ''
+			&& $this->appConfig->getValueString(AppConstants::APP_ID, self::CONNECTION_URL, '', lazy: true) === $url
+			&& $this->appConfig->getValueBool(AppConstants::APP_ID, self::CONNECTION_PASSED, false, lazy: true);
+	}
+
 	/** @param array<string, mixed> $values */
 	private static function integer(array $values, string $key): int {
 		return isset($values[$key]) && is_int($values[$key]) ? $values[$key] : 0;
@@ -283,6 +333,11 @@ final class StatusService {
 	/**
 	 * How the mirror is, as the setup checks and the status API say it:
 	 *
+	 * - unconfigured: the settings lack the URL of Paperless, its token or the target user, so no
+	 *   run can start, such as on a new installation or after Disconnect, which turns the schedule
+	 *   off. While the schedule is on and runs failed, such as after occ changed the URL, which the
+	 *   token does not follow, the scheduled runs keep failing, so the failure comes first: a
+	 *   monitor must keep alarming.
 	 * - failed or errors: the last run, not a dry-run, failed or completed with errors, also one by
 	 *   hand while scheduled runs are off: the mirror is incomplete until a run succeeds.
 	 * - off: scheduled runs are off.
@@ -294,6 +349,9 @@ final class StatusService {
 	 */
 	public function health(SyncConfig $config): string {
 		$failures = $this->failures();
+		if (!$config->complete() && (!$config->enabled || $failures['runs'] === 0)) {
+			return 'unconfigured';
+		}
 		if ($failures['runs'] > 0) {
 			return $failures['failed'] ? 'failed' : 'errors';
 		}

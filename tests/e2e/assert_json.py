@@ -197,6 +197,21 @@ elif mode == "queued":
     expect("queued", True)
     if payload.get("status", {}).get("state") != "queued":
         raise AssertionError(f"The answer of a queued run brings no queued status: {payload!r}")
+elif mode == "getting-started":
+    # The getting-started checklist of a status of the settings page: its five steps in their
+    # order, each in the state of the argument, complete once the first run succeeded, and the
+    # estimate of the first synchronization, which needs the documents of a dry-run.
+    setup = payload.get("setup", {})
+    steps = setup.get("steps", [])
+    if [step.get("id") for step in steps] != ["connect", "owner", "dry-run", "schedule", "first-run"]:
+        raise AssertionError(f"getting-started: the steps are not those of the checklist: {setup!r}")
+    states = [step.get("state") for step in steps]
+    if " ".join(states) != argument or setup.get("complete") is not (states[4] == "done"):
+        raise AssertionError(f"getting-started: expected the states {argument}, got {setup!r}")
+    estimate = setup.get("estimate", "")
+    expected = ("Paperless has ", "The last dry-run found no document") if states[2] == "done" else ("A dry-run counts the documents",)
+    if not estimate.startswith(expected):
+        raise AssertionError(f"getting-started: the estimate doesn't match the dry-run: {estimate!r}")
 elif mode == "status-export":
     # The run that the background job made, as the status of the settings page shows it.
     expect("state", "completed")

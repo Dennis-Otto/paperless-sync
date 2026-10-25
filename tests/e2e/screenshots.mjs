@@ -10,9 +10,9 @@
 // it takes the pictures of the German documentation instead, in docs/images/de/, and no
 // screenshots of the App Store (language.mjs).
 //
-// The story follows the quick start: a dry-run, the first synchronization, the archive
-// in Files, a dry-run a few days later that shows every kind of change, and a run that
-// ends with an error, which the status keeps.
+// The story follows the quick start: getting started, a dry-run, the first synchronization,
+// the archive in Files, a dry-run a few days later that shows every kind of change, and a
+// run that ends with an error, which the status keeps.
 //
 // Two runs draw the same pixels, so that the screenshot bot changes a picture only when the
 // app looks different: the data of the Paperless mock is fixed (showcase.py), the moments of
@@ -425,6 +425,16 @@ try {
 	await control('reset')
 	await control('scenario/showcase')
 	await upload(`${L.base}/${L.inbox}/${L.receipt}`, '%PDF-1.4 Synthetic receipt of the screenshots.\n')
+
+	// Getting started on the new installation, whose connection and target user are saved: the
+	// first two steps are done and the dry-run is next.
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, admin, theme, SETTINGS)
+		await page.locator('#paperless-sync-getting-started [data-step="dry-run"][aria-current="step"]').waitFor()
+		await settle(page)
+		save(`${IMAGES}/settings-getting-started-${theme}.png`, await shot(page, page.locator('#paperless-sync-getting-started')))
+		await context.close()
+	}
 
 	// The quick start: a dry-run lists what would change, then the first synchronization.
 	{

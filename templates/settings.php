@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -25,6 +25,22 @@ $webhook = $_['webhook'];
 // The warnings and errors of the setup checks of Administration → Overview, as they were when the
 // page loaded, which it shows on top.
 $health = $_['health'];
+// The getting-started checklist (GettingStarted), which shows until the first successful run, and
+// for each step its title, what it asks for and the button that leads to it; js/settings.js
+// updates the states with every status and has the same labels of the states.
+$setup = $_['setup'];
+$setupStates = [
+	'done' => $l->t('Done'),
+	'next' => $l->t('Next'),
+	'todo' => $l->t('To do'),
+];
+$setupSteps = [
+	'connect' => [$l->t('Connect to Paperless'), $l->t('Enter the URL of Paperless, then create an account for the app in Paperless, or enter the API token of an account of its own and save. The step is done when no line of the connection checklist fails.'), $l->t('Go to the connection')],
+	'owner' => [$l->t('Choose who gets the documents'), $l->t('The target user of Nextcloud gets the archive, or with per-user ownership each user gets the documents that they own in Paperless.'), $l->t('Go to the target user')],
+	'dry-run' => [$l->t('Try a dry-run'), $l->t('A dry-run lists in its report every change that a run would make, without changing a file. Read it before you go on.'), $l->t('Go to the dry-run')],
+	'schedule' => [$l->t('Turn on scheduled synchronization'), $l->t('Turn it on and save: the background jobs of Nextcloud then synchronize at the interval of the schedule.'), $l->t('Go to the schedule')],
+	'first-run' => [$l->t('Wait for the first run'), $setup['estimate'], $l->t('Go to the status')],
+];
 // The state of the last run as StatusService stores it, and its label; js/settings.js has the same.
 $state = (string)($status['state'] ?? 'never-run');
 $stateLabels = [
@@ -94,7 +110,44 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 			<h2><?php p($l->t('Paperless Sync')); ?></h2>
 			<p><?php p($l->t('Keep Paperless as your authoritative archive and make finalized documents available through Nextcloud Files.')); ?></p>
 		</div>
+		<button id="paperless-sync-getting-started-show" class="paperless-sync-getting-started-show" type="button" aria-controls="paperless-sync-getting-started" <?php if (!$setup['complete']) {
+			print_unescaped('hidden');
+		} ?>><?php p($l->t('Show getting started')); ?></button>
 	</div>
+
+	<section id="paperless-sync-getting-started" class="paperless-sync-getting-started" aria-labelledby="paperless-sync-getting-started-title" <?php if ($setup['complete']) {
+		print_unescaped('hidden');
+	} ?>>
+		<div class="paperless-sync-getting-started-heading">
+			<h3 id="paperless-sync-getting-started-title" tabindex="-1"><?php p($l->t('Getting started')); ?></h3>
+			<button id="paperless-sync-getting-started-hide" type="button" aria-controls="paperless-sync-getting-started"><?php p($l->t('Hide getting started')); ?></button>
+		</div>
+		<p class="settings-hint"><?php p($l->t('Five steps lead to the first run in a safe order, and each shows when it is done. The list hides once the first run has succeeded.')); ?> <?php $help('getting-started-in-the-settings', $l->t('Getting started')); ?></p>
+		<ol id="paperless-sync-getting-started-steps" class="paperless-sync-getting-started-steps">
+			<?php foreach ($setup['steps'] as $index => $step) {
+				[$title, $hint, $button] = $setupSteps[$step['id']]; ?>
+			<li class="paperless-sync-getting-started-step" data-step="<?php p($step['id']); ?>" data-state="<?php p($step['state']); ?>" <?php if ($step['state'] === 'next') {
+				print_unescaped('aria-current="step"');
+			} ?>>
+				<span class="paperless-sync-getting-started-marker" aria-hidden="true"><?php p((string)($index + 1)); ?></span>
+				<div class="paperless-sync-getting-started-text">
+					<span class="paperless-sync-getting-started-title">
+						<strong id="paperless-sync-getting-started-<?php p($step['id']); ?>"><?php p($title); ?></strong>
+						<span class="paperless-sync-getting-started-state"><?php p($setupStates[$step['state']]); ?></span>
+					</span>
+					<span class="paperless-sync-getting-started-hint" <?php if ($step['id'] === 'first-run') {
+						print_unescaped('id="paperless-sync-getting-started-estimate"');
+					} ?>><?php p($hint); ?></span>
+				</div>
+				<button type="button" data-step-target="<?php p($step['id']); ?>" aria-describedby="paperless-sync-getting-started-<?php p($step['id']); ?>"><?php p($button); ?></button>
+			</li>
+			<?php } ?>
+		</ol>
+		<p id="paperless-sync-getting-started-complete" class="paperless-sync-getting-started-complete" <?php if (!$setup['complete']) {
+			print_unescaped('hidden');
+		} ?>><?php p($l->t('Paperless Sync is set up: the first run succeeded. Every later run changes only what changed in Paperless.')); ?></p>
+		<span id="paperless-sync-getting-started-announcement" class="paperless-sync-visually-hidden" aria-live="polite"></span>
+	</section>
 
 	<?php foreach ($health as $result) { ?>
 	<p class="paperless-sync-health paperless-sync-health--<?php p($result['severity']); ?>" role="<?php p($result['severity'] === 'error' ? 'alert' : 'status'); ?>">
@@ -104,7 +157,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	</p>
 	<?php } ?>
 
-	<div id="paperless-sync-status" class="paperless-sync-status">
+	<div id="paperless-sync-status" class="paperless-sync-status" role="region" tabindex="-1" aria-label="<?php p($l->t('Synchronization status')); ?>">
 		<div class="paperless-sync-status-card">
 			<div>
 				<span class="paperless-sync-status-label"><?php p($l->t('Synchronization status')); ?></span>
