@@ -57,4 +57,7 @@ allow-dependencies-licenses:
   # (CC-BY-SA-4.0).
   - pkg:npm/%40cspell/dict-django
   - pkg:npm/%40cspell/dict-en-common-misspellings
+  # The URI parser of ESLint in scripts/eslint/, a tool of the checks that no release
+  # ships: BSD-2-Clause, which the review reads as BSD-2-Clause AND BSD-2-Clause-Views.
+  - pkg:npm/uri-js
   - pkg:composer/netresearch/jsonmapper
