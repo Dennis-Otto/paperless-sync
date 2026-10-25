@@ -67,6 +67,7 @@ plugins:
         nav_translations:
           Home: Start
           Guide: Anleitung
+          Use: Nutzung
           Help: Hilfe
           Troubleshooting: Fehlerbehebung
           Compare: Vergleich
@@ -112,6 +113,7 @@ hooks:
 nav:
   - Home: index.md
   - Guide: guide.md
+  - Use: use.md
   - Help:
       - FAQ: faq.md
       - Troubleshooting: troubleshooting.md

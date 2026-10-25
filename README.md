@@ -165,11 +165,20 @@ The settings of the app in the administration settings of Nextcloud:
 
 The [guide](https://dennis-otto.github.io/paperless-sync/guide.html#the-settings-section-by-section) shows every section of the settings.
 
+## Using the archive
+
+Everyone who reads or sends documents does so in Nextcloud alone: in Files on the web, with the desktop client and with the Nextcloud apps for Android and iOS, without an account of Paperless. [Using the archive](https://dennis-otto.github.io/paperless-sync/use.html) is the page for them, which the App Store links as the documentation for users: how to find a document by its folder, its name, its text or its tags, what the marker `[P123]` means, how to send a file to Paperless, and recipes to scan with the phone straight into the inbox, upload a folder of the phone on its own, scan from a scanner on the network, keep the archive offline on the computer and the phone, and share it read-only with the family or as a link with an expiration date with a tax adviser.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-menu-dark.png">
+  <img alt="Nextcloud Files in the browser of a phone with the menu of the copy 2026-06-30 - Electricity bill June open, which offers Open in Paperless among the actions of Files" src="docs/images/phone-menu-light.png">
+</picture>
+
 <!-- --8<-- [start:usage] -->
 
 ## Usage
 
-After installation, open **Administration settings → Paperless Sync**. Configure the connection while synchronization remains disabled: saving tests it when you enter the token. Run a dry-run, review the summary, and only then enable scheduled synchronization.
+This part is for the administrator, and [Using the archive](https://dennis-otto.github.io/paperless-sync/use.html) for the people who use the archive. After installation, open **Administration settings → Paperless Sync**. Configure the connection while synchronization remains disabled: saving tests it when you enter the token. Run a dry-run, review the summary, and only then enable scheduled synchronization.
 
 The default archive path template is:
 

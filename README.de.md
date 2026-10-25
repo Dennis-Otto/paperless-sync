@@ -170,11 +170,20 @@ Die Einstellungen der App in den Administrationseinstellungen von Nextcloud:
 
 Die [Anleitung](docs/guide.de.md#die-einstellungen-abschnitt-für-abschnitt) zeigt jeden Abschnitt der Einstellungen.
 
+## Das Archiv nutzen
+
+Wer Dokumente liest oder sendet, tut das allein in Nextcloud: in Dateien im Web, mit dem Desktop-Client und mit den Nextcloud-Apps für Android und iOS, ohne ein Konto von Paperless. [Das Archiv nutzen](https://dennis-otto.github.io/paperless-sync/de/use.html) ist die Seite für sie, die der App Store als Dokumentation für Benutzer verlinkt: wie du ein Dokument nach seinem Ordner, seinem Namen, seinem Text oder seinen Tags findest, was die Markierung `[P123]` bedeutet, wie du eine Datei an Paperless sendest, und Rezepte, um mit dem Handy direkt in den Eingang zu scannen, einen Ordner des Handys von selbst hochzuladen, von einem Scanner im Netzwerk zu scannen, das Archiv auf dem Computer und dem Handy offline zu halten und es mit der Familie nur zum Lesen oder als Link mit Ablaufdatum mit einer Steuerberatung zu teilen.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/phone-menu-dark.png">
+  <img alt="Nextcloud Dateien im Browser eines Handys mit dem geöffneten Menü der Kopie 2026-06-30 - Electricity bill June, das In Paperless öffnen unter den Aktionen von Dateien anbietet" src="docs/images/de/phone-menu-light.png">
+</picture>
+
 <!-- --8<-- [start:usage] -->
 
 ## Verwendung
 
-Öffne nach der Installation **Administrationseinstellungen → Paperless Sync**. Richte die Verbindung ein, während die Synchronisation ausgeschaltet bleibt: Das Speichern prüft sie, wenn du das Token eingibst. Starte einen Testlauf, prüfe die Zusammenfassung und schalte erst dann die geplante Synchronisation ein.
+Dieser Teil ist für die Administration, und [Das Archiv nutzen](https://dennis-otto.github.io/paperless-sync/de/use.html) für die Menschen, die das Archiv nutzen. Öffne nach der Installation **Administrationseinstellungen → Paperless Sync**. Richte die Verbindung ein, während die Synchronisation ausgeschaltet bleibt: Das Speichern prüft sie, wenn du das Token eingibst. Starte einen Testlauf, prüfe die Zusammenfassung und schalte erst dann die geplante Synchronisation ein.
 
 Die Standard-Pfadvorlage des Archivs ist:
 
