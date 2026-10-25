@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.2.0...v1.3.0) (2026-10-25)
+
+
+### Features
+
+* **settings:** a getting-started checklist and a setup check that lead a new installation to its first run ([#257](https://github.com/Dennis-Otto/paperless-sync/issues/257)) ([62361c4](https://github.com/Dennis-Otto/paperless-sync/commit/62361c4f6d52e7fffddb16bb184a61b36406394f))
+* **settings:** create the Paperless account of the app from the settings with one admin token ([#253](https://github.com/Dennis-Otto/paperless-sync/issues/253)) ([8e15289](https://github.com/Dennis-Otto/paperless-sync/commit/8e15289da8ff501363865a6df31fec666c3183bf))
+
+
+### Bug fixes
+
+* **a11y:** show the keyboard focus on checkboxes and keep it above the button bar, checked by keyboard and at 320 px ([#264](https://github.com/Dennis-Otto/paperless-sync/issues/264)) ([2dba613](https://github.com/Dennis-Otto/paperless-sync/commit/2dba613e8ae0c5cffaac20094abeaed470931fe1))
+
 ## [1.2.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.1.1...v1.2.0) (2026-10-23)
 
 ### Features
