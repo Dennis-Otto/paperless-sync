@@ -59,6 +59,12 @@ fi
 # keyboard.mjs and settings.mjs, which don't depend on the database or the storage; run-all.sh
 # runs them once for every version.
 E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
+# E2E_COVERAGE=1 measures which lines and branches of the JavaScript of the app, js/*.js, the
+# checks in the browser run (browser.mjs and coverage.mjs), and fails when a script runs a
+# smaller share of them than its floor in coverage-floor.json; run-all.sh sets it for the run
+# on the newest version. Its table is in the log, and with E2E_ARTIFACTS its reports are in
+# the folder coverage there, also when the run passes.
+E2E_COVERAGE="${E2E_COVERAGE:-0}"
 TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
 # playwright-core in package.json; Renovate updates both together, and
@@ -234,7 +240,10 @@ mock_state() {
 # a trace, and what a check that failed kept, its traces and screenshots (browser.mjs), comes
 # back through standard output, as a tar archive, into BROWSER_ARTIFACTS, which keep_evidence
 # takes along; everything the browser says goes to standard error. Unlike a mounted folder,
-# that works with any Docker and leaves no files of root on the runner.
+# that works with any Docker and leaves no files of root on the runner. With E2E_COVERAGE=1,
+# each check records the coverage of the scripts of the app in its pages, and coverage.mjs
+# then reports the share of their lines and branches that the checks run and fails below the
+# floor; after a check that failed it only reports, as a check that stopped early runs less.
 # The sh of the container expands these variables, not this script.
 # shellcheck disable=SC2016
 BROWSER_CHECKS='
@@ -248,23 +257,33 @@ BROWSER_CHECKS='
 	if [ "${E2E_KEEP_BROWSER}" = 1 ]; then
 		export E2E_BROWSER_ARTIFACTS=/tmp/artifacts
 	fi
+	if [ "${E2E_COVERAGE}" = 1 ]; then
+		export E2E_BROWSER_COVERAGE=/tmp/artifacts/coverage/v8
+	fi
 	failed=""
 	for check in accessibility keyboard settings files flow; do
 		node "${check}.mjs" || failed="${failed} ${check}.mjs"
 	done
 	if [ -n "${failed}" ]; then
+		if [ "${E2E_COVERAGE}" = 1 ]; then
+			node coverage.mjs /tmp/artifacts/coverage || true
+		fi
 		echo "The checks in the browser fail:${failed}."
 		exit 1
 	fi
+	if [ "${E2E_COVERAGE}" = 1 ]; then
+		node coverage.mjs /tmp/artifacts/coverage coverage-floor.json
+	fi
 '
 accessibility() {
+	local status=0
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
 	mkdir -p "${BROWSER_ARTIFACTS}"
 	# Git Bash on Windows would turn the paths of the container into paths of Windows.
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs coverage.mjs coverage-floor.json \
 		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -274,9 +293,17 @@ accessibility() {
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
+			--env "E2E_COVERAGE=${E2E_COVERAGE}" \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c "${BROWSER_CHECKS}" \
-		| tar -C "${BROWSER_ARTIFACTS}" -xf -
+		| tar -C "${BROWSER_ARTIFACTS}" -xf - || status=$?
+	# The coverage, which the checks keep also when they pass, goes to the folder of the run.
+	if [[ -n "${E2E_ARTIFACTS}" && -d "${BROWSER_ARTIFACTS}/coverage" ]]; then
+		mkdir -p "${E2E_ARTIFACTS}"
+		rm -rf "${E2E_ARTIFACTS}/coverage"
+		mv "${BROWSER_ARTIFACTS}/coverage" "${E2E_ARTIFACTS}/coverage"
+	fi
+	return "${status}"
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the

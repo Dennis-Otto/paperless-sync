@@ -54,11 +54,17 @@ flaky-test bot runs a failed job once more by itself, so a failure that stays is
 its element: `tests/e2e/accessibility.mjs` a rule of WCAG 2.1 AA that axe-core found
 violated, at 1280 or 320 px, or an element that reaches past a window of 320 px, and
 `tests/e2e/keyboard.mjs` a control that Tab doesn't reach, reaches against the order of
-the page or leaves hidden behind the bar of the buttons, or whose focus can't be seen."""
+the page or leaves hidden behind the bar of the buttons, or whose focus can't be seen. On
+the newest version, the checks in the browser also measure which lines and branches of
+the scripts in `js/` they run, in the table *Coverage of the JavaScript in the browser* of the
+summary, and fail when a script runs a smaller share of them than its floor in
+`tests/e2e/coverage-floor.json`."""
 why = """These tests run the app as a server runs it: a real Nextcloud with this checkout
 as its app, its settings page in a browser, its background jobs and its files in WebDAV,
 against a mock of Paperless. A change that passes the unit tests can still break the app
-in one of the versions that the App Store promises."""
+in one of the versions that the App Store promises. The JavaScript of the app has no build
+and no unit tests; the checks in the browser are its tests, and the floor keeps a change
+from leaving a part of it untested without anyone noticing."""
 fix = """Read the first error in the summary; for a check in the browser, download the
 artifact *e2e-nextcloud* and open the trace of the window that failed, in its folder
 `browser`, with `npx playwright show-trace` or at https://trace.playwright.dev: it shows each
@@ -66,7 +72,11 @@ step with the page before and after, its requests and its console. Run the versi
 failed on your machine with Docker, by the command that the log names, fix what its output
 shows, and push. A finding of the accessibility names its
 fix: a name for a control, a color with more contrast, CSS that lets a wide element wrap
-at 320 px, or an outline for `:focus-visible`. When `main` fails the same way, a new
+at 320 px, or an outline for `:focus-visible`. A script below its floor: the details of
+the table name the lines that no check runs; test the new code in `tests/e2e/settings.mjs`,
+`tests/e2e/files.mjs` or `tests/e2e/flow.mjs`, or remove the code that nothing needs. Lower a floor only for
+code that no browser check can reach, and say why in the pull request; the artifact
+*e2e-coverage* has the file lcov.info for an editor. When `main` fails the same way, a new
 point release of Nextcloud, which the image of the version brings, changed what the app
 relies on: adapt the app to it in a pull request of its own."""
 commands = [
@@ -75,6 +85,7 @@ commands = [
   "E2E_PLAN=1 E2E_SHARD=1 bash tests/e2e/run-all.sh  # which versions this check runs",
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
   "E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
+  "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache E2E_COVERAGE=1 E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # the coverage of the JavaScript, on max-version",
   "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
 docs = "tests/e2e/README.md#when-a-run-fails"
@@ -244,15 +255,19 @@ row, a setting, a credential, a file ID or a retry pass. *First error of a faile
 end-to-end run*: a test of `tests/e2e/failure.py` fails, so the summary of a failed run
 or the issue of the canary would name another line than its first error. *Check of the package*: a test of
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
-parse, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
+parse, ESLint finds what a rule of `scripts/eslint/eslint.config.mjs` forbids, such as a
+variable that nothing uses, a comparison with `==`, a function that becomes a global of the
+page, a `var` or a `let` that never changes, or misses one of them in its seeded script, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
 Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
 the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
 doesn't translate, a test of `tests/e2e/files-address.mjs` fails, because a browser test
 opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, a test of
 `tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, a
 test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots of a check in
-the browser that fails, or a check in the browser starts Chromium without it, or
-`l10n/de.json` lacks a text that the code
+the browser that fails and records the coverage of the scripts of the app, or a check in the
+browser starts Chromium without it, a test of `tests/e2e/coverage.mjs` fails, which reports
+that coverage and holds it to its floor, or a script of `js/` has no floor in
+`tests/e2e/coverage-floor.json`, or `l10n/de.json` lacks a text that the code
 translates, has one that no code translates, a placeholder of another kind or a text
 twice, or differs from `l10n/de.js`."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
@@ -278,18 +293,27 @@ look for a text of the German pictures as `l10n/de.json` translates it, with `L.
 in `tests/e2e/screenshots.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
 open Files at `folderAddress(await filesAddress(page), dir)` of
 `tests/e2e/files-address.mjs` until `node --test tests/e2e/files-address.test.mjs` passes,
+fix what ESLint names in the file and line that it prints, use the variable or remove it,
+compare with `===` and `!==`, keep a function of a script of the app inside its
+`(function() { … })()`, and turn a rule off for one line only with
+`// eslint-disable-next-line RULE -- the reason`,
 fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, start the browser
 of a check with `launch()` of `tests/e2e/browser.mjs` and keep what it has before it closes
-until `node --test tests/e2e/browser.test.mjs` passes, and add a new text with its German words to `l10n/de.json`. Two of them a command fixes: `cp` copies the icon of the app, and
+until `node --test tests/e2e/browser.test.mjs` passes, fix `tests/e2e/coverage.mjs` until
+`node --test tests/e2e/coverage.test.mjs` passes and give a new script of `js/` its floor of
+lines and branches, 0 until the end-to-end tests have measured it, and add a new text with its German words to `l10n/de.json`. Three of them a command fixes: `cp` copies the icon of the app,
+`eslint.sh --fix` makes a `var` and a `let` that never changes a `const`, and
 `check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
 anew. Then run the checks again:"""
 commands = [
   "bash scripts/check-project.sh",
   "cp img/app.svg docs/images/app.svg  # Icon of the website",
+  "bash scripts/eslint.sh --fix  # JavaScript and translations",
   "node scripts/check-l10n.mjs --fix  # JavaScript and translations",
 ]
 docs = "docs/development.md#set-up"
 autofix = [
   "cp img/app.svg docs/images/app.svg",
+  "bash scripts/eslint.sh --fix",
   "node scripts/check-l10n.mjs --fix",
 ]
