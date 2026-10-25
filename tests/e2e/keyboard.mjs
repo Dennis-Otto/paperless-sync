@@ -45,7 +45,9 @@ function expect(condition, message) {
 
 // Runs in the page: the controls of the scope that Tab must reach, in the order of the page, which
 // the page keeps for focused(): what Tab can focus and is visible and enabled; of a group of
-// radio buttons, the checked one. Gives their names.
+// radio buttons, the checked one. Gives their names. It keeps the look of each as well: two
+// controls of the same kind, with the same colors and borders on the same background and
+// inside the same box that may cut off an outline, show their focus alike.
 function listControls(selector) {
 	const root = document.querySelector(selector)
 	const name = (element) => {
@@ -64,7 +66,23 @@ function listControls(selector) {
 		}
 		return element.checkVisibility({ visibilityProperty: true })
 	})
+	const look = (element) => {
+		const style = getComputedStyle(element)
+		let backdrop = ''
+		let clip = ''
+		for (let node = element.parentElement; node !== null; node = node.parentElement) {
+			const outer = getComputedStyle(node)
+			if (backdrop === '' && outer.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+				backdrop = outer.backgroundColor
+			}
+			if (clip === '' && outer.overflowX !== 'visible') {
+				clip = `${node.tagName}.${node.className}`
+			}
+		}
+		return [element.tagName, element.type, element.getAttribute('role'), element.className, style.color, style.backgroundColor, style.borderTopColor, style.borderTopWidth, backdrop, clip].join('|')
+	}
 	window.e2eControls = controls
+	window.e2eLooks = controls.map(look)
 	window.e2eName = name
 	return controls.map(name)
 }
@@ -115,13 +133,13 @@ async function signIn(browser) {
 	}
 }
 
-async function openSettings(browser, session, viewport, colorScheme = 'light') {
-	const context = await browser.newContext({ storageState: session, viewport, colorScheme, reducedMotion: 'reduce' })
+async function openSettings(browser, session) {
+	const context = await browser.newContext({ storageState: session, viewport: WIDE, colorScheme: 'light', reducedMotion: 'reduce' })
 	const page = await context.newPage()
 	await page.goto(`${BASE_URL}${SETTINGS}`)
 	await page.locator(SCOPE).waitFor()
 	await page.waitForLoadState('networkidle')
-	return { context, page }
+	return page
 }
 
 // Puts the start of Tab at the top of the settings, as a click there does, and moves the mouse
@@ -167,10 +185,20 @@ async function walk(page, label) {
 // focus in either picture.
 async function focusIndicators(page, order, label) {
 	await page.evaluate(listControls, SCOPE)
+	const looks = await page.evaluate(() => window.e2eLooks)
 	await startAtTop(page)
 	await page.keyboard.press('Tab')
-	let shown = 0
+	// The first control of each look stands for the others.
+	const kinds = new Map()
 	for (const index of order) {
+		if (!kinds.has(looks[index])) {
+			kinds.set(looks[index], { index, count: 0 })
+		}
+		kinds.get(looks[index]).count++
+	}
+	let shown = 0
+	for (const { index, count } of kinds.values()) {
+		const others = count > 1 ? ` and ${count - 1} more control(s) that look like it` : ''
 		const area = await page.evaluate(({ index, room }) => {
 			document.activeElement?.blur()
 			const element = window.e2eControls[index]
@@ -192,18 +220,18 @@ async function focusIndicators(page, order, label) {
 			return document.activeElement === element && element.matches(':focus-visible')
 		}, index)
 		if (!visible) {
-			problems.push(`${label}: ${area.name} takes the focus, but not as a focus of the keyboard (:focus-visible).`)
+			problems.push(`${label}: ${area.name}${others}: the focus is not one of the keyboard (:focus-visible).`)
 			continue
 		}
 		const after = await page.screenshot({ clip: area.clip, animations: 'disabled', caret: 'hide' })
 		const indicator = focusIndicator(PNG.sync.read(before), PNG.sync.read(after), area.size)
 		if (indicator.visible) {
-			shown++
+			shown += count
 		} else {
-			problems.push(`${label}: ${area.name} shows the focus on ${indicator.pixels} pixel(s) with a contrast of 3:1, fewer than the ${indicator.needed} of a line around it.`)
+			problems.push(`${label}: ${area.name}${others}: the focus shows on ${indicator.pixels} pixel(s) with a contrast of 3:1, fewer than the ${indicator.needed} of a line around it.`)
 		}
 	}
-	console.log(`Keyboard, ${label}: ${shown} of ${order.length} control(s) show the focus with a contrast of at least 3:1.`)
+	console.log(`Keyboard, ${label}: ${shown} of ${order.length} control(s), of ${kinds.size} look(s), show the focus with a contrast of at least 3:1.`)
 }
 
 // The check checks itself first, on a page with a control of every kind that it must fail: a
@@ -229,7 +257,7 @@ async function seeded(browser) {
 		const found = problems.splice(before)
 		const fails = (name, kind) => found.some((problem) => problem.includes(name) && problem.includes(kind))
 		expect(
-			fails('Invisible', 'shows the focus') && fails('Faint', 'shows the focus') && fails('Covered', 'hidden behind') && fails('Second', 'against the order') && !fails('Visible', ''),
+			fails('Invisible', 'the focus shows') && fails('Faint', 'the focus shows') && fails('Covered', 'hidden behind') && fails('Second', 'against the order') && !fails('Visible', ''),
 			`The check must fail the seeded controls, and only them: ${found.join(' ')}`,
 		)
 		console.log('Keyboard: the check fails a seeded button and field without a visible focus, a button behind a bar and a focus against the order of the page.')
@@ -335,22 +363,18 @@ const started = Date.now()
 const browser = await chromium.launch()
 try {
 	await seeded(browser)
-	const session = await signIn(browser)
-	let order = []
-	for (const [label, viewport] of [['1280 px', WIDE], ['320 px', NARROW]]) {
-		const { context, page } = await openSettings(browser, session, viewport)
-		const walked = await walk(page, `settings, ${label}`)
-		if (viewport === WIDE) {
-			order = walked
-			await focusIndicators(page, order, `settings, light theme, ${label}`)
-			await pickers(page)
-			await dialogs(page)
-		}
-		await context.close()
-	}
-	const { context, page } = await openSettings(browser, session, WIDE, 'dark')
+	const page = await openSettings(browser, await signIn(browser))
+	// One page for everything, which switches its width and its theme without loading again.
+	const order = await walk(page, 'settings, 1280 px')
+	await focusIndicators(page, order, 'settings, light theme, 1280 px')
+	await page.setViewportSize(NARROW)
+	await walk(page, 'settings, 320 px')
+	await page.setViewportSize(WIDE)
+	await page.emulateMedia({ colorScheme: 'dark' })
 	await focusIndicators(page, order, 'settings, dark theme, 1280 px')
-	await context.close()
+	await page.emulateMedia({ colorScheme: 'light' })
+	await pickers(page)
+	await dialogs(page)
 } finally {
 	await browser.close()
 	for (const problem of problems) {
