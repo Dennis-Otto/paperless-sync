@@ -12,6 +12,11 @@ services:
       - /tmp
     volumes:
       - ./:/mock:ro
+    # The tests control the mock and read what it has seen from the host, with curl on a
+    # port of 127.0.0.1 that Docker chooses and run.sh looks up, so that the suites of
+    # run-all.sh side by side never meet on one.
+    ports:
+      - "127.0.0.1::8080"
     networks:
       default:
         # The name of Paperless in the screenshots of the documentation (screenshots.sh).

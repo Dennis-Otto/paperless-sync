@@ -24,10 +24,18 @@
 # and one package of the commit (packages.sh).
 #
 # E2E_VERSIONS="33 35" chooses the versions instead, and E2E_VERSIONS=none runs only
-# the variants, on max-version; the CI runs those in a job of their own, next to the
-# versions. KEEP_E2E=1 keeps the containers of each, as with run.sh.
+# the variants, on max-version. E2E_SHARD=1 or 2 runs one half of the runs, for the two
+# jobs of the CI, which each take one: shard 1 holds the oldest and the newest version,
+# shard 2 the variants, and each version between goes, from the oldest, to the shard
+# with the lighter load, where a version with its browser checks counts as two and a
+# variant as one, to 2 when both weigh as much. Both jobs get the same versions and
+# variants, so they split them the same way. A shard without anything to run passes.
+# E2E_PLAN=1 only prints the runs that it would start.
+# KEEP_E2E=1 keeps the containers of each, as with run.sh.
 # E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs before the job of the CI
-# ends after 20 minutes, so that the logs of all are still printed.
+# ends after 20 minutes, so that the logs of all are still printed. The table of the
+# results gives the time of each phase of each run, from the lines of its log, so that a
+# run that gets slower shows where.
 
 set -euo pipefail
 
@@ -59,6 +67,7 @@ case "${E2E_VERSIONS:-}" in
 	*) read -ra versions <<<"${E2E_VERSIONS}" ;;
 esac
 newest=0
+oldest=0
 for version in "${versions[@]}"; do
 	if [[ ! "${version}" =~ ^[0-9]+$ ]]; then
 		echo "${version} is no major version of Nextcloud, such as 33." >&2
@@ -66,6 +75,9 @@ for version in "${versions[@]}"; do
 	fi
 	if ((version > newest)); then
 		newest="${version}"
+	fi
+	if ((oldest == 0 || version < oldest)); then
+		oldest="${version}"
 	fi
 done
 
@@ -75,7 +87,56 @@ case "${E2E_VARIANTS:-}" in
 	none) ;;
 	*) read -ra variants <<<"${E2E_VARIANTS}" ;;
 esac
+
+# The shard of the runs: 1 the oldest and the newest version, 2 the variants, and each
+# version between to the one with the lighter load. A version counts twice, as its
+# browser checks take about as long as the rest of its run, and a variant, which has
+# none, once. The variants still run on the newest of all versions.
+case "${E2E_SHARD:-}" in
+	"") ;;
+	1 | 2)
+		first=()
+		second=()
+		if ((oldest > 0)); then
+			first+=("${oldest}")
+		fi
+		if ((newest != oldest)); then
+			first+=("${newest}")
+		fi
+		mapfile -t between < <(printf '%s\n' "${versions[@]}" | sort -n -u)
+		for version in "${between[@]}"; do
+			if [[ -z "${version}" ]] || ((version == oldest || version == newest)); then
+				continue
+			fi
+			if ((2 * ${#second[@]} + ${#variants[@]} <= 2 * ${#first[@]})); then
+				second+=("${version}")
+			else
+				first+=("${version}")
+			fi
+		done
+		if [[ "${E2E_SHARD}" == 1 ]]; then
+			mapfile -t versions < <(printf '%s\n' "${first[@]}" | sort -n | grep -v '^$' || true)
+			variants=()
+		else
+			versions=("${second[@]}")
+		fi
+		;;
+	*)
+		echo "E2E_SHARD=${E2E_SHARD} is neither 1 nor 2." >&2
+		exit 1
+		;;
+esac
 if ((${#versions[@]} + ${#variants[@]} == 0)); then
+	if [[ -n "${E2E_SHARD:-}" ]]; then
+		# Two supported versions leave nothing between them, and a pull request that can't
+		# behave differently on another database runs no variant.
+		message="The shard ${E2E_SHARD} has nothing to run: no version of Nextcloud and no variant."
+		echo "${message}"
+		if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+			printf '### Docker E2E\n\n%s\n' "${message}" >>"${GITHUB_STEP_SUMMARY}"
+		fi
+		exit 0
+	fi
 	echo "No version of Nextcloud to test." >&2
 	exit 1
 fi
@@ -99,8 +160,13 @@ trap 'rm -rf "${LOG_DIR}"' EXIT
 # The packages of the upgrade, once for every variant with +upgrade: the last release from
 # GitHub and the package of the commit. The upgrade runs on the newest version that both the
 # release and the commit support, as the users of the release have it before they update.
+# E2E_PLAN=1 downloads nothing: its upgrades start from "the last release", on the newest
+# version.
 release_version=""
 upgrade_newest="${newest}"
+if [[ "${E2E_PLAN:-0}" == "1" ]]; then
+	release_version="the last release"
+fi
 for variant in "${variants[@]}"; do
 	if [[ "${variant}" == *+upgrade && -z "${release_version}" ]]; then
 		E2E_RELEASE_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" release "${LOG_DIR}/packages")"
@@ -163,6 +229,11 @@ for index in "${!variants[@]}"; do
 		"$((18080 + newest + 100 * (index + 1)))" 0 "${upgrade}" "${title}"
 done
 
+if [[ "${E2E_PLAN:-0}" == "1" ]]; then
+	printf '%s\n' "${titles[@]}"
+	exit 0
+fi
+
 # The limit of one run: timeout of coreutils, which Git Bash has too, ends run.sh,
 # whose cleanup still shows the state of its containers. Where there is none, as on
 # macOS, they run without a limit.
@@ -195,6 +266,33 @@ duration() {
 	else
 		echo "$1 s"
 	fi
+}
+
+# The phases of a run as cells of the table, from the seconds that its log names at their
+# ends: until its containers run, the setup of Nextcloud and the app, the scenarios, and
+# the checks in the browser. A phase that the run didn't reach shows as ?, and the browser
+# of a variant, which leaves it out, as –. The scenarios are the rest of the run, also
+# those after the browser, and those up to the failure of a run that failed.
+phases() {
+	local log="$1" total="$2" browsing="$3" containers setup browser scenarios="?"
+	containers="$(sed -nE 's/^The containers run after ([0-9]+) s\.$/\1/p' "${log}" 2>/dev/null | head -n 1)"
+	setup="$(sed -nE 's/^Nextcloud and the app are set up after ([0-9]+) s\.$/\1/p' "${log}" 2>/dev/null | head -n 1)"
+	browser="$(sed -nE 's/^The checks in the browser took ([0-9]+) s\.$/\1/p' "${log}" 2>/dev/null | head -n 1)"
+	if [[ -n "${setup}" ]]; then
+		scenarios="$(duration "$((total - setup - ${browser:-0}))")"
+		if [[ -n "${containers}" ]]; then
+			setup="$(duration "$((setup - containers))")"
+		fi
+	fi
+	if [[ -n "${browser}" ]]; then
+		browser="$(duration "${browser}")"
+	elif [[ "${browsing}" == 0 ]]; then
+		browser="–"
+	fi
+	if [[ -n "${containers}" ]]; then
+		containers="$(duration "${containers}")"
+	fi
+	echo "${containers:-?} | ${setup:-?} | ${scenarios} | ${browser:-?}"
 }
 
 # The log of one run, in a group of its own in the CI.
@@ -269,7 +367,7 @@ for index in "${!keys[@]}"; do
 	if [[ "${upgrades[index]}" == 1 ]]; then
 		app="upgraded from ${release_version}"
 	fi
-	rows+=("| ${run_versions[index]} | $(database_name "${databases[index]}") | ${storage} | ${app} | ${release:-?} | ${result} | $(duration "${seconds}") |")
+	rows+=("| ${run_versions[index]} | $(database_name "${databases[index]}") | ${storage} | ${app} | ${release:-?} | ${result} | $(phases "${LOG_DIR}/${key}.log" "${seconds}" "${accessibility[index]}") | $(duration "${seconds}") |")
 
 	title="${titles[index]} (${release:-?}): ${result} after $(duration "${seconds}")"
 	show "${key}" "${title}"
@@ -284,8 +382,8 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
 	{
 		echo "### Docker E2E"
 		echo
-		echo "| Nextcloud | Database | Storage | App | Release | Result | Time |"
-		echo "| --- | --- | --- | --- | --- | --- | --- |"
+		echo "| Nextcloud | Database | Storage | App | Release | Result | Containers | Setup | Scenarios | Browser | Time |"
+		echo "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 		printf '%s\n' "${rows[@]}"
 	} >>"${GITHUB_STEP_SUMMARY}"
 fi

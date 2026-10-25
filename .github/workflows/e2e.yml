@@ -5,18 +5,19 @@ name: Docker E2E
 
 # The end-to-end tests in Docker against the current release of every Nextcloud
 # version that appinfo/info.xml supports, from min-version to max-version, so that
-# raising max-version, as the upstream bot does, tests the new version at once. One
-# job, the required check nextcloud, runs all versions side by side
-# (tests/e2e/run-all.sh): one wait for a runner instead of one for each, and the
-# downloads of one version overlap with the installation of another.
-#
-# A second job runs the newest version on PostgreSQL, and on MariaDB with an S3 object
-# store as its primary storage, on a runner of its own: the five installations in one
-# job took more than five minutes on the four cores of a runner, the versions alone
-# keep nextcloud as fast as before. It is a required check too, as decision 0007 says.
-# Beside them, it upgrades an installation in use on PostgreSQL and on MariaDB from the
-# last release to the package of the commit, which krankerl builds as the release does
-# (tests/e2e/upgrade.sh, decision 0028): the only test where the migrations meet rows.
+# raising max-version, as the upstream bot does, tests the new version at once, and
+# against the newest version on PostgreSQL, and on MariaDB with an S3 object store as
+# its primary storage (decision 0007). Beside them, it upgrades an installation in use
+# on PostgreSQL and on MariaDB from the last release to the package of the commit,
+# which krankerl builds as the release does (tests/e2e/upgrade.sh, decision 0028): the
+# only test where the migrations meet rows. Two jobs, both required checks, share the
+# work on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
+# runs the oldest and the newest version, nextcloud on PostgreSQL, MariaDB and S3 the
+# databases, S3 and the upgrades, and each version between goes to the one with the
+# lighter load (a version with its browser checks counts as two runs, a variant as
+# one), so that a fourth version doesn't make one of them twice as slow. Each job runs
+# its share side by side: one wait for a runner instead of one for each, and the
+# downloads of one run overlap with the installation of another.
 #
 # In a pull request, the versions run only when the change can affect the app
 # (tests/e2e/affected.sh), the databases and S3 only when it can behave differently
@@ -92,12 +93,24 @@ jobs:
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
-      - name: Run the Paperless Sync end-to-end tests against every supported Nextcloud version
+      - name: Run the Paperless Sync end-to-end tests against the oldest and the newest supported Nextcloud
         if: steps.changes.outputs.affected != 'false'
         env:
-          # The job variants runs the other databases and S3.
-          E2E_VARIANTS: none
-        run: bash tests/e2e/run-all.sh
+          # Shard 1: the oldest and the newest version, and the versions between that the
+          # job variants doesn't take. Both jobs get the same variants, so that they
+          # split the runs the same way; the job variants runs them.
+          E2E_SHARD: 1
+          VARIANTS: ${{ steps.changes.outputs.variants }}
+          UPGRADE: ${{ steps.changes.outputs.upgrade }}
+        run: |
+          variants=()
+          if [[ "$VARIANTS" != false ]]; then
+            variants+=(pgsql mysql+s3)
+          fi
+          if [[ "$UPGRADE" != false ]]; then
+            variants+=(pgsql+upgrade mysql+upgrade)
+          fi
+          E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
@@ -126,7 +139,7 @@ jobs:
           persist-credentials: false
           # The merge commit of a pull request and its base, which affected.sh compares.
           fetch-depth: 2
-      - name: Find out whether the change can behave differently on another database or storage, or break the upgrade
+      - name: Find out whether the change can affect the app, behave differently on another database or storage, or break the upgrade
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
@@ -159,11 +172,16 @@ jobs:
           fi
           echo "$KRANKERL_SHA256  $deb" | sha256sum --check --strict
           sudo dpkg --install "$deb"
-      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, and the upgrade from the last release
+      - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, the upgrade from the last release, and the versions between
         # Without a pull request, the step changes doesn't run, and so this one runs all.
-        if: steps.changes.outputs.variants != 'false' || steps.changes.outputs.upgrade != 'false'
+        if: steps.changes.outputs.affected != 'false' || steps.changes.outputs.upgrade != 'false'
         env:
-          E2E_VERSIONS: none
+          # Shard 2: the variants that the change needs, and the versions between that
+          # job nextcloud doesn't take. Both jobs list the same variants, so that they
+          # split the runs the same way. A change that can only break the upgrade, such
+          # as one of the package, runs no version.
+          E2E_SHARD: 2
+          E2E_VERSIONS: ${{ steps.changes.outputs.affected == 'false' && 'none' || '' }}
           VARIANTS: ${{ steps.changes.outputs.variants }}
           UPGRADE: ${{ steps.changes.outputs.upgrade }}
         run: |
@@ -174,7 +192,7 @@ jobs:
           if [[ "$UPGRADE" != false ]]; then
             variants+=(pgsql+upgrade mysql+upgrade)
           fi
-          E2E_VARIANTS="${variants[*]}" bash tests/e2e/run-all.sh
+          E2E_VARIANTS="${variants[*]:-none}" bash tests/e2e/run-all.sh
       # The PR coach: what failed, why it matters and how to fix it, in the summary
       # of the check and as its annotation, from .github/checks.project.toml.
       - name: Explain the failure
