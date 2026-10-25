@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+    wrappingWidth: 240
+---
+flowchart TB
+    accTitle: What the checks of the accessibility look at
+    accDescr: accessibility.mjs and keyboard.mjs first try their judgment, a11y.mjs, on a seeded page that must fail them, so that a check that can't fail fails. accessibility.mjs then runs axe-core against WCAG 2.1 AA on the settings in eight states, on the actions of the app in the menu of Files with the messages after sending and on the form of a rule of Flow, each in the light and the dark theme at 1280 and 320 pixels: none may have a serious violation, and at 320 pixels the settings and the form reflow without scrolling sideways. keyboard.mjs walks the settings with Tab at 1280 and 320 pixels and checks that Tab reaches every control, in the order of the page, and never leaves one behind the bar of the buttons, that each control shows its focus with a contrast of 3:1 in both themes, that the pickers work with the arrow keys, Enter, Escape and Backspace, and that Escape cancels the questions of Disconnect. A finding fails the end-to-end tests. The checks are blue, what they look at orange, and what passes green.
+
+    seeded{"A seeded page<br>fails a11y.mjs"}
+    axe["accessibility.mjs:<br>axe-core,<br>WCAG 2.1 AA"]
+    keyboard["keyboard.mjs:<br>Tab, arrow keys,<br>Enter, Escape"]
+    pages["Settings in 8 states,<br>Files: menu and messages,<br>Flow: form of a rule"]
+    sizes["Light and dark,<br>1280 and 320 px"]
+    reflow(["No serious violation;<br>at 320 px, no<br>scrolling sideways"])
+    walk(["Every control,<br>in the order of the page,<br>never behind the bar"])
+    focus(["A focus that<br>contrasts 3:1"])
+    widgets(["Pickers and<br>the questions of<br>Disconnect"])
+
+    seeded --> axe & keyboard
+    axe --> pages --> sizes --> reflow
+    keyboard --> walk & focus & widgets
+
+    classDef checks fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef looked fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef result fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class seeded,axe,keyboard checks
+    class pages,sizes looked
+    class reflow,walk,focus,widgets result

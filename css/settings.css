@@ -656,6 +656,13 @@
 	margin: calc((1lh - 16px) / 2) 0 0;
 }
 
+/* Nextcloud draws no focus for a checkbox of the browser, so the keyboard lost its place on
+   one; it gets the outline of the other controls of the page. */
+.paperless-sync-settings input[type='checkbox']:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
+}
+
 .paperless-sync-danger-toggle {
 	font-weight: 700;
 	color: var(--color-error-text);
@@ -831,6 +838,13 @@
 	border-radius: var(--border-radius-large);
 	background: color-mix(in srgb, var(--color-main-background) 94%, transparent);
 	backdrop-filter: blur(12px);
+}
+
+/* A control that the focus moves to stays above the bar, which would cover it where the browser
+   scrolls it to the bottom edge of the window, as Tab does (WCAG 2.4.11). settings.js keeps the
+   height of the bar, which grows with its message and on a narrow screen, in the variable. */
+.paperless-sync-settings :is(a, button, input, select, textarea, summary, [tabindex]) {
+	scroll-margin-block-end: calc(var(--paperless-sync-actions-height, 80px) + 24px);
 }
 
 /* Disconnect, which can't be undone, keeps its distance at the end of the bar. The ID outweighs
