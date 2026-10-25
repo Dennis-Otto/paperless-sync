@@ -53,6 +53,10 @@ const IMAGES = L.images
 const THEMES = ['light', 'dark']
 const VIEWPORT = { width: 1280, height: 800 }
 const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
+// A phone, 390 pixels wide, as Files shows itself in the browser of a phone: the size of
+// a common phone, with touch and the narrow layout of Nextcloud, for the guide of the
+// people who use the archive (docs/use.md).
+const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = `/${L.base}/${L.archive}`
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
@@ -132,11 +136,13 @@ async function signIn(browser, user) {
 	}
 }
 
-async function open(browser, session, theme, url) {
+// Opens the page in a browser of its own, the size of VIEWPORT unless `device` names
+// another, such as PHONE.
+async function open(browser, session, theme, url, device = { viewport: VIEWPORT }) {
 	const context = await browser.newContext({
 		storageState: session,
 		colorScheme: theme,
-		viewport: VIEWPORT,
+		...device,
 		locale: L.browserLocale,
 		timezoneId: 'Europe/Berlin',
 	})
@@ -625,6 +631,25 @@ try {
 	for (const theme of THEMES) {
 		const { context, page } = await open(browser, owner, theme, files(`${ARCHIVE}/City Utilities/Invoice/2026`))
 		save(`${IMAGES}/files-open-${theme}.png`, await menuOf(page, page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]'), L.t('Open in Paperless')))
+		await context.close()
+	}
+
+	// Files on a phone, for the people who use the archive: the archive with a folder for
+	// each correspondent, as the browser of a phone shows it, and in the folder of a year
+	// the menu of a copy, which a tap on its button of actions opens, with Open in Paperless.
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, owner, theme, files(ARCHIVE), PHONE)
+		await page.locator('[data-cy-files-list-row-name="City Utilities"]').waitFor()
+		await settle(page)
+		save(`${IMAGES}/phone-archive-${theme}.png`, await picture(page))
+		await page.goto(files(`${ARCHIVE}/City Utilities/Invoice/2026`))
+		const copy = page.locator('[data-cy-files-list-row-name^="2026-06-30 - Electricity bill June"]')
+		await copy.waitFor()
+		await settle(page)
+		await copy.locator('[data-cy-files-list-row-actions] .action-item__menutoggle').click()
+		await page.getByRole('menuitem', { name: L.t('Open in Paperless') }).waitFor()
+		await settle(page)
+		save(`${IMAGES}/phone-menu-${theme}.png`, await picture(page))
 		await context.close()
 	}
 
