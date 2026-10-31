@@ -878,6 +878,10 @@ if [[ "$fixed" != $'\tconst count = 1\n\tconst total = count + 1\n\tconst unused
 fi
 rm -rf "$eslint_copy"
 echo "ESLint reports an unused variable, ==, an accidental global, var and a let that never changes, and --fix makes the last two a const."
+# The minimatch under ESLint: the lock file keeps the one with the fix of an advisory, which
+# ESLint doesn't ask for yet, and ESLint still matches its globs with it.
+node --test --test-reporter=dot scripts/eslint/minimatch.test.mjs
+echo "The lock file of ESLint holds a minimatch with the fix of GHSA-g3hv-75wg-m249, and ESLint matches its globs with it."
 # The thumbnails of the screenshots of the App Store, which tests/e2e/screenshots.mjs
 # shrinks with tests/e2e/thumbnail.mjs.
 node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
