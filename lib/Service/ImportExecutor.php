@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
+use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
@@ -41,9 +42,13 @@ final class ImportExecutor {
 	public const RETRY_DELAY = 900;
 	/** The longest wait between two uploads of a file that keep failing, in seconds. */
 	public const MAX_RETRY_DELAY = 86400;
+	/** The most files that the notice of the files set aside names; the lines of the report name the others. */
+	public const SET_ASIDE_NAMES = 5;
 
 	private bool $dryRun;
 	private InboxTags $tags;
+	/** @var list<string> the names of the first files that the run set aside */
+	private array $setAsideNames = [];
 
 	public function __construct(
 		private SyncConfig $config,
@@ -70,6 +75,8 @@ final class ImportExecutor {
 			++$this->report->unchanged;
 		} elseif ($action instanceof Skipped) {
 			++$this->report->skipped;
+		} elseif ($action instanceof SetAside) {
+			$this->setAside($action);
 		} elseif ($action instanceof ForgetImport) {
 			if (!$this->dryRun) {
 				$this->state->deleteImport($this->config->targetUser, $action->path);
@@ -87,11 +94,44 @@ final class ImportExecutor {
 		}
 	}
 
+	/** What the run has to say about the inbox as a whole, once for the run. */
+	public function finish(): void {
+		$this->noticeOfFilesSetAside();
+		$this->noticeOfUnknownTags();
+	}
+
+	/**
+	 * A file of a type that never goes to Paperless: the report names it in every run for as long as
+	 * it stays, so the log has it only in the counts of the run.
+	 */
+	private function setAside(SetAside $action): void {
+		$this->report->fileSetAside($action->path, $action->kind);
+		if (count($this->setAsideNames) < self::SET_ASIDE_NAMES) {
+			$this->setAsideNames[] = $action->name;
+		}
+	}
+
+	/** The files set aside, in a notice that stays past the limit of the lines of the report, so that a long run still says so. */
+	private function noticeOfFilesSetAside(): void {
+		$count = $this->report->setAside;
+		if ($count === 0) {
+			return;
+		}
+		$names = implode(', ', $this->setAsideNames) . ($count > count($this->setAsideNames) ? ', …' : '');
+		$files = $count === 1
+			? "1 file of the inbox is a video, a program or an archive, which Paperless can't use as a document, so it stays in the inbox and doesn't go to Paperless: {$names}. Move it out of the inbox or delete it."
+			: "{$count} files of the inbox are videos, programs or archives, which Paperless can't use as documents, so they stay in the inbox and don't go to Paperless: {$names}. Move them out of the inbox or delete them.";
+		$this->report->notice(SyncReport::TYPE_INBOX_SET_ASIDE, "SET ASIDE: {$files}", [
+			'names' => $names,
+			'count' => $count,
+		]);
+	}
+
 	/**
 	 * The names of tags that Paperless lacks, once for the run: the files went to Paperless
 	 * without them, as "Create missing tags" is off.
 	 */
-	public function finish(): void {
+	private function noticeOfUnknownTags(): void {
 		$names = $this->tags->unknown();
 		if ($names === []) {
 			return;

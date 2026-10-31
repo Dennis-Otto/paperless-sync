@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
+use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
@@ -24,10 +25,10 @@ use OCP\AppFramework\Utility\ITimeFactory;
 
 /**
  * What a run does with the files of the inbox, the same in a dry-run and in a run: first how the
- * uploads of earlier runs ended, by the tasks of Paperless, then which files go to Paperless. It
- * reads Paperless, the inbox and the states of the uploads, but it changes none of them: it
- * reaches the inbox through TargetFiles, which can't write, and ImportExecutor applies its plan,
- * or reports it in a dry-run.
+ * uploads of earlier runs ended, by the tasks of Paperless, then which files go to Paperless, and
+ * which stay aside for their type, however many of each there are. It reads Paperless, the inbox
+ * and the states of the uploads, but it changes none of them: it reaches the inbox through
+ * TargetFiles, which can't write, and ImportExecutor applies its plan, or reports it in a dry-run.
  *
  * The plan is lazy, as that of the export: it plans each upload once the executor has applied
  * the one before, so that it sees the batch as it stands, and after a failure that may pass, such
@@ -79,6 +80,12 @@ final class ImportPlanner {
 				yield new Unchanged();
 				continue;
 			}
+			// A file of a type that the inbox sets aside has no upload left to wait for, and the plan
+			// names it below. Only an upload that Paperless has already may still end.
+			if ($status !== 'pending' && InboxFileTypes::setAsideKind($file['name']) !== null) {
+				yield new ForgetImport($path);
+				continue;
+			}
 			// A file that Paperless refused waits until it changes, and a file whose upload failed
 			// for a reason that may pass waits until its next attempt is due.
 			if ($status === 'retry' && $unchangedFile && (int)($pending['retry_at'] ?? 0) <= $now) {
@@ -100,6 +107,11 @@ final class ImportPlanner {
 
 		foreach ($byPath as $path => $file) {
 			($this->heartbeat)();
+			$kind = InboxFileTypes::setAsideKind($file['name']);
+			if ($kind !== null) {
+				yield new SetAside($path, $file['name'], $kind);
+				continue;
+			}
 			// Every upload takes its place in the batch, also one that fails. After a failure that may
 			// pass, Paperless is down or overloaded, and the other files wait for the next run.
 			if (!$this->batch->fits(SyncBatch::WRITE)) {
