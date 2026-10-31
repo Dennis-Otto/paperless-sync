@@ -28,7 +28,7 @@ final class InboxFileTypes {
 			'mp4', 'mpe', 'mpeg', 'mpg', 'mts', 'mxf', 'ogv', 'rm', 'rmvb', 'vob', 'webm', 'wmv',
 		],
 		self::PROGRAM => [
-			'aab', 'apk', 'appimage', 'appx', 'appxbundle', 'bat', 'cmd', 'com', 'deb', 'dll', 'dmg',
+			'aab', 'apk', 'appimage', 'appx', 'appxbundle', 'bat', 'cmd', 'deb', 'dll', 'dmg',
 			'dylib', 'exe', 'flatpak', 'ipa', 'jar', 'msi', 'msix', 'msixbundle', 'msp', 'msu', 'pkg',
 			'ps1', 'rpm', 'run', 'scr', 'sh', 'snap', 'so', 'sys', 'vbs', 'xapk',
 		],

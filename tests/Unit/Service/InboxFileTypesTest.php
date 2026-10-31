@@ -44,6 +44,7 @@ final class InboxFileTypesTest extends TestCase {
 			'a document of Word, which is a zip file inside' => ['letter.docx', null],
 			'a spreadsheet of LibreOffice, which is a zip file inside' => ['costs.ods', null],
 			'a type that only Paperless can judge' => ['notes.bin', null],
+			'a name that ends in a domain' => ['Rechnung amazon.com', null],
 			'a name without an extension' => ['scan', null],
 			'a name that is such an extension' => ['zip', null],
 			'a name without a dot that ends like such an extension' => ['azip', null],

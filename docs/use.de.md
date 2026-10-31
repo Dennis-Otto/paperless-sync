@@ -54,9 +54,9 @@ Jede Datei, die du in `Dokumente/Paperless/Eingang` legst, oder, in der Regel, i
 
 - **Sobald Paperless sie importiert hat,** verlässt die Datei den Eingang, außer deine Administration behält sie dort, und ihre Kopie erscheint mit dem nächsten Lauf, nachdem das Dokument den Posteingang von Paperless verlassen hat, wie [oben](#dokumente-an-paperless-senden) beschrieben.
 - **Wenn der Import scheitert,** etwa bei einem beschädigten PDF oder einer Aufgabe, die Paperless abgebrochen hat, wandert die Datei nach `Fehler`, neben eine `.error.txt` mit dem Grund.
-- **Ein Video, ein Programm oder ein Archiv bleibt, wo es ist:** `mp4`, `exe`, `zip` und dergleichen gehen nie an Paperless, das sie nicht als Dokumente verwenden kann, und der Bericht jedes Laufs nennt sie als *Beiseitegelegt*, bis du sie verschiebst oder löschst. Wie viele Dateien du in den Eingang legst, spielt keine Rolle: Ein großer Stapel Scans geht durch wie eine einzelne Seite.
 - **Wenn Paperless die Datei sofort ablehnt,** etwa eine eines Typs, den es nicht annimmt, bleibt die Datei im Eingang, und die nächsten Läufe lassen sie dort, bis du sie neu speicherst, umbenennst oder ersetzt.
 - **Der Eigentümer des Eingangs erfährt von beidem,** mit einer Benachrichtigung, die den Grund nennt: du, wenn der Eingang dein eigener ist, sonst der Eigentümer des Archivs.
+- **Ein Video, ein Programm oder ein Archiv bleibt, wo es ist:** `mp4`, `exe`, `zip` und dergleichen gehen nie an Paperless, das sie nicht als Dokumente verwenden kann, und der Bericht jedes Laufs nennt sie als *Beiseitegelegt*, bis du sie verschiebst oder löschst. Wie viele Dateien du in den Eingang legst, spielt keine Rolle: Ein großer Stapel Scans geht durch wie eine einzelne Seite.
 - **Ein Ordner unterhalb des Eingangs kann Tags nennen:** Mit *Unterordner werden zu Tags* bekommt eine Datei in `Eingang/Steuern/2026` in Paperless die Tags *Steuern* und *2026*. Deine Administration sagt dir, ob das an ist.
 
 Die [Anleitung](guide.de.md#nextcloud-inbox) hat die Einzelheiten für die Administration, wie die Wiederholungen und die Tags für jeden Import.

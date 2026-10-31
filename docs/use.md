@@ -54,9 +54,9 @@ Every file that you put into `Documents/Paperless/Inbox`, or, as a rule, into a 
 
 - **Once Paperless imported it,** the file leaves the inbox, unless your administrator keeps it there, and its copy appears in the archive with the next run after the document has left the inbox of Paperless, as [above](#send-documents-to-paperless).
 - **When the import fails,** such as for a damaged PDF or a task that Paperless cancelled, the file moves into `Failed imports`, next to a `.error.txt` with the reason.
-- **A video, a program or an archive stays where it is:** `mp4`, `exe`, `zip` and the like never go to Paperless, which can't use them as documents, and the report of each run names them as *Set aside* until you move or delete them. How many files you put in the inbox doesn't matter: a large batch of scans goes through as one page does.
 - **When Paperless refuses the file at once,** such as one of a type that it doesn't take, the file stays in the inbox, and the next runs leave it there until you save it anew, rename or replace it.
 - **The owner of the inbox hears of both,** with a notification that gives the reason: you, when the inbox is your own, or else the owner of the archive.
+- **A video, a program or an archive stays where it is:** `mp4`, `exe`, `zip` and the like never go to Paperless, which can't use them as documents, and the report of each run names them as *Set aside* until you move or delete them. How many files you put in the inbox doesn't matter: a large batch of scans goes through as one page does.
 - **A folder below the inbox can name tags:** with *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026* in Paperless. Your administrator says whether that is on.
 
 The [guide](guide.md#nextcloud-inbox) has the details for the administrator, such as the retries and the tags of every import.

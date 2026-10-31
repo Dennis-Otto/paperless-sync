@@ -1387,10 +1387,10 @@ assert_json notifications-imports "${TMP_DIR}/notifications-imports.json"
 dav_upload sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
 dav_upload sync-target 'Documents/Paperless/Inbox/setup.EXE' 'Synthetic program.'
 dav_upload sync-target 'Documents/Paperless/Inbox/backup.zip' 'Synthetic archive.'
-sync_run false "${TMP_DIR}/import-set-aside.json"
-assert_json import-set-aside "${TMP_DIR}/import-set-aside.json"
 sync_run true "${TMP_DIR}/import-set-aside-dry-run.json"
 assert_json import-set-aside "${TMP_DIR}/import-set-aside-dry-run.json"
+sync_run false "${TMP_DIR}/import-set-aside.json"
+assert_json import-set-aside "${TMP_DIR}/import-set-aside.json"
 assert_dav_file sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
 for file in holiday.mp4 setup.EXE backup.zip; do
 	dav_status sync-target DELETE "Documents/Paperless/Inbox/${file}" >/dev/null
