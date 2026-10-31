@@ -8,5 +8,9 @@
     "@eslint/js": "10.0.1",
     "eslint": "10.13.0",
     "globals": "17.13.0"
+  },
+  "//": "The override: ESLint asks for minimatch 10, and only 11.0.1 and newer are free of the advisory GHSA-g3hv-75wg-m249. minimatch.test.mjs holds the lock file to it and shows that ESLint works with it; drop the override when ESLint asks for a fixed minimatch itself.",
+  "overrides": {
+    "minimatch": "11.0.3"
   }
 }
