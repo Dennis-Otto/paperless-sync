@@ -116,9 +116,12 @@ elif mode == "checklist-no-ui-settings":
     expect_line(
         "trash",
         "warning",
-        hint="Paperless shows the account in its trash only the documents that it owns and those without an owner. "
-        "Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. "
-        "Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.",
+        hint="Synchronization works despite this note; only deletions in Paperless arrive later. "
+        "Paperless shows an account in its trash only its own documents and those without an owner, "
+        "so the copy of a deleted document of another owner moves to the deleted folder only after the runs set in \"Required consecutive missing scans\". "
+        "Optional: make the account of the app the owner of the documents to mirror, and deletions arrive with the next run. "
+        "This does not go together with per-user ownership. "
+        "Give the account the permission View for UI Settings, so that this checklist can check the owners.",
     )
     expect_line(
         "upload",
