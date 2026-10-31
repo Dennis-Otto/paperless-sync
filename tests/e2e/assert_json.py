@@ -72,9 +72,13 @@ def expect_view_only_checklist():
         "trash",
         "warning",
         "Visible to the account: 0",
-        "Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees 1 of them. "
-        "When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. "
-        "Make the account of the app their owner.",
+        "Synchronization works despite this note; only deletions in Paperless arrive later. "
+        "Paperless shows an account in its trash only its own documents and those without an owner, "
+        "and the account sees documents of other owners: 1. "
+        "When one of them is deleted, its copy moves to the deleted folder only after the runs set in \"Required consecutive missing scans\". "
+        "Keep \"Also delete copies of documents that disappeared without passing the Paperless trash\" off, so that such a copy is not deleted. "
+        "Optional: make the account of the app their owner, and deletions arrive with the next run. "
+        "This does not go together with per-user ownership.",
     )
     for line_id in ("correspondents", "document_types", "storage_paths", "folder"):
         expect_line(line_id, "passed")
@@ -116,9 +120,13 @@ elif mode == "checklist-no-ui-settings":
     expect_line(
         "trash",
         "warning",
-        hint="Paperless shows the account in its trash only the documents that it owns and those without an owner. "
-        "Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. "
-        "Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.",
+        hint="Synchronization works despite this note; only deletions in Paperless arrive later. "
+        "Paperless shows an account in its trash only its own documents and those without an owner, "
+        "so the copy of a deleted document of another owner moves to the deleted folder only after the runs set in \"Required consecutive missing scans\". "
+        "Keep \"Also delete copies of documents that disappeared without passing the Paperless trash\" off, so that such a copy is not deleted. "
+        "Optional: make the account of the app the owner of the documents to mirror, and deletions arrive with the next run. "
+        "This does not go together with per-user ownership. "
+        "Give the account the permission View for UI Settings, so that this checklist can check the owners.",
     )
     expect_line(
         "upload",

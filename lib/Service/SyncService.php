@@ -584,7 +584,7 @@ final class SyncService {
 		$fate = $deletes
 			? "their copies are deleted after the required missing scans ({$config->missingGraceRuns} in a row), although the documents can still be restored in Paperless"
 			: "their copies move to the deleted folder only after the required missing scans ({$config->missingGraceRuns} in a row), as those of documents deleted without the trash do";
-		$report->notice(SyncReport::TYPE_TRASH_EMPTY, "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.", [
+		$report->notice(SyncReport::TYPE_TRASH_EMPTY, "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Optional: make the account of the app their owner, and deletions arrive with the next run. This does not go together with per-user ownership.", [
 			'missing' => $missing,
 			'scans' => $config->missingGraceRuns,
 			'deletes' => $deletes ? 1 : 0,
