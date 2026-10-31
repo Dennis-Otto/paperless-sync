@@ -6,10 +6,9 @@ All notable changes to this project are documented in this file.
 
 ## [1.3.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.0...v1.3.1) (2026-10-31)
 
-
 ### Bug fixes
 
-* make OSV-Scanner and Findings pass on main ([#296](https://github.com/Dennis-Otto/paperless-sync/issues/296)) ([28b07e8](https://github.com/Dennis-Otto/paperless-sync/commit/28b07e8ad6533c8f02acf2fb6a329a717c0e5c2d))
+- **The checks of the JavaScript are free of a known vulnerability:** ESLint, which only the checks run and no release of the app ships, now matches its globs with a minimatch that has the fix of the advisory GHSA-g3hv-75wg-m249, so OSV-Scanner and Findings pass on `main` again.
 
 ## [1.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.2.0...v1.3.0) (2026-10-25)
 
