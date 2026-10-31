@@ -69,7 +69,7 @@ TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
 # playwright-core in package.json; Renovate updates both together, and
 # scripts/check-project.sh compares them.
-PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f"
+PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea"
 # The download of that image in the background, while Nextcloud installs.
 PLAYWRIGHT_PULL=""
 # E2E_ARTIFACTS, a folder, gets the evidence of a failure for the artifact of the job in the

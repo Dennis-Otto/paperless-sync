@@ -86,7 +86,7 @@ commands = [
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
   "E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
   "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache E2E_COVERAGE=1 E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # the coverage of the JavaScript, on max-version",
-  "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
+  "npx playwright@1.64.1 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
 docs = "tests/e2e/README.md#when-a-run-fails"
 autofix = """A test of the whole app that fails needs a person, who finds out what the app
@@ -153,7 +153,7 @@ issue once the tests pass again."""
 commands = [
   "bash tests/e2e/canary.sh",
   "KEEP_E2E=1 bash tests/e2e/canary.sh  # keeps the coming Nextcloud running after a failure",
-  "npx playwright@1.64.0 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
+  "npx playwright@1.64.1 show-trace files-1.trace.zip  # the trace of a window, from the artifact",
 ]
 docs = "tests/e2e/README.md#the-coming-nextcloud"
 autofix = """A change of a Nextcloud that isn't released yet needs a person, who decides
