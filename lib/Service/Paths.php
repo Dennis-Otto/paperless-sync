@@ -22,4 +22,26 @@ final class Paths {
 
 		return str_starts_with($path, $prefix) ? substr($path, strlen($prefix)) : basename($path);
 	}
+
+	/**
+	 * The name of a file without any marker of a document such as [P123], in the way that Paperless
+	 * Unified Search reads one: with any number of digits, and also one that the removal of another
+	 * one forms. A name without a marker stays as it is. Of a name that loses one, the spaces and the
+	 * dots that would make it unusable go as well, and $fallback stands in front of what is left when
+	 * no name is left, so that it is neither empty nor . or .. nor a hidden file.
+	 */
+	public static function withoutMarkers(string $name, string $fallback): string {
+		$clean = $name;
+		do {
+			$before = $clean;
+			// A failure of the expression leaves no name, rather than one that may still carry a marker.
+			$clean = preg_replace('/ *\[P\d+\]/', '', $before) ?? '';
+		} while ($clean !== $before);
+		if ($clean === $name) {
+			return $name;
+		}
+		$clean = rtrim(ltrim($clean, ' '), ' .');
+
+		return $clean === '' || $clean[0] === '.' ? $fallback . $clean : $clean;
+	}
 }

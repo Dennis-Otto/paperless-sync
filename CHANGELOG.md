@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Bug fixes
+
+- **A failed import no longer keeps a marker such as `[P999]` in its name:** whoever may write into the inbox could upload a broken file named `Scan [P999].pdf`. In the error folder, which others may only read, Paperless Unified Search then took it for the copy of document 999 and showed them its title and excerpt. The file now moves there as `Scan.pdf`, or as `Scan (2).pdf` when that name is taken, and its `.error.txt` says what it was called. A file that an earlier version moved there keeps its name, so look through the error folder once and rename a file with such a marker.
+
 ## [1.3.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.0...v1.3.1) (2026-10-31)
 
 ### Bug fixes
