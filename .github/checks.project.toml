@@ -257,7 +257,10 @@ or the issue of the canary would name another line than its first error. *Check 
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
 parse, ESLint finds what a rule of `scripts/eslint/eslint.config.mjs` forbids, such as a
 variable that nothing uses, a comparison with `==`, a function that becomes a global of the
-page, a `var` or a `let` that never changes, or misses one of them in its seeded script, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
+page, a `var` or a `let` that never changes, or misses one of them in its seeded script, a test of
+`scripts/eslint/minimatch.test.mjs` fails, because the lock file of ESLint holds a minimatch without the fix of the advisory
+GHSA-g3hv-75wg-m249, which would fail OSV-Scanner and Findings on `main`, or ESLint no longer matches its globs with that
+minimatch, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
 Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
 the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
 doesn't translate, a test of `tests/e2e/files-address.mjs` fails, because a browser test
@@ -297,6 +300,9 @@ fix what ESLint names in the file and line that it prints, use the variable or r
 compare with `===` and `!==`, keep a function of a script of the app inside its
 `(function() { … })()`, and turn a rule off for one line only with
 `// eslint-disable-next-line RULE -- the reason`,
+keep the version of `overrides` in `scripts/eslint/package.json` at the fix or newer and run
+`npm install --ignore-scripts` in `scripts/eslint/`, which updates the lock file and the packages, until
+`node --test scripts/eslint/minimatch.test.mjs` passes,
 fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, start the browser
 of a check with `launch()` of `tests/e2e/browser.mjs` and keep what it has before it closes
 until `node --test tests/e2e/browser.test.mjs` passes, fix `tests/e2e/coverage.mjs` until
