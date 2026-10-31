@@ -35,7 +35,7 @@ final class PathsTest extends TestCase {
 			'after the extension' => ['Scan.pdf [P999]', 'Scan.pdf'],
 			'several' => ['[P1] Scan [P2][P3] final [P4].pdf', 'Scan final.pdf'],
 			'in a name with umlauts' => ['Rechnung für März [P999].pdf', 'Rechnung für März.pdf'],
-			'leading zeros, which Paperless Unified Search reads as a marker' => ['Scan [P007].pdf', 'Scan.pdf'],
+			'leading zeros, which the removal takes too, to stay on the safe side' => ['Scan [P007].pdf', 'Scan.pdf'],
 			'the ID zero' => ['Scan [P0].pdf', 'Scan.pdf'],
 			'more digits than an ID has' => ['Scan [P123456789012345678901234567890].pdf', 'Scan.pdf'],
 			'one that the removal of another one would form' => ['Scan [P[P1]2].pdf', 'Scan.pdf'],

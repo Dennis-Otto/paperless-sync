@@ -42,6 +42,9 @@ final class ImportPlanner {
 	/** How long after its upload a task that Paperless has not finished, or doesn't list, may take, in seconds. */
 	public const TASK_TIMEOUT = 86400;
 
+	/** @var array<string, true> the places in the error folder that this plan gave out: a dry-run moves nothing, so that storage doesn't know them */
+	private array $errorPaths = [];
+
 	/** @param \Closure(): void $heartbeat the sign of life of the run, for each file that the plan may upload */
 	public function __construct(
 		private SyncConfig $config,
@@ -228,15 +231,15 @@ final class ImportPlanner {
 		$clean = Paths::withoutMarkers($name, $this->config->untitled);
 		$folder = Paths::join($this->errorRoot, $this->folderBelow($path));
 		$destination = Paths::join($folder, $clean);
-		if ($clean === $name) {
-			return $destination;
+		if ($clean !== $name) {
+			$dot = strrpos($clean, '.');
+			$stem = $dot === false ? $clean : substr($clean, 0, $dot);
+			$extension = $dot === false ? '' : substr($clean, $dot);
+			for ($number = 2; isset($this->errorPaths[$destination]) || $this->files->exists($destination); ++$number) {
+				$destination = Paths::join($folder, "{$stem} ({$number}){$extension}");
+			}
 		}
-		$dot = strrpos($clean, '.');
-		$stem = $dot === false ? $clean : substr($clean, 0, $dot);
-		$extension = $dot === false ? '' : substr($clean, $dot);
-		for ($number = 2; $this->files->exists($destination); ++$number) {
-			$destination = Paths::join($folder, "{$stem} ({$number}){$extension}");
-		}
+		$this->errorPaths[$destination] = true;
 
 		return $destination;
 	}

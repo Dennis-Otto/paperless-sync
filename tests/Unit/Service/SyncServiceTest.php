@@ -2096,6 +2096,20 @@ final class SyncServiceTest extends TestCase {
 		self::assertStringEndsWith("Name in the inbox: Scan [P2].pdf\n", $this->storage->files['Dokumente/Paperless/Fehler/Scan (2).pdf.error.txt']);
 	}
 
+	public function testDryRunShowsTheNumbersThatFailedImportsWillTake(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P1].pdf'] = 'first';
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P2].pdf'] = 'second';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+		$this->paperless->tasks['task-2'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+
+		$actions = implode("\n", $this->service->run(true)->actions);
+
+		self::assertStringContainsString('Dokumente/Paperless/Fehler/Scan.pdf', $actions);
+		self::assertStringContainsString('Dokumente/Paperless/Fehler/Scan (2).pdf', $actions);
+		self::assertArrayNotHasKey('Dokumente/Paperless/Fehler/Scan.pdf', $this->storage->files);
+	}
+
 	/** @return array<string, array{string}> */
 	public static function conflictPolicies(): array {
 		return ['replace' => ['replace'], 'skip' => ['skip']];
