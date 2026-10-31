@@ -43,6 +43,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_UPLOAD_FAILED = 'import-error';
 	/** Paperless refused a file of the inbox, which waits there until it changes. */
 	public const TYPE_UPLOAD_REJECTED = 'import-rejected';
+	/** A file of the inbox of a type that never goes to Paperless, such as a video, which stays there. */
+	public const TYPE_SET_ASIDE = 'import-set-aside';
 	/** A tag that the run creates in Paperless, for the folder of a file of the inbox. */
 	public const TYPE_NEW_TAG = 'new-tag';
 	/** The tags of Nextcloud of a copy follow the tags of its document in Paperless. */
@@ -61,11 +63,14 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_TAGS_TAKEN = 'tags-taken';
 	/** A notice: Nextcloud let the run create no tag, so the copies get these tags with a later run. */
 	public const TYPE_TAGS_NOT_CREATED = 'tags-not-created';
+	/** A notice: files of the inbox are of types that never go to Paperless, and stay there. */
+	public const TYPE_INBOX_SET_ASIDE = 'inbox-set-aside';
 
 	/**
 	 * The priority of a line by its type, 1 the highest. A full report gives up its last line of
 	 * the lowest priority for a line of a higher one, so that errors, deletions and moves to the
-	 * deleted folder never hide behind exports, moves and imports.
+	 * deleted folder never hide behind exports, moves and imports, and no other line hides behind
+	 * the files set aside, with which a folder of videos could fill every report; their notice stays.
 	 */
 	private const PRIORITIES = [
 		self::TYPE_ERROR => 1,
@@ -76,9 +81,10 @@ final class SyncReport implements \JsonSerializable {
 		self::TYPE_MISSING => 3,
 		self::TYPE_UPLOAD_FAILED => 4,
 		self::TYPE_UPLOAD_REJECTED => 4,
+		self::TYPE_SET_ASIDE => 6,
 	];
 	/** The priority of every other line: exports, moves, imports and documents that wait. */
-	private const LOWEST = 5;
+	private const REGULAR = 5;
 	/** The priority of a notice, which the report keeps past its limit and never gives up. */
 	private const NOTICE = 0;
 	/** The most files that the activity entry of a run names; it counts the others. */
@@ -102,6 +108,8 @@ final class SyncReport implements \JsonSerializable {
 	public int $importsSubmitted = 0;
 	public int $importsSucceeded = 0;
 	public int $importsFailed = 0;
+	/** The files of the inbox of types that never go to Paperless, which stayed there. */
+	public int $setAside = 0;
 	public int $foldersPruned = 0;
 	/** The copies whose tags of Nextcloud changed. */
 	public int $tagged = 0;
@@ -239,13 +247,19 @@ final class SyncReport implements \JsonSerializable {
 		$this->action("IMPORT REJECTED: {$path}: {$reason}", ['type' => self::TYPE_UPLOAD_REJECTED, 'path' => $path, 'detail' => $reason]);
 	}
 
+	/** A file of the inbox of the kind $kind, such as a video, which never goes to Paperless and stays there. */
+	public function fileSetAside(string $path, string $kind): void {
+		++$this->setAside;
+		$this->action("IMPORT SET ASIDE: {$path}: {$kind}", ['type' => self::TYPE_SET_ASIDE, 'path' => $path, 'values' => ['kind' => $kind]]);
+	}
+
 	/**
 	 * A line that the report keeps past the limit of its actions: a run that stopped its exports or
 	 * counted no document as missing says so, also after a hundred other actions. $message is the
 	 * line in English, $values the numbers and names that the settings page puts into its
 	 * translation.
 	 *
-	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN|self::TYPE_TAGS_TAKEN|self::TYPE_TAGS_NOT_CREATED $type
+	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN|self::TYPE_TAGS_TAKEN|self::TYPE_TAGS_NOT_CREATED|self::TYPE_INBOX_SET_ASIDE $type
 	 * @param array<string, int|string> $values
 	 */
 	public function notice(string $type, string $message, array $values = []): void {
@@ -328,6 +342,7 @@ final class SyncReport implements \JsonSerializable {
 		$this->importsSubmitted += $user->importsSubmitted;
 		$this->importsSucceeded += $user->importsSucceeded;
 		$this->importsFailed += $user->importsFailed;
+		$this->setAside += $user->setAside;
 		$this->foldersPruned += $user->foldersPruned;
 		$this->tagged += $user->tagged;
 		$this->unchanged += $user->unchanged;
@@ -369,6 +384,7 @@ final class SyncReport implements \JsonSerializable {
 			'importsSubmitted' => $this->importsSubmitted,
 			'importsSucceeded' => $this->importsSucceeded,
 			'importsFailed' => $this->importsFailed,
+			'setAside' => $this->setAside,
 			'foldersPruned' => $this->foldersPruned,
 			'tagged' => $this->tagged,
 			'unchanged' => $this->unchanged,
@@ -421,7 +437,7 @@ final class SyncReport implements \JsonSerializable {
 	 * @param ReportEntry $entry
 	 */
 	private function action(string $message, array $entry): void {
-		$priority = self::PRIORITIES[$entry['type']] ?? self::LOWEST;
+		$priority = self::PRIORITIES[$entry['type']] ?? self::REGULAR;
 		if (count($this->actions) - $this->notices < self::ACTION_LIMIT) {
 			$this->append($message, $priority, $entry);
 			return;

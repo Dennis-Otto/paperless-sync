@@ -2859,8 +2859,8 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	public function testRefusedFileForgetsItsEarlierAttempts(): void {
-		$path = 'Dokumente/Paperless/Eingang/notes.zip';
-		$this->storage->files[$path] = 'PK-archive';
+		$path = 'Dokumente/Paperless/Eingang/notes.bin';
+		$this->storage->files[$path] = 'BIN-archive';
 		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
 		$this->service->run();
 		$this->clock->advance(900);
@@ -2885,9 +2885,76 @@ final class SyncServiceTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A clean-up of a computer that lands in the inbox: only the document goes to Paperless. Every run
+	 * names the others, as a dry-run does, until they are gone, and nothing else happens to them.
+	 */
+	public function testVideosProgramsAndArchivesStayInTheInboxAndEveryRunNamesThem(): void {
+		$inbox = 'Dokumente/Paperless/Eingang';
+		$files = [
+			"{$inbox}/Aus Downloads/backup.ZIP" => 'archive',
+			"{$inbox}/Aus Downloads/setup.exe" => 'program',
+			"{$inbox}/Aus Videos/film.mp4" => 'video',
+		];
+		$this->storage->files = $files + ["{$inbox}/Aus Downloads/rechnung.pdf" => '%PDF-invoice'];
+		$this->logger->expects(self::never())->method('warning');
+
+		$dryRun = $this->service->run(true);
+		self::assertSame([3, 1, 0], [$dryRun->setAside, $dryRun->importsSubmitted, $dryRun->errors]);
+		self::assertSame([], $this->paperless->uploadAttempts);
+
+		$report = $this->service->run();
+
+		self::assertSame(['rechnung.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([3, 1, 0, 0, 0], [$report->setAside, $report->importsSubmitted, $report->importsFailed, $report->skipped, $report->errors]);
+		self::assertSame([
+			"IMPORT SET ASIDE: {$inbox}/Aus Downloads/backup.ZIP: archive",
+			"IMPORT SET ASIDE: {$inbox}/Aus Downloads/setup.exe: program",
+			"IMPORT SET ASIDE: {$inbox}/Aus Videos/film.mp4: video",
+			"IMPORT: {$inbox}/Aus Downloads/rechnung.pdf",
+			"SET ASIDE: 3 files of the inbox are videos, programs or archives, which Paperless can't use as documents, so they stay in the inbox and don't go to Paperless: backup.ZIP, setup.exe, film.mp4. Move them out of the inbox or delete them.",
+		], $report->actions);
+		self::assertSame($files, array_intersect_key($this->storage->files, $files));
+		self::assertSame(["{$inbox}/Aus Downloads/rechnung.pdf"], array_keys($this->state->imports));
+		self::assertSame('completed', $this->status->get()['state']);
+		self::assertSame(3, $this->status->get()['report']['setAside'] ?? null);
+		self::assertSame(3, $this->status->get()['summary']['setAside'] ?? null);
+		self::assertContains("IMPORT SET ASIDE: {$inbox}/Aus Videos/film.mp4: video", (array)($this->status->get()['report']['actions'] ?? []));
+
+		unset($this->storage->files["{$inbox}/Aus Videos/film.mp4"], $this->storage->files["{$inbox}/Aus Downloads/setup.exe"]);
+		$later = $this->service->run();
+
+		self::assertSame(1, $later->setAside);
+		self::assertSame(['rechnung.pdf'], $this->paperless->uploadAttempts);
+	}
+
+	/** A file set aside is no change and no failure: the activity stream and the notifications stay quiet about it. */
+	public function testFilesSetAsideReachNoActivityAndNoNotification(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/film.mp4'] = 'video';
+
+		$this->service->run();
+		$this->service->run();
+		$this->service->run();
+
+		self::assertSame([], $this->activities);
+		self::assertSame(0, $this->status->failures()['runs']);
+	}
+
+	/** A file of such a type that Paperless refused before this version stays aside, and its state goes. */
+	public function testFileOfSuchATypeThatPaperlessRefusedBeforeIsSetAside(): void {
+		$path = 'Dokumente/Paperless/Eingang/film.mp4';
+		$this->storage->files[$path] = 'video';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', 'video'), 'status' => 'rejected', 'task_id' => '', 'submitted_at' => 0, 'attempts' => 0, 'retry_at' => 0, 'last_error' => 'refused'];
+
+		$report = $this->service->run();
+
+		self::assertSame([1, 0], [$report->setAside, $report->skipped]);
+		self::assertSame([], $this->state->imports);
+	}
+
 	public function testFileThatPaperlessRefusedWaitsUntilItChanges(): void {
-		$path = 'Dokumente/Paperless/Eingang/notes.zip';
-		$this->storage->files[$path] = 'PK-archive';
+		$path = 'Dokumente/Paperless/Eingang/notes.bin';
+		$this->storage->files[$path] = 'BIN-archive';
 		$reason = 'Paperless answered the upload with HTTP 400: document: File type application/zip not supported';
 		$this->paperless->uploadException = new PaperlessUploadException($reason, true, 400);
 		$this->logger->expects(self::once())->method('warning')->with(
@@ -2912,17 +2979,17 @@ final class SyncServiceTest extends TestCase {
 			self::assertSame(0, $skipped->importsFailed);
 			self::assertSame(1, $skipped->skipped);
 		}
-		self::assertSame(['notes.zip'], $this->paperless->uploadAttempts, 'Paperless would refuse the same file again.');
+		self::assertSame(['notes.bin'], $this->paperless->uploadAttempts, 'Paperless would refuse the same file again.');
 
 		$this->storage->files[$path] = '%PDF-replaced';
 		$changed = $this->service->run();
 		self::assertSame(1, $changed->importsSubmitted);
-		self::assertSame(['notes.zip' => '%PDF-replaced'], $this->paperless->uploads);
+		self::assertSame(['notes.bin' => '%PDF-replaced'], $this->paperless->uploads);
 		self::assertSame('pending', $this->state->imports[$path]['status']);
 	}
 
 	public function testRefusedFileIsUploadedAgainUnderANewName(): void {
-		$path = 'Dokumente/Paperless/Eingang/notes.zip';
+		$path = 'Dokumente/Paperless/Eingang/notes.bin';
 		$this->storage->files[$path] = '%PDF-1';
 		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 400: document: No file was submitted.', true, 400);
 		$this->service->run();
@@ -2952,9 +3019,9 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	public function testRefusedFileDoesNotHoldUpTheOthers(): void {
-		$this->storage->files['Dokumente/Paperless/Eingang/a.zip'] = 'PK-a';
+		$this->storage->files['Dokumente/Paperless/Eingang/a.bin'] = 'BIN-a';
 		$this->storage->files['Dokumente/Paperless/Eingang/b.pdf'] = '%PDF-b';
-		$this->paperless->uploadFailures['a.zip'] = new PaperlessUploadException('Paperless answered the upload with HTTP 413.', true, 413);
+		$this->paperless->uploadFailures['a.bin'] = new PaperlessUploadException('Paperless answered the upload with HTTP 413.', true, 413);
 
 		$report = $this->service->run();
 
@@ -3000,25 +3067,25 @@ final class SyncServiceTest extends TestCase {
 	public function testFailedUploadsTakeTheirPlaceInTheBatch(): void {
 		$this->configService->save(['batch_size' => 2]);
 		foreach (['a', 'b', 'c'] as $name) {
-			$this->storage->files["Dokumente/Paperless/Eingang/{$name}.zip"] = "PK-{$name}";
+			$this->storage->files["Dokumente/Paperless/Eingang/{$name}.bin"] = "BIN-{$name}";
 		}
 		$this->paperless->uploadException = new PaperlessUploadException('Paperless answered the upload with HTTP 400.', true, 400);
 
 		$report = $this->service->run();
 
-		self::assertSame(['a.zip', 'b.zip'], $this->paperless->uploadAttempts);
+		self::assertSame(['a.bin', 'b.bin'], $this->paperless->uploadAttempts);
 		self::assertSame(2, $report->importsFailed);
 		self::assertSame(1, $report->skipped);
 	}
 
 	public function testDryRunSkipsWaitingFilesAndKeepsTheirState(): void {
-		$refused = 'Dokumente/Paperless/Eingang/refused.zip';
+		$refused = 'Dokumente/Paperless/Eingang/refused.bin';
 		$waiting = 'Dokumente/Paperless/Eingang/waiting.pdf';
 		$due = 'Dokumente/Paperless/Eingang/due.pdf';
 		$this->storage->files[$refused] = 'PK';
 		$this->storage->files[$waiting] = '%PDF-waiting';
 		$this->storage->files[$due] = '%PDF-due';
-		$this->paperless->uploadFailures['refused.zip'] = new PaperlessUploadException('Paperless answered the upload with HTTP 400.', true, 400);
+		$this->paperless->uploadFailures['refused.bin'] = new PaperlessUploadException('Paperless answered the upload with HTTP 400.', true, 400);
 		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
 		$this->service->run();
 		$this->service->run();

@@ -923,6 +923,7 @@
 			'tags-unknown': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'tags-taken': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'tags-not-created': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'inbox-set-aside': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
 			'remove-reassigned': { label: translate('Other user'), tone: 'warning', rank: 2 },
@@ -933,6 +934,7 @@
 			move: { label: translate('Move'), tone: 'info', rank: 2 },
 			import: { label: translate('Upload'), tone: 'info', rank: 2 },
 			'import-success': { label: translate('Imported'), tone: 'success', rank: 2 },
+			'import-set-aside': { label: translate('Set aside'), tone: 'warning', rank: 2 },
 			'new-tag': { label: translate('New tag'), tone: 'info', rank: 2 },
 			tags: { label: translate('Tags'), tone: 'info', rank: 2 },
 		}
@@ -949,6 +951,7 @@
 			['importsSubmitted', translate('Imports submitted'), 'info'],
 			['importsSucceeded', translate('Imports succeeded'), 'success'],
 			['importsFailed', translate('Imports failed'), 'error'],
+			['setAside', translate('Set aside'), 'warning'],
 			['foldersPruned', translate('Folders removed'), 'neutral'],
 			['tagged', translate('Tags changed'), 'info'],
 		]
@@ -1001,6 +1004,19 @@
 				return translate('Paperless could not import it, so it moves to the error folder: {reason}', { reason: entry.detail || '' })
 			case 'import-rejected':
 				return translate('Paperless refused it, so it stays in the inbox until it changes: {reason}', { reason: entry.detail || '' })
+			case 'import-set-aside':
+				return {
+					video: translate('A video, which Paperless can\'t use as a document: it stays in the inbox.'),
+					program: translate('A program, which Paperless can\'t use as a document: it stays in the inbox.'),
+					archive: translate('An archive, which Paperless can\'t use as a document: it stays in the inbox.'),
+				}[values.kind] || ''
+			case 'inbox-set-aside':
+				return translatePlural(
+					'%n file of the inbox is a video, a program or an archive, which Paperless can\'t use as a document, so it stays in the inbox and doesn\'t go to Paperless: {names}. Move it out of the inbox or delete it.',
+					'%n files of the inbox are videos, programs or archives, which Paperless can\'t use as documents, so they stay in the inbox and don\'t go to Paperless: {names}. Move them out of the inbox or delete them.',
+					Number(values.count) || 0,
+					{ names: values.names },
+				)
 			case 'scan-incomplete':
 				return values.list === 'trashed documents'
 					? translate('The trash of Paperless came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.', values)
@@ -1044,7 +1060,7 @@
 		// in place, and what a dry-run leaves where it is. A dry-run writes and moves nothing, and
 		// a deletion leaves nothing to open.
 		function fileIsThere(entry, dryRun) {
-			if (['import', 'import-rejected', 'import-error', 'wait'].includes(entry.type)) {
+			if (['import', 'import-rejected', 'import-set-aside', 'import-error', 'wait'].includes(entry.type)) {
 				return true
 			}
 			return !dryRun && ['export', 'move', 'trash', 'missing', 'tags'].includes(entry.type)

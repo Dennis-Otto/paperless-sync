@@ -377,6 +377,20 @@ elif mode == "import-rejected":
         for action in payload.get("actions", [])
     ):
         raise AssertionError(f"The run names no refusal with the reason of Paperless: {payload!r}")
+elif mode == "import-set-aside":
+    expect("setAside", 3)
+    expect("importsSubmitted", 0)
+    expect("errors", 0)
+    actions = [str(action) for action in payload.get("actions", [])]
+    for line in (
+        "IMPORT SET ASIDE: Documents/Paperless/Inbox/backup.zip: archive",
+        "IMPORT SET ASIDE: Documents/Paperless/Inbox/holiday.mp4: video",
+        "IMPORT SET ASIDE: Documents/Paperless/Inbox/setup.EXE: program",
+    ):
+        if line not in actions:
+            raise AssertionError(f"The run doesn't name {line!r}: {payload!r}")
+    if not any(action.startswith("SET ASIDE: 3 files of the inbox") and "backup.zip, holiday.mp4, setup.EXE" in action for action in actions):
+        raise AssertionError(f"The run has no notice of the files set aside: {payload!r}")
 elif mode == "import-waiting":
     expect("importsFailed", 0)
     expect("importsSubmitted", 0)

@@ -5,11 +5,12 @@ config:
 ---
 flowchart TB
     accTitle: Der Weg einer Datei aus dem Eingang zu Paperless
-    accDescr: Im nächsten Lauf wird eine Datei im Ordner Eingang zu Paperless hochgeladen. Ist Paperless nicht erreichbar oder überlastet, wartet die Datei 15 Minuten, dann jedes Mal doppelt so lange, bis zu einem Tag, und wird erneut hochgeladen. Lehnt Paperless sie ab, etwa eine Datei eines nicht unterstützten Typs, bleibt sie im Eingang und wird übersprungen, bis sie neu gespeichert, umbenannt oder ersetzt wird. Nimmt Paperless sie an, verfolgen die nächsten Läufe ihre Paperless-Aufgabe, solange sie läuft: Nach Erfolg wird die Datei aus dem Eingang entfernt oder behalten, wie eingestellt; nach einem Fehler, einem Duplikat oder einer abgebrochenen Aufgabe wandert sie in den Ordner Fehler, neben eine .error.txt mit dem Grund. Einen Tag nach dem Hochladen gilt eine Datei, deren Inhalt Paperless hat, als importiert; eine Aufgabe, die Paperless noch unfertig führt, verschiebt die Datei in den Ordner Fehler, damit ein zweites Hochladen kein Duplikat erzeugen kann; und eine Aufgabe, die Paperless nicht führt, schickt die Datei ebenfalls in die Wartezeit, und sie wird erneut hochgeladen.
+    accDescr: Ein Video, ein Programm oder ein Archiv bleibt im Ordner Eingang, und der Bericht jedes Laufs nennt es als beiseitegelegt. Im nächsten Lauf wird jede andere Datei im Ordner Eingang zu Paperless hochgeladen. Ist Paperless nicht erreichbar oder überlastet, wartet die Datei 15 Minuten, dann jedes Mal doppelt so lange, bis zu einem Tag, und wird erneut hochgeladen. Lehnt Paperless sie ab, etwa eine Datei eines nicht unterstützten Typs, bleibt sie im Eingang und wird übersprungen, bis sie neu gespeichert, umbenannt oder ersetzt wird. Nimmt Paperless sie an, verfolgen die nächsten Läufe ihre Paperless-Aufgabe, solange sie läuft: Nach Erfolg wird die Datei aus dem Eingang entfernt oder behalten, wie eingestellt; nach einem Fehler, einem Duplikat oder einer abgebrochenen Aufgabe wandert sie in den Ordner Fehler, neben eine .error.txt mit dem Grund. Einen Tag nach dem Hochladen gilt eine Datei, deren Inhalt Paperless hat, als importiert; eine Aufgabe, die Paperless noch unfertig führt, verschiebt die Datei in den Ordner Fehler, damit ein zweites Hochladen kein Duplikat erzeugen kann; und eine Aufgabe, die Paperless nicht führt, schickt die Datei ebenfalls in die Wartezeit, und sie wird erneut hochgeladen.
 
     %% The wait takes the uploads that failed for a time and the tasks without an end back to the upload.
     retry["Wartet 15 Minuten,<br>dann doppelt so<br>lange, bis zu einem Tag"]
     file["📄 Eine Datei in<br>📁 Eingang"]
+    aside["Beiseitegelegt, nicht<br>hochgeladen: bleibt<br>im Eingang, in jedem<br>Bericht genannt"]
     upload{"Hochladen<br>zu Paperless"}
     task{"Ihre Aufgabe,<br>in den<br>nächsten Läufen"}
     refused["Abgelehnt, etwa<br>ein nicht<br>unterstützter<br>Dateityp: bleibt<br>im Eingang,<br>übersprungen,<br>bis sie sich ändert"]
@@ -17,6 +18,7 @@ flowchart TB
     failed["Fehler, Duplikat,<br>abgebrochen oder<br>einen Tag nach dem<br>Hochladen noch<br>unfertig: verschoben<br>nach 📁 Fehler, neben<br>eine .error.txt<br>mit dem Grund"]
 
     retry -- "erneut" --> upload
+    file -- "ein Video, Programm<br>oder Archiv" --> aside
     file -- "nächster Lauf" --> upload
     upload -- "nicht erreichbar<br>oder überlastet" --> retry
     upload -- "angenommen" --> task
@@ -28,5 +30,5 @@ flowchart TB
 
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
     classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
-    class file,refused,done,failed nextcloud
+    class file,aside,refused,done,failed nextcloud
     class upload,task paperless

@@ -392,7 +392,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 		<section class="paperless-sync-card">
 			<div class="paperless-sync-card-heading">
 				<div><span class="paperless-sync-step">4</span><h3><?php p($l->t('Nextcloud inbox')); ?></h3></div>
-				<p><?php p($l->t('Files are submitted through the Paperless API and kept until Paperless reports success.')); ?> <?php $help('nextcloud-inbox', $l->t('Nextcloud inbox')); ?></p>
+				<p><?php p($l->t('Files are submitted through the Paperless API and kept until Paperless reports success.')); ?> <?php p($l->t('Videos, programs and archives stay in the inbox: they do not go to Paperless, and the report of each run names them.')); ?> <?php $help('nextcloud-inbox', $l->t('Nextcloud inbox')); ?></p>
 			</div>
 			<div class="paperless-sync-grid">
 				<label class="paperless-sync-field"><span><?php p($l->t('Inbox folder')); ?></span><input data-setting="inbox_folder" type="text" value="<?php p($config->inboxFolder); ?>"></label>

@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
+use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
@@ -101,6 +102,46 @@ final class ImportPlannerTest extends TestCase {
 			'a file whose next attempt is due goes to Paperless, with the count of its attempts' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'retry', 'retry_at' => TestClock::START, 'attempts' => 2]]],
 				['upload a.pdf after 2 attempts'],
+			],
+			'a video, a program and an archive stay aside, and only the document goes to Paperless' => [
+				['files' => ['Aus Videos/film.mp4', 'Aus Downloads/setup.exe', 'Aus Downloads/backup.zip', 'Aus Downloads/rechnung.pdf']],
+				['set aside Aus Videos/film.mp4 as video', 'set aside Aus Downloads/setup.exe as program', 'set aside Aus Downloads/backup.zip as archive', 'upload Aus Downloads/rechnung.pdf in Aus Downloads'],
+			],
+			'a file set aside takes no place in the batch, and a full batch still names it' => [
+				['files' => ['a.pdf', 'b.mp4', 'c.pdf', 'd.mp4'], 'settings' => ['batchSize' => 1]],
+				['upload a.pdf', 'set aside b.mp4 as video', 'skipped', 'set aside d.mp4 as video'],
+			],
+			'an upload of such a type that Paperless has already still ends' => [
+				['files' => ['a.zip'], 'imports' => ['a.zip' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'SUCCESS', 'message' => '', 'documentId' => 7]]],
+				['succeeded a.zip as P7'],
+			],
+			'a file of such a type that Paperless imported stays as it is' => [
+				['files' => ['a.zip'], 'imports' => ['a.zip' => ['status' => 'success']]],
+				['unchanged'],
+			],
+			'a file of such a type that changed after its import stays aside' => [
+				['files' => ['a.zip'], 'imports' => ['a.zip' => ['status' => 'success', 'changed' => true]]],
+				['forget a.zip', 'set aside a.zip as archive'],
+			],
+			'a file of such a type that Paperless refused before stays aside, with no state left' => [
+				['files' => ['a.mp4'], 'imports' => ['a.mp4' => ['status' => 'rejected']]],
+				['forget a.mp4', 'set aside a.mp4 as video'],
+			],
+			'a file of such a type whose next attempt is due goes no more' => [
+				['files' => ['a.exe'], 'imports' => ['a.exe' => ['status' => 'retry', 'retry_at' => TestClock::START, 'attempts' => 2]]],
+				['forget a.exe', 'set aside a.exe as program'],
+			],
+			'a file of such a type that waits for its next attempt goes no more' => [
+				['files' => ['a.exe'], 'imports' => ['a.exe' => ['status' => 'retry', 'retry_at' => TestClock::START + 60]]],
+				['forget a.exe', 'set aside a.exe as program'],
+			],
+			'the other states still count after a file set aside' => [
+				['files' => ['a.mp4', 'b.pdf'], 'imports' => ['a.mp4' => ['status' => 'rejected'], 'b.pdf' => ['status' => 'success']]],
+				['forget a.mp4', 'unchanged', 'set aside a.mp4 as video'],
+			],
+			'a file set aside that is gone leaves nothing behind' => [
+				['imports' => ['gone.mp4' => ['status' => 'rejected']]],
+				['forget gone.mp4'],
 			],
 			'a task that succeeded ends the upload' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'SUCCESS', 'message' => '', 'documentId' => 7]]],
@@ -207,14 +248,26 @@ final class ImportPlannerTest extends TestCase {
 		self::assertSame(['check failed a.pdf: Paperless is down'], $this->plan());
 	}
 
+	/** A large batch of scans goes through as a small one does: the number of files sets nothing aside. */
+	public function testTheNumberOfFilesSetsNothingAside(): void {
+		$expected = [];
+		for ($scan = 1000; $scan < 1500; ++$scan) {
+			$this->storage->files[self::INBOX . "/Stapel/{$scan}.pdf"] = "%PDF-{$scan}";
+			$expected[] = "upload Stapel/{$scan}.pdf in Stapel";
+		}
+
+		self::assertSame($expected, $this->plan(['batchSize' => 500]));
+	}
+
 	/** Each file that may go to Paperless is a sign of life of the run, also one that waits for a later run. */
 	public function testEveryFileThatMayGoToPaperlessIsASignOfLife(): void {
+		$this->storage->files[self::INBOX . '/c.mp4'] = 'video';
 		$this->storage->files[self::INBOX . '/a.pdf'] = '%PDF-a';
 		$this->storage->files[self::INBOX . '/b.pdf'] = '%PDF-b';
 
 		$this->plan(['batchSize' => 1]);
 
-		self::assertSame(2, $this->heartbeats);
+		self::assertSame(3, $this->heartbeats);
 	}
 
 	/** Only the inbox, and its folders when the settings say so, has files for Paperless. */
@@ -267,6 +320,7 @@ final class ImportPlannerTest extends TestCase {
 				. ($action->folder !== '' ? " in {$action->folder}" : ''),
 			$action instanceof Unchanged => 'unchanged',
 			$action instanceof Skipped => 'skipped',
+			$action instanceof SetAside => 'set aside ' . self::below($action->path) . " as {$action->kind}",
 			$action instanceof ForgetImport => 'forget ' . self::below($action->path),
 			$action instanceof ImportSucceeded => 'succeeded ' . self::below($action->context->path)
 				. ($action->sameContent ? '' : ', changed since')
