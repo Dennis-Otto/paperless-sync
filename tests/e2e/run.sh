@@ -717,6 +717,16 @@ containers
 # The seconds since the start at the end of each phase show where a slow run spends them;
 # run-all.sh adds them to the table of its summary.
 echo "The containers run after ${SECONDS} s."
+# The log of the filer of SeaweedFS and the bucket of Nextcloud each take 7 volumes. With room
+# for fewer, only the first to write gets any, and the run fails only when Nextcloud comes
+# second, on a slow runner; this fails each run, in a way that says why (compose.s3.yaml).
+if [[ "${E2E_OBJECTSTORE}" == s3 ]]; then
+	S3_TOPOLOGY="$("${COMPOSE[@]}" exec -T s3 curl --fail --silent --show-error http://127.0.0.1:9333/dir/status)"
+	if [[ ! "${S3_TOPOLOGY}" =~ \"Max\":([0-9]+) ]] || ((BASH_REMATCH[1] < 14)); then
+		echo "The object store has room for ${BASH_REMATCH[1]:-an unknown number of} volumes, and it needs 14, so -volume.max of compose.s3.yaml is too low: ${S3_TOPOLOGY:0:100}" >&2
+		exit 1
+	fi
+fi
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!
