@@ -301,7 +301,7 @@ compare with `===` and `!==`, keep a function of a script of the app inside its
 `(function() { … })()`, and turn a rule off for one line only with
 `// eslint-disable-next-line RULE -- the reason`,
 keep the version of `overrides` in `scripts/eslint/package.json` at the fix or newer and run
-`npm install --package-lock-only --ignore-scripts` in `scripts/eslint/` until
+`npm install --ignore-scripts` in `scripts/eslint/`, which updates the lock file and the packages, until
 `node --test scripts/eslint/minimatch.test.mjs` passes,
 fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, start the browser
 of a check with `launch()` of `tests/e2e/browser.mjs` and keep what it has before it closes

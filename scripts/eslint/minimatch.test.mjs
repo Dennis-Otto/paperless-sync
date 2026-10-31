@@ -5,9 +5,8 @@
 // once scripts/eslint.sh has installed the packages. ESLint matches every glob of its config and
 // of its command line with minimatch and asks for version 10, but only 11.0.1 and newer are free
 // of the advisory GHSA-g3hv-75wg-m249, so "overrides" in package.json gives it a newer major
-// version than it asks for: the first test keeps the fixed version in the lock file, which no
-// update of the lock file would find by itself, and the second shows that ESLint still works
-// with it. Drop the override, but not the tests, when ESLint asks for a fixed minimatch itself.
+// version than it asks for: one test keeps the fixed version in the lock file, which no update
+// of the lock file would find by itself, and another shows that ESLint still works with it. Drop the override, but not the tests, when ESLint asks for a fixed minimatch itself.
 
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
