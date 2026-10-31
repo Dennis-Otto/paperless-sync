@@ -62,9 +62,11 @@
   - changed-files:
       - any-glob-to-any-file:
           - lib/Service/PaperlessUploadException.php
+          - lib/Service/InboxFileTypes.php
           - lib/Service/InboxTags.php
           - lib/Service/ImportPlanner.php
           - lib/Service/ImportExecutor.php
+          - tests/Unit/Service/InboxFileTypesTest.php
           - tests/Unit/Service/InboxTagsTest.php
           - tests/Unit/Service/ImportPlannerTest.php
           - tests/Unit/Service/ImportExecutorTest.php

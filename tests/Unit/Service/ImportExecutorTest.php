@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
+use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
@@ -50,6 +51,7 @@ final class ImportExecutorTest extends TestCase {
 	private const FILE = TestConfig::INBOX . '/Steuern/a.pdf';
 	private const ERROR = TestConfig::ERRORS . '/Steuern/a.pdf';
 	private const CONTENT = '%PDF-a';
+	private const VIDEO = TestConfig::INBOX . '/Aus Videos/film.mp4';
 	/** The writes of the storage, which a dry-run never calls. */
 	private const WRITES = ['writeStream', 'writeText', 'move', 'delete', 'pruneEmptyParents'];
 
@@ -82,6 +84,7 @@ final class ImportExecutorTest extends TestCase {
 			'an upload with the tags of its folder, which the run creates' => [self::upload(), ['inboxFolderTags' => true, 'inboxCreateTags' => true]],
 			'an unchanged file' => [new Unchanged(), []],
 			'a skipped file' => [new Skipped(), []],
+			'a file set aside' => [new SetAside(self::VIDEO, 'film.mp4', 'video'), []],
 			'the state of a file that is gone' => [new ForgetImport(self::FILE), []],
 			'an import that succeeded, whose file is deleted' => [new ImportSucceeded($context, 'etag', true, 7, true), []],
 			'an import that succeeded, whose file stays' => [new ImportSucceeded($context, 'etag', true, 7, true), ['deleteInboxAfterSuccess' => false]],
@@ -331,6 +334,69 @@ final class ImportExecutorTest extends TestCase {
 
 		self::assertSame(array_fill(0, 2, 'ERROR: Import task ' . self::FILE . ': The error folder is read-only'), $this->report->actions);
 		self::assertSame(['path' => self::FILE, 'status' => 'pending', 'last_error' => 'The error folder is read-only'], $this->state->imports[self::FILE]);
+	}
+
+	/** A file set aside is named and stays where it is, without an upload, a state, a batch, an error or a warning in the log. */
+	public function testAFileSetAsideStaysAndIsNamed(): void {
+		$this->storage->files[self::VIDEO] = 'video';
+		$imports = $this->state->imports;
+		$this->logger->expects(self::never())->method('warning');
+
+		$this->executor->apply(new SetAside(self::VIDEO, 'film.mp4', 'video'));
+
+		self::assertSame(['IMPORT SET ASIDE: ' . self::VIDEO . ': video'], $this->report->actions);
+		self::assertSame([['type' => SyncReport::TYPE_SET_ASIDE, 'path' => self::VIDEO, 'values' => ['kind' => 'video']]], $this->report->entries);
+		self::assertSame([1, 0, 0, 0], [$this->report->setAside, $this->report->importsSubmitted, $this->report->importsFailed, $this->report->errors]);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame($imports, $this->state->imports);
+		self::assertSame('video', $this->storage->files[self::VIDEO]);
+		self::assertSame([], array_values(array_intersect($this->storage->methods(), self::WRITES)));
+		self::assertSame([], $this->report->importResults(), 'A file set aside is no import, so it has no entry in the activity stream and no notification.');
+		self::assertTrue($this->batch->fits(SyncBatch::WRITE));
+	}
+
+	/** The notice names one file with the words for one, and stays out of a run that set none aside. */
+	public function testTheNoticeOfOneFileSetAside(): void {
+		$this->executor->apply(new SetAside(self::VIDEO, 'film.mp4', 'video'));
+		$this->executor->finish();
+
+		self::assertSame("SET ASIDE: 1 file of the inbox is a video, a program or an archive, which Paperless can't use as a document, so it stays in the inbox and doesn't go to Paperless: film.mp4. Move it out of the inbox or delete it.", $this->report->actions[1]);
+		self::assertSame(['type' => SyncReport::TYPE_INBOX_SET_ASIDE, 'values' => ['names' => 'film.mp4', 'count' => 1]], $this->report->entries[1]);
+
+		$this->arrange(false);
+		$this->executor->finish();
+
+		self::assertSame([], $this->report->actions);
+	}
+
+	/** The notice names all of the files that fit it, without a sign of more. */
+	public function testTheNoticeNamesAsManyFilesAsFit(): void {
+		foreach (range(1, ImportExecutor::SET_ASIDE_NAMES) as $file) {
+			$this->executor->apply(new SetAside(TestConfig::INBOX . "/{$file}.zip", "{$file}.zip", 'archive'));
+		}
+		$this->executor->finish();
+
+		self::assertSame(['names' => '1.zip, 2.zip, 3.zip, 4.zip, 5.zip', 'count' => 5], $this->report->entries[5]['values'] ?? null);
+	}
+
+	/** The notice stays short with hundreds of files: it counts them all and names the first, in a run and in a dry-run. */
+	#[DataProvider('kindsOfRun')]
+	public function testTheNoticeCountsAllFilesAndNamesTheFirst(bool $dryRun): void {
+		$this->arrange($dryRun);
+		foreach (range(1, 300) as $file) {
+			$this->executor->apply(new SetAside(TestConfig::INBOX . "/{$file}.zip", "{$file}.zip", 'archive'));
+		}
+		$this->executor->finish();
+
+		$notice = (string)end($this->report->actions);
+		self::assertSame("SET ASIDE: 300 files of the inbox are videos, programs or archives, which Paperless can't use as documents, so they stay in the inbox and don't go to Paperless: 1.zip, 2.zip, 3.zip, 4.zip, 5.zip, …. Move them out of the inbox or delete them.", $notice);
+		self::assertSame(300, $this->report->setAside);
+		self::assertSame(200, $this->report->omittedActions);
+	}
+
+	/** @return array<string, array{bool}> */
+	public static function kindsOfRun(): array {
+		return ['a run' => [false], 'a dry-run' => [true]];
 	}
 
 	/** The tags that Paperless lacks are named once for the run; only a run, which sent the files without them, logs it. */

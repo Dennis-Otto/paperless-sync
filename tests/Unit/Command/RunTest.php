@@ -94,6 +94,7 @@ final class RunTest extends TestCase {
 		$output = $this->command->getDisplay();
 		self::assertStringStartsWith("Synchronization completed.\n", $output);
 		self::assertMatchesRegularExpression('/^  Exported +1$/m', $output);
+		self::assertMatchesRegularExpression('/^  Set aside +0$/m', $output);
 		self::assertMatchesRegularExpression('/^  Errors +0$/m', $output);
 		self::assertStringContainsString("Changes:\n  EXPORT P1: " . sprintf(self::PATH, 1) . "\n", $output);
 		self::assertStringNotContainsString('Errors:', $output);

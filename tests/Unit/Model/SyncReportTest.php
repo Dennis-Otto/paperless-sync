@@ -32,11 +32,13 @@ final class SyncReportTest extends TestCase {
 		$bob->error('P2: the quota is full', 2, 'Dokumente/Paperless/Archiv/b.pdf');
 		$bob->notice(SyncReport::TYPE_EXPORT_STOPPED, 'EXPORT STOPPED: Nextcloud cannot store files in the archive');
 		++$bob->unchanged;
+		$bob->fileSetAside('Dokumente/Paperless/Eingang/film.mp4', 'video');
 
 		$run->absorb($alice, 'alice');
 		$run->absorb($bob, 'bob');
 
-		self::assertSame([1, 1, 1, 1], [$run->exported, $run->removedReassigned, $run->errors, $run->unchanged]);
+		self::assertSame([1, 1, 1, 1, 1], [$run->exported, $run->removedReassigned, $run->errors, $run->unchanged, $run->setAside]);
+		self::assertSame([0, 1], [$run->users['alice']['setAside'], $run->users['bob']['setAside']]);
 		self::assertSame(['exported' => 1, 'removedReassigned' => 0, 'errors' => 0], array_intersect_key($run->users['alice'], ['exported' => 0, 'removedReassigned' => 0, 'errors' => 0]));
 		self::assertSame(['exported' => 0, 'removedReassigned' => 1, 'unchanged' => 1, 'errors' => 1], array_intersect_key($run->users['bob'], ['exported' => 0, 'removedReassigned' => 0, 'unchanged' => 0, 'errors' => 0]));
 		self::assertSame([
@@ -45,8 +47,9 @@ final class SyncReportTest extends TestCase {
 			'[bob] REMOVE REASSIGNED P1: Dokumente/Paperless/Archiv/a.pdf',
 			'[bob] ERROR: P2: the quota is full',
 			'[bob] EXPORT STOPPED: Nextcloud cannot store files in the archive',
+			'[bob] IMPORT SET ASIDE: Dokumente/Paperless/Eingang/film.mp4: video',
 		], $run->actions);
-		self::assertSame(['alice', 'bob', 'bob', 'bob'], array_column(array_slice($run->entries, 1), 'user'));
+		self::assertSame(['alice', 'bob', 'bob', 'bob', 'bob'], array_column(array_slice($run->entries, 1), 'user'));
 		self::assertSame(['[bob] P2: the quota is full'], $run->errorMessages);
 		self::assertSame([[], 0, []], [$run->changedFiles(), $run->changedFileCount(), $run->importResults()], 'The files and the imports of a user stay in their report.');
 		self::assertSame(['alice' => $alice->counts(), 'bob' => $bob->counts()], $run->jsonSerialize()['users']);
@@ -244,6 +247,39 @@ final class SyncReportTest extends TestCase {
 		self::assertNotContains('TRASH P98: Archiv/_Gelöscht/98.pdf', $report->actions);
 		self::assertSame(['TRASH P97: Archiv/_Gelöscht/97.pdf', 'DELETE P200: Archiv/200.pdf', 'DELETE P201: Archiv/201.pdf', 'DELETE P202: Archiv/202.pdf'], array_slice($report->actions, -4));
 		self::assertSame(3, $report->omittedActions);
+	}
+
+	/** Every other line takes the place of a file set aside, so that a folder of videos hides no change; the count stays. */
+	public function testFilesSetAsideGiveWayToEveryOtherLine(): void {
+		$report = new SyncReport(false);
+		$report->fileSetAside('Eingang/first.mp4', 'video');
+		for ($file = 1; $file < SyncReport::ACTION_LIMIT; ++$file) {
+			$report->fileSetAside("Eingang/{$file}.mp4", 'video');
+		}
+
+		$report->upload('Eingang/scan.pdf');
+		$report->change(SyncReport::TYPE_EXPORT, 1, 'Archiv/a.pdf');
+
+		self::assertCount(SyncReport::ACTION_LIMIT, $report->actions);
+		self::assertSame('IMPORT: Eingang/scan.pdf', $report->actions[98]);
+		self::assertSame('EXPORT P1: Archiv/a.pdf', $report->actions[99]);
+		self::assertSame('IMPORT SET ASIDE: Eingang/first.mp4: video', $report->actions[0]);
+		self::assertSame(SyncReport::ACTION_LIMIT, $report->setAside);
+		self::assertSame(2, $report->omittedActions);
+	}
+
+	/** A full report leaves out a file set aside, and counts it. */
+	public function testAFullReportLeavesOutAFileSetAside(): void {
+		$report = new SyncReport(false);
+		for ($document = 1; $document <= SyncReport::ACTION_LIMIT; ++$document) {
+			$report->change(SyncReport::TYPE_EXPORT, $document, "Archiv/{$document}.pdf");
+		}
+
+		$report->fileSetAside('Eingang/film.mp4', 'video');
+
+		self::assertNotContains('IMPORT SET ASIDE: Eingang/film.mp4: video', $report->actions);
+		self::assertSame(1, $report->setAside);
+		self::assertSame(1, $report->omittedActions);
 	}
 
 	public function testLineOfALowerPriorityNeverTakesThePlaceOfAnother(): void {

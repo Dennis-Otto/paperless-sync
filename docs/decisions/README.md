@@ -36,3 +36,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0028](0028-test-the-upgrade-users-run.md) | Test the upgrade that users run: from the last release, on PostgreSQL and MariaDB, with the packages they install | accepted |
 | [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) | Share the end-to-end runs between both required jobs, and make each call of the suite quick | accepted |
 | [0030](0030-lint-the-javascript-and-measure-it-in-the-browser.md) | Lint the JavaScript with ESLint, and measure its coverage in the checks in the browser | accepted |
+| [0031](0031-the-inbox-sets-aside-videos-programs-and-archives.md) | The inbox sets aside videos, programs and archives by their extensions, and leaves every other file to Paperless | accepted |
