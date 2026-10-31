@@ -452,7 +452,7 @@ final class SettingsControllerTest extends TestCase {
 		$this->controller->test(self::validSettings());
 		self::assertTrue($this->connectionPassed(), 'The saved token passes now.');
 
-		$this->checks[] = ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', ['0'], 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.');
+		$this->checks[] = ConnectionCheck::warning(ConnectionCheck::TRASH, 'Visible to the account: %s', ['0'], 'Synchronization works, and deletions in Paperless arrive with the next run, because a superuser sees the trash of every owner. But the token of a superuser controls all of Paperless, so use an account that is no superuser.');
 		$this->controller->test(self::validSettings());
 		self::assertTrue($this->connectionPassed(), 'A note is no failure.');
 	}

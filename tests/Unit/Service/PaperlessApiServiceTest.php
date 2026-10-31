@@ -44,13 +44,15 @@ final class PaperlessApiServiceTest extends TestCase {
 
 	private const URL = 'https://paperless.example.test';
 	/** What the checklist says of a trash that lists only the documents of the account, when it can't count those of others. */
-	private const TRASH_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror.';
+	private const TRASH_HINT = 'Synchronization works despite this note; only deletions in Paperless arrive later. Paperless shows an account in its trash only its own documents and those without an owner, so the copy of a deleted document of another owner moves to the deleted folder only after the runs set in "Required consecutive missing scans". Keep "Also delete copies of documents that disappeared without passing the Paperless trash" off, so that such a copy is not deleted. Optional: make the account of the app the owner of the documents to mirror, and deletions arrive with the next run. This does not go together with per-user ownership.';
 	/** The same, when Paperless refuses to name the account without the permission View for UI Settings. */
-	private const TRASH_UNKNOWN_HINT = 'Paperless shows the account in its trash only the documents that it owns and those without an owner. Trashed documents of other owners count as missing: they move to the deleted folder only after the required missing scans. Make the account of the app the owner of the documents to mirror, and give it the permission View for UI Settings, so that this checklist can check it.';
+	private const TRASH_UNKNOWN_HINT = 'Synchronization works despite this note; only deletions in Paperless arrive later. Paperless shows an account in its trash only its own documents and those without an owner, so the copy of a deleted document of another owner moves to the deleted folder only after the runs set in "Required consecutive missing scans". Keep "Also delete copies of documents that disappeared without passing the Paperless trash" off, so that such a copy is not deleted. Optional: make the account of the app the owner of the documents to mirror, and deletions arrive with the next run. This does not go together with per-user ownership. Give the account the permission View for UI Settings, so that this checklist can check the owners.';
 	/** What the checklist says of the visible documents of other owners. */
-	private const FOREIGN_DOCUMENTS_HINT = 'Paperless leaves the documents of other owners out of the trash that it shows the account, and the account sees %s of them. When they go to the trash, their copies count as missing and move to the deleted folder only after the required missing scans. Make the account of the app their owner.';
+	private const FOREIGN_DOCUMENTS_HINT = 'Synchronization works despite this note; only deletions in Paperless arrive later. Paperless shows an account in its trash only its own documents and those without an owner, and the account sees documents of other owners: %s. When one of them is deleted, its copy moves to the deleted folder only after the runs set in "Required consecutive missing scans". Keep "Also delete copies of documents that disappeared without passing the Paperless trash" off, so that such a copy is not deleted. Optional: make the account of the app their owner, and deletions arrive with the next run. This does not go together with per-user ownership.';
+	/** What the checklist says of the trash in per-user ownership, whose documents belong to their users. */
+	private const PER_USER_TRASH_HINT = 'Synchronization works despite this note; only deletions in Paperless arrive later. Paperless shows an account that is no superuser in its trash only its own documents and those without an owner, and in per-user ownership the documents belong to their users. When one of them is deleted, its copy moves to the deleted folder only after the runs set in "Required consecutive missing scans". Keep "Also delete copies of documents that disappeared without passing the Paperless trash" off, so that such a copy is not deleted. Leave the owners as they are: per-user ownership gives each document to the user who owns it.';
 	/** What the checklist says of the token of a superuser. */
-	private const SUPERUSER_HINT = 'The account is a superuser: the trash shows it the documents of every owner, but its token controls all of Paperless. Use an account that is no superuser, and make it the owner of the documents to mirror.';
+	private const SUPERUSER_HINT = 'Synchronization works, and deletions in Paperless arrive with the next run, because a superuser sees the trash of every owner. But the token of a superuser controls all of Paperless, so use an account that is no superuser.';
 	/** What the inbox needs, when Paperless refuses to name the account without the permission View for UI Settings. */
 	private const UI_SETTINGS_HINT = 'In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. The inbox needs Add for Documents and View for Paperless Tasks.';
 	/** The query of the documents that the account sees and another account owns, for the account of self::account(). */
@@ -1046,7 +1048,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	 * @return array<string, array{array{0: int, 1: mixed}, ConnectionCheck}>
 	 */
 	public static function perUserAccounts(): array {
-		$hint = 'Paperless shows the account in its trash only the documents that it owns and those without an owner, unless it is a superuser. In per-user ownership, the documents of the users belong to them, so their copies count as missing when they go to the trash, and move to the deleted folder only after the required missing scans.';
+		$hint = self::PER_USER_TRASH_HINT;
 
 		return [
 			'a superuser' => [[200, self::account(true, [])], ConnectionCheck::passed('trash', 'Visible to the account: %s', ['1'])],
@@ -1067,6 +1069,50 @@ final class PaperlessApiServiceTest extends TestCase {
 		$checks = $this->preflight(['ownership' => 'per-user', 'inbox_enabled' => false, 'send_group' => '']);
 
 		self::assertEquals($trash, $checks[2]);
+	}
+
+	/**
+	 * What each note of the trash has to get across, in English and in German, which is what an
+	 * administrator reads it for.
+	 *
+	 * @return array<string, array{string, string, string, string, string}>
+	 */
+	public static function notesOfTheTrash(): array {
+		$optional = ['Optional: make the account of the app', 'This does not go together with per-user ownership.'];
+		$optionalGerman = ['Optional: Mach das Konto der App', 'Das geht nicht zusammen mit Eigentum je Benutzer.'];
+
+		return [
+			'the owners are unknown' => [self::TRASH_HINT, ...$optional, ...$optionalGerman],
+			'the account is unknown' => [self::TRASH_UNKNOWN_HINT, ...$optional, ...$optionalGerman],
+			'the account sees documents of others' => [self::FOREIGN_DOCUMENTS_HINT, ...$optional, ...$optionalGerman],
+			'per-user ownership' => [self::PER_USER_TRASH_HINT, 'Leave the owners as they are:', 'per-user ownership gives each document', 'Lass die Eigentümer, wie sie sind:', 'Das Eigentum je Benutzer gibt jedes Dokument'],
+		];
+	}
+
+	/** Synchronization works, only deletions come late, why, and that the account of the app need not own anything. */
+	#[DataProvider('notesOfTheTrash')]
+	public function testANoteOfTheTrashSaysPlainlyWhatItMeansInBothLanguages(string $note, string $owner, string $ownership, string $germanOwner, string $germanOwnership): void {
+		$root = __DIR__ . '/../../..';
+		$catalog = json_decode((string)file_get_contents("{$root}/l10n/de.json"), true, 512, JSON_THROW_ON_ERROR);
+		self::assertIsArray($catalog);
+		self::assertIsArray($catalog['translations']);
+		$setting = 'Required consecutive missing scans';
+		$direct = 'Also delete copies of documents that disappeared without passing the Paperless trash';
+		self::assertStringContainsString("t('{$direct}')", (string)file_get_contents("{$root}/templates/settings.php"), 'The note names this setting of the page.');
+		self::assertStringContainsString("t('{$setting}')", (string)file_get_contents("{$root}/templates/settings.php"), 'The note names this setting of the page.');
+		$german = $catalog['translations'][$note] ?? null;
+		self::assertIsString($german);
+		$germanSetting = $catalog['translations'][$setting] ?? null;
+		self::assertIsString($germanSetting);
+		$germanDirect = $catalog['translations'][$direct] ?? null;
+		self::assertIsString($germanDirect);
+
+		foreach (['Synchronization works despite this note; only deletions in Paperless arrive later.', 'in its trash only its own documents and those without an owner', '"' . $setting . '"', 'Keep "' . $direct . '" off, so that such a copy is not deleted.', $owner, $ownership] as $words) {
+			self::assertStringContainsString($words, $note);
+		}
+		foreach (['Die Synchronisation funktioniert trotz dieses Hinweises, nur Löschungen in Paperless kommen später an.', 'im Papierkorb nur seine eigenen Dokumente und die ohne Eigentümer', '„' . $germanSetting . '“', 'Lass „' . $germanDirect . '“ aus, damit so eine Kopie nicht gelöscht wird.', $germanOwner, $germanOwnership] as $words) {
+			self::assertStringContainsString($words, $german);
+		}
 	}
 
 	/** A new tag that Paperless assigns to no other document on its own: its matching algorithm is None. */
