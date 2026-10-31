@@ -11,7 +11,15 @@ services:
   s3:
     image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     # Master, volume, filer and S3 in one process, which sends no telemetry.
-    command: ["server", "-s3", "-master.telemetry=false"]
+    #
+    # The number of volumes is fixed, since the image otherwise counts how many of 1 GB fit
+    # into the free space of /data: a tmpfs of half the memory of the host, room for 7 on a
+    # runner of GitHub. SeaweedFS grows a collection by 7 volumes at once, and its filer
+    # writes its log into a collection of its own a minute after the start. Whichever writes
+    # first takes them all, so when Nextcloud started later than that on a busy runner, each
+    # PUT into its bucket failed with a 500 (Dennis-Otto/paperless-sync#275). A volume takes
+    # no memory until something is written to it. run.sh checks that the number is enough.
+    command: ["server", "-s3", "-master.telemetry=false", "-volume.max=32"]
     environment:
       # The only key that the S3 API accepts; a request without it is refused.
       AWS_ACCESS_KEY_ID: e2e-only-key

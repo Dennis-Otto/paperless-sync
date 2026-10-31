@@ -6,6 +6,7 @@
 // example secret and files that changed a few seconds ago, whenever screenshots.sh runs.
 
 import assert from 'node:assert/strict'
+import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, test } from 'node:test'
 import { changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
 
@@ -163,7 +164,7 @@ function context() {
 			routes.push({ matches, handler })
 			return Promise.resolve()
 		},
-		async request(address, { method = 'GET', type = 'application/json', body = '', failure = null } = {}) {
+		async request(address, { method = 'GET', type = 'application/json', body = '', failure = null, resets = 0 } = {}) {
 			const url = new URL(address)
 			const route = routes.find(({ matches }) => matches(url))
 			if (route === undefined) {
@@ -175,13 +176,23 @@ function context() {
 				fallback: () => {
 					answer.passed = 'fallback'
 				},
-				fetch: () => (failure !== null ? Promise.reject(failure) : Promise.resolve({
-					status: () => 200,
-					headers: () => ({ 'content-type': type, 'content-length': String(body.length), 'content-encoding': 'gzip' }),
-					json: () => Promise.resolve(JSON.parse(body)),
-					text: () => Promise.resolve(body),
-					body: () => Promise.resolve(Buffer.from(body)),
-				})),
+				// As route.fetch of Playwright: it sends a request again for each reset connection
+				// that maxRetries allows, and for no other error.
+				fetch: ({ maxRetries = 0 } = {}) => {
+					if (failure !== null) {
+						return Promise.reject(failure)
+					}
+					if (resets > maxRetries) {
+						return Promise.reject(Object.assign(new Error('route.fetch: socket hang up (ECONNRESET)'), { code: 'ECONNRESET' }))
+					}
+					return Promise.resolve({
+						status: () => 200,
+						headers: () => ({ 'content-type': type, 'content-length': String(body.length), 'content-encoding': 'gzip' }),
+						json: () => Promise.resolve(JSON.parse(body)),
+						text: () => Promise.resolve(body),
+						body: () => Promise.resolve(Buffer.from(body)),
+					})
+				},
 				fulfill: (fulfilled) => {
 					Object.assign(answer, fulfilled)
 				},
@@ -234,4 +245,30 @@ test('a request whose page closed on the way needs no answer, and any other fail
 	await assert.rejects(browser.request('http://nextcloud/apps/paperless_sync/sync/status', { failure: new Error('ECONNREFUSED') }), /ECONNREFUSED/)
 	assert.equal(closed(new Error('Target page, context or browser has been closed')), true)
 	assert.equal(closed(undefined), false)
+})
+
+test('a connection that the web server closes just as it is used again takes another, as in a browser', async () => {
+	// Apache closes a connection after 5 idle seconds. A request that reuses it in that moment
+	// gets no answer, which a browser sends again on its own and route.fetch does not: a poll
+	// of the status once ended the render of the pictures with "socket hang up"
+	// (Dennis-Otto/paperless-sync#275).
+	const browser = context()
+	await freeze(browser, new Story(), () => Date.parse('2026-10-24T20:00:05Z'))
+	const status = await browser.request('http://nextcloud/apps/paperless_sync/sync/status', { body: '{"lastEnded":1800000001}', resets: 1 })
+	assert.deepEqual(JSON.parse(status.body), { lastEnded: AT_10_20 })
+	const listing = await browser.request('http://nextcloud/remote.php/dav/files/paperless/Documents', { method: 'PROPFIND', type: 'application/xml', body: '<d:getlastmodified>Sat, 18 Oct 2026 08:21:13 GMT</d:getlastmodified>', resets: 1 })
+	assert.equal(listing.body, '<d:getlastmodified>Sat, 24 Oct 2026 20:00:05 GMT</d:getlastmodified>')
+	// A server that keeps closing them is a failure, which shows.
+	await assert.rejects(browser.request('http://nextcloud/apps/paperless_sync/sync/status', { resets: 100 }), /ECONNRESET/)
+})
+
+test('every route.fetch of the checks in the browser takes another connection when one was closed', () => {
+	const folder = new URL('./', import.meta.url)
+	const scripts = readdirSync(folder).filter((name) => name.endsWith('.mjs') && !name.endsWith('.test.mjs'))
+	const calls = scripts.flatMap((name) => [...readFileSync(new URL(name, folder), 'utf8').matchAll(/route\.fetch\((.*)\)/g)]
+		.map((call) => ({ name, options: call[1] })))
+	assert.ok(calls.length > 0)
+	for (const { name, options } of calls) {
+		assert.match(options, /maxRetries/, `${name} calls route.fetch(${options}) without maxRetries.`)
+	}
 })
