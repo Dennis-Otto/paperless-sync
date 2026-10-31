@@ -79,6 +79,16 @@ E2E_ARTIFACTS="${E2E_ARTIFACTS:-}"
 [[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
 # What the checks in the browser keep of a failure, which keep_evidence takes along.
 BROWSER_ARTIFACTS="${TMP_DIR}/browser"
+# E2E_BROWSER_SNAPSHOTS=1 also keeps a snapshot of the page at each action in the trace of a
+# window, with E2E_ARTIFACTS. It takes about a fifth of the time of the checks in the browser,
+# so the first attempt of a job of the CI leaves it out; a failure that stays gets it from the
+# second attempt, which the flaky-test bot starts. A run on a machine keeps it.
+if [[ -z "${E2E_BROWSER_SNAPSHOTS:-}" ]]; then
+	E2E_BROWSER_SNAPSHOTS=1
+	if [[ "${GITHUB_RUN_ATTEMPT:-}" == 1 ]]; then
+		E2E_BROWSER_SNAPSHOTS=0
+	fi
+fi
 
 export E2E_PORT
 
@@ -293,6 +303,7 @@ accessibility() {
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
+			--env "E2E_BROWSER_SNAPSHOTS=${E2E_BROWSER_SNAPSHOTS}" \
 			--env "E2E_COVERAGE=${E2E_COVERAGE}" \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c "${BROWSER_CHECKS}" \

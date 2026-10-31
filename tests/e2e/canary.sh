@@ -111,7 +111,8 @@ fi
 # tests/e2e/failure.py names its first error in the issue of the canary.
 evidence="${E2E_ARTIFACTS}/coming"
 status=0
-NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 E2E_ARTIFACTS="${evidence}" \
+# Nobody waits for the canary, and its issue stays: its traces keep the snapshots of the page.
+NEXTCLOUD_IMAGE="${IMAGE}" E2E_IGNORE_MAX_VERSION=1 E2E_ARTIFACTS="${evidence}" E2E_BROWSER_SNAPSHOTS=1 \
 	bash "${SCRIPT_DIR}/run.sh" 2>&1 | tee "${TMP_DIR}/run.log" || status=$?
 if ((status != 0)); then
 	mkdir -p "${evidence}"

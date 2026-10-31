@@ -157,21 +157,30 @@ test('a check that passes keeps nothing, and the trace of each window ends unsav
 	await first.newPage()
 	await first.close()
 	// The window that the check closed stays until it opens the next one.
-	assert.deepEqual(type.log, ['open admin', 'trace files.mjs, window 1: true true'])
+	assert.deepEqual(type.log, ['open admin', 'trace files.mjs, window 1: true false'])
 	const second = await browser.newContext({ name: 'other' })
 	await second.close()
 	await browser.close()
 	assert.deepEqual(type.log, [
 		'open admin',
-		'trace files.mjs, window 1: true true',
+		'trace files.mjs, window 1: true false',
 		'discard',
 		'close admin',
 		'open other',
-		'trace files.mjs, window 2: true true',
+		'trace files.mjs, window 2: true false',
 		'close the browser',
 	])
 	assert.equal(existsSync(folder), false)
 	assert.deepEqual(errors, [])
+})
+
+test('a trace leaves out the snapshots of the page unless it is asked for them, as in a second attempt of the CI', async () => {
+	const type = fakeType()
+	const browser = await launch('files', { folder, type, snapshots: true })
+	const first = await browser.newContext({ name: 'admin' })
+	assert.deepEqual(type.log, ['open admin', 'trace files.mjs, window 1: true true'])
+	await first.close()
+	await browser.close()
 })
 
 test('a check that fails keeps the trace and the pages of the windows that are there, also of one that it closed', async () => {
