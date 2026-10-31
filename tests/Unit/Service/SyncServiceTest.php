@@ -4680,7 +4680,7 @@ final class SyncServiceTest extends TestCase {
 			? "their copies are deleted after the required missing scans ({$scans} in a row), although the documents can still be restored in Paperless"
 			: "their copies move to the deleted folder only after the required missing scans ({$scans} in a row), as those of documents deleted without the trash do";
 
-		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Make the account of the app their owner.";
+		return "TRASH EMPTY: documents of the archive are gone from Paperless ({$missing}), and its trash lists none. Paperless shows in its trash only the documents that the account of the app owns and those without an owner. Documents in the trash of other owners count as missing: {$fate}. Optional: make the account of the app their owner, and deletions arrive with the next run. This does not go together with per-user ownership.";
 	}
 
 	/** The path of the copy of a document that a run of today, the day of the clock, moves to the deleted folder. */
