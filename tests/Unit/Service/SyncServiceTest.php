@@ -2041,6 +2041,80 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->imports, 'The file left the inbox, and so did its import.');
 	}
 
+	/**
+	 * A user who may write into the inbox chooses the name of a file. In the error folder, which
+	 * others may only read, Paperless Unified Search would take a file with a marker for the copy of
+	 * that document, and show its title and excerpt, so the file leaves its marker behind, and the
+	 * text next to it says what the file was called.
+	 */
+	public function testFailedImportLeavesTheMarkerOfTheFileBehind(): void {
+		$path = 'Dokumente/Paperless/Eingang/Scan [P999].pdf';
+		$this->storage->files[$path] = 'broken';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Unsupported mime type'];
+
+		$report = $this->service->run();
+
+		$errorPath = 'Dokumente/Paperless/Fehler/Scan.pdf';
+		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
+		self::assertSame('broken', $this->storage->files[$errorPath]);
+		self::assertSame("Paperless import failed\n\nUnsupported mime type\n\nPaperless task: task-1\nName in the inbox: Scan [P999].pdf\n", $this->storage->files[$errorPath . '.error.txt']);
+		self::assertSame([$errorPath, $errorPath . '.error.txt'], array_keys($this->storage->files), 'No name in the error folder carries a marker.');
+		self::assertSame([], $this->state->imports);
+	}
+
+	/** The note on a task that Paperless has not finished says what the file was called, too. */
+	public function testUnfinishedImportLeavesTheMarkerOfTheFileBehind(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P999].pdf'] = 'stuck';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
+		$this->clock->advance(86400);
+
+		$this->service->run();
+
+		$diagnostic = $this->storage->files['Dokumente/Paperless/Fehler/Scan.pdf.error.txt'];
+		self::assertStringStartsWith('Paperless import not finished', $diagnostic);
+		self::assertStringEndsWith("Paperless task: task-1\nName in the inbox: Scan [P999].pdf\n", $diagnostic);
+	}
+
+	/** Two files that differ only by their markers both reach the error folder, whatever the conflict policy. */
+	#[DataProvider('conflictPolicies')]
+	public function testFailedImportsThatDifferOnlyByTheirMarkersKeepEachOther(string $policy): void {
+		$this->configService->save(['conflict_mode' => $policy]);
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P1].pdf'] = 'first';
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P2].pdf'] = 'second';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+		$this->paperless->tasks['task-2'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+
+		$report = $this->service->run();
+
+		self::assertSame(2, $report->importsFailed);
+		self::assertSame(0, $report->errors);
+		self::assertSame('first', $this->storage->files['Dokumente/Paperless/Fehler/Scan.pdf']);
+		self::assertSame('second', $this->storage->files['Dokumente/Paperless/Fehler/Scan (2).pdf']);
+		self::assertStringEndsWith("Name in the inbox: Scan [P2].pdf\n", $this->storage->files['Dokumente/Paperless/Fehler/Scan (2).pdf.error.txt']);
+	}
+
+	public function testDryRunShowsTheNumbersThatFailedImportsWillTake(): void {
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P1].pdf'] = 'first';
+		$this->storage->files['Dokumente/Paperless/Eingang/Scan [P2].pdf'] = 'second';
+		$this->service->run();
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+		$this->paperless->tasks['task-2'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+
+		$actions = implode("\n", $this->service->run(true)->actions);
+
+		self::assertStringContainsString('Dokumente/Paperless/Fehler/Scan.pdf', $actions);
+		self::assertStringContainsString('Dokumente/Paperless/Fehler/Scan (2).pdf', $actions);
+		self::assertArrayNotHasKey('Dokumente/Paperless/Fehler/Scan.pdf', $this->storage->files);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function conflictPolicies(): array {
+		return ['replace' => ['replace'], 'skip' => ['skip']];
+	}
+
 	public function testSuccessfulImportNamesTheDocumentThatPaperlessCreated(): void {
 		$this->configService->save(['delete_inbox_after_success' => false]);
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
