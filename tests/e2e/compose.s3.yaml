@@ -28,9 +28,12 @@ services:
       - /data
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8333/healthz"]
-      interval: 2s
+      # Often while it starts, and seldom once it runs, as in compose.yaml.
+      start_period: 120s
+      start_interval: 1s
+      interval: 1m
       timeout: 2s
-      retries: 60
+      retries: 1
 
   nextcloud:
     depends_on:

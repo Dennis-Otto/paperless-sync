@@ -175,6 +175,8 @@ occ background:cron >/dev/null
 	php occ user:add --password-from-env e2e-mapped >/dev/null
 restart_nextcloud
 echo "The release ${RELEASE_VERSION} is installed and intact after ${SECONDS} s."
+# The end of the phase of the setup in the table of run-all.sh, as in run.sh.
+echo "Nextcloud and the app are set up after ${SECONDS} s."
 
 # 2. The release in use: the documents of e2e-owner of Paperless go to e2e-mapped, those of
 # E2E-Other to e2e-other.

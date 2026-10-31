@@ -27,9 +27,10 @@
 # the variants, on max-version. E2E_SHARD=1 or 2 runs one half of the runs, for the two
 # jobs of the CI, which each take one: shard 1 holds the oldest and the newest version,
 # shard 2 the variants, and each version between goes, from the oldest, to the shard
-# with the lighter load, where a version with its browser checks counts as two and a
-# variant as one, to 2 when both weigh as much. Both jobs get the same versions and
-# variants, so they split them the same way. A shard without anything to run passes.
+# with the lighter load, where a version with its browser checks counts as five, a variant
+# as three and an upgrade as two, to 2 when both weigh as much. Both jobs get the same
+# versions and variants, so they split them the same way. A shard without anything to run
+# passes.
 # E2E_PLAN=1 only prints the runs that it would start.
 # KEEP_E2E=1 keeps the containers of each, as with run.sh.
 # E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs before the job of the CI
@@ -98,9 +99,18 @@ case "${E2E_VARIANTS:-}" in
 esac
 
 # The shard of the runs: 1 the oldest and the newest version, 2 the variants, and each
-# version between to the one with the lighter load. A version counts twice, as its
-# browser checks take about as long as the rest of its run, and a variant, which has
-# none, once. The variants still run on the newest of all versions.
+# version between to the one with the lighter load. The load of a run is what it costs a
+# runner, measured in the phases of the table of the summary: a version counts as five, with
+# its browser checks, a variant, which has none, as three, and an upgrade, which runs far less
+# of the scenario, as two. The variants still run on the newest of all versions.
+LOAD_OF_VERSION=5
+load_of_variant() {
+	if [[ "$1" == *+upgrade ]]; then
+		echo 2
+	else
+		echo 3
+	fi
+}
 case "${E2E_SHARD:-}" in
 	"") ;;
 	1 | 2)
@@ -112,15 +122,22 @@ case "${E2E_SHARD:-}" in
 		if ((newest != oldest)); then
 			first+=("${newest}")
 		fi
+		first_load=$((LOAD_OF_VERSION * ${#first[@]}))
+		second_load=0
+		for variant in "${variants[@]}"; do
+			second_load=$((second_load + $(load_of_variant "${variant}")))
+		done
 		mapfile -t between < <(printf '%s\n' "${versions[@]}" | sort -n -u)
 		for version in "${between[@]}"; do
 			if [[ -z "${version}" ]] || ((version == oldest || version == newest)); then
 				continue
 			fi
-			if ((2 * ${#second[@]} + ${#variants[@]} <= 2 * ${#first[@]})); then
+			if ((second_load <= first_load)); then
 				second+=("${version}")
+				second_load=$((second_load + LOAD_OF_VERSION))
 			else
 				first+=("${version}")
+				first_load=$((first_load + LOAD_OF_VERSION))
 			fi
 		done
 		if [[ "${E2E_SHARD}" == 1 ]]; then

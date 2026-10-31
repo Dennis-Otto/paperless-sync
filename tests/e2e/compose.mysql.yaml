@@ -20,9 +20,12 @@ services:
       - /var/lib/mysql
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 2s
+      # Often while it starts, and seldom once it runs, as in compose.yaml.
+      start_period: 120s
+      start_interval: 1s
+      interval: 1m
       timeout: 2s
-      retries: 60
+      retries: 1
 
   nextcloud:
     depends_on:

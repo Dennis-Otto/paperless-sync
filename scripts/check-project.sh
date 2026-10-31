@@ -329,7 +329,7 @@ for versions in "" "33 34 35 36 37" "33 34" none; do
 done
 # The split of samples: the oldest and the newest version in shard 1, the variants in
 # shard 2, and each version between in the one with the lighter load, where a version,
-# with its browser checks, counts as two and a variant as one.
+# with its browser checks, counts as five, a variant as three and an upgrade as two.
 expect_shard() {
   local versions="$1" variants="$2" shard="$3" expected="$4" actual
   actual="$(runs_of "$versions" "$variants" "$shard")"
@@ -341,8 +341,9 @@ expect_shard() {
 expect_shard "33 34 35" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 35"
 expect_shard "33 34 35" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3"
 expect_shard "33 34 35" none 2 "Nextcloud 34"
-expect_shard "33 34 35 36" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 36"
-expect_shard "33 34 35 36" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 35;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 1 "Nextcloud 33;Nextcloud 35;Nextcloud 36"
+expect_shard "33 34 35 36" "pgsql mysql+s3" 2 "Nextcloud 34;Nextcloud 36 on PostgreSQL;Nextcloud 36 on MariaDB with S3"
+expect_shard "33 34 35" "pgsql mysql+s3 mysql sqlite+s3" 1 "Nextcloud 33;Nextcloud 34;Nextcloud 35"
 expect_shard "33 34 35" "" 1 "Nextcloud 33;Nextcloud 35"
 expect_shard "33 34 35" "" 2 "Nextcloud 34;Nextcloud 35 on PostgreSQL;Nextcloud 35 on MariaDB with S3;Nextcloud 35 on PostgreSQL, upgraded from the last release;Nextcloud 35 on MariaDB, upgraded from the last release"
 expect_shard "33 34 35 36" "" 1 "Nextcloud 33;Nextcloud 35;Nextcloud 36"
@@ -353,7 +354,28 @@ expect_shard "33 34" none 2 ""
 if ((problems > 0)); then
   exit 1
 fi
-echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with the lighter load, where a version counts as two runs and a variant as one."
+echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with the lighter load, where a version counts as five, a variant as three and an upgrade as two."
+
+printf '\n== %s\n' "The health checks of the end-to-end tests"
+# Each check of the health of a container starts a process in it through Docker. With up to
+# five runs of two or three containers on the four cores of a runner, a check every two or
+# three seconds takes a good part of a core from the tests, so each one checks often only
+# while its service starts (start_interval) and seldom once it runs (interval).
+problems=0
+for file in tests/e2e/compose.yaml tests/e2e/compose.pgsql.yaml tests/e2e/compose.mysql.yaml tests/e2e/compose.s3.yaml; do
+  checks="$(grep -cE '^ +healthcheck:$' "$file" || true)"
+  quick="$(grep -cE '^ +start_interval: [0-9]+s$' "$file" || true)"
+  # Up to 29 seconds, the interval is too short for a service that runs.
+  seldom="$(grep -cE '^ +interval: ([0-9]+m|[3-9][0-9]s|[0-9]{3,}s)$' "$file" || true)"
+  if [[ "$checks" == 0 || "$quick" != "$checks" || "$seldom" != "$checks" ]]; then
+    echo "$file: of its $checks health checks, $quick have a start_interval and $seldom an interval of at least 30 s. Check often only while a service starts, and seldom once it runs: tests/e2e/README.md#how-the-suite-stays-quick."
+    problems=$((problems + 1))
+  fi
+done
+if ((problems > 0)); then
+  exit 1
+fi
+echo "The health checks of the end-to-end tests check often only while their services start."
 
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a
