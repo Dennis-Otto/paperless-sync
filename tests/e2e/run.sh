@@ -70,7 +70,8 @@ TMP_DIR="$(mktemp -d)"
 # playwright-core in package.json; Renovate updates both together, and
 # scripts/check-project.sh compares them.
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea"
-# The download of that image in the background, while Nextcloud installs.
+# The download of that image in the background, from the start of the run, when the tests
+# don't need the processors yet.
 PLAYWRIGHT_PULL=""
 # E2E_ARTIFACTS, a folder, gets the evidence of a failure for the artifact of the job in the
 # CI (keep_evidence below); run-all.sh and canary.sh give each run a folder of its own.
@@ -723,6 +724,10 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 	E2E_PACKAGE="${E2E_PACKAGE:-$(bash "${SCRIPT_DIR}/packages.sh" commit "${TMP_DIR}")}"
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
+	PLAYWRIGHT_PULL=$!
+fi
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
 containers
 # The seconds since the start at the end of each phase show where a slow run spends them;
@@ -737,10 +742,6 @@ if [[ "${E2E_OBJECTSTORE}" == s3 ]]; then
 		echo "The object store has room for ${BASH_REMATCH[1]:-an unknown number of} volumes, and it needs 14, so -volume.max of compose.s3.yaml is too low: ${S3_TOPOLOGY:0:100}" >&2
 		exit 1
 	fi
-fi
-if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
-	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
-	PLAYWRIGHT_PULL=$!
 fi
 
 install_options=(--database="${E2E_DATABASE}")

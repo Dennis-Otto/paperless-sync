@@ -356,6 +356,32 @@ if ((problems > 0)); then
 fi
 echo "The shards 1 and 2 of tests/e2e/run-all.sh start every run of the suite once, the oldest and the newest version in the job nextcloud and the variants in the other, and each version between in the shard with the lighter load, where a version counts as five, a variant as three and an upgrade as two."
 
+printf '\n== %s\n' "The runs at once of the end-to-end tests"
+# tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names. A
+# script in place of run.sh counts the runs that are going at each start.
+limit_folder="$(mktemp -d)"
+cat >"$limit_folder/run.sh" <<'EOF'
+#!/usr/bin/env bash
+: >"$LIMIT_FOLDER/$E2E_PORT.going"
+ls "$LIMIT_FOLDER" | grep -c '\.going$' >>"$LIMIT_FOLDER/counts"
+python3 -c 'import time; time.sleep(0.5)' 2>/dev/null || python -c 'import time; time.sleep(0.5)'
+rm "$LIMIT_FOLDER/$E2E_PORT.going"
+EOF
+if ! LIMIT_FOLDER="$limit_folder" E2E_RUN_SCRIPT="$limit_folder/run.sh" E2E_PARALLEL=2 E2E_VERSIONS="33 34 35 36 37" E2E_VARIANTS=none \
+  bash tests/e2e/run-all.sh >"$limit_folder/log" 2>&1; then
+  cat "$limit_folder/log"
+  echo "E2E_PARALLEL=2 bash tests/e2e/run-all.sh fails with a script that passes in place of run.sh."
+  exit 1
+fi
+started="$(wc -l <"$limit_folder/counts" | tr -d ' ')"
+most="$(sort -n "$limit_folder/counts" | tail -n 1)"
+rm -rf "$limit_folder"
+if [[ "$started" != 5 || "$most" != 2 ]]; then
+  echo "With E2E_PARALLEL=2, tests/e2e/run-all.sh started $started of 5 runs, with at most $most at once instead of 2."
+  exit 1
+fi
+echo "tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names."
+
 printf '\n== %s\n' "The health checks of the end-to-end tests"
 # Each check of the health of a container starts a process in it through Docker. With up to
 # five runs of two or three containers on the four cores of a runner, a check every two or

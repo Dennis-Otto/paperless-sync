@@ -45,6 +45,10 @@ services:
       - "${E2E_PORT:-18083}:80"
     volumes:
       - nextcloud_html:/var/www/html
+      # The files and the database of SQLite. E2E_DATA_FOLDER, a folder in memory in the CI
+      # (run-all.sh), spares every commit of SQLite the wait for the disk, and stays through
+      # a restart of the container, which a tmpfs of Compose wouldn't.
+      - ${E2E_DATA_FOLDER:-nextcloud_data}:/var/www/html/data
       - ../../:/var/www/html/custom_apps/paperless_sync:ro
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1/status.php >/dev/null || exit 1"]
@@ -56,3 +60,4 @@ services:
 
 volumes:
   nextcloud_html:
+  nextcloud_data:

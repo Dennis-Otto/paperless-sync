@@ -239,7 +239,8 @@ doesn't pin exactly one, which the upgrade test reads. *Changes that run the end
 `tests/e2e/affected.sh` decides otherwise than its sample. *The shards of the end-to-end tests*: the two shards of
 `tests/e2e/run-all.sh`, which the two required jobs of `.github/workflows/e2e.yml`
 run, leave out a run of the whole suite or start one twice, or split a sample of
-versions otherwise than it expects. *The health checks of the end-to-end tests*: a health
+versions otherwise than it expects. *The runs at once of the end-to-end tests*: `tests/e2e/run-all.sh` leaves out a run, or starts more at
+once than `E2E_PARALLEL` names. *The health checks of the end-to-end tests*: a health
 check of a Compose file of `tests/e2e/` has no `start_interval`, or an `interval` below 30 s,
 which would take the processors of the runner from the tests while its service runs.
 *Downloads that a script runs*: a pipe of a shell script

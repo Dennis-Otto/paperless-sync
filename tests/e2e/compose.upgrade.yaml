@@ -10,6 +10,7 @@ services:
   nextcloud:
     volumes: !override
       - nextcloud_html:/var/www/html
+      - ${E2E_DATA_FOLDER:-nextcloud_data}:/var/www/html/data
     # A quarter of the weight of the CPU of the other containers: run-all.sh runs the
     # upgrade beside the scenario of the other variants on the four cores of a runner of
     # the CI, and the upgrade, which ends sooner, yields to them instead of making the job
