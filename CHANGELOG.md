@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.3.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.0...v1.3.1) (2026-10-31)
+
+
+### Bug fixes
+
+* make OSV-Scanner and Findings pass on main ([#296](https://github.com/Dennis-Otto/paperless-sync/issues/296)) ([28b07e8](https://github.com/Dennis-Otto/paperless-sync/commit/28b07e8ad6533c8f02acf2fb6a329a717c0e5c2d))
+
 ## [1.3.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.2.0...v1.3.0) (2026-10-25)
 
 ### Features

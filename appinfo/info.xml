@@ -76,7 +76,7 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
 ]]></description>
-	<version>1.3.0</version>
+	<version>1.3.1</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -95,12 +95,12 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 	     writes its version into the first address of each line of the block below, so each address
 	     has a line of its own, joined by a comment that the App Store and Nextcloud leave out. -->
 	<!-- x-release-please-start-version -->
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/01-admin-settings-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/01-admin-settings.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/02-structured-archive-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/02-structured-archive.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/03-dry-run-report-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.0/screenshots/03-dry-run-report.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/01-admin-settings-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/01-admin-settings.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/02-structured-archive-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/02-structured-archive.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/03-dry-run-report-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/03-dry-run-report.png</screenshot>
 	<!-- x-release-please-end -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
