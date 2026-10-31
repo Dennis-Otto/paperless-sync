@@ -149,7 +149,7 @@ The password of the tests is masked in `nextcloud.log`, `apps.txt` and the logs 
 The checks in the browser start Chromium through `browser.mjs`. With `E2E_ARTIFACTS`, each window records a Playwright trace from its start: every action with a screenshot and a snapshot of the page, its requests and what the page logged. When a check fails, by an error or by the findings it counts, it keeps the trace and the screenshots of its windows that are still there, also of one that it closed while it failed, and prints *The check in the browser files.mjs fails:* with the error; a check that passes keeps nothing. All five checks run, also after one that failed, so a run names every page that broke, and the browser fails at the end. Open a trace with the version of Playwright of `package.json`, or drop it on [trace.playwright.dev](https://trace.playwright.dev), which reads it in your browser without uploading it:
 
 ```bash
-npx playwright@1.64.0 show-trace browser/files-1.trace.zip
+npx playwright@1.64.1 show-trace browser/files-1.trace.zip
 ```
 
 After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
