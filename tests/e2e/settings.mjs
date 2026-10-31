@@ -418,7 +418,8 @@ try {
 		releaseStatus = resolve
 	})
 	await page.route(`**${STATUS}`, async (route) => {
-		const response = await route.fetch()
+		// With maxRetries, as a browser does when Apache closed an idle connection as it is reused.
+		const response = await route.fetch({ maxRetries: 3 })
 		await statusReleased
 		await route.fulfill({ response })
 	}, { times: 1 })
@@ -572,7 +573,7 @@ try {
 	// its own, while the run continues, as the status shows.
 	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 504, contentType: 'text/html', body: GATEWAY_TIMEOUT }))
 	await page.route(`**${STATUS}`, async (route) => {
-		const response = await route.fetch()
+		const response = await route.fetch({ maxRetries: 3 })
 		await route.fulfill({ response, json: { ...(await response.json()), state: 'dry-run-running' } })
 	})
 	await dryRun.click()

@@ -136,10 +136,12 @@ export function plainHeaders(headers) {
 
 // Answers a request with what the server answered, its body changed by rewrite, or as it
 // is when rewrite gives undefined. A request whose page closed on the way, such as the
-// preview that a page asks for as screenshots.mjs closes it, needs no answer.
+// preview that a page asks for as screenshots.mjs closes it, needs no answer. Apache closes
+// a connection after 5 idle seconds, and a request that reuses it in that moment gets no
+// answer: a browser sends it again on its own, and route.fetch only with maxRetries.
 async function rewritten(route, rewrite) {
 	try {
-		const response = await route.fetch()
+		const response = await route.fetch({ maxRetries: 3 })
 		const headers = response.headers()
 		const type = headers['content-type'] ?? ''
 		const body = await rewrite(response, type)
