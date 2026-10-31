@@ -265,7 +265,7 @@ test('a connection that the web server closes just as it is used again takes ano
 test('every route.fetch of the checks in the browser takes another connection when one was closed', () => {
 	const folder = new URL('./', import.meta.url)
 	const scripts = readdirSync(folder).filter((name) => name.endsWith('.mjs') && !name.endsWith('.test.mjs'))
-	const calls = scripts.flatMap((name) => [...readFileSync(new URL(name, folder), 'utf8').matchAll(/route\.fetch\((.*)\)/g)]
+	const calls = scripts.flatMap((name) => [...readFileSync(new URL(name, folder), 'utf8').matchAll(/route\.fetch\(([^)]*)\)/g)]
 		.map((call) => ({ name, options: call[1] })))
 	assert.ok(calls.length > 0)
 	for (const { name, options } of calls) {
