@@ -64,8 +64,6 @@ Im eingestellten Intervall startet der Cron von Nextcloud einen Lauf der App in 
 | Paperless-ngx | 2.20, das letzte Release von 2.x, und das aktuelle Release von 3.x | die [Vertragstests](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx) gegen ein echtes Paperless in Docker, jede Woche und bei jeder Änderung daran, wie die App mit Paperless spricht |
 
 <!-- --8<-- [end:requirements] -->
-<!-- --8<-- [start:try-it-section] -->
-
 ## Ausprobieren
 
 <!-- --8<-- [start:try-it] -->
@@ -78,16 +76,16 @@ cd paperless-sync
 docker compose -f demo/compose.yaml up
 ```
 
-Das startet Nextcloud und Paperless-ngx allein auf Ihrem Rechner, füllt Paperless mit einem erfundenen Archiv eines Haushalts, installiert die App aus dem App Store und verbindet sie, zuerst mit einem Probelauf und dann mit dem ersten Lauf. Danach nennt der Befehl die Adresse des Archivs und das Passwort, das er erzeugt hat und das in `demo/.env` bleibt. `docker compose -f demo/compose.yaml down --volumes` entfernt alles wieder. [Die README der Demo](https://github.com/Dennis-Otto/paperless-sync/blob/main/demo/README.md) sagt auf Englisch, was Sie darin ausprobieren können.
+Das startet Nextcloud und Paperless-ngx allein auf Ihrem Rechner, füllt Paperless mit einem erfundenen Archiv eines Haushalts, installiert die App aus dem App Store und verbindet sie, zuerst mit einem Probelauf und dann mit dem ersten Lauf. Danach nennt der Befehl die Adresse des Archivs und das Passwort, das er erzeugt hat und das in `demo/.env` bleibt. `docker compose -f demo/compose.yaml down --volumes` entfernt alles wieder.
 
 <!-- --8<-- [end:try-it] -->
-
-<!-- --8<-- [end:try-it-section] -->
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/try-it-dark.gif">
   <img alt="Ein Terminal führt docker compose -f demo/compose.yaml up aus: Paperless-ngx und Nextcloud starten, die Einrichtung füllt Paperless mit erfundenen Dokumenten, verbindet die App, startet einen Probelauf und den ersten Lauf und nennt die Adressen der Demo. Dann zeigt Nextcloud Dateien das Archiv, von den Ordnern der Korrespondenten über einen Korrespondenten und einen Dokumenttyp bis zu einem Jahr" src="docs/images/de/try-it.gif">
 </picture>
+
+[Die README der Demo](demo/README.md) sagt auf Englisch, was Sie darin ausprobieren können.
 
 <!-- --8<-- [start:quick-start-section] -->
 

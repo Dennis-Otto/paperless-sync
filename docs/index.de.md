@@ -311,6 +311,8 @@ Die Einstellungen sprechen Englisch und Deutsch. Sie, die Aktionen in Dateien un
   <img alt="Ein Terminal führt docker compose -f demo/compose.yaml up aus: Paperless-ngx und Nextcloud starten, die Einrichtung füllt Paperless mit erfundenen Dokumenten, verbindet die App, startet einen Probelauf und den ersten Lauf und nennt die Adressen der Demo. Dann zeigt Nextcloud Dateien das Archiv, von den Ordnern der Korrespondenten über einen Korrespondenten und einen Dokumenttyp bis zu einem Jahr" src="images/de/try-it.gif">
 </picture>
 
+`demo/README.md` im [Repository](https://github.com/Dennis-Otto/paperless-sync) sagt auf Englisch, was Sie darin ausprobieren können.
+
 ## Schnellstart
 
 --8<-- "README.de.md:quick-start"

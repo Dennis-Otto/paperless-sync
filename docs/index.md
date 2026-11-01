@@ -311,6 +311,8 @@ The settings speak English and German. They, the actions in Files and the form o
   <img alt="A terminal runs docker compose -f demo/compose.yaml up: Paperless-ngx and Nextcloud start, the setup fills Paperless with synthetic documents, connects the app, starts a dry run and the first run, and prints the addresses of the demo. Then Nextcloud Files shows the archive, from the folders of the correspondents through a correspondent and a document type to a year" src="images/try-it.gif">
 </picture>
 
+`demo/README.md` in [the repository](https://github.com/Dennis-Otto/paperless-sync) says what to try in it.
+
 ## Quick start
 
 --8<-- "README.md:quick-start"
