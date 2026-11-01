@@ -454,6 +454,24 @@ rm -rf "$scenario_folder"
 expect_stop 'E2E_ONLY names nope' tests/e2e/run.sh E2E_ONLY=nope
 expect_stop 'E2E_BROWSER names nope' tests/e2e/run.sh E2E_BROWSER=nope
 expect_stop 'E2E_UPGRADE=1 runs the upgrade' tests/e2e/run.sh E2E_UPGRADE=1 E2E_ONLY=files
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=french E2E_ACCESSIBILITY=0
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=browser E2E_ACCESSIBILITY=0
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_BROWSER=files E2E_ACCESSIBILITY=0
+expect_stop 'E2E_VARIANTS names pgsql+upgrade' tests/e2e/run-all.sh E2E_VERSIONS=33 E2E_VARIANTS=pgsql+upgrade E2E_ONLY=files
+expect_plan 'upgrade' E2E_UPGRADE=1
+# A selection through run-all.sh runs the versions, and no variant unless it names one.
+selection_runs="$(env -u E2E_BROWSER -u E2E_VARIANTS E2E_PLAN=1 E2E_VERSIONS=33 E2E_ONLY=files bash tests/e2e/run-all.sh | tr -d '' | paste -sd ' ' -)"
+if [[ "$selection_runs" != 'Nextcloud 33' ]]; then
+  echo "E2E_ONLY=files bash tests/e2e/run-all.sh with E2E_VERSIONS=33 plans \"$selection_runs\" instead of the version alone."
+  problems=$((problems + 1))
+fi
+# The command that repeats a failed scenario names the stack that it failed on.
+repeat_stack="$(sed -n '/^stack_of_run() {$/,/^}$/p' tests/e2e/run.sh)"
+repeat_command="$(NEXTCLOUD_IMAGE=nextcloud:35-apache E2E_DATABASE=pgsql E2E_OBJECTSTORE=s3 E2E_IGNORE_MAX_VERSION=1 bash -c "$repeat_stack; stack_of_run" | tr -d '')"
+if [[ "$repeat_command" != 'NEXTCLOUD_IMAGE=nextcloud:35-apache E2E_DATABASE=pgsql E2E_OBJECTSTORE=s3 E2E_IGNORE_MAX_VERSION=1 ' ]]; then
+  echo "stack_of_run of tests/e2e/run.sh says \"$repeat_command\", which should name the image, the database, the storage and E2E_IGNORE_MAX_VERSION."
+  problems=$((problems + 1))
+fi
 expect_plan 'connection dry-run export files browser (files)' E2E_ONLY=files
 expect_plan 'connection files' E2E_ONLY=files E2E_ACCESSIBILITY=0
 expect_plan 'connection files flow' E2E_ONLY='flow files' E2E_BROWSER=none

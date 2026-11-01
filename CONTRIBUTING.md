@@ -55,7 +55,7 @@ composer install
 bash scripts/check.sh
 ```
 
-The end-to-end tests run the app in Docker against every supported Nextcloud version side by side, and a mock of Paperless-ngx; `bash tests/e2e/run.sh` runs them against one version. They need Docker 25 or newer and Python 3.11 or newer, as `python3` or `python`, which checks the answers on your machine. `E2E_ONLY=files bash tests/e2e/run.sh` runs [one scenario alone](tests/e2e/README.md#one-scenario-alone) with what it needs, in a few minutes. They run in Git Bash on Windows too:
+The end-to-end tests run the app in Docker against every supported Nextcloud version side by side, and a mock of Paperless-ngx; `bash tests/e2e/run.sh` runs them against one version. They need Docker 25 or newer and Python 3.11 or newer, as `python3` or `python`, which checks the answers on your machine. Both run in Git Bash on Windows too:
 
 ```sh
 bash tests/e2e/run-all.sh

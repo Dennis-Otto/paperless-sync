@@ -145,6 +145,19 @@ empty_data_folder() {
 	fi
 }
 
+# What chose the stack of this run, for the command that repeats a scenario of it: compose.yaml
+# has another version of Nextcloud on SQLite without it, where a failure may not show.
+stack_of_run() {
+	local stack="${NEXTCLOUD_IMAGE:+NEXTCLOUD_IMAGE=${NEXTCLOUD_IMAGE} }"
+	if [[ "${E2E_DATABASE}" != sqlite ]]; then
+		stack+="E2E_DATABASE=${E2E_DATABASE} "
+	fi
+	if [[ "${E2E_OBJECTSTORE}" != local ]]; then
+		stack+="E2E_OBJECTSTORE=${E2E_OBJECTSTORE} "
+	fi
+	echo "${stack}${E2E_IGNORE_MAX_VERSION:+E2E_IGNORE_MAX_VERSION=${E2E_IGNORE_MAX_VERSION} }"
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT
@@ -154,8 +167,8 @@ cleanup() {
 		echo "The end-to-end tests fail with exit code ${status}." >&2
 		case "${CURRENT_SCENARIO:-}" in
 			"") ;;
-			browser) echo "The checks in the browser fail. One of them runs alone, with what it needs, with: E2E_BROWSER=<check> bash tests/e2e/run.sh" >&2 ;;
-			*) echo "The scenario ${CURRENT_SCENARIO} fails. It runs alone, with what it needs, with: E2E_ONLY=${CURRENT_SCENARIO} bash tests/e2e/run.sh" >&2 ;;
+			browser) echo "The checks in the browser fail. One of them runs alone, with what it needs, with: $(stack_of_run)E2E_BROWSER=<check> bash tests/e2e/run.sh" >&2 ;;
+			*) echo "The scenario ${CURRENT_SCENARIO} fails. It runs alone, with what it needs, with: $(stack_of_run)E2E_ONLY=${CURRENT_SCENARIO} bash tests/e2e/run.sh" >&2 ;;
 		esac
 		if [[ -n "${E2E_ARTIFACTS}" ]]; then
 			keep_evidence || echo "The evidence of the failure could not be kept." >&2
@@ -2217,6 +2230,14 @@ plan_scenarios() {
 
 check_scenario_list
 plan_scenarios
+if [[ -n "${E2E_ONLY}${E2E_BROWSER}" && ${#PLAN[@]} -eq 0 ]]; then
+	echo "E2E_ONLY and E2E_BROWSER leave nothing to run with E2E_ACCESSIBILITY=${E2E_ACCESSIBILITY} and E2E_LANGUAGES=${E2E_LANGUAGES}." >&2
+	exit 1
+fi
+if [[ "${E2E_PLAN}" == "1" && "${E2E_UPGRADE}" == "1" ]]; then
+	echo upgrade
+	exit 0
+fi
 if [[ "${E2E_PLAN}" == "1" ]]; then
 	for name in "${PLAN[@]}"; do
 		if [[ "${name}" == browser ]]; then

@@ -42,4 +42,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0034](0034-a-note-in-files-says-what-a-folder-of-the-app-does.md) | A note in Files says what a folder of the app does, from one answer for each user | accepted |
 | [0035](0035-delegate-the-settings-page-and-no-key-of-its-configuration.md) | Delegate the settings page, and no key of its configuration | accepted |
 | [0036](0036-more-languages-without-moving-an-archive.md) | Speak more languages from catalogs that a check holds complete, and let no catalog move an archive | accepted |
-| [0037](0037-name-the-scenarios-of-the-end-to-end-tests.md) | Name the scenarios of the end-to-end tests, each with what it needs, and let one of them run alone | accepted |
+| [0037](0037-name-the-scenarios-of-the-end-to-end-tests.md) | Name the scenarios of the end-to-end tests, each with what it needs | accepted |

@@ -95,6 +95,8 @@ The scenarios share one installation of Nextcloud and build on each other, so a 
   <img src="../../docs/images/diagrams/what-a-selection-of-scenarios-runs.svg" alt="What a selection of scenarios runs: E2E_ONLY=files sets up Nextcloud and the app, as every run does. It then runs the scenario files with what it needs, connection, dry-run and export, in the order of the list, and the check in the browser of the same name, files.mjs. The other 30 scenarios and the other checks in the browser stay out.">
 </picture>
 
+`run-all.sh` passes a selection on to every version. It then leaves out the variants, unless `E2E_VARIANTS` names them, and it stops when `E2E_VARIANTS` names an upgrade, which runs none of the scenarios. A selection that leaves nothing to run, such as `E2E_ONLY=browser E2E_ACCESSIBILITY=0`, stops as well. A failed scenario names the command that repeats it, with the version, database and storage that it failed on.
+
 A run without either variable runs everything, which is what the CI does: `scripts/check-project.sh` fails when a workflow sets them. It also fails when a function `scenario_<name>` of `run.sh` has no entry in the list, which would leave it out of every run, or when an entry has no function or comes before what it needs; each start of `run.sh` stops for the same reasons.
 
 - A check in the browser runs with the scenario of its name, `files` and `flow`. `E2E_BROWSER` names others instead, `accessibility`, `keyboard`, `settings`, `files` and `flow`, or `none`; without `E2E_ONLY`, only what they need runs before them. `E2E_ONLY=browser` runs all five, and `E2E_ACCESSIBILITY=0` none of them.
