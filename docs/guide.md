@@ -10,7 +10,10 @@ How Paperless Sync works, what it needs, how to install and set it up, what it d
 
 The dry-run and the first synchronization of the quick start:
 
-![The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed](images/dry-run.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/dry-run-dark.gif">
+  <img alt="The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed" src="images/dry-run.gif">
+</picture>
 
 --8<-- "README.md:features"
 

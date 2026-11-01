@@ -737,7 +737,10 @@ broken_twin README.md 'has the diagram docs/diagrams/how-paperless-sync-moves-do
   -e 's/how-paperless-sync-moves-documents\.de\.svg/how-paperless-sync-moves-documents.svg/'
 broken_twin README.md 'has the dark diagram docs/diagrams/how-paperless-sync-moves-documents.mmd where line' \
   -e 's/how-paperless-sync-moves-documents\.de\.dark\.svg/how-paperless-sync-moves-documents.dark.svg/'
-broken_twin docs/faq.md 'removed somewhere between there and line 83, the heading of level 2 ("## Einrichtung und Betrieb"), and line' \
+# The last entry before the headings of level 3 that follow it is the diagram of the first
+# synchronization, whose line follows the page, which grows with its answers.
+first_line="$(grep -n 'src="images/diagrams/the-first-synchronization.de.svg"' docs/faq.de.md | cut -d: -f1)"
+broken_twin docs/faq.md "removed somewhere between there and line $first_line, the diagram docs/diagrams/the-first-synchronization.de.mmd, and line" \
   -e '/^### Wie oft läuft es?$/d'
 broken_twin docs/guide.md 'has the snippet include --8<-- "README.md:features" where line' \
   -e 's/README\.de\.md:features/README.md:features/'
@@ -938,6 +941,10 @@ echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail
 # for in its catalog, l10n/de.json.
 node --test --test-reporter=dot tests/e2e/language.test.mjs
 echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German."
+# The animations of the documentation: each that the script records is there in both
+# languages and both themes, and stays below 1 MB.
+node --test --test-reporter=dot tests/e2e/screenshots.test.mjs
+echo "Every animation of tests/e2e/screenshots.mjs is there in English and German, in the light and the dark theme, and stays below 1 MB."
 # The address of Files in the browser tests, which Files of Nextcloud 36 routes only as
 # Nextcloud links it.
 node --test --test-reporter=dot tests/e2e/files-address.test.mjs

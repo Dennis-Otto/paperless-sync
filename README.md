@@ -16,7 +16,10 @@ raise of max-version by the upstream bot; scripts/check-project.sh checks that t
 
 [**Get it from the App Store**](https://apps.nextcloud.com/apps/paperless_sync) · [Requirements](#requirements) · [Quick start](#quick-start) · [Documentation](https://dennis-otto.github.io/paperless-sync/) · [FAQ](https://dennis-otto.github.io/paperless-sync/faq.html) · [Troubleshooting](https://dennis-otto.github.io/paperless-sync/troubleshooting.html) · [Help](#help-and-feedback) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
-![The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud](docs/images/archive.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/archive-dark.gif">
+  <img alt="The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud" src="docs/images/archive.gif">
+</picture>
 
 </div>
 
@@ -140,7 +143,10 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 
 Following the quick start: a dry-run lists every file that a run would write, move or delete, without changing anything, and *Synchronize now* makes the changes.
 
-![The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed](docs/images/dry-run.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dry-run-dark.gif">
+  <img alt="The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed" src="docs/images/dry-run.gif">
+</picture>
 
 A few days later, a dry-run shows every kind of change at once: new documents, a new title, a document in the Paperless trash, one with an excluded tag and a finished import from the inbox.
 
@@ -162,6 +168,8 @@ The settings of the app in the administration settings of Nextcloud:
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-dark.png">
   <img alt="The administration settings of Paperless Sync: the status of the last run, the connection to Paperless and the owner of the archive" src="docs/images/settings-light.png">
 </picture>
+
+Three more animations show the app at work in Files: [the inbox](#nextcloud-inbox), [a document that moves to another folder](#usage) and [the trash](#deletion-safety).
 
 The [guide](https://dennis-otto.github.io/paperless-sync/guide.html#the-settings-section-by-section) shows every section of the settings.
 
@@ -202,6 +210,13 @@ Each part of the template becomes a folder. The base folder holds the inbox fold
 Stable markers such as `[P123]` are compatible with the independent [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) app.
 
 When you change the title, the tags, the correspondent or the type of a document in Paperless, its file moves to its new path and keeps its shares, comments and versions in Nextcloud, and the desktop and mobile clients only rename it. Only a change of the content, such as a new archive version after Paperless processed the document again, downloads it again, and the download goes into the same file, at its new path if it has one, so the file keeps its shares, comments and favorites; in a scheduled run, Nextcloud keeps the previous content as a version of the file. A run tells the two apart by the checksums of the file: it keeps the SHA-256 and the MD5 of every download and compares them with the checksum that Paperless reports, MD5 up to Paperless-ngx 2.x and SHA-256 since 3.0. For a file that an earlier version of the app exported, which has only its SHA-256 saved, the first change on Paperless-ngx 2.x reads the file in Nextcloud once to add its MD5, so that it moves without a download too. A download goes to Nextcloud in chunks, so a document of any size fits into the memory of PHP. A run asks Paperless only for the fields of the documents that it reads, not for their text, and for the checksum of a document once for each revision, also when the document waits for a later run; a run over an archive without changes writes nothing to the database.
+
+Here a document of the type Letter becomes a Contract with a new title in Paperless, and the next run moves its copy into the folder of its new type and renames it:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/move-dark.gif">
+  <img alt="Nextcloud Files in the folder Example Bank/Letter/2026 of the archive with the copy 2026-10-07 - Credit card terms [P190].pdf. A caption says that in Paperless the document becomes a Contract with the new title Credit card agreement, then that the next run moves the copy into the folder of its new type with its new name. The pointer opens Example Bank, which now holds Contract and Statement and no folder Letter, then Contract and 2026, where the copy is named 2026-10-07 - Credit card agreement [P190].pdf" src="docs/images/move.gif">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.dark.svg">
@@ -589,6 +604,13 @@ Files in the inbox folder, and in its subfolders when *Scan inbox subfolders* is
   <img src="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.svg" alt="The way of a file from the inbox to Paperless: A video, a program or an archive stays in the folder Inbox, and the report of every run names it as set aside. In the next run, any other file in the folder Inbox is uploaded to Paperless. When Paperless is unreachable or overloaded, the file waits 15 minutes, then twice as long each time, up to a day, and is uploaded again. When Paperless refuses it, such as a file of an unsupported type, it stays in Inbox and is skipped until it is saved anew, renamed or replaced. When Paperless accepts it, the next runs follow its Paperless task while it is running: after success, the file is removed from Inbox or kept, as configured; after a failure, a duplicate or a cancelled task, it moves to the folder Failed imports, next to a .error.txt with the reason. A day after the upload, a file whose content Paperless has counts as imported; a task that Paperless still lists unfinished moves the file to Failed imports, so that a second upload can't make a duplicate; and a task that Paperless doesn't list sends the file to the wait as well, and it is uploaded again.">
 </picture>
 
+Two scans in the inbox: Paperless imports the first, and the second, which it couldn't import, waits in the error folder next to its reason:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/inbox-dark.gif">
+  <img alt="Nextcloud Files in the folder Inbox: two scans arrive, and a caption says that the next runs send them to Paperless and that a scan leaves the inbox once Paperless has finished its import. The inbox is empty again, and the pointer opens the folder Failed imports in the folder tree, which holds the second scan next to its .error.txt, as Paperless could not import it" src="docs/images/inbox.gif">
+</picture>
+
 A failed file keeps its subfolder below the error folder, but not a marker such as `[P123]` in its name: `Scan [P123].pdf` becomes `Scan.pdf`, or `Scan (2).pdf` when that name is taken, and its `.error.txt` says what it was called. Whoever may write into the inbox chooses the name of a file, and for those who may only read the error folder, [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) would take a file with a marker for the copy of that document. Its `.error.txt` has the reason that Paperless gave, such as a file type that it doesn't take, or *It is a duplicate of document #123* on Paperless-ngx 2.x and on 3.x with `PAPERLESS_CONSUMER_DELETE_DUPLICATES`, and the ID of the Paperless task, by which the task list of Paperless shows more. Paperless-ngx 2.x marks a failed import first without its reason, so the app waits for the reason before it moves the file. A task that Paperless cancelled, `REVOKED` in its task list, moves the file there too. The report of a run names the document that a successful import created: the settings page shows the file as *Imported*, with *Paperless imported it as document P456*, and the command line prints `IMPORT SUCCESS: Documents/Paperless/Inbox/police.pdf -> P456`.
 
 When Paperless has not finished the task of a file a day after the upload, the run first looks for a document with the content of the file, by its checksum. If Paperless has one, the import counts as a success. If Paperless still lists the task, as pending or started, its worker may be down or its queue long, so the document may still appear: the file moves to the error folder, with a note that says so, and the Nextcloud log has a warning. It isn't uploaded again, because Paperless-ngx 3.x imports a duplicate as a second document. If Paperless doesn't list the task at all, its queue lost it, as after a restart of Redis: the run reports an error, the Nextcloud log has a warning, and the file is uploaded again after 15 minutes, as after a failed upload.
@@ -678,7 +700,21 @@ A copy that a run deletes goes to the trash bin of the target user, *Deleted fil
   <img src="docs/images/diagrams/what-happens-to-the-copy-of-a-document.svg" alt="What happens to the copy of a document: An exported document is in the archive. Moved to the trash in Paperless, or gone from Paperless without the trash for N complete scans, its copy moves to _Deleted; restored in Paperless, it moves back to the archive. Deleted for good in Paperless, the copy in _Deleted is deleted in Nextcloud after N complete scans, when permanent deletion is on. A copy in the archive whose document is gone from Paperless without the trash for N complete scans is deleted directly when permanent and direct deletion are on.">
 </picture>
 
+A bill goes to the trash of Paperless and comes back:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/trash-dark.gif">
+  <img alt="Nextcloud Files in the folder City Utilities/Invoice/2026 of the archive with three electricity bills. A caption says that Electricity bill March goes to the trash in Paperless; after the next run, the folder holds two bills, and the pointer opens _Deleted, 2026-10-25, City Utilities, Invoice and 2026, where the copy of the bill of March is. A caption says that the bill is restored in Paperless, and the folder of the archive holds all three bills again" src="docs/images/trash.gif">
+</picture>
+
 N is the number of *Required consecutive missing scans*, three by default. With the trash behavior *Keep archive file in place*, the copy stays in the archive instead of moving to `_Deleted`, and it is deleted from there when the rules allow it. A document that Paperless restores, or lists again, keeps that copy without a download.
+
+Which settings of *Trash and deletion safety* you need, question by question:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-deletion-settings-do-i-need.dark.svg">
+  <img src="docs/images/diagrams/which-deletion-settings-do-i-need.svg" alt="Which deletion settings you need: The section Trash and deletion safety answers three questions. First, where the copy of a document goes that went to the trash of Paperless: with the Paperless trash behavior Move to deleted folder, the default, it moves into _Deleted, below the day on which the document went to the trash, and comes back when the document is restored; with Keep archive file in place, it stays where it is. Second, whether the copy goes too once Paperless deleted the document for good: leave Delete the Nextcloud copy after Paperless deletes the document for good off, the default, and the copy stays; turn it on, and the copy goes to the trash bin of its user in Nextcloud after N complete scans without the document, where N is the setting Required consecutive missing scans, three by default. Third, with that switch on, whether the copy is deleted too of a document that disappears while the trash doesn't list it, such as one in the trash of another owner, which the account of the app can't see: turn on Also delete copies of documents that disappeared without passing the Paperless trash, and after N complete scans the copy goes to the trash bin of its user, without _Deleted, even if Paperless can still restore the document; leave it off, the default, and after N complete scans the copy moves to _Deleted, or stays in place with Keep archive file in place, and is not deleted. The questions are indigo, the safe defaults green, the other way to keep copies blue and the switches that delete copies amber.">
+</picture>
 
 The copy of a document that disappears from Paperless without passing through its trash moves to the deleted folder after the same number of scans. It stays in place when the trash behavior keeps archive files in place, and it is deleted when direct deletion is allowed as well.
 
@@ -718,6 +754,13 @@ The interval counts from the start or the end of the last run, whichever is late
 *Synchronize now* queues a second job, `OCA\PaperlessSync\Cron\ManualSyncJob`, once, which the next background jobs run. To start it at once, run a worker of Nextcloud for it, such as in a service of systemd or a container of its own: `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'`. For a single run, `occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'` runs the queued job and returns. While another run holds the lock, such as a dry-run, the job waits for the next background jobs.
 
 A large archive takes many runs at first: about the number of documents divided by the batch size, times the interval. With the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. A larger batch, up to 1,000, makes the first synchronization faster; every later run changes only what changed in Paperless. Or import it in one go on the [command line](#command-line), with `occ paperless_sync:run --unlimited`.
+
+The first synchronization, from the dry-run to a complete archive:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-first-synchronization.dark.svg">
+  <img src="docs/images/diagrams/the-first-synchronization.svg" alt="The first synchronization: With the connection saved and synchronization still off, a dry-run lists what the first run would write, and Getting started estimates how long the first synchronization takes. Then scheduled synchronization is turned on and saved. Nextcloud's cron starts the background job of the app every five minutes at most, and once the interval has passed, a run exports the documents that Paperless added last first, up to the batch size, 100 by default; its report counts the others as skipped. While documents are left, the next run takes the next batch after the interval: with the defaults, 5,000 documents take 50 runs, four hours or more. Then the archive is complete, and each later run changes only what changed in Paperless. Instead, a large archive can be imported in one go on the server, with the schedule still off, by occ paperless_sync:run --unlimited. Your steps are orange, the questions indigo, the runs blue and the complete archive green.">
+</picture>
 
 ### Changes within seconds
 

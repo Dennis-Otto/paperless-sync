@@ -17,7 +17,10 @@ above a heading lets an English page of the German website link to it. -->
 
 [**Im App Store holen**](https://apps.nextcloud.com/apps/paperless_sync) · [Voraussetzungen](#voraussetzungen) · [Schnellstart](#schnellstart) · [Dokumentation](https://dennis-otto.github.io/paperless-sync/de/) · [FAQ](https://dennis-otto.github.io/paperless-sync/de/faq.html) · [Fehlerbehebung](https://dennis-otto.github.io/paperless-sync/de/troubleshooting.html) · [Hilfe](#hilfe-und-feedback) · [Änderungen](CHANGELOG.md) · [English](README.md)
 
-![Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet](docs/images/de/archive.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/archive-dark.gif">
+  <img alt="Das Archiv in Nextcloud Dateien: von den Ordnern der Korrespondenten über einen Korrespondenten, einen Dokumenttyp und ein Jahr zu einem Dokument von Paperless, das sich im Viewer von Nextcloud öffnet" src="docs/images/de/archive.gif">
+</picture>
 
 </div>
 
@@ -145,7 +148,10 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 
 Nach dem Schnellstart: Ein Testlauf listet jede Datei auf, die ein Lauf schreiben, verschieben oder löschen würde, ohne etwas zu ändern, und *Jetzt synchronisieren* macht die Änderungen. Die Bilder zeigen Nextcloud auf Deutsch, mit den Dokumenten eines erfundenen Haushalts in Paperless, deren Namen englisch sind.
 
-![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](docs/images/de/dry-run.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/dry-run-dark.gif">
+  <img alt="Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen" src="docs/images/de/dry-run.gif">
+</picture>
 
 Ein paar Tage später zeigt ein Testlauf jede Art von Änderung auf einmal: neue Dokumente, einen neuen Titel, ein Dokument im Papierkorb von Paperless, eines mit einem ausgeschlossenen Tag und einen abgeschlossenen Import aus dem Eingang.
 
@@ -167,6 +173,8 @@ Die Einstellungen der App in den Administrationseinstellungen von Nextcloud:
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/settings-dark.png">
   <img alt="Die Administrationseinstellungen von Paperless Sync: der Status des letzten Laufs, die Verbindung zu Paperless und der Eigentümer des Archivs" src="docs/images/de/settings-light.png">
 </picture>
+
+Drei weitere Animationen zeigen die App in Dateien bei der Arbeit: [den Eingang](#nextcloud-inbox), [ein Dokument, das in einen anderen Ordner wandert](#verwendung), und [den Papierkorb](#deletion-safety).
 
 Die [Anleitung](docs/guide.de.md#die-einstellungen-abschnitt-für-abschnitt) zeigt jeden Abschnitt der Einstellungen.
 
@@ -207,6 +215,13 @@ Jeder Teil der Vorlage wird zu einem Ordner. Der Basisordner enthält neben dem 
 Feste Markierungen wie `[P123]` passen zur unabhängigen App [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search).
 
 Änderst du in Paperless den Titel, die Tags, den Korrespondenten oder den Typ eines Dokuments, wandert seine Datei an ihren neuen Pfad und behält in Nextcloud ihre Freigaben, Kommentare und Versionen, und die Desktop- und Mobil-Clients benennen sie nur um. Nur eine Änderung des Inhalts, etwa eine neue Archivversion, nachdem Paperless das Dokument neu verarbeitet hat, lädt es erneut herunter, und das Herunterladen geht in dieselbe Datei, an ihrem neuen Pfad, wenn sie einen hat, sodass die Datei ihre Freigaben, Kommentare und Favoriten behält; in einem geplanten Lauf behält Nextcloud den vorigen Inhalt als Version der Datei. Ein Lauf unterscheidet beides an den Prüfsummen der Datei: Er behält die SHA-256 und die MD5 jedes Herunterladens und vergleicht sie mit der Prüfsumme, die Paperless meldet, MD5 bis Paperless-ngx 2.x und SHA-256 seit 3.0. Für eine Datei, die eine frühere Version der App exportiert hat und von der nur die SHA-256 gespeichert ist, liest die erste Änderung unter Paperless-ngx 2.x die Datei in Nextcloud einmal, um ihre MD5 zu ergänzen, sodass auch sie ohne Herunterladen wandert. Ein Herunterladen geht in Stücken nach Nextcloud, sodass ein Dokument jeder Größe in den Speicher von PHP passt. Ein Lauf fragt Paperless nur nach den Feldern der Dokumente, die er liest, nicht nach ihrem Text, und nach der Prüfsumme eines Dokuments nur einmal je Revision, auch wenn das Dokument auf einen späteren Lauf wartet; ein Lauf über ein Archiv ohne Änderungen schreibt nichts in die Datenbank.
+
+Hier wird in Paperless ein Dokument vom Typ Letter zu einem Contract mit neuem Titel, und der nächste Lauf verschiebt seine Kopie in den Ordner des neuen Typs und benennt sie um:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/move-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner Example Bank/Letter/2026 des Archivs mit der Kopie 2026-10-07 - Credit card terms [P190].pdf. Eine Bildunterschrift sagt, dass das Dokument in Paperless den Typ Contract und den neuen Titel Credit card agreement erhält, dann, dass der nächste Lauf die Kopie in den Ordner ihres neuen Typs verschiebt und ihr den neuen Namen gibt. Der Zeiger öffnet Example Bank, das jetzt Contract und Statement enthält und keinen Ordner Letter mehr, dann Contract und 2026, wo die Kopie 2026-10-07 - Credit card agreement [P190].pdf heißt" src="docs/images/de/move.gif">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-run-tells-new-metadata-from-new-content.de.dark.svg">
@@ -610,6 +625,13 @@ Dateien im Eingangsordner, und in seinen Unterordnern, wenn *Unterordner des Ein
   <img src="docs/images/diagrams/the-way-of-a-file-from-the-inbox-to-paperless.de.svg" alt="Der Weg einer Datei aus dem Eingang zu Paperless: Ein Video, ein Programm oder ein Archiv bleibt im Ordner Eingang, und der Bericht jedes Laufs nennt es als beiseitegelegt. Im nächsten Lauf wird jede andere Datei im Ordner Eingang zu Paperless hochgeladen. Ist Paperless nicht erreichbar oder überlastet, wartet die Datei 15 Minuten, dann jedes Mal doppelt so lange, bis zu einem Tag, und wird erneut hochgeladen. Lehnt Paperless sie ab, etwa eine Datei eines nicht unterstützten Typs, bleibt sie im Eingang und wird übersprungen, bis sie neu gespeichert, umbenannt oder ersetzt wird. Nimmt Paperless sie an, verfolgen die nächsten Läufe ihre Paperless-Aufgabe, solange sie läuft: Nach Erfolg wird die Datei aus dem Eingang entfernt oder behalten, wie eingestellt; nach einem Fehler, einem Duplikat oder einer abgebrochenen Aufgabe wandert sie in den Ordner Fehler, neben eine .error.txt mit dem Grund. Einen Tag nach dem Hochladen gilt eine Datei, deren Inhalt Paperless hat, als importiert; eine Aufgabe, die Paperless noch unfertig führt, verschiebt die Datei in den Ordner Fehler, damit ein zweites Hochladen kein Duplikat erzeugen kann; und eine Aufgabe, die Paperless nicht führt, schickt die Datei ebenfalls in die Wartezeit, und sie wird erneut hochgeladen.">
 </picture>
 
+Zwei Scans im Eingang: Paperless importiert den ersten, und der zweite, den es nicht importieren konnte, wartet im Fehlerordner neben seinem Grund:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/inbox-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner Eingang: Zwei Scans kommen an, und eine Bildunterschrift sagt, dass die nächsten Läufe sie an Paperless schicken und ein Scan den Eingang verlässt, sobald Paperless seinen Import beendet hat. Der Eingang ist wieder leer, und der Zeiger öffnet im Ordnerbaum den Ordner Fehler, der den zweiten Scan neben seiner .error.txt enthält, da Paperless ihn nicht importieren konnte" src="docs/images/de/inbox.gif">
+</picture>
+
 Eine fehlgeschlagene Datei behält ihren Unterordner unterhalb des Fehlerordners, aber keine Markierung wie `[P123]` in ihrem Namen: Aus `Scan [P123].pdf` wird `Scan.pdf`, oder `Scan (2).pdf`, wenn dieser Name vergeben ist, und ihre `.error.txt` nennt ihren früheren Namen. Den Namen einer Datei wählt, wer in den Eingang schreiben darf, und für alle, die den Fehlerordner nur lesen dürfen, hielte [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) eine Datei mit Markierung für die Kopie dieses Dokuments. Ihre `.error.txt` enthält den Grund, den Paperless genannt hat, etwa einen Dateityp, den es nicht annimmt, oder *It is a duplicate of document #123* unter Paperless-ngx 2.x und unter 3.x mit `PAPERLESS_CONSUMER_DELETE_DUPLICATES`, und die ID der Paperless-Aufgabe, über die die Aufgabenliste von Paperless mehr zeigt. Paperless-ngx 2.x markiert einen fehlgeschlagenen Import zuerst ohne seinen Grund, deshalb wartet die App auf den Grund, bevor sie die Datei verschiebt. Eine Aufgabe, die Paperless abgebrochen hat, `REVOKED` in seiner Aufgabenliste, verschiebt die Datei ebenfalls dorthin. Der Bericht eines Laufs nennt das Dokument, das ein erfolgreicher Import angelegt hat: Die Einstellungsseite zeigt die Datei als *Importiert*, mit *Paperless hat die Datei als Dokument P456 importiert.*, und die Kommandozeile gibt `IMPORT SUCCESS: Dokumente/Paperless/Eingang/police.pdf -> P456` aus.
 
 Hat Paperless die Aufgabe einer Datei einen Tag nach dem Hochladen nicht abgeschlossen, sucht der Lauf zuerst ein Dokument mit dem Inhalt der Datei, über ihre Prüfsumme. Hat Paperless eines, zählt der Import als Erfolg. Führt Paperless die Aufgabe noch, als wartend oder gestartet, ist vielleicht sein Worker ausgefallen oder seine Warteschlange lang, also kann das Dokument noch erscheinen: Die Datei wandert in den Fehlerordner, mit einem Hinweis, der das sagt, und das Nextcloud-Protokoll hat eine Warnung. Sie wird nicht erneut hochgeladen, weil Paperless-ngx 3.x ein Duplikat als zweites Dokument importiert. Führt Paperless die Aufgabe gar nicht, hat seine Warteschlange sie verloren, wie nach einem Neustart von Redis: Der Lauf meldet einen Fehler, das Nextcloud-Protokoll hat eine Warnung, und die Datei wird nach 15 Minuten erneut hochgeladen, wie nach einem fehlgeschlagenen Hochladen.
@@ -705,7 +727,21 @@ Eine Kopie, die ein Lauf löscht, kommt in den Papierkorb des Zielbenutzers, *Ge
   <img src="docs/images/diagrams/what-happens-to-the-copy-of-a-document.de.svg" alt="Was mit der Kopie eines Dokuments geschieht: Ein exportiertes Dokument liegt im Archiv. In Paperless in den Papierkorb verschoben, oder ohne den Papierkorb aus Paperless verschwunden, N vollständige Scans lang, wandert seine Kopie nach _Gelöscht; in Paperless wiederhergestellt, wandert sie zurück ins Archiv. In Paperless endgültig gelöscht, wird die Kopie in _Gelöscht nach N vollständigen Scans in Nextcloud gelöscht, wenn endgültiges Löschen an ist. Eine Kopie im Archiv, deren Dokument N vollständige Scans lang ohne den Papierkorb aus Paperless verschwunden ist, wird direkt gelöscht, wenn endgültiges und direktes Löschen an sind.">
 </picture>
 
+Eine Rechnung kommt in Paperless in den Papierkorb und kehrt zurück:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/trash-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner City Utilities/Invoice/2026 des Archivs mit drei Stromrechnungen. Eine Bildunterschrift sagt, dass Electricity bill March in Paperless in den Papierkorb kommt; nach dem nächsten Lauf enthält der Ordner zwei Rechnungen, und der Zeiger öffnet _Gelöscht, 2026-10-25, City Utilities, Invoice und 2026, wo die Kopie der Rechnung vom März liegt. Eine Bildunterschrift sagt, dass die Rechnung in Paperless wiederhergestellt wird, und der Ordner des Archivs enthält wieder alle drei Rechnungen" src="docs/images/de/trash.gif">
+</picture>
+
 N ist die Zahl der *Erforderlichen aufeinanderfolgenden Läufe ohne das Dokument*, standardmäßig drei. Mit dem Papierkorb-Verhalten *Archivdatei am Ort behalten* bleibt die Kopie im Archiv, statt nach `_Gelöscht` zu wandern, und wird von dort gelöscht, wenn die Regeln es erlauben. Ein Dokument, das Paperless wiederherstellt oder wieder auflistet, behält diese Kopie ohne Herunterladen.
+
+Welche Einstellungen von *Papierkorb und Löschsicherheit* du brauchst, Frage für Frage:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-deletion-settings-do-i-need.de.dark.svg">
+  <img src="docs/images/diagrams/which-deletion-settings-do-i-need.de.svg" alt="Welche Löscheinstellungen du brauchst: Der Abschnitt Papierkorb und Löschsicherheit beantwortet drei Fragen. Erstens, wohin die Kopie eines Dokuments kommt, das in den Papierkorb von Paperless ging: Mit dem Verhalten beim Paperless-Papierkorb In Gelöscht-Ordner verschieben, der Vorgabe, wandert sie nach _Gelöscht, unter den Tag, an dem das Dokument in den Papierkorb kam, und kehrt zurück, wenn das Dokument wiederhergestellt wird; mit Archivdatei am Ort behalten bleibt sie, wo sie ist. Zweitens, ob die Kopie auch geht, wenn Paperless das Dokument endgültig gelöscht hat: Bleibt Nextcloud-Kopie löschen, nachdem Paperless das Dokument endgültig gelöscht hat aus, die Vorgabe, bleibt die Kopie; ist es an, kommt die Kopie nach N vollständigen Scans ohne das Dokument in den Papierkorb ihres Benutzers in Nextcloud, wobei N die Einstellung Erforderliche aufeinanderfolgende Läufe ohne das Dokument ist, drei als Vorgabe. Drittens, mit diesem Schalter an, ob auch die Kopie eines Dokuments gelöscht wird, das verschwindet, ohne dass der Papierkorb es zeigt, etwa eines im Papierkorb eines anderen Eigentümers, den das Konto der App nicht sieht: Mit Auch Kopien von Dokumenten löschen, die ohne den Paperless-Papierkorb verschwunden sind, kommt die Kopie nach N vollständigen Scans in den Papierkorb ihres Benutzers, ohne _Gelöscht, auch wenn Paperless das Dokument noch wiederherstellen kann; bleibt es aus, die Vorgabe, wandert die Kopie nach N vollständigen Scans nach _Gelöscht, oder sie bleibt mit Archivdatei am Ort behalten, wo sie ist, und wird nicht gelöscht. Die Fragen sind indigo, die sicheren Vorgaben grün, der andere Weg, Kopien zu behalten, blau und die Schalter, die Kopien löschen, bernsteinfarben.">
+</picture>
 
 Die Kopie eines Dokuments, das aus Paperless verschwindet, ohne durch seinen Papierkorb zu gehen, wandert nach derselben Zahl von Scans in den Gelöscht-Ordner. Sie bleibt am Ort, wenn das Papierkorb-Verhalten Archivdateien am Ort behält, und wird gelöscht, wenn auch das direkte Löschen erlaubt ist.
 
@@ -747,6 +783,13 @@ Das Intervall zählt ab dem Start oder dem Ende des letzten Laufs, je nachdem, w
 *Jetzt synchronisieren* reiht einmal einen zweiten Job ein, `OCA\PaperlessSync\Cron\ManualSyncJob`, den die nächsten Hintergrundjobs ausführen. Um ihn sofort zu starten, lass einen Worker von Nextcloud für ihn laufen, etwa in einem Dienst von systemd oder einem eigenen Container: `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'`. Für einen einzelnen Lauf führt `occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'` den eingereihten Job aus und kehrt zurück. Solange ein anderer Lauf die Sperre hält, etwa ein Testlauf, wartet der Job auf die nächsten Hintergrundjobs.
 
 Ein großes Archiv braucht anfangs viele Läufe: etwa die Zahl der Dokumente geteilt durch die Batchgröße, mal das Intervall. Mit den Standardwerten, einem Batch von 100 und 5 Minuten, brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Ein größerer Batch, bis zu 1.000, macht die erste Synchronisation schneller; jeder spätere Lauf ändert nur, was sich in Paperless geändert hat. Oder importiere es in einem Zug auf der [Kommandozeile](#kommandozeile), mit `occ paperless_sync:run --unlimited`.
+
+Die erste Synchronisation, vom Testlauf bis zum vollständigen Archiv:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/the-first-synchronization.de.dark.svg">
+  <img src="docs/images/diagrams/the-first-synchronization.de.svg" alt="Die erste Synchronisation: Mit gespeicherter Verbindung und noch ausgeschalteter Synchronisation listet ein Testlauf, was der erste Lauf schreiben würde, und Erste Schritte schätzt, wie lange die erste Synchronisation dauert. Dann wird die geplante Synchronisation eingeschaltet und gespeichert. Der Cron von Nextcloud startet den Hintergrundjob der App höchstens alle fünf Minuten, und sobald das Intervall vergangen ist, exportiert ein Lauf die Dokumente, die Paperless zuletzt hinzugefügt hat, zuerst, bis zur Batchgröße, 100 als Vorgabe; sein Bericht zählt die anderen als übersprungen. Solange Dokumente übrig sind, nimmt der nächste Lauf nach dem Intervall den nächsten Batch: Mit den Standardwerten brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Dann ist das Archiv vollständig, und jeder spätere Lauf ändert nur, was sich in Paperless geändert hat. Stattdessen lässt sich ein großes Archiv auf dem Server in einem Zug importieren, mit noch ausgeschaltetem Zeitplan, mit occ paperless_sync:run --unlimited. Deine Schritte sind orange, die Fragen indigo, die Läufe blau und das vollständige Archiv grün.">
+</picture>
 
 <a id="changes-within-seconds"></a>
 

@@ -3,7 +3,8 @@
 
 // Takes the pictures of the documentation (docs/images/) and of the App Store
 // (screenshots/, each with its small thumbnail) in Chromium, in the light and the dark
-// theme of Nextcloud, and records two animations as GIFs. screenshots.sh sets the app
+// theme of Nextcloud, and records five animations as GIFs, each in both themes: NAME.gif
+// and NAME-dark.gif. screenshots.sh sets the app
 // up with the synthetic archive of showcase.py and starts this script in the image of
 // Playwright; the pictures go to the folder pictures/ next to this script, which
 // screenshots.sh returns as a tar archive. With E2E_LANGUAGE=de, and Nextcloud in German,
@@ -12,7 +13,9 @@
 //
 // The story follows the quick start: getting started, a dry-run, the first synchronization,
 // the archive in Files, a dry-run a few days later that shows every kind of change, and a
-// run that ends with an error, which the status keeps.
+// run that ends with an error, which the status keeps. A week later, two scans go through
+// the inbox, a document of a new type and title moves, and a bill goes to the trash of
+// Paperless and comes back, each as an animation of Files with captions.
 //
 // Two runs draw the same pixels, so that the screenshot bot changes a picture only when the
 // app looks different: the data of the Paperless mock is fixed (showcase.py), the moments of
@@ -28,7 +31,7 @@ import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
-import { freeze, Story } from './frozen.mjs'
+import { blackCorners, freeze, Story } from './frozen.mjs'
 import { pictureLanguage } from './language.mjs'
 import { thumbnail } from './thumbnail.mjs'
 
@@ -59,6 +62,9 @@ const TALL_VIEWPORT = { width: VIEWPORT.width, height: 1400 }
 const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
 const SETTINGS = `${BASE_URL}/index.php/settings/admin/paperless_sync`
 const ARCHIVE = `/${L.base}/${L.archive}`
+// The two scans of the inbox, named as a scanner names them, in both languages: the Paperless
+// mock takes the name of a file in the path of /control/task-of/, as it comes, without spaces.
+const SCANS = { imported: 'Scan_20261025_0815.pdf', failed: 'Scan_20261025_0816.pdf' }
 const CARDS = ['connection', 'schedule', 'archive', 'inbox', 'deletion', 'webhook']
 // How long a run that "Synchronize now" queued may take: a background job of Nextcloud runs
 // it, and the page asks for its status every few seconds.
@@ -213,13 +219,18 @@ async function settle(page) {
 	await page.waitForTimeout(400)
 }
 
+// The first entry of the folder tree in the navigation of Files with the name that it shows.
+function folderTreeEntry(page, name) {
+	return page.locator(`xpath=//li[contains(@class, "files-navigation__item")]/div[contains(@class, "app-navigation-entry")][.//*[contains(@class, "app-navigation-entry__name")][normalize-space() = "${name}"]]`)
+		.filter({ visible: true })
+		.first()
+}
+
 // Opens the folder tree in the navigation of Files down to the folders, one after the
 // other; Files remembers what is open.
 async function expandFolderTree(page, folders) {
 	for (const name of [L.nextcloud('Folder tree'), ...folders]) {
-		const entry = page.locator(`xpath=//li[contains(@class, "files-navigation__item")]/div[contains(@class, "app-navigation-entry")][.//*[contains(@class, "app-navigation-entry__name")][normalize-space() = "${name}"]]`)
-			.filter({ visible: true })
-			.first()
+		const entry = folderTreeEntry(page, name)
 		if ((await entry.locator('a').first().getAttribute('aria-expanded')) !== 'true') {
 			await entry.locator('button.icon-collapse').click()
 		}
@@ -274,28 +285,155 @@ async function shot(page, locator, margin = 16) {
 	})
 }
 
+// Shows the page in a theme of Nextcloud, light or dark, as a browser in that color scheme
+// would: the styles follow the color scheme at once, and the avatars, which Nextcloud draws
+// for each theme and the page chose as it loaded, get the picture of the theme. It returns
+// once the page has drawn the theme: Chromium draws the background of Nextcloud anew a moment
+// later, and a picture of that moment shows its corners black.
+async function showTheme(page, theme) {
+	await page.emulateMedia({ colorScheme: theme })
+	await page.evaluate((dark) => {
+		const avatar = /(\/avatar\/[^/?\s]+\/\d+)(?:\/dark)?/g
+		for (const image of document.querySelectorAll('img[src*="/avatar/"]')) {
+			for (const name of ['src', 'srcset']) {
+				const value = image.getAttribute(name)
+				const themed = value?.replace(avatar, dark ? '$1/dark' : '$1')
+				if (value !== null && themed !== value) {
+					image.setAttribute(name, themed)
+				}
+			}
+		}
+	}, theme === 'dark')
+	await page.evaluate(() => new Promise((resolve) => {
+		requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 150)))
+	}))
+}
+
+// Draws the caption of an animation at the bottom of the window, in the middle of the content
+// of the app, beside its navigation, in the colors of the theme that the page shows, or takes
+// it away for null. It runs in the page, so it names nothing outside of itself.
+function drawCaption(text) {
+	let caption = document.getElementById('screenshot-caption')
+	if (text === null) {
+		caption?.remove()
+		return
+	}
+	if (caption === null) {
+		caption = document.createElement('div')
+		caption.id = 'screenshot-caption'
+		Object.assign(caption.style, {
+			position: 'fixed',
+			bottom: '32px',
+			transform: 'translateX(-50%)',
+			zIndex: '2147483646',
+			boxSizing: 'border-box',
+			width: 'max-content',
+			maxWidth: '860px',
+			padding: '14px 22px',
+			borderRadius: '14px',
+			border: '2px solid var(--color-primary-element)',
+			background: 'var(--color-main-background)',
+			color: 'var(--color-main-text)',
+			boxShadow: '0 6px 24px var(--color-box-shadow)',
+			font: '600 18px/1.45 var(--font-face)',
+			textAlign: 'center',
+			pointerEvents: 'none',
+		})
+		document.body.append(caption)
+	}
+	const content = (document.querySelector('#app-content-vue') ?? document.querySelector('#app-content'))?.getBoundingClientRect()
+	const left = content === undefined ? 0 : content.left
+	const width = content === undefined ? window.innerWidth : content.width
+	caption.style.left = `${Math.round(left + width / 2)}px`
+	caption.style.maxWidth = `${Math.min(860, Math.round(width) - 48)}px`
+	caption.textContent = text
+}
+
+// Saves the GIFs of an animation, one for each of its themes: NAME.gif in the light theme,
+// NAME-dark.gif in the dark one.
+function saveAnimation(name, animation) {
+	for (const theme of animation.themes) {
+		save(`${IMAGES}/${name}${theme === THEMES[0] ? '' : `-${theme}`}.gif`, animation.encode(theme))
+	}
+}
+
 // Records the frames of a GIF: each a picture of the page with how long it shows. A
-// drawn pointer moves to what is clicked, since a picture of the page has none.
+// drawn pointer moves to what is clicked, since a picture of the page has none, and a
+// caption says what happens where no picture shows it, such as in Paperless.
+//
+// One recording makes a GIF for each theme: the page shows the first theme, and each frame
+// is taken in every theme in turn (showTheme), so that a story that changes the app, such as
+// the first synchronization, needs to happen only once.
 //
 // The frames are the same on every run: each shows the page with its transitions at their
 // end, the animation waits for the server without frames, and a scroll is drawn in fixed
 // steps (glide). A frame taken at a moment in time would catch a page that is still busy or
 // scrolling at another place on each run, as fast as the machine and the server are.
 class Animation {
-	constructor(page) {
+	constructor(page, themes = THEMES) {
 		this.page = page
-		this.frames = []
+		this.themes = themes
+		this.frames = Object.fromEntries(themes.map((theme) => [theme, []]))
 		this.position = { x: VIEWPORT.width * 0.6, y: VIEWPORT.height * 0.55 }
+		this.text = null
 	}
 
+	// Takes the page as it shows now in every theme: first in the one that it shows, then in
+	// each other one, and back.
 	async frame(delay = 80) {
-		const { width, height, data } = PNG.sync.read(await picture(this.page))
-		const last = this.frames.at(-1)
-		if (last !== undefined && last.data.equals(data)) {
-			last.delay += delay
-		} else {
-			this.frames.push({ width, height, data, delay })
+		await this.page.evaluate(drawCaption, this.text)
+		for (const [number, theme] of this.themes.entries()) {
+			if (number > 0) {
+				await showTheme(this.page, theme)
+			}
+			const { width, height, data } = PNG.sync.read(await this.drawn(theme))
+			const frames = this.frames[theme]
+			const last = frames.at(-1)
+			if (last !== undefined && last.data.equals(data)) {
+				last.delay += delay
+			} else {
+				frames.push({ width, height, data, delay })
+			}
 		}
+		if (this.themes.length > 1) {
+			await showTheme(this.page, this.themes[0])
+		}
+	}
+
+	// The picture of the page in a theme that it shows, without black corners on the panel of
+	// Nextcloud, which Chromium draws now and then after a change of the theme and which stay
+	// until it draws them anew: it does, when the theme changes back and forth.
+	async drawn(theme) {
+		const other = this.themes.find((name) => name !== theme) ?? theme
+		const panel = await this.page.evaluate(() => {
+			const { left, top, right, bottom } = (document.querySelector('#content') ?? document.querySelector('#content-vue')).getBoundingClientRect()
+			return { left, top, right, bottom }
+		})
+		let shown = await picture(this.page)
+		for (let look = 0; look < 10 && blackCorners(PNG.sync.read(shown), panel); look++) {
+			console.warn(`Chromium drew the corners of the panel black in the ${theme} theme; taking the frame again.`)
+			await showTheme(this.page, other)
+			await showTheme(this.page, theme)
+			shown = await picture(this.page)
+		}
+		return shown
+	}
+
+	// Shows a caption at the bottom of the window from the next frame on, or none for null.
+	caption(text) {
+		this.text = text
+	}
+
+	// A picture of the page as the last frame shows it in the first theme, with its caption but
+	// without the pointer, for a screenshot of the App Store.
+	async still() {
+		const pointer = (visibility) => this.page.evaluate((visibility) => {
+			document.getElementById('screenshot-pointer')?.style.setProperty('visibility', visibility)
+		}, visibility)
+		await pointer('hidden')
+		const shown = await this.drawn(this.themes[0])
+		await pointer('visible')
+		return shown
 	}
 
 	async hold(milliseconds) {
@@ -320,8 +458,10 @@ class Animation {
 
 	// Frames of the scroll from where mark() found the page to where it stands once it stands
 	// still, in steps of the same easing as the pointer: the page scrolls smoothly on its own,
-	// as when it shows a report, at a speed that differs from run to run.
-	async glide(steps = 8) {
+	// as when it shows a report, at a speed that differs from run to run. A scroll changes every
+	// pixel of a frame, and three steps keep the animation below the 1 MB that
+	// screenshots.test.mjs allows.
+	async glide(steps = 3) {
 		await standStill(this.page)
 		await this.page.evaluate(() => {
 			for (const scrolled of window.screenshotScrolling) {
@@ -384,25 +524,33 @@ class Animation {
 		await locator.click()
 	}
 
-	// One palette for every frame, from a sample of all of them, so that no color
-	// flickers between frames; every frame after the first draws only what changed.
-	encode() {
-		const { width, height } = this.frames[0]
+	// The GIF of a theme. One palette for every frame, from a sample of all of them, so that
+	// no color flickers between frames; every frame after the first draws only what changed.
+	// White keeps its exact color: the paper of a document in the viewer is white also in the
+	// dark theme, where the sample has too few white pixels for a color of its own and would
+	// tint the page.
+	encode(theme = this.themes[0]) {
+		const frames = this.frames[theme]
+		const { width, height } = frames[0]
 		const pixels = width * height
-		const stride = Math.max(1, Math.floor((this.frames.length * pixels) / 1_000_000))
-		const sample = new Uint8Array(Math.ceil(pixels / stride) * 4 * this.frames.length)
+		const stride = Math.max(1, Math.floor((frames.length * pixels) / 1_000_000))
+		const sample = new Uint8Array(Math.ceil(pixels / stride) * 4 * frames.length)
 		let offset = 0
-		for (const frame of this.frames) {
+		for (const frame of frames) {
 			for (let pixel = 0; pixel < pixels; pixel += stride) {
 				sample.set(frame.data.subarray(pixel * 4, pixel * 4 + 4), offset)
 				offset += 4
 			}
 		}
-		const palette = quantize(sample.slice(0, offset), 255)
+		const white = ([red, green, blue]) => red === 255 && green === 255 && blue === 255
+		let palette = quantize(sample.slice(0, offset), 255)
+		if (!palette.some(white)) {
+			palette = [...quantize(sample.slice(0, offset), 254), [255, 255, 255]]
+		}
 		const transparent = palette.length
 		const gif = GIFEncoder()
 		let previous = null
-		for (const [number, frame] of this.frames.entries()) {
+		for (const [number, frame] of frames.entries()) {
 			const index = applyPalette(new Uint8Array(frame.data), palette)
 			const changes = previous === null ? index : index.map((color, pixel) => (color === previous[pixel] ? transparent : color))
 			gif.writeFrame(changes, width, height, {
@@ -467,7 +615,7 @@ try {
 		await page.locator('#paperless-sync-settings').evaluate((element) => element.scrollIntoView({ behavior: 'instant', block: 'start' }))
 		await animation.glide()
 		await animation.hold(3500)
-		save(`${IMAGES}/dry-run.gif`, animation.encode())
+		saveAnimation('dry-run', animation)
 		await context.close()
 	}
 
@@ -581,7 +729,7 @@ try {
 		await animation.until(page.locator('.viewer').waitFor())
 		await animation.until(page.waitForTimeout(1500))
 		await animation.hold(3000)
-		save(`${IMAGES}/archive.gif`, animation.encode())
+		saveAnimation('archive', animation)
 		await context.close()
 	}
 
@@ -737,6 +885,137 @@ try {
 		await page.locator('#paperless-sync-errors').waitFor({ state: 'visible' })
 		await settle(page)
 		save(`${IMAGES}/status-error-${theme}.png`, await shot(page, page.locator('#paperless-sync-status')))
+		await context.close()
+	}
+
+	// A week later, without the document that Paperless doesn't hand out. Each run of this part
+	// is one of Synchronize now, in a window of its own that no picture shows.
+	await control('scenario/showcase-update')
+	const synchronize = async (moment) => {
+		story.to(moment)
+		const { context, page } = await open(browser, admin, 'light', SETTINGS)
+		try {
+			await page.locator('#paperless-sync-settings').waitFor()
+			page.once('dialog', (dialog) => dialog.accept())
+			await page.locator('#paperless-sync-run').click()
+			await page.locator('#paperless-sync-message', { hasText: L.t('Synchronization completed.') }).waitFor(QUEUED_RUN)
+		} finally {
+			await context.close()
+		}
+	}
+	// A folder or a file in the list of Files by its name, and a folder in the folder tree of the
+	// navigation, which shows each folder of the archive at one place, where the path above the
+	// list folds away the folders that don't fit.
+	const row = (page, name) => page.locator(`[data-cy-files-list-row-name="${name}"] [data-cy-files-list-row-name-link]`)
+	const tree = (page, name) => folderTreeEntry(page, name).locator('a').first()
+	// Opens a folder in the window of an animation with a click, and waits until Files shows
+	// what it holds. After a run that moved folders, Files shows them anew (fresh), as it does
+	// when it opens: its folder tree would still show the folders as they were.
+	const enter = async (animation, page, link, shown, fresh = false) => {
+		await animation.click(link)
+		if (fresh) {
+			await animation.until(page.waitForLoadState('networkidle'))
+			await animation.until(page.reload())
+		}
+		await animation.until(shown.waitFor())
+		await animation.until(settle(page))
+		await animation.hold(900)
+	}
+
+	// The inbox: two scans arrive in the folder Inbox, the next runs send them to Paperless, which
+	// imports the first, and the second, which Paperless couldn't import, waits in Failed imports
+	// next to the reason. The App Store shows the scans as they arrive.
+	{
+		const inbox = `${L.base}/${L.inbox}`
+		const { context, page } = await open(browser, owner, 'light', files(`/${inbox}`))
+		await page.locator('[data-cy-files-content-breadcrumbs]').waitFor()
+		await expandFolderTree(page, L.base.split('/'))
+		const animation = new Animation(page)
+		await animation.hold(1200)
+		animation.caption(L.captions.inboxArrive)
+		await animation.until(upload(`${inbox}/${SCANS.imported}`, '%PDF-1.4 Synthetic letter of an insurance, scanned for the screenshots.\n'))
+		await animation.until(upload(`${inbox}/${SCANS.failed}`, '%PDF-1.4 Synthetic damaged page, scanned for the screenshots.\n'))
+		await animation.until(page.reload())
+		await animation.until(row(page, SCANS.failed).waitFor())
+		await animation.until(settle(page))
+		await animation.hold(3500)
+		saveScreenshot('04-inbox', await animation.still())
+		animation.caption(L.captions.inboxRun)
+		await animation.hold(800)
+		// The first run uploads both, and the next one follows their tasks to their ends.
+		await animation.until(synchronize('2026-10-25T08:20:00+02:00'))
+		await animation.until(control(`task-of/${SCANS.imported}/success`))
+		await animation.until(control(`task-of/${SCANS.failed}/failure`))
+		await animation.until(synchronize('2026-10-25T08:25:00+02:00'))
+		await animation.until(page.reload())
+		await animation.until(page.locator('[data-cy-files-content-breadcrumbs]').waitFor())
+		await animation.until(settle(page))
+		await animation.hold(3000)
+		animation.caption(L.captions.inboxFailed)
+		await enter(animation, page, tree(page, L.failed), row(page, `${SCANS.failed}.error.txt`))
+		await animation.hold(4000)
+		saveAnimation('inbox', animation)
+		await context.close()
+	}
+
+	// A move: in Paperless, the credit card terms become a contract with a new title, and the
+	// next run moves their copy from the folder Letter of Example Bank to Contract, with its new
+	// name.
+	{
+		const bank = `${ARCHIVE}/Example Bank`
+		const { context, page } = await open(browser, owner, 'light', files(`${bank}/Letter/2026`))
+		await row(page, '2026-10-07 - Credit card terms [P190].pdf').waitFor()
+		await expandFolderTree(page, [...L.base.split('/'), L.archive])
+		const animation = new Animation(page)
+		animation.caption(L.captions.moveChange)
+		await animation.hold(3500)
+		await control('scenario/showcase-moved')
+		await animation.until(synchronize('2026-10-25T08:30:00+02:00'))
+		animation.caption(L.captions.moveRun)
+		await animation.hold(1500)
+		await enter(animation, page, tree(page, 'Example Bank'), row(page, 'Contract'), true)
+		await enter(animation, page, row(page, 'Contract'), row(page, '2026'))
+		await enter(animation, page, row(page, '2026'), row(page, '2026-10-07 - Credit card agreement [P190].pdf'))
+		await animation.hold(3500)
+		saveAnimation('move', animation)
+		await context.close()
+	}
+
+	// The trash: in Paperless, the electricity bill of March goes to the trash, and the next run
+	// moves its copy to the deleted folder, below the day on which it went to the trash, in the
+	// folders that it had in the archive; restored in Paperless, it comes back. The App Store
+	// shows the copy in the deleted folder.
+	{
+		const bills = `${ARCHIVE}/City Utilities/Invoice/2026`
+		const march = '2026-03-31 - Electricity bill March [P140].pdf'
+		const { context, page } = await open(browser, owner, 'light', files(bills))
+		await row(page, march).waitFor()
+		await expandFolderTree(page, [...L.base.split('/'), L.archive])
+		const animation = new Animation(page)
+		animation.caption(L.captions.trashChange)
+		await animation.hold(3500)
+		await control('scenario/showcase-trashed')
+		await animation.until(synchronize('2026-10-25T08:35:00+02:00'))
+		await animation.until(page.reload())
+		await animation.until(row(page, '2026-06-30 - Electricity bill June [P141].pdf').waitFor())
+		await animation.until(settle(page))
+		animation.caption(L.captions.trashRun)
+		await animation.hold(2000)
+		await enter(animation, page, tree(page, L.deleted), row(page, '2026-10-25'))
+		for (const [folder, next] of [['2026-10-25', 'City Utilities'], ['City Utilities', 'Invoice'], ['Invoice', '2026'], ['2026', march]]) {
+			await enter(animation, page, row(page, folder), row(page, next))
+		}
+		await animation.hold(3500)
+		saveScreenshot('05-trash', await animation.still())
+		animation.caption(L.captions.trashRestore)
+		await animation.hold(800)
+		await control('scenario/showcase-restored')
+		await animation.until(synchronize('2026-10-25T08:40:00+02:00'))
+		await animation.until(page.goto(files(bills)))
+		await animation.until(row(page, march).waitFor())
+		await animation.until(settle(page))
+		await animation.hold(4000)
+		saveAnimation('trash', animation)
 		await context.close()
 	}
 } finally {

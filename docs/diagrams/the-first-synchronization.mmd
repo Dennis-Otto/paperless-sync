@@ -1,0 +1,35 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: The first synchronization
+    accDescr: With the connection saved and synchronization still off, a dry-run lists what the first run would write, and Getting started estimates how long the first synchronization takes. Then scheduled synchronization is turned on and saved. Nextcloud's cron starts the background job of the app every five minutes at most, and once the interval has passed, a run exports the documents that Paperless added last first, up to the batch size, 100 by default; its report counts the others as skipped. While documents are left, the next run takes the next batch after the interval: with the defaults, 5,000 documents take 50 runs, four hours or more. Then the archive is complete, and each later run changes only what changed in Paperless. Instead, a large archive can be imported in one go on the server, with the schedule still off, by occ paperless_sync:run --unlimited. Your steps are orange, the questions indigo, the runs blue and the complete archive green.
+
+    dryrun["Run dry-run: what the<br>first run would write;<br>Getting started estimates<br>how long it takes"]
+    schedule["Turn on scheduled<br>synchronization<br>and save"]
+    occ["Or, with the schedule off:<br>occ paperless_sync:run<br>--unlimited imports<br>everything in one go"]
+    cron{"Nextcloud's cron, every<br>5 minutes at most:<br>has the interval<br>passed?"}
+    run["A run exports the documents<br>that Paperless added last<br>first, up to the batch size,<br>100 by default, and counts<br>the others as skipped"]
+    left{"Documents<br>left?"}
+    complete["✅ The archive is complete:<br>each later run changes only<br>what changed in Paperless"]
+
+    dryrun --> schedule
+    dryrun -.-> occ
+    schedule --> cron
+    cron -- "no: the next<br>background job" --> cron
+    cron -- "yes" --> run
+    run --> left
+    left -- "yes: 5,000 documents<br>take 50 runs, four hours<br>or more by default" --> cron
+    left -- "no" --> complete
+    occ --> complete
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class dryrun,schedule,occ yours
+    class cron,left check
+    class run nextcloud
+    class complete done

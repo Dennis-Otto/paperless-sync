@@ -8,19 +8,41 @@
 // The documents of Paperless stay those of showcase.py, in English, in both.
 
 // What the story of the pictures names in each language: the files that someone puts into
-// the inbox and into the folders of the administrator, and the tags of the rule of Flow.
+// the inbox and into the folders of the administrator, the tags of the rule of Flow, and the
+// captions of the animations of the inbox, of a move and of the trash, which say what happens
+// where no picture shows it, in Paperless and in a run.
 const STORIES = {
 	en: {
 		receipt: 'Receipts/Hardware store.pdf',
 		letter: 'Scans/Letter from the bank.pdf',
 		flowTag: 'To Paperless',
 		flowTags: ['Letters', 'Bank'],
+		captions: {
+			inboxArrive: 'Two scans arrive in the folder Inbox, such as from the Nextcloud app on a phone',
+			inboxRun: 'The next runs send both to Paperless: a scan leaves the inbox once Paperless has finished its import',
+			inboxFailed: 'Paperless could not import the second scan: it waits in the folder Failed imports, next to a text file with the reason',
+			moveChange: 'In Paperless, Credit card terms becomes a document of the type Contract, with the new title Credit card agreement',
+			moveRun: 'The next run moves the copy into the folder of its new type and gives it its new name',
+			trashChange: 'In Paperless, Electricity bill March goes to the trash',
+			trashRun: 'The next run moves its copy into _Deleted, below the day on which it went to the trash',
+			trashRestore: 'Restored in Paperless, the bill comes back to its place in the archive with the next run',
+		},
 	},
 	de: {
 		receipt: 'Belege/Baumarkt.pdf',
 		letter: 'Scans/Brief der Bank.pdf',
 		flowTag: 'An Paperless',
 		flowTags: ['Briefe', 'Bank'],
+		captions: {
+			inboxArrive: 'Zwei Scans kommen im Ordner Eingang an, etwa aus der Nextcloud-App auf dem Handy',
+			inboxRun: 'Die nächsten Läufe schicken beide an Paperless: Ein Scan verlässt den Eingang, sobald Paperless seinen Import beendet hat',
+			inboxFailed: 'Den zweiten Scan konnte Paperless nicht importieren: Er wartet im Ordner Fehler, neben einer Textdatei mit dem Grund',
+			moveChange: 'In Paperless wird Credit card terms zu einem Dokument vom Typ Contract, mit dem neuen Titel Credit card agreement',
+			moveRun: 'Der nächste Lauf verschiebt die Kopie in den Ordner ihres neuen Typs und gibt ihr den neuen Namen',
+			trashChange: 'In Paperless kommt Electricity bill March in den Papierkorb',
+			trashRun: 'Der nächste Lauf verschiebt ihre Kopie nach _Gelöscht, unter den Tag, an dem sie in den Papierkorb kam',
+			trashRestore: 'In Paperless wiederhergestellt, kehrt die Rechnung mit dem nächsten Lauf an ihren Platz im Archiv zurück',
+		},
 	},
 }
 
@@ -69,6 +91,8 @@ export function pictureLanguage(code, catalog = {}) {
 		base: t('Documents/Paperless'),
 		archive: t('Archive'),
 		inbox: t('Inbox'),
+		failed: t('Failed imports'),
+		deleted: t('_Deleted'),
 		...story,
 	}
 }

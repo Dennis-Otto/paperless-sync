@@ -52,6 +52,15 @@ Every copy that the app deletes in Nextcloud, and every folder that it empties, 
 
 Only the target user sees that trash bin, under *Deleted files* in *Files*; with per-user ownership, each user has the copies of their own documents in theirs. Nextcloud empties it after its retention, 30 days by default, or earlier when the quota of the user needs the space. The [deletion safety](guide.md#deletion-safety) describes when the app deletes at all.
 
+### Which deletion settings do I need?
+
+It depends on how long the archive should keep a copy that Paperless no longer has. The defaults keep every copy: a document in the trash of Paperless moves to `_Deleted`, and no copy is ever deleted. Three questions lead to the settings of *Trash and deletion safety*, and the [guide](guide.md#deletion-safety) explains each:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/which-deletion-settings-do-i-need.dark.svg">
+  <img src="images/diagrams/which-deletion-settings-do-i-need.svg" alt="Which deletion settings you need: The section Trash and deletion safety answers three questions. First, where the copy of a document goes that went to the trash of Paperless: with the Paperless trash behavior Move to deleted folder, the default, it moves into _Deleted, below the day on which the document went to the trash, and comes back when the document is restored; with Keep archive file in place, it stays where it is. Second, whether the copy goes too once Paperless deleted the document for good: leave Delete the Nextcloud copy after Paperless deletes the document for good off, the default, and the copy stays; turn it on, and the copy goes to the trash bin of its user in Nextcloud after N complete scans without the document, where N is the setting Required consecutive missing scans, three by default. Third, with that switch on, whether the copy is deleted too of a document that disappears while the trash doesn't list it, such as one in the trash of another owner, which the account of the app can't see: turn on Also delete copies of documents that disappeared without passing the Paperless trash, and after N complete scans the copy goes to the trash bin of its user, without _Deleted, even if Paperless can still restore the document; leave it off, the default, and after N complete scans the copy moves to _Deleted, or stays in place with Keep archive file in place, and is not deleted. The questions are indigo, the safe defaults green, the other way to keep copies blue and the switches that delete copies amber.">
+</picture>
+
 ### Can I change the path template later?
 
 Yes. The next runs move every file to the path of the new template, within the batch size, without downloading it again, so a large archive shows the old and the new layout side by side for a while: 5,000 documents take 50 runs with a batch of 100. The preview under the template shows the new paths of the newest documents while you type, and a dry-run before the save tries the new template and lists a move for every file. The app removes the folders that the moves leave empty when *Remove empty folders after moves and deletions* is on. A new archive or base folder moves the files of the archive as well, but not the copies in the deleted folder, and the old folders stay behind; remove them once the moves are done. Share the archive folder, which the template doesn't change, rather than the folders that it builds: a folder that a move empties disappears with its shares. A share of the base folder would include the inbox and error folders as well.
@@ -59,6 +68,11 @@ Yes. The next runs move every file to the path of the new template, within the b
 ### Can several users see the archive?
 
 Yes, through Nextcloud: the target user shares the folder of the archive with them, or with a group of them, as [decision 0002](decisions/0002-the-filesystem-api-of-nextcloud.md) intends. Share it read-only, since nothing there goes back to Paperless, and a run may replace an edited copy or write a deleted one anew; share the inbox folder only with those who may send documents to Paperless. With [per-user ownership](guide.md#per-user-ownership), each user gets an archive of their own instead, with the documents that their user of Paperless owns.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/sharing-the-archive-with-your-household.dark.svg">
+  <img src="images/diagrams/sharing-the-archive-with-your-household.svg" alt="Sharing the archive with your household: Every run writes the documents of the household from Paperless-ngx into the folder Archive of the target user. The target user shares the folder Archive itself, which the path template doesn't change, with the group of the household in Nextcloud, View only, so that each member finds the documents in Files on the web, with the desktop client and in the Nextcloud app on the phone. The folder Inbox is shared with those who may send documents, with the permission to edit, so that they scan or save into it, and the next run sends the files to Paperless. Someone without an account, such as a tax adviser, gets a share link to a folder, View only, with an expiration date and a password. Instead of one shared archive, per-user ownership gives each member an archive of their own, with the documents that they own in Paperless. Paperless-ngx is green, the folders of Nextcloud blue, the people orange and the other way indigo.">
+</picture>
 
 ### Can I find the copies by their tags?
 
@@ -87,6 +101,11 @@ Yes. The app writes through the file API of Nextcloud, which hides where the fil
 About the number of documents divided by the batch size, times the interval: with the defaults, a batch of 100 and 5 minutes, 5,000 documents take 50 runs, four hours or more. Until the first run has succeeded, [Getting started](guide.md#getting-started-in-the-settings) in the settings makes this estimate for your archive after a dry-run. A larger batch, up to 1,000, makes it faster; then every run downloads more at once. Each run takes the documents that Paperless added last first, so new documents don't wait behind the backlog, and its report counts the documents that wait for the next run as skipped. Every later run changes only what changed in Paperless.
 
 To import a large archive in one go, leave scheduled synchronization off and run `occ paperless_sync:run --unlimited` on the server: it makes every change that is due, as long as it takes, and the [command line](guide.md#command-line) explains the rest.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/the-first-synchronization.dark.svg">
+  <img src="images/diagrams/the-first-synchronization.svg" alt="The first synchronization: With the connection saved and synchronization still off, a dry-run lists what the first run would write, and Getting started estimates how long the first synchronization takes. Then scheduled synchronization is turned on and saved. Nextcloud's cron starts the background job of the app every five minutes at most, and once the interval has passed, a run exports the documents that Paperless added last first, up to the batch size, 100 by default; its report counts the others as skipped. While documents are left, the next run takes the next batch after the interval: with the defaults, 5,000 documents take 50 runs, four hours or more. Then the archive is complete, and each later run changes only what changed in Paperless. Instead, a large archive can be imported in one go on the server, with the schedule still off, by occ paperless_sync:run --unlimited. Your steps are orange, the questions indigo, the runs blue and the complete archive green.">
+</picture>
 
 ### How often does it run?
 

@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, test } from 'node:test'
-import { changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
+import { blackCorners, changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
 
 const AT_10_20 = Date.parse(STORY_START) / 1000
 const AT_10_21 = AT_10_20 + 60
@@ -271,4 +271,43 @@ test('every route.fetch of the checks in the browser takes another connection wh
 	for (const { name, options } of calls) {
 		assert.match(options, /maxRetries/, `${name} calls route.fetch(${options}) without maxRetries.`)
 	}
+})
+
+// A picture of a white page with black squares: [x, y, size].
+function pictureWith(width, height, squares) {
+	const data = new Uint8Array(width * height * 4).fill(255)
+	for (const [x0, y0, size] of squares) {
+		for (let y = y0; y < y0 + size; y++) {
+			for (let x = x0; x < x0 + size; x++) {
+				data.fill(0, (y * width + x) * 4, (y * width + x) * 4 + 3)
+			}
+		}
+	}
+	return { width, height, data }
+}
+
+const PANEL = { left: 8, top: 50, right: 92, bottom: 110 }
+
+test('a picture whose panel has clean corners passes', () => {
+	assert.equal(blackCorners(pictureWith(100, 120, []), PANEL), false)
+})
+
+test('a black corner of the panel is found, at each of its four corners', () => {
+	for (const corner of [[8, 50], [86, 50], [8, 104], [86, 104]]) {
+		assert.equal(blackCorners(pictureWith(100, 120, [[...corner, 6]]), PANEL), true, `the corner at ${corner}`)
+	}
+})
+
+test('a box with a fraction of a pixel is rounded to the pixels of the picture', () => {
+	assert.equal(blackCorners(pictureWith(100, 120, [[86, 50, 6]]), { ...PANEL, right: 91.6, top: 50.4 }), true)
+})
+
+test('a few black pixels in a corner are a part of the page, and black in its middle counts for nothing', () => {
+	assert.equal(blackCorners(pictureWith(100, 120, [[8, 104, 2]]), PANEL), false)
+	assert.equal(blackCorners(pictureWith(100, 120, [[40, 70, 20]]), PANEL), false)
+})
+
+test('a box that reaches over the picture looks only at the pixels that the picture has', () => {
+	assert.equal(blackCorners(pictureWith(100, 120, []), { left: -8, top: -8, right: 108, bottom: 128 }), false)
+	assert.equal(blackCorners(pictureWith(100, 120, [[0, 0, 6]]), { left: -8, top: -8, right: 108, bottom: 128 }), true)
 })
