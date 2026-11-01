@@ -1,0 +1,105 @@
+/**
+ * SPDX-FileCopyrightText: 2026 Dennis Otto
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+/* The note above the list of Files in a folder of the app, from js/files.js. Nextcloud styles
+   every button with button:not(.button-vue, [class^=vs__]), and more on hover, which wins over a
+   single class: without two classes, its padding squeezes the icon of the button out of sight. */
+.paperless-sync-folder-note {
+	display: flex;
+	gap: calc(2 * var(--default-grid-baseline));
+	align-items: flex-start;
+	box-sizing: border-box;
+	margin: var(--default-grid-baseline) calc(2 * var(--default-grid-baseline));
+	padding: calc(2 * var(--default-grid-baseline)) calc(3 * var(--default-grid-baseline));
+	border-inline-start: var(--default-grid-baseline) solid var(--color-info);
+	border-radius: var(--border-radius-element, var(--border-radius-large));
+	background-color: var(--color-background-hover);
+	color: var(--color-main-text);
+	line-height: 1.5;
+}
+
+.paperless-sync-folder-note__icon {
+	flex: 0 0 20px;
+	width: 20px;
+	height: 20px;
+	margin-block-start: 2px;
+	color: var(--color-text-maxcontrast);
+}
+
+.paperless-sync-folder-note__text {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.paperless-sync-folder-note__text p {
+	margin: 0;
+}
+
+.paperless-sync-folder-note__text a {
+	display: inline-block;
+	color: inherit;
+	font-weight: bold;
+	text-decoration: underline;
+}
+
+.paperless-sync-folder-note__text a:focus-visible,
+.paperless-sync-folder-note .paperless-sync-folder-note__dismiss:focus-visible,
+.paperless-sync-folder-question .paperless-sync-folder-question__button:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
+}
+
+.paperless-sync-folder-note .paperless-sync-folder-note__dismiss {
+	display: flex;
+	flex: 0 0 var(--default-clickable-area);
+	align-items: center;
+	justify-content: center;
+	width: var(--default-clickable-area);
+	min-width: var(--default-clickable-area);
+	height: var(--default-clickable-area);
+	min-height: var(--default-clickable-area);
+	margin: calc(-1 * var(--default-grid-baseline));
+	padding: 0;
+	border: none;
+	border-radius: var(--border-radius-element, var(--border-radius-large));
+	background: transparent;
+	color: var(--color-main-text);
+	cursor: pointer;
+}
+
+.paperless-sync-folder-note .paperless-sync-folder-note__dismiss:not(:disabled):hover {
+	background-color: var(--color-background-dark);
+}
+
+.paperless-sync-folder-note .paperless-sync-folder-note__dismiss svg {
+	width: 20px;
+	height: 20px;
+}
+
+/* What is left of a note that the user hid: the question that brings it back. */
+.paperless-sync-folder-question {
+	display: flex;
+	justify-content: flex-end;
+	margin: 0 calc(2 * var(--default-grid-baseline));
+}
+
+.paperless-sync-folder-question .paperless-sync-folder-question__button {
+	width: auto;
+	min-height: var(--default-clickable-area);
+	margin: 0;
+	padding: 0 calc(2 * var(--default-grid-baseline));
+	border: none;
+	border-radius: var(--border-radius-element, var(--border-radius-large));
+	background: transparent;
+	color: var(--color-main-text);
+	font-weight: normal;
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.paperless-sync-folder-question .paperless-sync-folder-question__button:not(:disabled):hover {
+	background-color: var(--color-background-hover);
+}

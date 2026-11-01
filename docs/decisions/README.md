@@ -39,3 +39,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0031](0031-the-inbox-sets-aside-videos-programs-and-archives.md) | The inbox sets aside videos, programs and archives by their extensions, and leaves every other file to Paperless | accepted |
 | [0032](0032-spend-the-runners-of-the-end-to-end-tests-on-the-tests.md) | Spend the runners of the end-to-end tests on the tests: health checks that check often only while a service starts, traces without snapshots in a first attempt, no more runs than processors, the data in memory, and a split by what a run costs | accepted |
 | [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md) | Each user also gets a copy of the documents that Paperless shares with them | accepted |
+| [0034](0034-a-note-in-files-says-what-a-folder-of-the-app-does.md) | A note in Files says what a folder of the app does, from one answer for each user | accepted |

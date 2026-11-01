@@ -154,6 +154,13 @@ A share of a copy stays with it when it moves after a change in Paperless. A sha
 
 The archive is a mirror of Paperless: nothing that you do with a copy in Nextcloud changes Paperless. Change a document in Paperless, and the next run brings the change to its copy.
 
+Files says so too: a note above the list in the archive and below it, also in an archive that someone shares with you, says that the folder is a mirror of Paperless and when it was last updated. In the inbox, it says when the files go to Paperless, and in `Failed imports` that the reason of each failure is in the `.error.txt` next to the file. Hide a note with its button once you know it; *What is this folder?* brings it back.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/folder-note-dark.png">
+  <img alt="Nextcloud Files in the folder Archive with a note above the list: Mirror of Paperless, updated 5 minutes ago. Changes here don't reach Paperless, and the next runs may undo them. Edit the document in Paperless. A link opens Paperless, and a button hides the note. Below it, the folders of the correspondents" src="images/folder-note-light.png">
+</picture>
+
 When a document gets a new type and a new title in Paperless, for example, the next run moves its copy and renames it:
 
 <picture>

@@ -81,6 +81,9 @@
           - lib/Listener/**
           - lib/Migration/Version000140Date20261018000000.php
           - js/files.js
+          - css/files.css
+          - lib/Service/FolderInfo.php
+          - lib/Controller/FolderInfoController.php
           - js/flow.js
           - img/flow.svg
           - lib/Operation/**
@@ -90,6 +93,8 @@
           - tests/Unit/Service/FileActionsTest.php
           - tests/Unit/Service/SendServiceTest.php
           - tests/Unit/Controller/FileActionControllerTest.php
+          - tests/Unit/Service/FolderInfoTest.php
+          - tests/Unit/Controller/FolderInfoControllerTest.php
           - tests/Unit/Listener/**
           - tests/Unit/Migration/Version000140*
 "area: runs":

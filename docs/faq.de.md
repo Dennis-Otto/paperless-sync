@@ -27,7 +27,7 @@ Die Dateien des Archivs sind ein Spiegel von Paperless und mit Absicht nur zum L
 - **Synchronisierte Datei ersetzen**, der Standard: Der Lauf schreibt den Inhalt von Paperless in dieselbe Datei, sodass ihre Freigaben und Versionen bleiben. Deine Bearbeitung bleibt als frühere Version erhalten, unter *Versionen* in den Details der Datei, in jedem Lauf: *Jetzt synchronisieren* läuft als Hintergrundjob, wie ein geplanter Lauf.
 - **Überspringen und Konflikt melden:** Deine Bearbeitung bleibt, und jeder Lauf meldet einen Konflikt für das Dokument, bis du die Datei löschst oder verschiebst; solange bleibt die Kopie veraltet. Eine Kopie, die niemand bearbeitet hat, ist kein Konflikt, und der Lauf aktualisiert sie.
 
-Eine Kopie, die du umbenennst oder verschiebst, bleibt, wo du sie hingelegt hast, als eigene Datei, und der nächste Lauf schreibt das Dokument neu an seinen Pfad; eine, die du löschst, kommt auf dieselbe Weise zurück. Um eine eigene Fassung zu behalten, kopiere die Datei aus dem Archiv heraus, und bearbeite Dokumente in Paperless.
+Eine Kopie, die du umbenennst oder verschiebst, bleibt, wo du sie hingelegt hast, als eigene Datei, und der nächste Lauf schreibt das Dokument neu an seinen Pfad; eine, die du löschst, kommt auf dieselbe Weise zurück. Um eine eigene Fassung zu behalten, kopiere die Datei aus dem Archiv heraus, und bearbeite Dokumente in Paperless. Ein Hinweis über der Liste des Archivs in Dateien sagt das ebenfalls, auch denen, die es über eine Freigabe erreichen.
 
 ### Wohin gehen gelöschte Dateien?
 

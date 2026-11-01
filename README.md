@@ -113,6 +113,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - [Send to Paperless](#send-from-files) in the menu of a file or a folder in Files: the members of a group that you choose, the administrators by default, send it with the tags of the inbox, it stays where it is, and a notification tells them when Paperless has it, with a link to the new document
 - [Rules of Flow](#send-by-a-rule-of-flow) that send files on their own, such as every PDF that a member of a group uploads, with tags of their own; only the administrators make them
 - *Open in Paperless* in the menu of every copy of the archive opens its document in Paperless
+- [A note above the list](https://dennis-otto.github.io/paperless-sync/use.html#what-edits-renames-and-deletions-do) says what a folder of the app does: that the archive is a mirror, when the inbox sends its files, and where the reasons of failed imports are; also for people who reach the folder through a share
 - A file whose content Paperless has already isn't uploaded again, so Paperless-ngx 3.x makes no duplicate; the sender learns the document that has it
 
 ### Safety
@@ -180,6 +181,13 @@ Everyone who reads or sends documents does so in Nextcloud alone: in Files on th
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-menu-dark.png">
   <img alt="Nextcloud Files in the browser of a phone with the menu of the copy 2026-06-30 - Electricity bill June open, which offers Open in Paperless among the actions of Files" src="docs/images/phone-menu-light.png">
+</picture>
+
+Files itself says what each folder of the app does, for the people who reach it through a share and never read this. A note above the list says in the archive and below it that the folder is a mirror of Paperless, when it was last updated, and that changes there don't reach Paperless, with a link to Paperless; in the inbox when its files go to Paperless, with a link to the failed imports; and there that the reason of each failure is in the `.error.txt` next to the file. Each person can hide each kind of the note, and *What is this folder?* brings it back. A share of a single folder below the archive shows no note, so share the folder `Archive` itself ([decision 0034](docs/decisions/0034-a-note-in-files-says-what-a-folder-of-the-app-does.md)).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/folder-note-dark.png">
+  <img alt="Nextcloud Files in the folder Archive with a note above the list: Mirror of Paperless, updated 5 minutes ago. Changes here don't reach Paperless, and the next runs may undo them. Edit the document in Paperless. A link opens Paperless, and a button hides the note. Below it, the folders of the correspondents" src="docs/images/folder-note-light.png">
 </picture>
 
 <!-- --8<-- [start:usage] -->

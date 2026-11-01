@@ -68,6 +68,7 @@ final class LoadAdditionalScriptsListenerTest extends TestCase {
 
 	protected function tearDown(): void {
 		self::initScripts([]);
+		\OC_Util::$styles = [];
 		OC::$server = null;
 	}
 
@@ -82,6 +83,18 @@ final class LoadAdditionalScriptsListenerTest extends TestCase {
 
 		self::assertSame(['files' => ['send' => true, 'paperlessUrl' => 'https://paperless.example.test']], $this->states);
 		self::assertSame(['paperless_sync/l10n/de', 'paperless_sync/js/files'], self::initScripts());
+	}
+
+	/** The look of the note above the list of Files, which comes with the script. */
+	public function testTheStylesComeWithTheScriptAndOnlyWithIt(): void {
+		$this->listener->handle(new Event());
+		self::assertSame(['paperless_sync/files'], \OC_Util::$styles);
+
+		\OC_Util::$styles = [];
+		$this->settings['paperless_url'] = '';
+		$this->settings['send_group'] = '';
+		$this->listener->handle(new Event());
+		self::assertSame([], \OC_Util::$styles);
 	}
 
 	public function testEveryoneElseGetsTheScriptToOpenDocuments(): void {

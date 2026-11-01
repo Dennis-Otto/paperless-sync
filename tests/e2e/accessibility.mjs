@@ -4,10 +4,10 @@
 // axe-core checks the pages of the app in Chromium against WCAG 2.1 at levels A and
 // AA, in the light and the dark theme of Nextcloud, each in a window of a computer, 1280
 // CSS pixels wide, and of a phone, 320 pixels wide: the administration settings, the actions
-// of the app in the menu of Files with the messages after sending, and the form of a rule of
-// Flow. It looks only into the elements that hold the app's own markup, so what Nextcloud
+// of the app in the menu of Files with the messages after sending, the note above the list of a
+// folder of the app, and the form of a rule of Flow. It looks only into the elements that hold the app's own markup, so what Nextcloud
 // draws around them doesn't count. A serious or critical violation fails the check; the
-// others are listed. At 320 pixels, the settings, the report and the form of Flow also
+// others are listed. At 320 pixels, the settings, the report, the note and the form of Flow also
 // reflow into the window, with nothing that reaches past its edge (WCAG 1.4.10). a11y.mjs
 // judges, and the check tries it on a seeded page first. run.sh starts it in the image of
 // Playwright, inside the network of the Compose project, after npm ci of package-lock.json,
@@ -28,6 +28,22 @@ const AXE = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.mi
 const THEMES = ['light', 'dark']
 const SIZES = [['1280 px', WIDE], ['320 px', NARROW]]
 const SETTINGS = '/index.php/settings/admin/paperless_sync'
+const FOLDER_INFO = '**/apps/paperless_sync/api/v1/folder-info'
+
+// The folder of the user in Files shows the note of a kind: the answer of the app names it as that
+// folder of the app, and the page asks anew, so that each part of the check starts from it.
+async function showFolderNote(page, kind, dismissed = []) {
+	await page.unroute(FOLDER_INFO)
+	await page.route(FOLDER_INFO, (route) => route.fulfill({
+		json: {
+			folders: [{ kind, id: 0, path: '' }, { kind: 'errors', id: 0, path: 'Failed imports' }],
+			lastSuccess: Math.round(Date.now() / 1000) - 300,
+			nextRun: Math.round(Date.now() / 1000) + 300,
+			dismissed,
+		},
+	}))
+	await page.reload()
+}
 
 const FAILED_STATUS = {
 	lastStarted: 1791880000,
@@ -216,6 +232,26 @@ const PAGES = [
 			await tags.press('ArrowDown')
 			await page.locator('#paperless-sync-excluded-tags-options [aria-selected="true"]').waitFor()
 		},
+	},
+	{
+		// The note above the list of Files, in each kind of folder of the app, with its links and
+		// the button that hides it, and the question that is left of one that the user hid.
+		name: 'Note above the list of Files',
+		files: '/',
+		parts: [
+			...['archive', 'inbox', 'errors'].map((kind) => ({
+				name: `Note of the ${kind}`,
+				scope: `.paperless-sync-folder-note[data-kind="${kind}"]`,
+				reflow: true,
+				prepare: (page) => showFolderNote(page, kind),
+			})),
+			{
+				name: 'Question of a hidden note',
+				scope: '.paperless-sync-folder-question',
+				reflow: true,
+				prepare: (page) => showFolderNote(page, 'inbox', ['inbox']),
+			},
+		],
 	},
 	{
 		// The actions of the app in the menu of Files, in the folder that run.sh uploaded the

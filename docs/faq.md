@@ -27,7 +27,7 @@ The files of the archive are a mirror of Paperless, and they are read-only by in
 - **Replace synchronized file**, the default: the run writes the content of Paperless into the same file, so its shares and versions stay. Your edit remains as an earlier version, under *Versions* in the details of the file, in every run: *Synchronize now* runs as a background job, as a scheduled run does.
 - **Skip and report conflict:** your edit stays, and every run reports a conflict for the document until you delete or move the file; meanwhile, the copy stays outdated. A copy that nobody edited is no conflict, and the run updates it.
 
-A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless.
+A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless. A note above the list of the archive in Files says so as well, also to those who reach it through a share.
 
 ### Where do deleted files go?
 

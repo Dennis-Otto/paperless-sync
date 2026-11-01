@@ -213,6 +213,17 @@ final class TestStorage implements NextcloudStorageInterface {
 		return $id;
 	}
 
+	/**
+	 * Shares a folder of the user with another user, who sees it at another path, with the same ID,
+	 * as Nextcloud shows a shared folder.
+	 */
+	public function shareFolder(string $path, string $withUser, string $asPath, string $userId = self::USER): int {
+		$id = $this->findFileId($userId, $path) ?? throw new \RuntimeException('There is no folder ' . $path);
+		$this->foldersById[$withUser][$id] = $asPath;
+
+		return $id;
+	}
+
 	/** Gives the folder of the user an ID, by which nodeById() finds it. */
 	public function folderId(string $path, string $userId = self::USER): int {
 		$id = ++$this->lastFileId;

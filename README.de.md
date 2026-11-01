@@ -118,6 +118,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 - [An Paperless senden](#aus-dateien-senden) im Menü einer Datei oder eines Ordners in Dateien: Die Mitglieder einer Gruppe, die du wählst, standardmäßig die Administratoren, senden sie mit den Tags des Eingangs, sie bleibt, wo sie ist, und eine Benachrichtigung sagt ihnen, sobald Paperless sie hat, mit einem Link zum neuen Dokument
 - [Regeln von Flow](#durch-eine-regel-von-flow-senden), die Dateien von selbst senden, etwa jedes PDF, das ein Mitglied einer Gruppe hochlädt, mit eigenen Tags; nur die Administratoren legen sie an
 - *In Paperless öffnen* im Menü jeder Kopie des Archivs öffnet ihr Dokument in Paperless
+- [Ein Hinweis über der Liste](https://dennis-otto.github.io/paperless-sync/de/use.html#was-bearbeiten-umbenennen-und-löschen-bewirken) sagt, was ein Ordner der App tut: dass das Archiv ein Spiegel ist, wann der Eingang seine Dateien sendet und wo die Gründe fehlgeschlagener Importe stehen; auch für alle, die den Ordner über eine Freigabe erreichen
 - Eine Datei, deren Inhalt Paperless schon hat, wird nicht noch einmal hochgeladen, Paperless-ngx 3.x legt also kein Duplikat an; der Absender erfährt das Dokument, das ihn hat
 
 ### Sicherheit
@@ -185,6 +186,13 @@ Wer Dokumente liest oder sendet, tut das allein in Nextcloud: in Dateien im Web,
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/phone-menu-dark.png">
   <img alt="Nextcloud Dateien im Browser eines Handys mit dem geöffneten Menü der Kopie 2026-06-30 - Electricity bill June, das In Paperless öffnen unter den Aktionen von Dateien anbietet" src="docs/images/de/phone-menu-light.png">
+</picture>
+
+Dateien sagt selbst, was jeder Ordner der App tut, für alle, die ihn über eine Freigabe erreichen und das hier nie lesen. Ein Hinweis über der Liste sagt im Archiv und darunter, dass der Ordner ein Spiegel von Paperless ist, wann er zuletzt aktualisiert wurde und dass Änderungen dort Paperless nicht erreichen, mit einem Link zu Paperless; im Eingang, wann seine Dateien an Paperless gehen, mit einem Link zu den fehlgeschlagenen Importen; und dort, dass der Grund jedes Fehlers in der `.error.txt` neben der Datei steht. Jede Person kann jede Art des Hinweises ausblenden, und *Was ist das für ein Ordner?* holt ihn zurück. Die Freigabe eines einzelnen Ordners unter dem Archiv zeigt keinen Hinweis, also gib den Ordner `Archiv` selbst frei ([Entscheidung 0034](docs/decisions/0034-a-note-in-files-says-what-a-folder-of-the-app-does.md)).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/de/folder-note-dark.png">
+  <img alt="Nextcloud Dateien im Ordner Archiv mit einem Hinweis über der Liste: Spiegel von Paperless, aktualisiert vor 5 Minuten. Änderungen hier erreichen Paperless nicht, und die nächsten Läufe können sie rückgängig machen. Bearbeite das Dokument in Paperless. Ein Link öffnet Paperless, und ein Knopf blendet den Hinweis aus. Darunter die Ordner der Korrespondenten" src="docs/images/de/folder-note-light.png">
 </picture>
 
 <!-- --8<-- [start:usage] -->

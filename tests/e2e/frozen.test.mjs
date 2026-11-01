@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, test } from 'node:test'
-import { blackCorners, changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
+import { blackCorners, changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenFolderInfo, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
 
 const AT_10_20 = Date.parse(STORY_START) / 1000
 const AT_10_21 = AT_10_20 + 60
@@ -133,6 +133,10 @@ test('frozenInitialState freezes each initial state of the app once the page is 
 	assert.equal(page.inputs[2].value, '%%%')
 })
 
+test('the note above the list of Files says the same on every run, by the clock of the browser', () => {
+	assert.deepEqual(frozenFolderInfo({ dismissed: ['inbox'], lastSuccess: 7, nextRun: null }, 1_000_000_400), { dismissed: ['inbox'], lastSuccess: 1_000_000 - 300, nextRun: 1_000_000 + 600 })
+})
+
 test('every file of a list of WebDAV changed at the moment the browser got the list', () => {
 	const now = Date.parse('2026-10-24T20:00:05Z')
 	const xml = '<d:multistatus xmlns:d="DAV:"><d:response><d:prop><d:getlastmodified>Sat, 18 Oct 2026 08:21:13 GMT</d:getlastmodified>'
@@ -172,7 +176,7 @@ function context() {
 			}
 			const answer = {}
 			await route.handler({
-				request: () => ({ method: () => method }),
+				request: () => ({ method: () => method, url: () => address }),
 				fallback: () => {
 					answer.passed = 'fallback'
 				},
@@ -217,6 +221,10 @@ test('freeze() freezes the initial state, rewrites the answers of the app and th
 	assert.deepEqual(JSON.parse(ocs.body), { ocs: { data: { lastSuccess: AT_10_20 } } })
 	const routed = await browser.request('http://nextcloud/index.php/apps/paperless_sync/settings/webhook', { method: 'POST', body: '{"secret":"abc"}' })
 	assert.deepEqual(JSON.parse(routed.body), { secret: EXAMPLE_SECRET })
+	// The note above the list of Files, by the clock of the browser.
+	const note = await browser.request('http://nextcloud/index.php/apps/paperless_sync/api/v1/folder-info', { body: '{"folders":[],"lastSuccess":1800000001,"nextRun":null}' })
+	const noon = Date.parse('2026-10-24T20:00:05Z') / 1000
+	assert.deepEqual(JSON.parse(note.body), { folders: [], lastSuccess: noon - 300, nextRun: noon + 600 })
 	// An answer that is no JSON passes as the server sent it, with its decoded body.
 	const download = await browser.request('http://nextcloud/apps/paperless_sync/settings', { type: 'text/plain', body: 'plain' })
 	assert.deepEqual(download.body, Buffer.from('plain'))
