@@ -386,7 +386,7 @@ class Animation {
 			if (number > 0) {
 				await showTheme(this.page, theme)
 			}
-			const { width, height, data } = await this.drawn(theme)
+			const { width, height, data } = PNG.sync.read(await this.drawn(theme))
 			const frames = this.frames[theme]
 			const last = frames.at(-1)
 			if (last !== undefined && last.data.equals(data)) {
@@ -409,12 +409,12 @@ class Animation {
 			const { left, top, right, bottom } = (document.querySelector('#content') ?? document.querySelector('#content-vue')).getBoundingClientRect()
 			return { left, top, right, bottom }
 		})
-		let shown = PNG.sync.read(await picture(this.page))
-		for (let look = 0; look < 10 && blackCorners(shown, panel); look++) {
+		let shown = await picture(this.page)
+		for (let look = 0; look < 10 && blackCorners(PNG.sync.read(shown), panel); look++) {
 			console.warn(`Chromium drew the corners of the panel black in the ${theme} theme; taking the frame again.`)
 			await showTheme(this.page, other)
 			await showTheme(this.page, theme)
-			shown = PNG.sync.read(await picture(this.page))
+			shown = await picture(this.page)
 		}
 		return shown
 	}
@@ -431,7 +431,7 @@ class Animation {
 			document.getElementById('screenshot-pointer')?.style.setProperty('visibility', visibility)
 		}, visibility)
 		await pointer('hidden')
-		const shown = await picture(this.page)
+		const shown = await this.drawn(this.themes[0])
 		await pointer('visible')
 		return shown
 	}

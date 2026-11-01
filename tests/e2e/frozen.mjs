@@ -17,8 +17,6 @@
 // When the story of the pictures starts: the quick start, with its first dry-run.
 export const STORY_START = '2026-10-18T10:20:00+02:00'
 
-// The secret of the webhook in the pictures, as the page shows it once after its creation:
-// plainly an example, which no one takes for a real one.
 // The size of the square in each corner of a box that blackCorners() looks at, and how many
 // black pixels in it are still a part of the page, such as of an icon.
 const CORNER = 16
@@ -45,6 +43,8 @@ export function blackCorners({ width, height, data }, { left, top, right, bottom
 	}))
 }
 
+// The secret of the webhook in the pictures, as the page shows it once after its creation:
+// plainly an example, which no one takes for a real one.
 export const EXAMPLE_SECRET = 'example-secret-of-the-screenshots-0123456789'
 
 // The addresses whose answers freeze() rewrites: the routes of the app, with or without
