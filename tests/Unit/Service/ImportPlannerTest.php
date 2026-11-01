@@ -155,6 +155,14 @@ final class ImportPlannerTest extends TestCase {
 				['files' => ['Steuern/a.pdf'], 'imports' => ['Steuern/a.pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
 				['failed Steuern/a.pdf -> Fehler/Steuern/a.pdf: Broken PDF'],
 			],
+			'a file that moves to the error folder leaves the marker of its name behind, as only a file can stand for a document' => [
+				['files' => ['Steuern [P7]/Scan [P999].pdf'], 'imports' => ['Steuern [P7]/Scan [P999].pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
+				['failed Steuern [P7]/Scan [P999].pdf -> Fehler/Steuern [P7]/Scan.pdf: Broken PDF'],
+			],
+			'a file with nothing but a marker gets the name of a document without a title, and never the path of the error folder' => [
+				['files' => ['[P999]'], 'imports' => ['[P999]' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
+				['failed [P999] -> Fehler/Ohne Titel: Broken PDF'],
+			],
 			'a task that Paperless cancelled' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'REVOKED', 'message' => '']]],
 				['failed a.pdf -> Fehler/a.pdf: Paperless cancelled the task before it finished (REVOKED), so it created no document.'],
@@ -178,6 +186,10 @@ final class ImportPlannerTest extends TestCase {
 			'a task that Paperless still lists a day after the upload moves the file to the error folder' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'tasks' => ['task-1' => ['status' => 'STARTED', 'message' => 'Running OCR']]],
 				['failed a.pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (STARTED: Running OCR), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (STARTED: Running OCR))'],
+			],
+			'a file of a task that Paperless still lists a day after the upload leaves its marker behind, too' => [
+				['files' => ['a [P999].pdf'], 'imports' => ['a [P999].pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'tasks' => ['task-1' => ['status' => 'STARTED', 'message' => '']]],
+				['failed a [P999].pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (STARTED), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (STARTED))'],
 			],
 			'a task that Paperless lost goes to Paperless again' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY, 'attempts' => 1]], 'tasks' => ['task-1' => ['status' => 'PENDING', 'message' => '', 'listed' => false]]],
@@ -227,6 +239,50 @@ final class ImportPlannerTest extends TestCase {
 		}
 
 		self::assertSame($expected, $this->plan($case['settings'] ?? []));
+	}
+
+	/**
+	 * Names that lost their markers may meet in the error folder. Such a file takes the next free
+	 * number there, so that it replaces no other file and, with the conflict policy skip, ends
+	 * without a conflict.
+	 *
+	 * @return array<string, array{string, list<string>, string}>
+	 */
+	public static function namesInTheErrorFolder(): array {
+		return [
+			'the name is free' => ['Scan [P999].pdf', ['Andere.pdf'], 'Scan.pdf'],
+			'the name is taken' => ['Scan [P999].pdf', ['Scan.pdf'], 'Scan (2).pdf'],
+			'the first numbers are taken' => ['Scan [P999].pdf', ['Scan.pdf', 'Scan (2).pdf', 'Scan (3).pdf'], 'Scan (4).pdf'],
+			'the number comes before the last extension' => ['Scan [P999].tar.pdf', ['Scan.tar.pdf'], 'Scan.tar (2).pdf'],
+			'a name without an extension' => ['Scan [P999]', ['Scan'], 'Scan (2)'],
+			'a name that takes the fallback' => ['[P999].pdf', ['Ohne Titel.pdf'], 'Ohne Titel (2).pdf'],
+			'a file without a marker stays at its path, where the conflict policy decides' => ['Scan.pdf', ['Scan.pdf'], 'Scan.pdf'],
+		];
+	}
+
+	/** @param list<string> $taken */
+	#[DataProvider('namesInTheErrorFolder')]
+	public function testANameThatLostItsMarkerTakesTheNextFreeNumber(string $name, array $taken, string $expected): void {
+		$path = self::INBOX . '/' . $name;
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1'];
+		$this->paperless->tasks = ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']];
+		foreach ($taken as $file) {
+			$this->storage->files[TestConfig::ERRORS . '/' . $file] = 'there';
+		}
+
+		self::assertSame(["failed {$name} -> Fehler/{$expected}: Broken PDF"], $this->plan());
+	}
+
+	/** A look at the error folder that fails is a failure of the check: the file stays where it is, and the next run asks again. */
+	public function testAFailedLookAtTheErrorFolderFailsOnlyItsFile(): void {
+		$path = self::INBOX . '/a [P999].pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1'];
+		$this->paperless->tasks = ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']];
+		$this->storage->existsFailures[TestConfig::ERRORS . '/a.pdf'] = new RuntimeException('Nextcloud is busy');
+
+		self::assertSame(['check failed a [P999].pdf: Nextcloud is busy'], $this->plan());
 	}
 
 	/** A check of a task that fails keeps the upload pending, and the other uploads go on. */

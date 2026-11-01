@@ -42,6 +42,9 @@ final class ImportPlanner {
 	/** How long after its upload a task that Paperless has not finished, or doesn't list, may take, in seconds. */
 	public const TASK_TIMEOUT = 86400;
 
+	/** @var array<string, true> the places in the error folder that this plan gave out: a dry-run moves nothing, so that storage doesn't know them */
+	private array $errorPaths = [];
+
 	/** @param \Closure(): void $heartbeat the sign of life of the run, for each file that the plan may upload */
 	public function __construct(
 		private SyncConfig $config,
@@ -139,7 +142,7 @@ final class ImportPlanner {
 			if (in_array($task['status'], self::TASK_FAILED, true)) {
 				$reason = self::failureReason($task);
 
-				return [new ImportFailed($context, $this->errorPath($context->path), $reason, $this->diagnostic($taskId, $reason))];
+				return [new ImportFailed($context, $this->errorPath($context->path), $reason, $this->diagnostic($taskId, $reason) . $this->formerName($context->path))];
 			}
 			if ($now - (int)($pending['submitted_at'] ?? 0) >= self::TASK_TIMEOUT) {
 				return [$this->endUnfinished($context, $etag, $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task)];
@@ -180,7 +183,7 @@ final class ImportPlanner {
 			return new RetryUnfinished($context, $etag, $attempts, $taskId, $error);
 		}
 
-		return new ImportFailed($context, $this->errorPath($context->path), "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.", $this->unfinishedDiagnostic($taskId, $state), $taskId, $error);
+		return new ImportFailed($context, $this->errorPath($context->path), "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.", $this->unfinishedDiagnostic($taskId, $state) . $this->formerName($context->path), $taskId, $error);
 	}
 
 	/**
@@ -213,9 +216,44 @@ final class ImportPlanner {
 			. "Paperless task: {$taskId}\n";
 	}
 
-	/** Where a file of the inbox goes when its import failed: the same path below the error folder. */
+	/**
+	 * Where a file of the inbox goes when its import failed: the same path below the error folder,
+	 * without a marker such as [P123] in its name. Whoever may write into the inbox chooses that name,
+	 * and for those who may only read the error folder, Paperless Unified Search would take the file
+	 * for the copy of that document, and show them its title and excerpt.
+	 *
+	 * Names that lost their markers may meet there, so such a file takes the next free number, as
+	 * Nextcloud does, instead of replacing another one or failing on a conflict. A file without a
+	 * marker keeps its name, and the conflict policy decides as ever.
+	 */
 	private function errorPath(string $path): string {
-		return Paths::join($this->errorRoot, Paths::relativeTo($path, $this->inboxRoot));
+		$name = self::nameOf($path);
+		$clean = Paths::withoutMarkers($name, $this->config->untitled);
+		$folder = Paths::join($this->errorRoot, $this->folderBelow($path));
+		$destination = Paths::join($folder, $clean);
+		if ($clean !== $name) {
+			$dot = strrpos($clean, '.');
+			$stem = $dot === false ? $clean : substr($clean, 0, $dot);
+			$extension = $dot === false ? '' : substr($clean, $dot);
+			for ($number = 2; isset($this->errorPaths[$destination]) || $this->files->exists($destination); ++$number) {
+				$destination = Paths::join($folder, "{$stem} ({$number}){$extension}");
+			}
+		}
+		$this->errorPaths[$destination] = true;
+
+		return $destination;
+	}
+
+	/** The line of the .error.txt that names a file that lost a marker on its way to the error folder, or nothing for any other. */
+	private function formerName(string $path): string {
+		$name = self::nameOf($path);
+
+		return Paths::withoutMarkers($name, $this->config->untitled) === $name ? '' : "Name in the inbox: {$name}\n";
+	}
+
+	/** The name of a file of the inbox; every such path has a folder, which is never empty, in front of it. */
+	private static function nameOf(string $path): string {
+		return substr((string)strrchr($path, '/'), 1);
 	}
 
 	/** The path of the folder of a file of the inbox below the inbox, such as Taxes/2026, or '' for the inbox itself. */
