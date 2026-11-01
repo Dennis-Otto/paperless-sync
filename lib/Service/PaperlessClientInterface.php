@@ -45,9 +45,11 @@ interface PaperlessClientInterface {
 
 	/**
 	 * The active documents, and whether the run received all of them; with $notes, the notes of
-	 * each, which only the metadata next to the archive holds.
+	 * each, which only the metadata next to the archive holds; with $permissions, who may view each,
+	 * in its field permissions, which Paperless reads for each document, so only a run that gives
+	 * those users their copies asks for it.
 	 */
-	public function documents(bool $notes = false): PaperlessScan;
+	public function documents(bool $notes = false, bool $permissions = false): PaperlessScan;
 
 	/** The documents in the trash of Paperless, and whether the run received all of them. */
 	public function trash(): PaperlessScan;
@@ -56,11 +58,11 @@ interface PaperlessClientInterface {
 	 * One active document, with the fields that documents() lists of each, for the run of one
 	 * document that the webhook of a Paperless workflow asks for; null when Paperless doesn't show
 	 * it to the account: in the trash, deleted, or of another owner who doesn't share it. With
-	 * $notes, its notes as well, as documents() lists them.
+	 * $notes, its notes as well, and with $permissions, who may view it, as documents() lists them.
 	 *
 	 * @return array<string, mixed>|null
 	 */
-	public function document(int $documentId, bool $notes = false): ?array;
+	public function document(int $documentId, bool $notes = false, bool $permissions = false): ?array;
 
 	/** @return array<string, string> */
 	public function correspondents(): array;
@@ -81,6 +83,17 @@ interface PaperlessClientInterface {
 	 * @return array<string, string>
 	 */
 	public function users(): array;
+
+	/**
+	 * The IDs of the users of each group of Paperless, by the ID of the group, a group without users
+	 * too: who may view a document through its groups. Paperless lists the groups for a token whose
+	 * user may view groups, and the groups of each user for one whose user may view users.
+	 *
+	 * @return array<int, list<int>>
+	 * @throws PaperlessRequestException when Paperless can't be reached
+	 * @throws \RuntimeException when Paperless doesn't list them, or names no groups for a user: without them, the copies of the users of a group would look as if the document was no longer shared
+	 */
+	public function groupMembers(): array;
 
 	/**
 	 * The number of documents that the account sees and that the user of Paperless with this ID

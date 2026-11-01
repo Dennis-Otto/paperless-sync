@@ -9,7 +9,7 @@ Die Namen auf dieser Seite sind die, die eine neue Installation auf Deutsch vors
 Das Archiv ist ein Ordner von Nextcloud, und seine Kopien sind Dateien von Nextcloud: Sie öffnen sich im Viewer, sie haben Versionen, Kommentare und Favoriten, und die Suche von Nextcloud findet sie nach ihren Namen. Wo du es findest, hängt davon ab, wie deine Administration die App eingerichtet hat:
 
 - **Ein geteiltes Archiv:** Der Eigentümer des Archivs, das Konto von Nextcloud, für das die App es schreibt, teilt den Ordner `Archiv` mit dir oder mit einer deiner Gruppen, in der Regel nur zum Lesen. Er erscheint unter *Mit dir geteilt* in Dateien und in dem Ordner, in den deine Nextcloud die Ordner legt, die andere teilen.
-- **Ein eigenes Archiv:** Mit dem [Eigentum je Benutzer](guide.de.md#per-user-ownership) bekommst du die Dokumente, die dir in Paperless gehören, in deine eigenen Dateien, in `Dokumente/Paperless/Archiv`, neben einem eigenen Eingang.
+- **Ein eigenes Archiv:** Mit dem [Eigentum je Benutzer](guide.de.md#per-user-ownership) bekommst du die Dokumente, die dir in Paperless gehören, in deine eigenen Dateien, in `Dokumente/Paperless/Archiv`, neben einem eigenen Eingang, und, wenn dein Administrator es gewählt hat, [eine Kopie der Dokumente, die Paperless mit dir teilt](guide.de.md#documents-that-paperless-shares).
 
 Dateien im Browser eines Handys zeigt dasselbe Archiv, im schmalen Layout von Nextcloud:
 

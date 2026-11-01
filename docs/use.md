@@ -9,7 +9,7 @@ The names on this page are those that a new installation proposes, `Documents/Pa
 The archive is a folder of Nextcloud, and its copies are files of Nextcloud: they open in the viewer, they have versions, comments and favorites, and the search of Nextcloud finds them by their names. Where you find it depends on how your administrator set the app up:
 
 - **A shared archive:** the owner of the archive, the account of Nextcloud that the app writes it for, shares the folder `Archive` with you or with a group of yours, read-only as a rule. It shows in *Shared with you* in Files and in the folder where your Nextcloud puts the folders that others share.
-- **An archive of your own:** with [per-user ownership](guide.md#per-user-ownership), you get the documents that you own in Paperless in your own files, in `Documents/Paperless/Archive`, next to an inbox of your own.
+- **An archive of your own:** with [per-user ownership](guide.md#per-user-ownership), you get the documents that you own in Paperless in your own files, in `Documents/Paperless/Archive`, next to an inbox of your own, and, when your administrator chose it, [a copy of those that Paperless shares with you](guide.md#documents-that-paperless-shares).
 
 Files in the browser of a phone shows the same archive, in the narrow layout of Nextcloud:
 

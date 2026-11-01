@@ -1,0 +1,3 @@
+### Features
+
+- **Each user can also get the documents that Paperless shares with them:** set *Who gets the documents* to *Each user, those they own or may view in Paperless*, and a bill that one person of your household owns and shares with the other, directly or through a group of Paperless, reaches both of them, each with a copy of their own in their own files. When Paperless no longer lets someone view a document, their copy moves to their trash bin with the next run, and the copies of the others stay. Each copy counts against the quota of its user, and the account of the app needs the permission *View* for Groups. The connection checklist shows who also gets how many documents of whom, and a dry run lists every change with its user.

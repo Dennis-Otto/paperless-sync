@@ -1,6 +1,6 @@
 flowchart TB
     accTitle: In wessen Archiv ein Dokument kommt
-    accDescr: Beim Eigentum je Benutzer fragt ein Lauf bei jedem aktiven Dokument, wem es in Paperless gehört. Ein Dokument ohne Eigentümer kommt zum Zielbenutzer. Ein Dokument, dessen Eigentümer Paperless nicht aufgelistet hat oder das dem Konto der App gehört, während ein Upload auf seinen Eigentümer wartet, bleibt, wo seine Kopie ist. Für jeden anderen Eigentümer sucht der Lauf genau einen Benutzer von Nextcloud: den, den die Tabelle Paperless-Benutzer mit einer anderen Nextcloud-ID nennt, sonst den mit derselben ID, gleich in welcher Schreibung. Ohne solchen Benutzer oder außerhalb der Gruppe der Einstellung kommt das Dokument zum Zielbenutzer, damit keines verloren geht. Hat ein anderer Benutzer von Paperless denselben Benutzer von Nextcloud, bleibt es, wo seine Kopie ist, denn der Lauf rät nicht. Die Verbindungs-Checkliste nennt jeden Fall. Sonst kommt es zu diesem Benutzer. Seine Kopie wird im Archiv dieses Benutzers geschrieben, unter demselben Basisordner seiner eigenen Dateien, und verlässt jedes andere Archiv.
+    accDescr: Beim Eigentum je Benutzer fragt ein Lauf bei jedem aktiven Dokument, wem es in Paperless gehört. Ein Dokument ohne Eigentümer kommt zum Zielbenutzer. Ein Dokument, dessen Eigentümer Paperless nicht aufgelistet hat oder das dem Konto der App gehört, während ein Upload auf seinen Eigentümer wartet, bleibt, wo seine Kopie ist. Für jeden anderen Eigentümer sucht der Lauf genau einen Benutzer von Nextcloud: den, den die Tabelle Paperless-Benutzer mit einer anderen Nextcloud-ID nennt, sonst den mit derselben ID, gleich in welcher Schreibung. Ohne solchen Benutzer oder außerhalb der Gruppe der Einstellung kommt das Dokument zum Zielbenutzer, damit keines verloren geht. Hat ein anderer Benutzer von Paperless denselben Benutzer von Nextcloud, bleibt es, wo seine Kopie ist, denn der Lauf rät nicht. Die Verbindungs-Checkliste nennt jeden Fall. Sonst kommt es zu diesem Benutzer. Seine Kopie wird im Archiv dieses Benutzers geschrieben, unter demselben Basisordner seiner eigenen Dateien. Mit der Option, die Benutzern auch gibt, was sie ansehen dürfen, fragt der Lauf dann Paperless, wer das Dokument ansehen darf. Sagt Paperless es nicht, bleibt jede andere Kopie, wo sie ist, und der Bericht zählt das Dokument. Sonst erhält jeder Benutzer von Nextcloud, dessen Benutzer von Paperless es ansehen darf, selbst oder über eine Gruppe, eine Kopie unter demselben Pfad. Dann verlässt seine Kopie jedes andere Archiv.
 
     document["Jedes aktive Dokument<br>von Paperless"] --> owner{"Wem gehört es<br>in Paperless?"}
     owner -->|niemandem| target["Das Archiv<br>des Zielbenutzers"]
@@ -13,11 +13,17 @@ flowchart TB
     group -->|ja| shared{"Hat ein anderer Benutzer von<br>Paperless denselben Benutzer<br>von Nextcloud?"}
     shared -->|ja| held
     shared -->|nein| user["Das Archiv dieses Benutzers,<br>unter demselben Basisordner<br>seiner eigenen Dateien"]
-    target --> copy["Die Kopie wird dort geschrieben<br>und verlässt jedes andere Archiv"]
+    target --> copy["Die Kopie wird dort geschrieben"]
     user --> copy
+    copy --> option{"Erhalten Benutzer auch, was<br>sie in Paperless ansehen dürfen?"}
+    option -->|nein, nur was ihnen gehört| leaves["Seine Kopie verlässt<br>jedes andere Archiv"]
+    option -->|ja| viewers{"Sagt Paperless, wer<br>es ansehen darf?"}
+    viewers -->|nein| stays["Jede andere Kopie bleibt,<br>wo sie ist, und der Bericht<br>zählt das Dokument"]
+    viewers -->|ja| also["Eine Kopie unter demselben Pfad<br>für jeden Benutzer von Nextcloud,<br>dessen Benutzer von Paperless es<br>ansehen darf, selbst oder über eine Gruppe"]
+    also --> leaves
     classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class document,owner,match,group,shared check
-    class user,copy kept
-    class target,held changed
+    class document,owner,match,group,shared,option,viewers check
+    class user,copy,also,leaves kept
+    class target,held,stays changed

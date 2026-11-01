@@ -290,6 +290,182 @@ final class OwnerMappingTest extends TestCase {
 		self::assertStringContainsString('View for Users', $checks[0]->hint);
 	}
 
+	/**
+	 * With the documents that Paperless shares, the checklist says who also gets how many documents
+	 * from the archive of whom, the owner of a document having no line for it, the target user among
+	 * them, and who may view documents without getting a copy, but not the account of the app, which
+	 * may view them so that a run can read them. Whose owner the run can't tell has no line.
+	 */
+	public function testTheChecklistNamesWhoAlsoGetsDocumentsOfWhom(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice', '2' => 'bob', '3' => 'carol', '4' => '1234', '9' => 'paperless-sync'];
+		$paperless->groupMembers = [8 => [2, 3]];
+		$paperless->accountId = 9;
+		$paperless->documents = [
+			self::shared(5, 42, [1], []),
+			['id' => 6, 'permissions' => ['view' => ['users' => [1], 'groups' => []]]],
+			self::shared(1, 1, [1, 4, 9], [8]),
+			self::shared(2, 1, [2, 3], []),
+			self::shared(3, 2, [1], []),
+			self::shared(4, null, [2], []),
+		];
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+
+		$lines = array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => str_contains($check->message, 'also gets') || str_contains($check->message, 'may view')));
+		self::assertSame([
+			['%1$s also gets documents from the archive of %2$s: %3$s', ['alice', 'bob', '1']],
+			['%1$s also gets documents from the archive of %2$s: %3$s', ['bob', 'alice', '2']],
+			['%1$s also gets documents from the archive of %2$s: %3$s', ['bob', 'paperless', '1']],
+			['%1$s may view documents of others in Paperless but gets no copies, without a user of Nextcloud of its own: %2$s', ['1234', '1']],
+			['%1$s may view documents of others in Paperless but gets no copies, without a user of Nextcloud of its own: %2$s', ['carol', '2']],
+		], array_map(static fn (ConnectionCheck $check): array => [$check->message, $check->parameters], $lines));
+		self::assertSame([ConnectionCheck::PASSED], array_values(array_unique(array_map(static fn (ConnectionCheck $check): string => $check->status, $lines))));
+		self::assertSame([true], $paperless->permissionsAsked);
+		self::assertSame([false], $paperless->notesAsked, 'The checklist has no use for the notes of the documents.');
+	}
+
+	/** A viewer without a user of Nextcloud has a line. */
+	public function testTheChecklistNamesAViewerWithoutAUser(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 9;
+		$paperless->users = ['1' => 'alice', '3' => 'carol'];
+		$paperless->documents = [self::shared(1, 1, [3], [])];
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+
+		self::assertSame(['carol', '1'], end($checks)->parameters);
+	}
+
+	/** The lines of who gets what have a limit of their own, as the lines of the users do. */
+	public function testTheChecklistNamesWhoAlsoGetsDocumentsUpToItsLimit(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 999;
+		$documents = [];
+		foreach (range(1, OwnerMapping::CHECKED_USERS + 3) as $id) {
+			$this->usersOfNextcloud[] = $paperless->users[(string)$id] = sprintf('user%02d', $id);
+			$documents[] = self::shared($id, 1, [$id], []);
+		}
+		$paperless->documents = $documents;
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+		$lines = array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => str_contains($check->message, 'also gets')));
+
+		self::assertCount(OwnerMapping::CHECKED_USERS + 1, $lines);
+		self::assertSame(['user02', 'user01', '1'], $lines[0]->parameters, 'The first lines stay.');
+		self::assertSame(['And %s more lines of who also gets which documents, which a run treats in the same way.', ['2']], [$lines[OwnerMapping::CHECKED_USERS]->message, $lines[OwnerMapping::CHECKED_USERS]->parameters]);
+	}
+
+	/** As many lines as the limit need no line for the rest. */
+	public function testTheChecklistNamesWhoAlsoGetsDocumentsWithoutALineForTheRest(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 999;
+		$documents = [];
+		foreach (range(1, OwnerMapping::CHECKED_USERS + 1) as $id) {
+			$this->usersOfNextcloud[] = $paperless->users[(string)$id] = sprintf('user%02d', $id);
+			$documents[] = self::shared($id, 1, [$id], []);
+		}
+		$paperless->documents = $documents;
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+		$lines = array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => str_contains($check->message, 'also gets')));
+
+		self::assertCount(OwnerMapping::CHECKED_USERS, $lines);
+		self::assertStringStartsWith('%1$s also gets', $lines[OwnerMapping::CHECKED_USERS - 1]->message);
+	}
+
+	/** A document that doesn't say who may view it, or names a group that Paperless didn't list, gets a warning. */
+	public function testTheChecklistWarnsOfDocumentsThatDoNotSayWhoMayViewThem(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 9;
+		$paperless->users = ['1' => 'alice'];
+		$paperless->documents = [['id' => 1, 'owner' => 1], self::shared(2, 1, [], [77])];
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+		$check = end($checks);
+
+		self::assertSame([ConnectionCheck::WARNING, 'Paperless did not say who may view documents: %s', ['2']], [$check->status, $check->message, $check->parameters]);
+		self::assertStringContainsString('proxy', $check->hint);
+	}
+
+	/** Without the groups of Paperless, a run fails, and the checklist says which permission is missing. */
+	public function testTheChecklistFailsWithoutTheGroupsOfPaperless(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 9;
+		$paperless->users = ['1' => 'alice'];
+		$paperless->groupsException = new PaperlessRequestException('Paperless answered HTTP 403.');
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+
+		self::assertCount(1, $checks);
+		self::assertSame([ConnectionCheck::OWNERS, ConnectionCheck::FAILED, 'Paperless did not list its groups: %s', ['Paperless answered HTTP 403.'], false], [$checks[0]->id, $checks[0]->status, $checks[0]->message, $checks[0]->parameters, $checks[0]->blocks()]);
+		self::assertStringContainsString('View for Groups', $checks[0]->hint);
+	}
+
+	/** Without the ID of the account, a run fails, and the checklist says which permission is missing. */
+	public function testTheChecklistFailsWithoutTheAccountOfTheApp(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice'];
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+
+		self::assertCount(1, $checks);
+		self::assertSame([ConnectionCheck::OWNERS, ConnectionCheck::FAILED, 'Paperless did not name its account.'], [$checks[0]->id, $checks[0]->status, $checks[0]->message]);
+		self::assertStringContainsString('View for UI Settings', $checks[0]->hint);
+	}
+
+	/** The account of the app may view each document, which gives its user of Nextcloud no line, directly or through a group. */
+	public function testTheChecklistGivesTheAccountOfTheAppNoCopy(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice', '2' => 'bob', '9' => 'paperless'];
+		$paperless->groupMembers = [8 => [9]];
+		$paperless->accountId = 9;
+		$paperless->documents = [self::shared(1, 1, [9], []), self::shared(2, 2, [], [8])];
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+
+		self::assertSame([], array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => str_contains($check->message, 'also gets') || str_contains($check->message, 'may view'))));
+	}
+
+	/** A scan that fails is a line of its own, after the lines of the users, which it doesn't take away. */
+	public function testTheChecklistFailsWithoutTheDocuments(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->accountId = 9;
+		$paperless->users = ['1' => 'alice'];
+		$paperless->documentsException = new PaperlessRequestException('Paperless answered HTTP 500.');
+
+		$checks = $this->ownerMapping()->checks($this->sharedConfig(), $paperless, new TestStorage());
+		$check = end($checks);
+
+		self::assertCount(3, $checks);
+		self::assertSame([ConnectionCheck::FAILED, 'Paperless did not list who may view its documents: %s', ['Paperless answered HTTP 500.']], [$check->status, $check->message, $check->parameters]);
+	}
+
+	/** Per-user ownership alone reads neither the groups nor who may view each document. */
+	public function testTheChecklistOfPerUserOwnershipReadsNoPermissions(): void {
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice'];
+
+		$this->ownerMapping()->checks($this->config(), $paperless, new TestStorage());
+
+		self::assertSame([[], false, 0], [$paperless->permissionsAsked, in_array('groups', $paperless->listsRead, true), $paperless->accountReads]);
+	}
+
+	/**
+	 * A document with an owner, in the shape of Paperless.
+	 *
+	 * @param list<int> $users
+	 * @param list<int> $groups
+	 * @return array<string, mixed>
+	 */
+	private static function shared(int $id, ?int $owner, array $users, array $groups): array {
+		return ['id' => $id, 'owner' => $owner, 'permissions' => ['view' => ['users' => $users, 'groups' => $groups], 'change' => ['users' => [], 'groups' => []]]];
+	}
+
+	private function sharedConfig(): SyncConfig {
+		return $this->configService()->save(self::validSettings() + ['ownership' => SyncConfig::PER_USER_SHARED], 'secret-token');
+	}
+
 	/** @param array<string, string> $settings */
 	private function config(array $settings = []): SyncConfig {
 		return $this->configService()->save(self::validSettings() + ['ownership' => SyncConfig::PER_USER] + $settings, 'secret-token');

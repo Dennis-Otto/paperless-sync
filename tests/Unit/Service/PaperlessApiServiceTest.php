@@ -13,6 +13,7 @@ use Closure;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
@@ -220,13 +221,16 @@ final class PaperlessApiServiceTest extends TestCase {
 			}
 		}
 		// The trash is read whole: Paperless ignores the list of fields there. The notes are asked for
-		// only for the metadata next to the archive, see testTheMetadataNextToTheArchiveAsksForTheNotes().
-		$read = array_values(array_diff(array_unique($read), ['deleted_at', 'notes']));
+		// only for the metadata next to the archive, see testTheMetadataNextToTheArchiveAsksForTheNotes(),
+		// and the permissions only for the documents that Paperless shares, see
+		// testTheDocumentsThatPaperlessSharesAskForThePermissions().
+		$read = array_values(array_diff(array_unique($read), ['deleted_at', 'notes', 'permissions']));
 
 		self::assertNotEmpty($read);
 		self::assertSame([], array_values(array_diff($read, PaperlessApiService::DOCUMENT_FIELDS)), 'Every field that the app reads from a document is asked for.');
 		self::assertNotContains('content', PaperlessApiService::DOCUMENT_FIELDS);
 		self::assertNotContains('notes', PaperlessApiService::DOCUMENT_FIELDS);
+		self::assertNotContains('permissions', PaperlessApiService::DOCUMENT_FIELDS);
 	}
 
 	/** @return array<string, array{list<array{int, int, int}>}> the count, the first and the last ID of each page; no IDs when the last is lower */
@@ -635,6 +639,81 @@ final class PaperlessApiServiceTest extends TestCase {
 		$fields = implode(',', [...PaperlessApiService::DOCUMENT_FIELDS, 'notes']);
 		self::assertSame(['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 1, 'page_size' => 1000], $this->requests[0]['options']['query']);
 		self::assertSame(['fields' => $fields, 'truncate_content' => 'true'], $this->requests[1]['options']['query']);
+	}
+
+	/**
+	 * Who may view a document reaches Nextcloud only for the documents that Paperless shares: then
+	 * the scan of a run and the read of one document ask for them, with the parameter without which
+	 * Paperless leaves them out whatever the fields name, also beside the notes.
+	 */
+	public function testTheDocumentsThatPaperlessSharesAskForThePermissions(): void {
+		$this->responses[] = [200, ['count' => 1, 'results' => self::entries(1, 1)]];
+		$this->responses[] = [200, ['id' => 123, 'title' => 'Strom August']];
+		$this->responses[] = [200, ['count' => 1, 'results' => self::entries(1, 1)]];
+
+		$this->service->documents(false, true);
+		$this->service->document(123, false, true);
+		$this->service->documents(true, true);
+
+		$fields = implode(',', [...PaperlessApiService::DOCUMENT_FIELDS, 'permissions']);
+		self::assertSame(['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'full_perms' => 'true', 'page' => 1, 'page_size' => 1000], $this->requests[0]['options']['query']);
+		self::assertSame(['fields' => $fields, 'truncate_content' => 'true', 'full_perms' => 'true'], $this->requests[1]['options']['query']);
+		self::assertSame(implode(',', [...PaperlessApiService::DOCUMENT_FIELDS, 'notes', 'permissions']), $this->requests[2]['options']['query']['fields']);
+	}
+
+	/** The answers of a real Paperless for the documents that it shares, for a request as the app makes it, in the list as for one document by its ID. */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessSendsWhoMayViewADocument(string $line): void {
+		$this->responses[] = self::recorded($line, 'documents-shared');
+		$this->responses[] = self::recorded($line, 'document-shared');
+
+		$scan = $this->service->documents(false, true);
+		$document = $this->service->document((int)self::recording($line, 'document-shared')['body']['id'], false, true);
+
+		self::assertSame(self::recordedQuery($line, 'documents-shared'), self::sentQuery($this->requests[0]));
+		self::assertSame(self::recordedQuery($line, 'document-shared'), self::sentQuery($this->requests[1]));
+		self::assertCount(1, $scan->documents);
+		self::assertIsArray($document);
+		self::assertSame($scan->documents[0]['permissions'], $document['permissions']);
+		self::assertNotNull(DocumentPermissions::of($document));
+	}
+
+	/**
+	 * The users of each group, by its ID: from the list of the groups, a group without users too,
+	 * and the groups of each user, whose IDs may be digits. A group that the list of the groups
+	 * doesn't name, which the account may not see, has no line, so that its documents say nothing.
+	 */
+	public function testTheMembersOfTheGroups(): void {
+		$this->responses[] = [200, ['count' => 2, 'results' => [['id' => 8, 'name' => 'household'], ['id' => 9, 'name' => 'nobody']]]];
+		$this->responses[] = [200, ['count' => 3, 'results' => [
+			['id' => 3, 'username' => 'dennis', 'groups' => [8, 77, 'household']],
+			['id' => 4, 'username' => 'sarah', 'groups' => ['8']],
+			['id' => 5, 'username' => 'paperless-sync', 'groups' => []],
+		]]];
+
+		self::assertSame([8 => [3, 4], 9 => []], $this->service->groupMembers());
+		self::assertSame([self::URL . '/api/groups/', self::URL . '/api/users/'], array_column($this->requests, 'url'));
+	}
+
+	/** The answers of a real Paperless for the groups and the groups of a user. */
+	#[DataProvider('paperlessLines')]
+	public function testPaperlessListsTheMembersOfItsGroups(string $line): void {
+		$this->responses[] = self::recorded($line, 'groups');
+		$this->responses[] = self::recorded($line, 'user-in-group');
+		$member = self::recording($line, 'user-in-group')['body']['results'][0]['id'];
+
+		self::assertSame([1 => [$member]], $this->service->groupMembers());
+	}
+
+	/** A user without the field would look as if they had left every group, and their copies would go. */
+	public function testAUserWithoutTheFieldOfTheGroupsFailsTheList(): void {
+		$this->responses[] = [200, ['count' => 1, 'results' => [['id' => 8, 'name' => 'household']]]];
+		$this->responses[] = [200, ['count' => 1, 'results' => [['id' => 3, 'username' => 'dennis']]]];
+
+		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionMessage('Paperless named no groups for a user of its list /api/users/.');
+
+		$this->service->groupMembers();
 	}
 
 	/** The answer of a real Paperless for one document: the fields of a run, as a scan reads them. */

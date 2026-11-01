@@ -19,7 +19,7 @@
 // of @nextcloud/files 4, which Files of Nextcloud 33 to 35 reads, as registerFileAction() of that
 // library does, and the note as registerFileListHeader() does.
 // docs/decisions/0023-file-actions-in-files-without-a-build.md and
-// docs/decisions/0033-a-note-in-files-says-what-a-folder-of-the-app-does.md say why.
+// docs/decisions/0034-a-note-in-files-says-what-a-folder-of-the-app-does.md say why.
 (function() {
 	'use strict'
 

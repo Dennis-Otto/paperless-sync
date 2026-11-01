@@ -1,0 +1,37 @@
+{
+  "body": {
+    "all": [
+      10
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "date_joined": "2026-11-01T02:30:13.114907Z",
+        "email": "",
+        "first_name": "",
+        "groups": [
+          1
+        ],
+        "id": 10,
+        "inherited_permissions": [],
+        "is_active": true,
+        "is_mfa_enabled": false,
+        "is_staff": false,
+        "is_superuser": false,
+        "last_name": "",
+        "password": "*****************************************************************************************",
+        "user_permissions": [],
+        "username": "contract-member"
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/users/?page=1&page_size=1000&username__iexact=contract-member",
+  "status": 200
+}

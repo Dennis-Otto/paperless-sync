@@ -30,7 +30,7 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0022](0022-a-dry-run-takes-the-plan-of-a-run.md) | A dry-run takes the plan of a run: planners decide, executors apply or only report | accepted |
 | [0023](0023-file-actions-in-files-without-a-build.md) | Actions in the menu of Files, without a build, and uploads in the background | accepted |
 | [0024](0024-the-tags-of-paperless-as-tags-of-nextcloud-that-the-app-alone-changes.md) | The tags of Paperless become tags of Nextcloud that the app alone changes | accepted |
-| [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted |
+| [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted, amended by [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md) |
 | [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) | Every change of files runs in the filesystem of their user, through the setup manager of Nextcloud | accepted |
 | [0027](0027-the-account-of-the-app-from-one-token-of-a-superuser.md) | The settings create the account of the app in Paperless with a token of a superuser that they use once | accepted |
 | [0028](0028-test-the-upgrade-users-run.md) | Test the upgrade that users run: from the last release, on PostgreSQL and MariaDB, with the packages they install | accepted |
@@ -38,4 +38,5 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0030](0030-lint-the-javascript-and-measure-it-in-the-browser.md) | Lint the JavaScript with ESLint, and measure its coverage in the checks in the browser | accepted |
 | [0031](0031-the-inbox-sets-aside-videos-programs-and-archives.md) | The inbox sets aside videos, programs and archives by their extensions, and leaves every other file to Paperless | accepted |
 | [0032](0032-spend-the-runners-of-the-end-to-end-tests-on-the-tests.md) | Spend the runners of the end-to-end tests on the tests: health checks that check often only while a service starts, traces without snapshots in a first attempt, no more runs than processors, the data in memory, and a split by what a run costs | accepted |
-| [0033](0033-a-note-in-files-says-what-a-folder-of-the-app-does.md) | A note in Files says what a folder of the app does, from one answer for each user | accepted |
+| [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md) | Each user also gets a copy of the documents that Paperless shares with them | accepted |
+| [0034](0034-a-note-in-files-says-what-a-folder-of-the-app-does.md) | A note in Files says what a folder of the app does, from one answer for each user | accepted |

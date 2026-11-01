@@ -729,6 +729,38 @@ elif mode == "checklist-per-user":
     ]
     if owners != expected:
         raise AssertionError(f"checklist-per-user: the lines of the users are {owners!r} instead of {expected!r}")
+elif mode == "checklist-shared":
+    # The documents that Paperless shares: the checklist names who also gets which documents.
+    owners = [line["message"] for line in payload.get("checks", []) if line.get("id") == "owners"]
+    expected = "e2e-other also gets documents from the archive of e2e-owner: 1"
+    if expected not in owners:
+        raise AssertionError(f"checklist-shared: the lines of the users are {owners!r} without {expected!r}")
+elif mode == "shared-added":
+    # P123 of e2e-owner reaches e2e-other through the group of the household, as a copy of their
+    # own at the same path, and the copy of e2e-owner stays where it is.
+    exports = [(entry.get("user"), entry.get("document")) for entry in payload["entries"] if entry["type"] == "export"]
+    if payload.get("errors") != 0 or exports != [("e2e-other", 123)]:
+        raise AssertionError(f"shared-added: the run exported {exports!r}: {payload!r}")
+    if any(entry["type"].startswith("remove") for entry in payload["entries"]):
+        raise AssertionError(f"shared-added: a copy left an archive: {payload!r}")
+elif mode == "shared-dry-run":
+    # A dry-run says that the copy leaves the archive of e2e-other, and no other.
+    removed = [(entry.get("user"), entry.get("document")) for entry in payload["entries"] if entry["type"] == "remove-reassigned"]
+    if payload.get("dryRun") is not True or removed != [("e2e-other", 123)]:
+        raise AssertionError(f"shared-dry-run: the plan removes {removed!r}: {payload!r}")
+elif mode == "shared-removed":
+    # Without the permission, the copy of e2e-other leaves their archive, and no copy arrives.
+    removed = [(entry.get("user"), entry.get("document")) for entry in payload["entries"] if entry["type"] == "remove-reassigned"]
+    if payload.get("errors") != 0 or removed != [("e2e-other", 123)] or payload.get("exported") != 0:
+        raise AssertionError(f"shared-removed: the run removed {removed!r}: {payload!r}")
+elif mode == "mock-shared-scans":
+    # Only the runs of the documents that Paperless shares ask for the permissions of every document.
+    scans = payload.get("documentScans", [])
+    asked = [scan for scan in scans if scan.get("fullPerms") == "true"]
+    if not asked or any("permissions" not in scan["fields"].split(",") for scan in asked):
+        raise AssertionError(f"mock-shared-scans: the runs asked for no permissions: {scans!r}")
+    if any("permissions" in scan["fields"].split(",") for scan in scans if scan.get("fullPerms") != "true"):
+        raise AssertionError(f"mock-shared-scans: a run asked for permissions without full_perms: {scans!r}")
 elif mode in ("per-user", "per-user-sent"):
     # Each user gets the documents of their user of Paperless in their own archive, and the copies
     # that the target user had of them leave its archive; the report counts the changes of each.

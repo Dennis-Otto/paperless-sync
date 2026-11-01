@@ -183,17 +183,17 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $checks;
 	}
 
-	public function documents(bool $notes = false): PaperlessScan {
+	public function documents(bool $notes = false, bool $permissions = false): PaperlessScan {
 		// Ordered by their IDs, a document added during the scan joins the last page instead of
 		// shifting the pages that the run has not read yet. Only the fields that a run reads come
-		// back, without the text of the documents, their permissions, and their notes unless the run
-		// writes the metadata next to the archive. A Paperless that ignored the list of fields would
-		// still cut the text short.
+		// back, without the text of the documents, their permissions unless the run gives them to
+		// the users who may view them, and their notes unless the run writes the metadata next to
+		// the archive. A Paperless that ignored the list of fields would still cut the text short.
 		return $this->scan('/api/documents/', [
 			'ordering' => 'id',
-			'fields' => self::documentFields($notes),
+			'fields' => self::documentFields($notes, $permissions),
 			'truncate_content' => 'true',
-		]);
+		] + self::fullPermissions($permissions));
 	}
 
 	public function trash(): PaperlessScan {
@@ -202,13 +202,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/** @psalm-suppress MixedAssignment */
-	public function document(int $documentId, bool $notes = false): ?array {
+	public function document(int $documentId, bool $notes = false, bool $permissions = false): ?array {
 		$response = $this->send(
 			'GET',
 			'/api/documents/' . $documentId . '/',
 			[
 				// The fields of the scan of a run, so that the document takes the same path as in a run.
-				'query' => ['fields' => self::documentFields($notes), 'truncate_content' => 'true'],
+				'query' => ['fields' => self::documentFields($notes, $permissions), 'truncate_content' => 'true'] + self::fullPermissions($permissions),
 				'connect_timeout' => 10,
 				'timeout' => 60,
 				'http_errors' => false,
@@ -236,11 +236,21 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
-	 * The fields of a document that a run asks for: those that it reads, and the notes of the
-	 * document, which only the metadata next to the archive holds.
+	 * The fields of a document that a run asks for: those that it reads, the notes of the document,
+	 * which only the metadata next to the archive holds, and who may view it.
 	 */
-	private static function documentFields(bool $notes): string {
-		return implode(',', $notes ? [...self::DOCUMENT_FIELDS, 'notes'] : self::DOCUMENT_FIELDS);
+	private static function documentFields(bool $notes, bool $permissions): string {
+		return implode(',', [...self::DOCUMENT_FIELDS, ...($notes ? ['notes'] : []), ...($permissions ? ['permissions'] : [])]);
+	}
+
+	/**
+	 * What makes Paperless send the field permissions of a document, which it leaves out of every
+	 * other answer, whatever the list of fields names.
+	 *
+	 * @return array<string, string>
+	 */
+	private static function fullPermissions(bool $permissions): array {
+		return $permissions ? ['full_perms' => 'true'] : [];
 	}
 
 	public function correspondents(): array {
@@ -274,6 +284,25 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	public function users(): array {
 		return $this->namedMap('/api/users/', 'username');
+	}
+
+	/** @psalm-suppress MixedAssignment */
+	public function groupMembers(): array {
+		$members = array_fill_keys(array_map('intval', array_keys($this->getAll('/api/groups/'))), []);
+		foreach ($this->getAll('/api/users/') as $user => $fields) {
+			$groups = $fields['groups'] ?? null;
+			if (!is_array($groups)) {
+				throw new UnexpectedValueException('Paperless named no groups for a user of its list /api/users/.');
+			}
+			foreach ($groups as $group) {
+				$id = is_numeric($group) ? (int)$group : 0;
+				if (isset($members[$id])) {
+					$members[$id][] = (int)$user;
+				}
+			}
+		}
+
+		return $members;
 	}
 
 	public function ownedDocuments(?int $owner): int {
