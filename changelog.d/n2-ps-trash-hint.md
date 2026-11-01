@@ -1,3 +1,0 @@
-### Bug fixes
-
-- **The note of the trash in the connection checklist says plainly what it means:** synchronization works, and only deletions in Paperless reach the deleted folder later, after the runs set in *Required consecutive missing scans*, because Paperless shows an account in its trash only its own documents and those without an owner. Making the account of the app the owner of the documents is optional and doesn't go together with per-user ownership. Before, the note read like a fault and told you to change the owners. The notice of a dry run about an empty trash no longer orders that change either.
