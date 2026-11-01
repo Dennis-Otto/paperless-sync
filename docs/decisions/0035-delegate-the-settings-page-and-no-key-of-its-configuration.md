@@ -27,6 +27,6 @@ Options 2 and 5. `AdminSettings` implements `IDelegatedSettings`, with no name a
 
 ## Consequences
 
-A member gets a page that works like that of an administrator, by one way of saving, in which every value passes the same checks; a test finds every route of the page by its attribute, so that a new route that forgets the delegation fails. A member is an administrator of this app, with its reach into the files of every user, which the page, the guide and the security design say.
+A member gets a page that works like that of an administrator, by one way of saving, in which every value passes the same checks; a test finds every route of the page by its attribute, so that a new route that forgets the delegation fails. A member is an administrator of this app, with its reach into the files of every user and the network of the server, which the page, the guide and the security design say.
 
 Members see the account names and display names of every user and group, which a picker of the target user can't do without. They don't get the notification of a failing mirror by themselves: Nextcloud has no public API that names the delegated groups, and the setting `notification_group` remains for it.

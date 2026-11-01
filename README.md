@@ -384,17 +384,18 @@ The person who runs Paperless is not always an administrator of Nextcloud. An ad
 occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' archive-admins
 ```
 
-The members of the group then find **Paperless Sync** in their administration settings. They can do all that the page offers, with their own password where the page asks for one, and nothing else of the administration of Nextcloud.
+The members of the group have no entry *Administration settings* in their user menu: they open **Settings** there and find **Paperless Sync** in the part *Administration* of the sidebar. They can do all that the page offers, with their own password where the page asks for one, and nothing else of the administration of Nextcloud.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/who-may-use-the-settings.dark.svg">
   <img src="docs/images/diagrams/who-may-use-the-settings.svg" alt="Who may use the settings of Paperless Sync: An administrator of Nextcloud reaches the settings page of Paperless Sync and the rest of the administration, and delegates the page to a group under Administration privileges. A member of that group reaches the page and its routes, with their own password, and neither the rest of the administration nor the keys of the app configuration through the provisioning API of Nextcloud: Nextcloud answers 403. So a setting reaches the app configuration only through the routes of the page, which check every value. Every other user gets 403 on every route of the page.">
 </picture>
 
-Delegate the page only to people whom you trust with the files of every user, because that is what it gives them:
+Delegate the page only to people whom you trust with the files of every user and the network of the server, because that is what it gives them:
 
 - **The files of every user.** They choose the target user or per-user ownership, and so where the archive is written, and they can turn on permanent deletion there. They also choose the inbox folder below the base folder of that user, whose files then go to Paperless and, as the settings say, leave the folder.
 - **The account of the app in Paperless.** Their dry-runs, runs and reports read Paperless with its token and name documents and files. They can replace the address and the token, and create the secret of the webhook.
+- **The network of the server.** They can turn on *Paperless runs in my local network* and point the app at any address there, so the server sends requests to devices that they may not reach themselves, and answers can land in the archive.
 - **The names of the accounts.** The fields of the target user and of the groups offer the account names and display names of every user and group of Nextcloud, without their e-mail addresses.
 
 Everything else stays with the administrators, whatever the group: the [notification of a failing mirror](#being-notified), unless `notification_group` names the group of the members, the setup checks of *Administration → Overview*, whose warnings the page shows them too, the status API, the rules of Flow and `occ`. A key of the configuration of the app can't be written past the page either, so each value passes the same checks as for an administrator. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#delegated-settings) has the details.

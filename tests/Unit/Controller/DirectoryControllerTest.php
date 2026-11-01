@@ -119,6 +119,27 @@ final class DirectoryControllerTest extends TestCase {
 		self::assertSame(['groups' => [['id' => 'archive-admins', 'displayname' => 'Archive admins']]], $response->getData());
 	}
 
+	public function testASearchAnswersAtMostTheLimitOverAllBackendsOfGroups(): void {
+		$found = array_map(function (int $number): IGroup {
+			$group = $this->createStub(IGroup::class);
+			$group->method('getGID')->willReturn("group-{$number}");
+			$group->method('getDisplayName')->willReturn("Group {$number}");
+
+			return $group;
+		}, range(1, DirectoryController::SEARCH_LIMIT + 2));
+		$groups = $this->createStub(IGroupManager::class);
+		$groups->method('search')->willReturn($found);
+
+		$data = $this->controller(null, $groups)->groups('group')->getData();
+
+		self::assertIsArray($data);
+		self::assertIsArray($data['groups']);
+		self::assertSame(
+			array_map(static fn (int $number): string => "group-{$number}", range(1, 10)),
+			array_column($data['groups'], 'id'),
+		);
+	}
+
 	public function testWithoutASearchTheFirstGroupsAreOffered(): void {
 		$groups = $this->createMock(IGroupManager::class);
 		$groups->expects(self::once())->method('search')->with('', DirectoryController::SEARCH_LIMIT)->willReturn([]);

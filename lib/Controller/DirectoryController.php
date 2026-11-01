@@ -63,12 +63,12 @@ final class DirectoryController extends Controller {
 		return new JSONResponse(['exists' => $exists], $exists ? Http::STATUS_OK : Http::STATUS_NOT_FOUND);
 	}
 
-	/** The groups whose ID or name holds $search. */
+	/** The groups whose ID or name holds $search, cut to the limit as for the users. */
 	#[FrontpageRoute(verb: 'GET', url: '/settings/groups')]
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function groups(string $search = ''): JSONResponse {
 		$groups = [];
-		foreach ($this->groups->search($search, self::SEARCH_LIMIT) as $group) {
+		foreach (array_slice($this->groups->search($search, self::SEARCH_LIMIT), 0, self::SEARCH_LIMIT) as $group) {
 			$groups[] = ['id' => $group->getGID(), 'displayname' => $group->getDisplayName()];
 		}
 
