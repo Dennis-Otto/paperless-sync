@@ -263,7 +263,8 @@ GHSA-g3hv-75wg-m249, which would fail OSV-Scanner and Findings on `main`, or ESL
 minimatch, a test of `tests/e2e/thumbnail.mjs`, which shrinks the screenshots of the App
 Store into their thumbnails, fails, a test of `tests/e2e/language.mjs` fails, because
 the German pictures of `tests/e2e/screenshots.mjs` look for a text that `l10n/de.json`
-doesn't translate, a test of `tests/e2e/files-address.mjs` fails, because a browser test
+doesn't translate, a test of `tests/e2e/screenshots.test.mjs` fails, because an animation that
+`tests/e2e/screenshots.mjs` records lacks a language or a theme, or has 1 MB or more, a test of `tests/e2e/files-address.mjs` fails, because a browser test
 opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, a test of
 `tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, a
 test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots of a check in
@@ -294,6 +295,8 @@ fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
 look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`
 in `tests/e2e/screenshots.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
+render a new animation with `bash tests/e2e/screenshots.sh`, or show less of a scroll or of a page
+that changes as a whole, until `node --test tests/e2e/screenshots.test.mjs` passes,
 open Files at `folderAddress(await filesAddress(page), dir)` of
 `tests/e2e/files-address.mjs` until `node --test tests/e2e/files-address.test.mjs` passes,
 fix what ESLint names in the file and line that it prints, use the variable or remove it,

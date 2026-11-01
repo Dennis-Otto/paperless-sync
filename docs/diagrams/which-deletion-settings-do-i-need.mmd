@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Which deletion settings you need
+    accDescr: The section Trash and deletion safety answers three questions. First, where the copy of a document goes that went to the trash of Paperless: with the Paperless trash behavior Move to deleted folder, the default, it moves into _Deleted, below the day on which the document went to the trash, and comes back when the document is restored; with Keep archive file in place, it stays where it is. Second, whether the copy goes too once Paperless deleted the document for good: leave Delete the Nextcloud copy after Paperless deletes the document for good off, the default, and the copy stays; turn it on, and the copy goes to the trash bin of its user in Nextcloud after N complete scans without the document, where N is the setting Required consecutive missing scans, three by default. Third, with that switch on, whether the copy of a document that disappeared without passing the Paperless trash, such as one deleted through the API, goes at once: turn on Also delete copies of documents that disappeared without passing the Paperless trash; leave it off, the default, and that copy takes the way of a document in the trash first. The questions are indigo, the safe defaults green, the other way to keep copies blue and the switches that delete copies amber.
+
+    trashed{"A document goes to<br>the trash of Paperless:<br>where should its<br>copy be?"}
+    move["Move to deleted folder,<br>the default: the copy<br>moves to 📁 _Deleted/<br>2026-10-25/…, and back<br>when it is restored"]
+    keep["Keep archive file<br>in place: the copy<br>stays where it is"]
+    gone{"Paperless deletes it<br>for good: should the<br>copy go too?"}
+    stays["Leave Delete the<br>Nextcloud copy … off,<br>the default: the<br>copy stays"]
+    permanent["Turn on Delete the Nextcloud<br>copy after Paperless deletes<br>the document for good: after<br>N complete scans, the copy<br>goes to the trash bin<br>of its user"]
+    vanished{"A document disappears<br>without the trash, such<br>as through the API: should<br>its copy go at once?"}
+    direct["Turn on Also delete<br>copies of documents that<br>disappeared without passing<br>the Paperless trash"]
+    first["Leave it off, the<br>default: the copy takes<br>the way of a document<br>in the trash first"]
+
+    trashed -- "in a folder<br>of its own" --> move
+    trashed -- "where it is" --> keep
+    move --> gone
+    keep --> gone
+    gone -- "no" --> stays
+    gone -- "yes" --> permanent
+    permanent --> vanished
+    vanished -- "yes" --> direct
+    vanished -- "no" --> first
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class trashed,gone,vanished check
+    class move,stays,first kept
+    class keep nextcloud
+    class permanent,direct warning

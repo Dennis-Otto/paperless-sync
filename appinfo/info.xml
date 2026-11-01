@@ -101,6 +101,10 @@ Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextc
 		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/02-structured-archive.png</screenshot>
 	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/03-dry-run-report-small.png"><!--
 		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/03-dry-run-report.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/04-inbox-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/04-inbox.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/05-trash-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.3.1/screenshots/05-trash.png</screenshot>
 	<!-- x-release-please-end -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>

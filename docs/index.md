@@ -28,7 +28,10 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 [Requirements](guide.md#requirements){ .md-button }
 { .ps-hero-actions }
 
-![The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud](images/archive.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/archive-dark.gif">
+  <img alt="The archive in Nextcloud Files: from the folders of the correspondents through a correspondent, a document type and a year to a document of Paperless, which opens in the viewer of Nextcloud" src="images/archive.gif">
+</picture>
 
 ## What it does
 
@@ -78,7 +81,10 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 
 --8<-- "README.md:quick-start"
 
-![The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed](images/dry-run.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/dry-run-dark.gif">
+  <img alt="The settings of Paperless Sync: Run dry-run lists the documents that a run would export, then Synchronize now exports them and the status turns to completed" src="images/dry-run.gif">
+</picture>
 
 The [guide](guide.md) describes the configuration in detail: the Paperless account, the folders, the path template and the deletion safety.
 

@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Das Archiv mit deinem Haushalt teilen
+    accDescr: Jeder Lauf schreibt die Dokumente des Haushalts aus Paperless-ngx in den Ordner Archiv des Zielbenutzers. Der Zielbenutzer teilt den Ordner Archiv selbst, den die Pfadvorlage nicht ändert, mit der Gruppe des Haushalts in Nextcloud, Nur anzeigen, damit jedes Mitglied die Dokumente in Dateien im Web, mit dem Desktop-Client und in der Nextcloud-App auf dem Handy findet. Den Ordner Eingang teilt er mit denen, die Dokumente senden dürfen, mit der Berechtigung zum Bearbeiten, damit sie hineinscannen oder hineinspeichern, und der nächste Lauf schickt die Dateien an Paperless. Jemand ohne Konto, etwa eine Steuerberatung, erhält einen geteilten Link auf einen Ordner, Nur anzeigen, mit einem Ablaufdatum und einem Passwort. Statt eines gemeinsamen Archivs gibt das Eigentum je Benutzer jedem Mitglied ein eigenes Archiv, mit den Dokumenten, die ihm in Paperless gehören. Paperless-ngx ist grün, die Ordner von Nextcloud blau, die Menschen orange und der andere Weg indigo.
+
+    paperless["Paperless-ngx mit den<br>Dokumenten des Haushalts"]
+    archive["📁 Archiv des<br>Zielbenutzers, das<br>die Läufe schreiben"]
+    inbox["📁 Eingang des<br>Zielbenutzers"]
+    family["👪 Der Haushalt, eine Gruppe<br>von Nextcloud: Dateien im<br>Web, auf dem Desktop und<br>auf dem Handy"]
+    adviser["🧾 Eine Steuerberatung,<br>ohne Konto"]
+    own["Oder Eigentum je<br>Benutzer: Jedes Mitglied<br>erhält ein eigenes Archiv,<br>mit den Dokumenten, die<br>ihm in Paperless gehören"]
+
+    paperless -- "jeder Lauf" --> archive
+    archive -- "mit der Gruppe<br>geteilt, Nur anzeigen" --> family
+    family -- "hineinscannen oder<br>-speichern, geteilt mit<br>Berechtigung zum Bearbeiten" --> inbox
+    inbox -- "nächster Lauf" --> paperless
+    archive -- "Link teilen: Nur anzeigen,<br>Ablaufdatum<br>und Passwort" --> adviser
+    paperless -.-> own
+
+    classDef paperless fill:#17803d2e,stroke:#17803d,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    class paperless paperless
+    class archive,inbox nextcloud
+    class family,adviser yours
+    class own check

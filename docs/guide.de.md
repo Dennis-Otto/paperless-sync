@@ -10,7 +10,10 @@ Wie Paperless Sync funktioniert, was es braucht, wie du es installierst und einr
 
 Der Testlauf und die erste Synchronisation des Schnellstarts:
 
-![Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen](images/de/dry-run.gif)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/dry-run-dark.gif">
+  <img alt="Die Einstellungen von Paperless Sync: Testlauf starten listet die Dokumente auf, die ein Lauf exportieren würde, dann exportiert Jetzt synchronisieren sie, und der Status wechselt zu abgeschlossen" src="images/de/dry-run.gif">
+</picture>
 
 --8<-- "README.de.md:features"
 

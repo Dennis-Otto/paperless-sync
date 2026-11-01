@@ -1,0 +1,37 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Welche Löscheinstellungen du brauchst
+    accDescr: Der Abschnitt Papierkorb und Löschsicherheit beantwortet drei Fragen. Erstens, wohin die Kopie eines Dokuments kommt, das in den Papierkorb von Paperless ging: Mit dem Verhalten beim Paperless-Papierkorb In Gelöscht-Ordner verschieben, der Vorgabe, wandert sie nach _Gelöscht, unter den Tag, an dem das Dokument in den Papierkorb kam, und kehrt zurück, wenn das Dokument wiederhergestellt wird; mit Archivdatei am Ort behalten bleibt sie, wo sie ist. Zweitens, ob die Kopie auch geht, wenn Paperless das Dokument endgültig gelöscht hat: Bleibt Nextcloud-Kopie löschen, nachdem Paperless das Dokument endgültig gelöscht hat aus, die Vorgabe, bleibt die Kopie; ist es an, kommt die Kopie nach N vollständigen Scans ohne das Dokument in den Papierkorb ihres Benutzers in Nextcloud, wobei N die Einstellung Erforderliche aufeinanderfolgende Läufe ohne das Dokument ist, drei als Vorgabe. Drittens, mit diesem Schalter an, ob die Kopie eines Dokuments, das ohne den Paperless-Papierkorb verschwunden ist, etwa über die API gelöscht, sofort geht: Dann Auch Kopien von Dokumenten löschen, die ohne den Paperless-Papierkorb verschwunden sind einschalten; bleibt es aus, die Vorgabe, nimmt diese Kopie zuerst den Weg eines Dokuments im Papierkorb. Die Fragen sind indigo, die sicheren Vorgaben grün, der andere Weg, Kopien zu behalten, blau und die Schalter, die Kopien löschen, bernsteinfarben.
+
+    trashed{"Ein Dokument kommt in<br>den Papierkorb von<br>Paperless: Wo soll<br>seine Kopie sein?"}
+    move["In Gelöscht-Ordner<br>verschieben, die Vorgabe:<br>Die Kopie wandert nach<br>📁 _Gelöscht/2026-10-25/…,<br>und zurück, wenn es<br>wiederhergestellt wird"]
+    keep["Archivdatei am Ort<br>behalten: Die Kopie<br>bleibt, wo sie ist"]
+    gone{"Paperless löscht es<br>endgültig: Soll die<br>Kopie auch gehen?"}
+    stays["Nextcloud-Kopie löschen …<br>aus lassen, die Vorgabe:<br>Die Kopie bleibt"]
+    permanent["Nextcloud-Kopie löschen,<br>nachdem Paperless das Dokument<br>endgültig gelöscht hat<br>einschalten: Nach N<br>vollständigen Scans kommt<br>die Kopie in den Papierkorb<br>ihres Benutzers"]
+    vanished{"Ein Dokument verschwindet<br>ohne den Papierkorb, etwa<br>über die API: Soll seine<br>Kopie sofort gehen?"}
+    direct["Auch Kopien von Dokumenten<br>löschen, die ohne den<br>Paperless-Papierkorb<br>verschwunden sind<br>einschalten"]
+    first["Aus lassen, die Vorgabe:<br>Die Kopie nimmt zuerst<br>den Weg eines Dokuments<br>im Papierkorb"]
+
+    trashed -- "in einem eigenen<br>Ordner" --> move
+    trashed -- "wo sie ist" --> keep
+    move --> gone
+    keep --> gone
+    gone -- "nein" --> stays
+    gone -- "ja" --> permanent
+    permanent --> vanished
+    vanished -- "ja" --> direct
+    vanished -- "nein" --> first
+
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef warning fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class trashed,gone,vanished check
+    class move,stays,first kept
+    class keep nextcloud
+    class permanent,direct warning

@@ -1,0 +1,35 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Die erste Synchronisation
+    accDescr: Mit gespeicherter Verbindung und noch ausgeschalteter Synchronisation listet ein Testlauf, was der erste Lauf schreiben würde, und Erste Schritte schätzt, wie lange die erste Synchronisation dauert. Dann wird die geplante Synchronisation eingeschaltet und gespeichert. Der Cron von Nextcloud startet den Hintergrundjob der App höchstens alle fünf Minuten, und sobald das Intervall vergangen ist, exportiert ein Lauf die Dokumente, die Paperless zuletzt hinzugefügt hat, zuerst, bis zur Batchgröße, 100 als Vorgabe; sein Bericht zählt die anderen als übersprungen. Solange Dokumente übrig sind, nimmt der nächste Lauf nach dem Intervall den nächsten Batch: Mit den Standardwerten brauchen 5.000 Dokumente 50 Läufe, vier Stunden oder mehr. Dann ist das Archiv vollständig, und jeder spätere Lauf ändert nur, was sich in Paperless geändert hat. Stattdessen lässt sich ein großes Archiv auf dem Server in einem Zug importieren, mit noch ausgeschaltetem Zeitplan, mit occ paperless_sync:run --unlimited. Deine Schritte sind orange, die Fragen indigo, die Läufe blau und das vollständige Archiv grün.
+
+    dryrun["Testlauf starten: Was der<br>erste Lauf schreiben würde;<br>Erste Schritte schätzt,<br>wie lange er dauert"]
+    schedule["Geplante Synchronisation<br>einschalten und<br>speichern"]
+    occ["Oder, mit Zeitplan aus:<br>occ paperless_sync:run<br>--unlimited importiert<br>alles in einem Zug"]
+    cron{"Cron von Nextcloud,<br>höchstens alle 5 Minuten:<br>Ist das Intervall<br>vergangen?"}
+    run["Ein Lauf exportiert die<br>Dokumente, die Paperless<br>zuletzt hinzugefügt hat, zuerst,<br>bis zur Batchgröße, 100 als<br>Vorgabe, und zählt die<br>anderen als übersprungen"]
+    left{"Dokumente<br>übrig?"}
+    complete["✅ Das Archiv ist vollständig:<br>Jeder spätere Lauf ändert nur,<br>was sich in Paperless<br>geändert hat"]
+
+    dryrun --> schedule
+    dryrun -.-> occ
+    schedule --> cron
+    cron -- "nein: der nächste<br>Hintergrundjob" --> cron
+    cron -- "ja" --> run
+    run --> left
+    left -- "ja: 5.000 Dokumente<br>brauchen 50 Läufe, vier<br>Stunden oder mehr mit<br>den Standardwerten" --> cron
+    left -- "nein" --> complete
+    occ --> complete
+
+    classDef yours fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class dryrun,schedule,occ yours
+    class cron,left check
+    class run nextcloud
+    class complete done

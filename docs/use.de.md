@@ -59,6 +59,13 @@ Jede Datei, die du in `Dokumente/Paperless/Eingang` legst, oder, in der Regel, i
 - **Ein Video, ein Programm oder ein Archiv bleibt, wo es ist:** `mp4`, `exe`, `zip` und dergleichen gehen nie an Paperless, das sie nicht als Dokumente verwenden kann, und der Bericht jedes Laufs nennt sie als *Beiseitegelegt*, bis du sie verschiebst oder löschst. Wie viele Dateien du in den Eingang legst, spielt keine Rolle: Ein großer Stapel Scans geht durch wie eine einzelne Seite.
 - **Ein Ordner unterhalb des Eingangs kann Tags nennen:** Mit *Unterordner werden zu Tags* bekommt eine Datei in `Eingang/Steuern/2026` in Paperless die Tags *Steuern* und *2026*. Deine Administration sagt dir, ob das an ist.
 
+Zwei Scans im Eingang: Paperless importiert den ersten, und der zweite, den es nicht importieren konnte, wartet in `Fehler` neben seinem Grund:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/inbox-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner Eingang: Zwei Scans kommen an, und eine Bildunterschrift sagt, dass die nächsten Läufe sie an Paperless schicken und ein Scan den Eingang verlässt, sobald Paperless seinen Import beendet hat. Der Eingang ist wieder leer, und der Zeiger öffnet im Ordnerbaum den Ordner Fehler, der den zweiten Scan neben seiner .error.txt enthält, da Paperless ihn nicht importieren konnte" src="images/de/inbox.gif">
+</picture>
+
 Die [Anleitung](guide.de.md#nextcloud-inbox) hat die Einzelheiten für die Administration, wie die Wiederholungen und die Tags für jeden Import.
 
 ### An Paperless senden im Menü einer Datei
@@ -134,11 +141,25 @@ Wer einen Ordner des Archivs teilen darf, sein Eigentümer oder jemand, mit dem 
 - **Mit einem Benutzer oder einer Gruppe von Nextcloud:** Tippe den Namen ein und wähle **Nur anzeigen**, damit niemand eine Kopie bearbeitet, die die nächste Änderung in Paperless ersetzt.
 - **Mit jemandem ohne Konto,** etwa einer Steuerberatung: **Link teilen** erstellt einen öffentlichen Link. Wähle **Nur anzeigen**, setze ein **Ablaufdatum** und ein **Passwort**, und sende das Passwort auf einem anderen Weg als den Link. Wer den Link hat, sieht die Dateien, nicht Paperless.
 
+Das Archiv eines Haushalts, geteilt:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/sharing-the-archive-with-your-household.de.dark.svg">
+  <img src="images/diagrams/sharing-the-archive-with-your-household.de.svg" alt="Das Archiv mit deinem Haushalt teilen: Jeder Lauf schreibt die Dokumente des Haushalts aus Paperless-ngx in den Ordner Archiv des Zielbenutzers. Der Zielbenutzer teilt den Ordner Archiv selbst, den die Pfadvorlage nicht ändert, mit der Gruppe des Haushalts in Nextcloud, Nur anzeigen, damit jedes Mitglied die Dokumente in Dateien im Web, mit dem Desktop-Client und in der Nextcloud-App auf dem Handy findet. Den Ordner Eingang teilt er mit denen, die Dokumente senden dürfen, mit der Berechtigung zum Bearbeiten, damit sie hineinscannen oder hineinspeichern, und der nächste Lauf schickt die Dateien an Paperless. Jemand ohne Konto, etwa eine Steuerberatung, erhält einen geteilten Link auf einen Ordner, Nur anzeigen, mit einem Ablaufdatum und einem Passwort. Statt eines gemeinsamen Archivs gibt das Eigentum je Benutzer jedem Mitglied ein eigenes Archiv, mit den Dokumenten, die ihm in Paperless gehören. Paperless-ngx ist grün, die Ordner von Nextcloud blau, die Menschen orange und der andere Weg indigo.">
+</picture>
+
 Eine Freigabe einer Kopie bleibt bei ihr, wenn sie nach einer Änderung in Paperless wandert. Eine Freigabe eines Ordners zeigt, was die Pfadvorlage in diesen Ordner legt: Mit der Standardvorlage enthält der Ordner eines Jahres die Dokumente eines Korrespondenten und eines Typs, und eine Freigabe eines solchen Ordners, den die Pfadvorlage baut, verschwindet samt ihrem Link, wenn eine Änderung in Paperless oder an der Vorlage alle seine Kopien wegbewegt. Gib also den Ordner `Archiv` selbst frei, den die Vorlage nicht ändert, oder bitte deine Administration um eine Pfadvorlage, oder einen Speicherpfad von Paperless, deren oberster Ordner sammelt, was du freigibst, etwa die Dokumente einer Steuererklärung. Die [FAQ](faq.de.md#kann-ich-die-pfadvorlage-später-ändern) erklärt, warum.
 
 ## Was Bearbeiten, Umbenennen und Löschen bewirken
 
 Das Archiv ist ein Spiegel von Paperless: Nichts, was du mit einer Kopie in Nextcloud tust, ändert Paperless. Ändere ein Dokument in Paperless, und der nächste Lauf bringt die Änderung zu seiner Kopie.
+
+Erhält ein Dokument in Paperless etwa einen neuen Typ und einen neuen Titel, verschiebt der nächste Lauf seine Kopie und benennt sie um:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/move-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner Example Bank/Letter/2026 des Archivs mit der Kopie 2026-10-07 - Credit card terms [P190].pdf. Eine Bildunterschrift sagt, dass das Dokument in Paperless den Typ Contract und den neuen Titel Credit card agreement erhält, dann, dass der nächste Lauf die Kopie in den Ordner ihres neuen Typs verschiebt und ihr den neuen Namen gibt. Der Zeiger öffnet Example Bank, das jetzt Contract und Statement enthält und keinen Ordner Letter mehr, dann Contract und 2026, wo die Kopie 2026-10-07 - Credit card agreement [P190].pdf heißt" src="images/de/move.gif">
+</picture>
 
 | Was du in Nextcloud tust | Was passiert |
 | --- | --- |
@@ -148,3 +169,10 @@ Das Archiv ist ein Spiegel von Paperless: Nichts, was du mit einer Kopie in Next
 | Eine Datei in den Eingang legen | Sie geht an Paperless, und ihre Kopie kommt ins Archiv, sobald das Dokument dort fertig bearbeitet ist. |
 
 Wenn ein Dokument in den Papierkorb von Paperless geht, wandert seine Kopie in den Ordner `_Gelöscht` des Archivs, und wenn es von dort zurückkommt, auch seine Kopie. Die [FAQ](faq.de.md#das-archiv-in-nextcloud) beantwortet mehr: [was mit einer Änderung passiert](faq.de.md#was-passiert-wenn-ich-eine-gespiegelte-datei-bearbeite), [wohin gelöschte Dateien gehen](faq.de.md#wohin-gehen-gelöschte-dateien) und [ob eine Änderung Paperless erreicht](faq.de.md#erreichen-meine-änderungen-in-nextcloud-paperless).
+
+Eine Rechnung kommt in Paperless in den Papierkorb und kehrt zurück:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/trash-dark.gif">
+  <img alt="Nextcloud Dateien im Ordner City Utilities/Invoice/2026 des Archivs mit drei Stromrechnungen. Eine Bildunterschrift sagt, dass Electricity bill March in Paperless in den Papierkorb kommt; nach dem nächsten Lauf enthält der Ordner zwei Rechnungen, und der Zeiger öffnet _Gelöscht, 2026-10-25, City Utilities, Invoice und 2026, wo die Kopie der Rechnung vom März liegt. Eine Bildunterschrift sagt, dass die Rechnung in Paperless wiederhergestellt wird, und der Ordner des Archivs enthält wieder alle drei Rechnungen" src="images/de/trash.gif">
+</picture>

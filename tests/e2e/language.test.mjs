@@ -22,6 +22,7 @@ test('the English pictures go to docs/images/ and the App Store, with the texts 
 	assert.equal(english.t('Send to Paperless'), 'Send to Paperless')
 	assert.equal(english.nextcloud('Folder tree'), 'Folder tree')
 	assert.deepEqual([english.base, english.archive, english.inbox], ['Documents/Paperless', 'Archive', 'Inbox'])
+	assert.deepEqual([english.failed, english.deleted], ['Failed imports', '_Deleted'])
 	assert.equal(english.receipt, 'Receipts/Hardware store.pdf')
 })
 
@@ -34,6 +35,7 @@ test('the German pictures go to docs/images/de/ only, in the words of the German
 	assert.equal(german.t('Send to Paperless'), catalog['Send to Paperless'])
 	assert.equal(german.nextcloud('Folder tree'), 'Ordnerbaum')
 	assert.deepEqual([german.base, german.archive, german.inbox], ['Dokumente/Paperless', 'Archiv', 'Eingang'])
+	assert.deepEqual([german.failed, german.deleted], ['Fehler', '_Gelöscht'])
 	assert.equal(german.letter, 'Scans/Brief der Bank.pdf')
 })
 
@@ -49,6 +51,19 @@ test('every text that screenshots.mjs looks for has its German', () => {
 	for (const text of nextcloud) {
 		assert.ok(german.nextcloud(text))
 	}
+})
+
+test('the animations have every caption in both languages, each naming the folders of its language', () => {
+	const english = pictureLanguage('en')
+	const german = pictureLanguage('de', catalog)
+	assert.deepEqual(Object.keys(german.captions), Object.keys(english.captions))
+	for (const [key, text] of Object.entries(german.captions)) {
+		assert.ok(text.length > 0 && text !== english.captions[key], `The German caption ${key} is the English one.`)
+	}
+	assert.match(english.captions.inboxFailed, new RegExp(english.failed))
+	assert.match(german.captions.inboxFailed, new RegExp(german.failed))
+	assert.match(english.captions.trashRun, new RegExp(english.deleted))
+	assert.match(german.captions.trashRun, new RegExp(german.deleted))
 })
 
 test('a text without German fails, as does a language without pictures', () => {
