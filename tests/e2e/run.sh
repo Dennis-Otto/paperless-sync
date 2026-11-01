@@ -70,7 +70,8 @@ TMP_DIR="$(mktemp -d)"
 # playwright-core in package.json; Renovate updates both together, and
 # scripts/check-project.sh compares them.
 PLAYWRIGHT_IMAGE="mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea"
-# The download of that image in the background, while Nextcloud installs.
+# The download of that image in the background, from the start of the run, when the tests
+# don't need the processors yet.
 PLAYWRIGHT_PULL=""
 # E2E_ARTIFACTS, a folder, gets the evidence of a failure for the artifact of the job in the
 # CI (keep_evidence below); run-all.sh and canary.sh give each run a folder of its own.
@@ -79,6 +80,16 @@ E2E_ARTIFACTS="${E2E_ARTIFACTS:-}"
 [[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
 # What the checks in the browser keep of a failure, which keep_evidence takes along.
 BROWSER_ARTIFACTS="${TMP_DIR}/browser"
+# E2E_BROWSER_SNAPSHOTS=1 also keeps a snapshot of the page at each action in the trace of a
+# window, with E2E_ARTIFACTS. It takes about a fifth of the time of the checks in the browser,
+# so the first attempt of a job of the CI leaves it out; a failure that stays gets it from the
+# second attempt, which the flaky-test bot starts. A run on a machine keeps it.
+if [[ -z "${E2E_BROWSER_SNAPSHOTS:-}" ]]; then
+	E2E_BROWSER_SNAPSHOTS=1
+	if [[ "${GITHUB_RUN_ATTEMPT:-}" == 1 ]]; then
+		E2E_BROWSER_SNAPSHOTS=0
+	fi
+fi
 
 export E2E_PORT
 
@@ -109,6 +120,18 @@ keep_evidence() {
 	echo "The evidence of the failure is in ${E2E_ARTIFACTS}."
 }
 
+# Empties the folder of E2E_DATA_FOLDER, in the container as its files belong to the user of
+# the web server there. down doesn't touch a folder of the machine, whose old files would
+# fail the next installation and whose memory would stay taken until a reboot. A runner of
+# the CI starts without the folder and is thrown away with it. Runs after a down, and
+# removes again what it starts for this.
+empty_data_folder() {
+	if [[ -n "${E2E_DATA_FOLDER:-}" && -d "${E2E_DATA_FOLDER}" ]]; then
+		"${COMPOSE[@]}" run --rm --no-deps --entrypoint sh nextcloud -c 'find /var/www/html/data -mindepth 1 -delete' >/dev/null
+		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+	fi
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT
@@ -131,6 +154,7 @@ cleanup() {
 	elif [[ "${CI:-}" != "true" ]]; then
 		# A runner of the CI is thrown away with its containers after the job.
 		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+		empty_data_folder || echo "The folder ${E2E_DATA_FOLDER} could not be emptied." >&2
 	fi
 	exit "${status}"
 }
@@ -293,6 +317,7 @@ accessibility() {
 			--env E2E_VIEW_ONLY_TOKEN=e2e-view-only-token \
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
+			--env "E2E_BROWSER_SNAPSHOTS=${E2E_BROWSER_SNAPSHOTS}" \
 			--env "E2E_COVERAGE=${E2E_COVERAGE}" \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c "${BROWSER_CHECKS}" \
@@ -712,6 +737,11 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 	E2E_PACKAGE="${E2E_PACKAGE:-$(bash "${SCRIPT_DIR}/packages.sh" commit "${TMP_DIR}")}"
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+empty_data_folder
+if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
+	PLAYWRIGHT_PULL=$!
+fi
 "${COMPOSE[@]}" up --detach --wait --wait-timeout 300
 containers
 # The seconds since the start at the end of each phase show where a slow run spends them;
@@ -726,10 +756,6 @@ if [[ "${E2E_OBJECTSTORE}" == s3 ]]; then
 		echo "The object store has room for ${BASH_REMATCH[1]:-an unknown number of} volumes, and it needs 14, so -volume.max of compose.s3.yaml is too low: ${S3_TOPOLOGY:0:100}" >&2
 		exit 1
 	fi
-fi
-if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
-	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
-	PLAYWRIGHT_PULL=$!
 fi
 
 install_options=(--database="${E2E_DATABASE}")

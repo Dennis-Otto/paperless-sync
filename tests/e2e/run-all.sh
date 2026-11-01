@@ -27,15 +27,22 @@
 # the variants, on max-version. E2E_SHARD=1 or 2 runs one half of the runs, for the two
 # jobs of the CI, which each take one: shard 1 holds the oldest and the newest version,
 # shard 2 the variants, and each version between goes, from the oldest, to the shard
-# with the lighter load, where a version with its browser checks counts as two and a
-# variant as one, to 2 when both weigh as much. Both jobs get the same versions and
-# variants, so they split them the same way. A shard without anything to run passes.
+# with the lighter load, where a version with its browser checks counts as five, a variant
+# as three and an upgrade as two, to 2 when both weigh as much. Both jobs get the same
+# versions and variants, so they split them the same way. A shard without anything to run
+# passes.
 # E2E_PLAN=1 only prints the runs that it would start.
 # KEEP_E2E=1 keeps the containers of each, as with run.sh.
-# E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs before the job of the CI
-# ends after 20 minutes, so that the logs of all are still printed. The table of the
+# E2E_VERSION_TIMEOUT, by default 15m from its own start, ends a run that hangs before the
+# job of the CI ends after 25 minutes, also a run that first waited for a processor, so
+# that the logs of all are still printed. The table of the
 # results gives the time of each phase of each run, from the lines of its log, so that a
 # run that gets slower shows where.
+# E2E_PARALLEL, by default the number of processors, limits the runs at once: a run that
+# would have to share a processor with another takes longer without saving any time, so the
+# next one starts when one ends, in the order of the plan, which has the lightest last.
+# E2E_MEMORY_FOLDER, a folder in memory such as /dev/shm, keeps the files and the database of
+# SQLite of each run there instead of on the disk; the CI sets it.
 # E2E_ARTIFACTS, a folder, gets a folder for each run that failed, named by its key, such
 # as 35 or 35-pgsql-upgrade, with its log, run.log, its title, title.txt, and the evidence
 # that run.sh keeps; tests/e2e/failure.py names the first error of each from there.
@@ -98,9 +105,18 @@ case "${E2E_VARIANTS:-}" in
 esac
 
 # The shard of the runs: 1 the oldest and the newest version, 2 the variants, and each
-# version between to the one with the lighter load. A version counts twice, as its
-# browser checks take about as long as the rest of its run, and a variant, which has
-# none, once. The variants still run on the newest of all versions.
+# version between to the one with the lighter load. The load of a run is what it costs a
+# runner, measured in the phases of the table of the summary: a version counts as five, with
+# its browser checks, a variant, which has none, as three, and an upgrade, which runs far less
+# of the scenario, as two. The variants still run on the newest of all versions.
+LOAD_OF_VERSION=5
+load_of_variant() {
+	if [[ "$1" == *+upgrade ]]; then
+		echo 2
+	else
+		echo 3
+	fi
+}
 case "${E2E_SHARD:-}" in
 	"") ;;
 	1 | 2)
@@ -112,15 +128,22 @@ case "${E2E_SHARD:-}" in
 		if ((newest != oldest)); then
 			first+=("${newest}")
 		fi
+		first_load=$((LOAD_OF_VERSION * ${#first[@]}))
+		second_load=0
+		for variant in "${variants[@]}"; do
+			second_load=$((second_load + $(load_of_variant "${variant}")))
+		done
 		mapfile -t between < <(printf '%s\n' "${versions[@]}" | sort -n -u)
 		for version in "${between[@]}"; do
 			if [[ -z "${version}" ]] || ((version == oldest || version == newest)); then
 				continue
 			fi
-			if ((2 * ${#second[@]} + ${#variants[@]} <= 2 * ${#first[@]})); then
+			if ((second_load <= first_load)); then
 				second+=("${version}")
+				second_load=$((second_load + LOAD_OF_VERSION))
 			else
 				first+=("${version}")
+				first_load=$((first_load + LOAD_OF_VERSION))
 			fi
 		done
 		if [[ "${E2E_SHARD}" == 1 ]]; then
@@ -251,6 +274,11 @@ if timeout --version >/dev/null 2>&1; then
 	limit=(timeout --kill-after=30s "${E2E_VERSION_TIMEOUT:-15m}")
 fi
 
+# The script of one run, which scripts/check-project.sh replaces to check the limit.
+RUN_SCRIPT="${E2E_RUN_SCRIPT:-${SCRIPT_DIR}/run.sh}"
+# The runs at once, or 0 without a limit where nothing names the number of processors.
+parallel="${E2E_PARALLEL:-$(nproc 2>/dev/null || echo 0)}"
+
 # One run, with its log and its result in LOG_DIR: the exit code of run.sh and the
 # seconds it took. Its process ID, of run.sh or of the timeout around it, lets stop()
 # end it.
@@ -263,13 +291,14 @@ run() {
 	NEXTCLOUD_IMAGE="nextcloud:${run_versions[index]}-apache" \
 		E2E_PORT="${ports[index]}" \
 		E2E_PROJECT_NAME="paperless_sync_e2e_${key//-/_}" \
+		E2E_DATA_FOLDER="${E2E_MEMORY_FOLDER:+${E2E_MEMORY_FOLDER}/paperless_sync_e2e_${key//-/_}}" \
 		E2E_DATABASE="${databases[index]}" \
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
 		E2E_COVERAGE="${coverage}" \
 		E2E_UPGRADE="${upgrades[index]}" \
 		E2E_ARTIFACTS="${E2E_ARTIFACTS:+${E2E_ARTIFACTS}/${key}}" \
-		"${limit[@]}" bash "${SCRIPT_DIR}/run.sh" >"${LOG_DIR}/${key}.log" 2>&1 &
+		"${limit[@]}" bash "${RUN_SCRIPT}" >"${LOG_DIR}/${key}.log" 2>&1 &
 	echo "$!" >"${LOG_DIR}/${key}.pid"
 	wait "$!" || status=$?
 	echo "${status} $((SECONDS - started))" >"${LOG_DIR}/${key}.result"
@@ -348,6 +377,11 @@ trap 'stop 130' INT
 trap 'stop 143' TERM
 pids=()
 for index in "${!keys[@]}"; do
+	if ((parallel > 0)); then
+		while (($(jobs -rp | wc -l) >= parallel)); do
+			wait -n || true
+		done
+	fi
 	run "${index}" &
 	pids+=("$!")
 	echo "  ${titles[index]}: ${LOG_DIR}/${keys[index]}.log"

@@ -68,7 +68,10 @@ from leaving a part of it untested without anyone noticing."""
 fix = """Read the first error in the summary; for a check in the browser, download the
 artifact *e2e-nextcloud* and open the trace of the window that failed, in its folder
 `browser`, with `npx playwright show-trace` or at https://trace.playwright.dev: it shows each
-step with the page before and after, its requests and its console. Run the version that
+step with a picture of the page, its requests and its console, and in the second attempt of
+the job, which the flaky-test bot starts unless the same jobs failed for the commit before, a
+snapshot of the page to inspect; without a second attempt, the run on your machine below keeps
+it as well. Run the version that
 failed on your machine with Docker, by the command that the log names, fix what its output
 shows, and push. A finding of the accessibility names its
 fix: a name for a control, a color with more contrast, CSS that lets a wide element wrap
@@ -102,8 +105,8 @@ PostgreSQL or MariaDB: the release wasn't intact, `occ upgrade` failed, a migrat
 didn't run, or the upgrade lost a row, a setting, the token, a file ID or a retry; or
 the tests failed against a version between `min-version` and `max-version`, which this
 check runs on SQLite as well, when its load is not heavier than that of the check
-nextcloud, where a version with its browser checks counts as two runs and a variant as
-one. The summary of the check has a table with the result and the time of each phase of
+nextcloud, where a version with its browser checks counts as five, a variant as three
+and an upgrade as two. The summary of the check has a table with the result and the time of each phase of
 each, below it the first error of each run that failed, and the last lines of the log the
 command that runs one again on its own. The artifact *e2e-variants* keeps the log,
 the log of Nextcloud, nextcloud.log, the apps and the logs of the containers of each run that failed."""
@@ -238,7 +241,14 @@ doesn't pin exactly one, which the upgrade test reads. *Changes that run the end
 `tests/e2e/affected.sh` decides otherwise than its sample. *The shards of the end-to-end tests*: the two shards of
 `tests/e2e/run-all.sh`, which the two required jobs of `.github/workflows/e2e.yml`
 run, leave out a run of the whole suite or start one twice, or split a sample of
-versions otherwise than it expects. *Downloads that a script runs*: a pipe of a shell script
+versions otherwise than it expects. *The runs at once of the end-to-end tests*: `tests/e2e/run-all.sh` leaves out a run, or starts more at
+once than `E2E_PARALLEL` names. *The folder in memory of the end-to-end tests*: `tests/e2e/run.sh`
+doesn't empty the folder of `E2E_DATA_FOLDER` after its `down`, so a second run on a machine
+would fail to install. *The health checks of the end-to-end tests*: a health
+check of a Compose file of `tests/e2e/` has no `start_interval`, an `interval` below 30 s,
+which would take the processors of the runner from the tests while its service runs, or
+fewer than two `retries`, which would fail a run on one late answer.
+*Downloads that a script runs*: a pipe of a shell script
 hands a download to a program, such as `curl … | bash` or `curl … | docker exec
 … python`, which Scorecard reports as a download that runs without a pinned hash, or the
 check misreads one of its samples. *Icon of the website*: `docs/images/app.svg` differs from

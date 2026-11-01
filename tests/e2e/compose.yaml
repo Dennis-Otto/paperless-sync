@@ -23,9 +23,15 @@ services:
         aliases: [paperless]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
-      interval: 2s
+      # Each check starts a process through Docker, which costs a runner more than the
+      # suite can spare with several runs side by side: often while the service starts,
+      # and seldom once it runs (tests/e2e/README.md#how-the-suite-stays-quick). One late
+      # answer doesn't count as unhealthy, which would fail each later up --wait: two do.
+      start_period: 60s
+      start_interval: 1s
+      interval: 1m
       timeout: 2s
-      retries: 30
+      retries: 2
 
   nextcloud:
     image: ${NEXTCLOUD_IMAGE:-nextcloud:33.0.9-apache@sha256:a97666d6ae931bde78a80cfba8abdf46d436d7b540f31895803f6fb0a012d689}
@@ -40,12 +46,19 @@ services:
       - "${E2E_PORT:-18083}:80"
     volumes:
       - nextcloud_html:/var/www/html
+      # The files and the database of SQLite. E2E_DATA_FOLDER, a folder in memory in the CI
+      # (run-all.sh), spares every commit of SQLite the wait for the disk, and stays through
+      # a restart of the container, which a tmpfs of Compose wouldn't.
+      - ${E2E_DATA_FOLDER:-nextcloud_data}:/var/www/html/data
       - ../../:/var/www/html/custom_apps/paperless_sync:ro
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1/status.php >/dev/null || exit 1"]
-      interval: 3s
+      start_period: 180s
+      start_interval: 1s
+      interval: 1m
       timeout: 3s
-      retries: 60
+      retries: 2
 
 volumes:
   nextcloud_html:
+  nextcloud_data:

@@ -1,6 +1,7 @@
 # Share the end-to-end runs between both required jobs, and make each call of the suite quick
 
 - Status: accepted
+- Amended by [0032](0032-spend-the-runners-of-the-end-to-end-tests-on-the-tests.md): the split weighs a version as five, a variant as three and an upgrade as two
 - Date: 2026-10-25
 
 ## Context

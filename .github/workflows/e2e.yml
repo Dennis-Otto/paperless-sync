@@ -14,10 +14,10 @@ name: Docker E2E
 # work on a runner each (tests/e2e/run-all.sh with E2E_SHARD, decision 0029): nextcloud
 # runs the oldest and the newest version, nextcloud on PostgreSQL, MariaDB and S3 the
 # databases, S3 and the upgrades, and each version between goes to the one with the
-# lighter load (a version with its browser checks counts as two runs, a variant as
-# one), so that a fourth version doesn't make one of them twice as slow. Each job runs
-# its share side by side: one wait for a runner instead of one for each, and the
-# downloads of one run overlap with the installation of another.
+# lighter load (a version with its browser checks counts as five, a variant as three
+# and an upgrade as two), so that a fourth version doesn't make one of them twice as
+# slow. Each job runs its share side by side: one wait for a runner instead of one for
+# each, and the downloads of one run overlap with the installation of another.
 #
 # In a pull request, the versions run only when the change can affect the app
 # (tests/e2e/affected.sh), the databases and S3 only when it can behave differently
@@ -82,7 +82,7 @@ jobs:
     # The run of Monday morning is the coming Nextcloud's alone.
     if: github.event.schedule != '17 5 * * 1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -106,6 +106,9 @@ jobs:
           # job variants doesn't take. Both jobs get the same variants, so that they
           # split the runs the same way; the job variants runs them.
           E2E_SHARD: 1
+          # The files and the database of SQLite of each run in memory, on a runner that is
+          # thrown away after the job.
+          E2E_MEMORY_FOLDER: /dev/shm
           VARIANTS: ${{ steps.changes.outputs.variants }}
           UPGRADE: ${{ steps.changes.outputs.upgrade }}
           E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts
@@ -163,7 +166,7 @@ jobs:
     name: nextcloud on PostgreSQL, MariaDB and S3
     if: github.event.schedule != '17 5 * * 1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -219,6 +222,9 @@ jobs:
           # as one of the package, runs no version.
           E2E_SHARD: 2
           E2E_VERSIONS: ${{ steps.changes.outputs.affected == 'false' && 'none' || '' }}
+          # The files and the database of SQLite of each run in memory, on a runner that is
+          # thrown away after the job.
+          E2E_MEMORY_FOLDER: /dev/shm
           VARIANTS: ${{ steps.changes.outputs.variants }}
           UPGRADE: ${{ steps.changes.outputs.upgrade }}
           E2E_ARTIFACTS: ${{ runner.temp }}/e2e-artifacts

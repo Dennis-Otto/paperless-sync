@@ -5,7 +5,9 @@
 // files.mjs and flow.mjs, which keeps what it takes to understand a failure without running
 // the suite again. In the folder of E2E_BROWSER_ARTIFACTS, which run.sh sets, each window of
 // a check, a context of Playwright, records a trace from its start: every action with a
-// screenshot and a snapshot of the page, its requests and what the page logged. When the
+// screenshot of the page, its requests and what the page logged. With E2E_BROWSER_SNAPSHOTS=1,
+// which run.sh sets unless it is the first attempt of a job of the CI, each action also keeps
+// a snapshot of the page, which takes about a fifth of the time of the checks. When the
 // check fails, keep() saves the trace of each window that is still there as
 // <check>-<window>.trace.zip, which `npx playwright show-trace` and trace.playwright.dev
 // open, and a screenshot of the whole of each of its pages as <check>-<window>-<page>.png.
@@ -57,7 +59,7 @@ function firstLine(reason) {
 // Starts Chromium for the check of that name, such as files for files.mjs. The browser is
 // the one of Playwright, with keep(reason) added, which saves what the check leaves and
 // names the failure; the check calls it before it closes the browser.
-export async function launch(check, { folder = process.env.E2E_BROWSER_ARTIFACTS ?? '', coverage = process.env.E2E_BROWSER_COVERAGE ?? '', type } = {}) {
+export async function launch(check, { folder = process.env.E2E_BROWSER_ARTIFACTS ?? '', coverage = process.env.E2E_BROWSER_COVERAGE ?? '', snapshots = process.env.E2E_BROWSER_SNAPSHOTS === '1', type } = {}) {
 	const browserType = type ?? (await import('playwright-core')).chromium
 	const browser = await browserType.launch(coverage ? { args: coverageSwitches() } : {})
 	if (coverage) {
@@ -118,7 +120,7 @@ export async function launch(check, { folder = process.env.E2E_BROWSER_ARTIFACTS
 		const context = await newContext(options)
 		opened += 1
 		const window = { number: opened, context, close: context.close.bind(context), closed: false, kept: false }
-		await context.tracing.start({ screenshots: true, snapshots: true, title: `${check}.mjs, window ${opened}` })
+		await context.tracing.start({ screenshots: true, snapshots, title: `${check}.mjs, window ${opened}` })
 		context.close = async () => {
 			window.closed = true
 		}
