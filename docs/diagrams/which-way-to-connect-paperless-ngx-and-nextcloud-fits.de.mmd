@@ -1,0 +1,28 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Welcher Weg, Paperless-ngx und Nextcloud zu verbinden, passt
+    accDescr: Wenn nur Dateien nach Paperless sollen, sendet die Paperless-Integration von Nextcloud einzelne Dateien von Hand, der Eingang von Paperless Sync nimmt jede Datei, die in einen Ordner von Nextcloud kommt, auf Wunsch mit ausgeschaltetem Export, und der Consume-Ordner, der Mail-Abruf und die Apps von Paperless nehmen Scans von einem Handy, einer Mail oder einem Scanner. Wenn die Dokumente von Paperless in Nextcloud Dateien erscheinen sollen, lautet die Frage, ob du in deiner Nextcloud Apps installieren kannst. Wenn nicht, etwa bei einer gehosteten Nextcloud, kopieren der WebDAV-Container oder ein rclone-Skript sie über WebDAV. Wenn ja und eine schreibgeschützte Sicht auf die eigenen Dateien von Paperless genügt, passt ein Mount mit externem Speicher, eines lokalen Ordners oder über SMB oder SFTP; für ein aufgeräumtes Archiv nach Korrespondent, Typ und Jahr, einen Eingang zu Paperless und Löschungen erst nach einer Bestätigung Paperless Sync. Die Fragen sind orange, die Optionen grün.
+
+    need{{"Dokumente von Paperless<br>in Nextcloud Dateien?"}}
+    into(["Paperless-<br>Integration,<br>der Eingang von<br>Paperless Sync, oder<br>Consume-<br>Ordner, Mail,<br>Apps von Paperless"])
+    install{{"Kannst du in Nextcloud<br>Apps installieren?"}}
+    webdav(["WebDAV-<br>Container oder<br>rclone-Skript"])
+    view{{"Genügt eine schreib-<br>geschützte Sicht auf die<br>Dateien von Paperless?"}}
+    mount(["Mount mit<br>externem Speicher"])
+    sync(["Paperless Sync"])
+
+    need -- "nein, nur nach<br>Paperless" --> into
+    need -- "ja" --> install
+    install -- "nein, etwa<br>eine gehostete<br>Nextcloud" --> webdav
+    install -- "ja" --> view
+    view -- "ja" --> mount
+    view -- "nein: ein aufgeräumtes<br>Archiv, ein Eingang,<br>sicheres Löschen" --> sync
+
+    classDef question fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef option fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class need,install,view question
+    class into,webdav,mount,sync option

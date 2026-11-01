@@ -39,7 +39,7 @@ Paperless-ngx keeps your documents, and Nextcloud is where you work with your fi
 | **Preview of the changes** | a dry run, on the settings page or with `occ` | — | — | `--dry-run` | — | — |
 | **Edits in Nextcloud** | stay in the copy until its document changes in Paperless, never reach Paperless | — | overwritten at its next start | overwritten at the next run | change Paperless's own files, unless the mount is read-only | — |
 | **Paperless on another server** | yes, over HTTP or HTTPS | yes | needs its media folder | needs its media folder | over SMB or SFTP | — |
-| **Users** | one archive of one Nextcloud user, shared with others | every user with a token of their own | one account, shared with others | one account, shared with others | the users and groups of the mount | — |
+| **Users** | one archive of one Nextcloud user, shared with others, or one for each user with the documents they own in Paperless | every user with a token of their own | one account, shared with others | one account, shared with others | the users and groups of the mount | — |
 | **Needs** | Nextcloud <span data-app="nextcloud">33–35</span> with system cron, and its admin | a Paperless token for every user | Docker, FUSE and a privileged container | rclone and a scheduler | the app External storage support, with sharing turned on | — |
 | **Maintained by** | Dennis Otto, with signed releases | Nextcloud GmbH, "with limited effort" | Flo-R1der | you | Nextcloud | the Paperless-ngx team |
 
@@ -53,7 +53,7 @@ It is not the right choice when:
 
 - you can't install apps in your Nextcloud, such as a Nextcloud of a provider: the [WebDAV container](#the-webdav-container-paperless-nextcloud-sync) and [rclone](#an-rclone-or-webdav-script) work over WebDAV;
 - your Nextcloud is older than the versions in the [requirements](guide.md#requirements);
-- every user should have an archive of their own Paperless account: one Nextcloud user owns the archive and shares it, and [#84](https://github.com/Dennis-Otto/paperless-sync/issues/84) asks for more;
+- every user should connect with a Paperless token of their own: an administrator connects one Paperless with one token, and [per-user ownership](guide.md#per-user-ownership) gives each user the documents they own there;
 - a second copy of every document is too much for the disk: the archive is a copy, as PDF/A or the original file.
 
 ### Nextcloud's Paperless integration
@@ -118,7 +118,10 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 | `{{ doc_pk }}` | `{{ id }}`, without the leading zeros: `123`, not `0000123` |
 | `{{ original_name }}` | `{{ original_filename }}` |
 | a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | none yet: `{{ storage_path }}` puts only the name of the storage path in, as one folder |
-| `{{ created_day }}`, the names of months, `{{ asn }}`, `{{ tag_list }}`, `{{ owner_username }}`, custom fields and Jinja logic | none yet: use `{{ created }}` for the full date, or leave them out |
+| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_day }}`, `{{ added_month }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | the same; the name of a month is in the language of Nextcloud |
+| `{{ owner_username }}` | the same; the account of the app needs the permission to view users |
+| a custom field, through `get_cf_value("Name")` | `{{ custom_fields.Name }}`; the account of the app needs the permission to view custom fields |
+| `{{ created_month_name_short }}`, `{{ added_year_short }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ tags }}` and Jinja logic | none yet: leave them out |
 
 ### From paperless-nextcloud-sync
 
