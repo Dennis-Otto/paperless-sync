@@ -3,7 +3,7 @@
 
 // Takes the pictures of the documentation (docs/images/) and of the App Store
 // (screenshots/, each with its small thumbnail) in Chromium, in the light and the dark
-// theme of Nextcloud, and records five animations as GIFs, each in both themes: NAME.gif
+// theme of Nextcloud, and records six animations as GIFs, each in both themes: NAME.gif
 // and NAME-dark.gif. screenshots.sh sets the app
 // up with the synthetic archive of showcase.py and starts this script in the image of
 // Playwright; the pictures go to the folder pictures/ next to this script, which
@@ -347,6 +347,59 @@ function drawCaption(text) {
 	caption.style.left = `${Math.round(left + width / 2)}px`
 	caption.style.maxWidth = `${Math.min(860, Math.round(width) - 48)}px`
 	caption.textContent = text
+}
+
+// What docker compose -f demo/compose.yaml up prints, for the animation of the demo, as the
+// terminal draws it in turn: screenshots.test.mjs compares its sentences with demo/init.py. Only
+// the password of the banner stays hidden, and the times are those of a machine with the images.
+const DEMO_TERMINAL = [
+	'$ docker compose -f demo/compose.yaml up',
+	'init-1     | Paperless-ngx and Nextcloud set themselves up, which takes a few minutes on the first start.',
+	'init-1     | Paperless-ngx is up after 29 s.',
+	'init-1     | Nextcloud is up after 1 s.',
+	'init-1     | Filling Paperless-ngx with 15 synthetic documents.',
+	'init-1     | Paperless-ngx has read the 15 documents.',
+	'init-1     | Creating the user demo in Nextcloud.',
+	'init-1     | Creating the account nextcloud-sync of the app in Paperless-ngx and connecting the app.',
+	'init-1     | The dry run changes nothing and lists 14 documents to export.',
+	'init-1     | Synchronization is on. The first run exports them.',
+	'init-1     | The archive has 14 documents.',
+	'init-1     | ',
+	'init-1     | The demo of Paperless Sync is ready.',
+	'init-1     | ',
+	'init-1     |   The archive   http://localhost:8580/apps/files/files?dir=/Documents/Paperless/Archive',
+	'init-1     |                 user demo, password ••••••••••••••••••••••••••••••••',
+	'init-1     |   The settings  http://localhost:8580/settings/admin/paperless_sync',
+	'init-1     |                 user admin, the same password',
+	'init-1     |   Paperless     http://localhost:8581',
+	'init-1     |                 user admin, the same password',
+]
+
+// Draws a terminal with these lines over the whole page, in both themes alike, or takes it
+// away for null.
+function drawTerminal(lines) {
+	let terminal = document.getElementById('screenshot-terminal')
+	if (lines === null) {
+		terminal?.remove()
+		return
+	}
+	if (terminal === null) {
+		terminal = document.createElement('pre')
+		terminal.id = 'screenshot-terminal'
+		Object.assign(terminal.style, {
+			position: 'fixed',
+			inset: '0',
+			zIndex: '100000',
+			margin: '0',
+			padding: '32px 36px',
+			background: '#232a3b',
+			color: '#e4e9f2',
+			font: '15px/1.6 monospace',
+			whiteSpace: 'pre-wrap',
+		})
+		document.body.append(terminal)
+	}
+	terminal.textContent = lines.join('\n')
 }
 
 // Saves the GIFs of an animation, one for each of its themes: NAME.gif in the light theme,
@@ -730,6 +783,38 @@ try {
 		await animation.until(page.waitForTimeout(1500))
 		await animation.hold(3000)
 		saveAnimation('archive', animation)
+		await context.close()
+	}
+
+	// The demo that the READMEs offer: the command in a terminal, and then the archive that it
+	// fills. This story has the same documents as the demo, with the IDs of the mock.
+	{
+		const { context, page } = await open(browser, owner, 'light', files(ARCHIVE))
+		const row = (name) => page.locator(`[data-cy-files-list-row-name^="${name}"] [data-cy-files-list-row-name-link]`)
+		await row('Example Insurance').waitFor()
+		await expandFolderTree(page, [...L.base.split('/'), L.archive])
+		const animation = new Animation(page)
+		await page.evaluate(drawTerminal, ['$'])
+		await animation.hold(500)
+		for (const shown of DEMO_TERMINAL.keys()) {
+			await page.evaluate(drawTerminal, DEMO_TERMINAL.slice(0, shown + 1))
+			// The command stands a moment, each step of the setup a shorter one, and the
+			// banner comes at once, as it does in the terminal.
+			await animation.hold(shown === 0 ? 1500 : shown < 11 ? 450 : 60)
+		}
+		await animation.hold(4000)
+		await page.evaluate(drawTerminal, null)
+		animation.caption(L.captions.tryIt)
+		await animation.hold(3000)
+		animation.caption(null)
+		for (const [folder, next] of [['Example Insurance', 'Contract'], ['Contract', '2026'], ['2026', '2026-01-15 - Home insurance policy']]) {
+			await animation.click(row(folder))
+			await animation.until(row(next).waitFor())
+			await animation.until(settle(page))
+			await animation.hold(900)
+		}
+		await animation.hold(2500)
+		saveAnimation('try-it', animation)
 		await context.close()
 	}
 

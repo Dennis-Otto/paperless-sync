@@ -233,8 +233,20 @@ def test_a_message_of_run_contract_sh_is_not_hidden_by_the_logs_of_the_container
     assert found.error == "occ paperless_sync:run ended with exit code 1: {}", found
 
 
-def test_both_scripts_print_the_line_where_the_report_stops() -> None:
-    for name in ("run.sh", "run-contract.sh"):
+def test_a_message_of_demo_sh_is_not_hidden_by_the_logs_of_the_containers() -> None:
+    found = failure.describe(
+        "Demo app-store",
+        "The first start passes after 80 s.\n"
+        "The archive of the demo has 0 files instead of 14.\n"
+        "The demo tests fail with exit code 1.\n"
+        "nextcloud-1  | 127.0.0.1 - - [25/Oct/2026:01:02:03 +0000] \"GET /status.php HTTP/1.1\" 200\n",
+    )
+    assert found.error == "The archive of the demo has 0 files instead of 14.", found
+    assert found.passed == "The first start passes after 80 s.", found
+
+
+def test_each_script_prints_the_line_where_the_report_stops() -> None:
+    for name in ("run.sh", "run-contract.sh", "demo.sh"):
         lines = (SCRIPT.parent / name).read_text(encoding="utf-8").splitlines()
         printed = [
             line.strip().removeprefix('echo "').removesuffix('" >&2').replace("${status}", "1")

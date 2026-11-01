@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The demo with the app of this checkout instead of the App Store, to try a change:
+#
+#   docker compose -f demo/compose.yaml -f demo/compose.local.yaml up
+#
+# demo/nextcloud-hook.sh enables the app that it finds in this folder.
+
+services:
+  nextcloud:
+    volumes:
+      - ../:/var/www/html/custom_apps/paperless_sync:ro,z
+  cron:
+    volumes:
+      - ../:/var/www/html/custom_apps/paperless_sync:ro,z
+  worker:
+    volumes:
+      - ../:/var/www/html/custom_apps/paperless_sync:ro,z

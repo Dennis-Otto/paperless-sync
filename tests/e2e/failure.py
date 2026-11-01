@@ -9,7 +9,7 @@
 
 FOLDER is that of E2E_ARTIFACTS, which keeps a folder for each run that failed: run.sh puts
 the evidence of its failure there, and run-all.sh and canary.sh its log, run.log, and its
-title, title.txt; the job of the contract tests writes both for its line of Paperless-ngx.
+title, title.txt; the jobs of the contract tests and of the demo write both for each of their runs.
 For each such run, this prints a line of Markdown with its title, its first error, the check
 in the browser that failed, if one did, and the last step that passed. In GitHub Actions, it also writes the lines into the
 summary of the job and as an annotation each, and into the output OUTPUT of the step, by
@@ -41,9 +41,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-# What run.sh and run-contract.sh print as their cleanup starts after a failure; what
+# What run.sh, run-contract.sh and demo.sh print as their cleanup starts after a failure; what
 # follows, such as the logs of the containers, isn't the output of the tests.
-STOPPED = re.compile(r"^The (?:end-to-end|contract) tests fail with exit code (\d+)\.$")
+STOPPED = re.compile(r"^The (?:end-to-end|contract|demo) tests fail with exit code (\d+)\.$")
 BROWSER = re.compile(r"^The check in the browser (\S+) fails: (.+)$")
 ERROR = re.compile(r"^(?:Contract broken: .+|(?:[A-Za-z_][\w.]*\.)?[A-Za-z_]*(?:Error|Exception): .+)$")
 # Where occ, a command of Symfony, names the file and the line of an exception, whose

@@ -93,9 +93,10 @@ for path in README.md README.de.md CHANGELOG.md docs/guide.md docs/guide.de.md d
   tests/package/test_check_package.sh; do
   expect skip "$path"
 done
-# The contract tests against a real Paperless are a job of their own.
+# The contract tests against a real Paperless are a job of their own, and so is the demo.
 for path in tests/e2e/contract.py tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml \
-  tests/fixtures/paperless-ngx-3/documents.json; do
+  tests/fixtures/paperless-ngx-3/documents.json demo/compose.yaml demo/init.py tests/e2e/demo.sh \
+  tests/e2e/test_demo.py; do
   expect skip "$path"
 done
 # The scripts of the pictures alone are the visual check's (visual.yml), whose story shares
@@ -178,6 +179,26 @@ done
 for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php templates/settings.php \
   tests/e2e/run.sh tests/e2e/README.md tests/Unit/Service/PaperlessApiServiceTest.php README.md; do
   expect_contract skip "$path"
+done
+
+# The smoke test of the demo runs for a change of the demo or of what it reads.
+expect_demo() {
+  local expected="$1" path="$2" actual=skip
+  if path_affects_demo "$path"; then
+    actual=run
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    echo "A change of $path should $expected the smoke test of the demo, but tests/e2e/affected.sh says $actual."
+    problems=$((problems + 1))
+  fi
+}
+for path in demo/compose.yaml demo/compose.local.yaml demo/init.py demo/nextcloud-hook.sh tests/e2e/demo.sh \
+  tests/e2e/showcase.py .nextcloudignore .github/workflows/e2e.yml; do
+  expect_demo run "$path"
+done
+for path in demo/README.md README.md lib/Service/SyncService.php tests/e2e/run.sh tests/e2e/test_demo.py \
+  .github/renovate.json5; do
+  expect_demo skip "$path"
 done
 
 # A change of appinfo/info.xml, as git diff --unified=0 shows it. A release writes
@@ -894,6 +915,15 @@ if [[ -n "$python" ]]; then
   "$python" -B tests/e2e/test_assert_upgrade.py
 else
   echo "Python 3.11 or newer is not installed here; the CI checks the checks of the upgrade test."
+fi
+
+printf '\n== %s\n' "Checks of the demo"
+# The demo in demo/ without its containers: its secrets, what demo/compose.yaml promises, and
+# that a first run or the smoke test tests/e2e/demo.sh fails on an archive that stays empty.
+if [[ -n "$python" ]]; then
+  "$python" -B tests/e2e/test_demo.py
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the demo."
 fi
 
 printf '\n== %s\n' "First error of a failed end-to-end run"

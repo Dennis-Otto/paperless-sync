@@ -185,6 +185,29 @@ autofix = """Whether the app or the fixtures follow a new answer of Paperless is
 decision of a person, who reads what Paperless changed; the job keeps the answers as its
 artifact paperless-ngx-2 or paperless-ngx-3 for that."""
 
+[check."Demo *"]
+title = "The smoke test of the demo"
+problem = """The demo of `demo/compose.yaml`, which the README offers to try the app, didn't
+start, its container init failed, its archive has fewer files than the seeded documents, or
+its password doesn't sign in. Each Monday, the job tries it with the app from the App Store
+and with that of the checkout; a pull request that changes the demo tries the checkout. The
+log names the step that failed, with the logs of the containers below it."""
+why = """The demo is the first thing that many people run of this app. When it breaks, they
+see a project that doesn't work, before they have seen the app. Its images and the release in
+the App Store move on their own, so a test has to start it for real."""
+fix = """Start the demo on your machine with Docker, as the job does, and read the logs of
+the container that failed. When the app has changed its settings or routes, or Paperless-ngx
+its API, adapt `demo/init.py`; when a new image needs something else, adapt
+`demo/compose.yaml`."""
+commands = [
+  "bash tests/e2e/demo.sh  # the job Demo app-store",
+  "bash tests/e2e/demo.sh --local  # the job Demo checkout",
+  "KEEP_E2E=1 bash tests/e2e/demo.sh --local  # keeps the containers to look inside",
+]
+docs = "tests/e2e/README.md#the-demo"
+autofix = """Why a whole Nextcloud and Paperless-ngx didn't come together, or which of them
+has to change, is for a person to decide from the logs of the containers."""
+
 [check."render (*)"]
 title = "The pictures of the visual check"
 problem = """The visual check could not render the pictures of the documentation and of the App
@@ -259,7 +282,10 @@ check misreads one of its samples. *Icon of the website*: `docs/images/app.svg` 
 has another outline than its English twin. *Area labels of pull requests*: a file of the
 app belongs to no area of `.github/labeler.yml`, or a rule names no file. *Explanations
 of the checks*: a check lacks its explanation in `.github/checks.project.toml`, or an
-explanation names a file that is gone. *Checks of the upgrade test*: a test of
+explanation names a file that is gone. *Checks of the demo*: a test of `tests/e2e/test_demo.py`
+fails, so `demo/compose.yaml` writes a password, publishes a port beyond this machine, runs an
+image without its digest or a Nextcloud that the app doesn't support, or the demo would pass with an empty
+archive. *Checks of the upgrade test*: a test of
 `tests/e2e/assert_upgrade.py` fails, so the upgrade test would let an upgrade that loses a
 row, a setting, a credential, a file ID or a retry pass. *First error of a failed
 end-to-end run*: a test of `tests/e2e/failure.py` fails, so the summary of a failed run
