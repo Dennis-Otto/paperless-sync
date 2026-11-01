@@ -99,6 +99,10 @@ jobs:
         id: changes
         if: github.event_name == 'pull_request'
         run: bash tests/e2e/affected.sh
+      - name: Temporary, for the measurement of four versions
+        run: |
+          docker pull --quiet nextcloud:35-apache
+          docker tag nextcloud:35-apache nextcloud:36-apache
       - name: Run the Paperless Sync end-to-end tests against the oldest and the newest supported Nextcloud
         if: steps.changes.outputs.affected != 'false'
         env:
@@ -106,6 +110,7 @@ jobs:
           # job variants doesn't take. Both jobs get the same variants, so that they
           # split the runs the same way; the job variants runs them.
           E2E_SHARD: 1
+          E2E_VERSIONS: "33 34 35 36"
           # The files and the database of SQLite of each run in memory, on a runner that is
           # thrown away after the job.
           E2E_MEMORY_FOLDER: /dev/shm
@@ -212,6 +217,10 @@ jobs:
           fi
           echo "$KRANKERL_SHA256  $deb" | sha256sum --check --strict
           sudo dpkg --install "$deb"
+      - name: Temporary, for the measurement of four versions
+        run: |
+          docker pull --quiet nextcloud:35-apache
+          docker tag nextcloud:35-apache nextcloud:36-apache
       - name: Run the Paperless Sync end-to-end tests on PostgreSQL, on MariaDB with S3, the upgrade from the last release, and the versions between
         # Without a pull request, the step changes doesn't run, and so this one runs all.
         if: steps.changes.outputs.affected != 'false' || steps.changes.outputs.upgrade != 'false'
@@ -221,7 +230,7 @@ jobs:
           # split the runs the same way. A change that can only break the upgrade, such
           # as one of the package, runs no version.
           E2E_SHARD: 2
-          E2E_VERSIONS: ${{ steps.changes.outputs.affected == 'false' && 'none' || '' }}
+          E2E_VERSIONS: "33 34 35 36"
           # The files and the database of SQLite of each run in memory, on a runner that is
           # thrown away after the job.
           E2E_MEMORY_FOLDER: /dev/shm
