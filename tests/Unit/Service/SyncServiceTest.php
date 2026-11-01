@@ -216,6 +216,20 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->exports);
 	}
 
+	/** An archive stays where a run put it, also when the names that it never saved would change. */
+	public function testARunKeepsTheNamesThatItUsesAndADryRunDoesNot(): void {
+		// Set up with occ, which stores only the settings that it names.
+		unset($this->settings['inbox_folder']);
+
+		$this->service->run(dryRun: true);
+		self::assertArrayNotHasKey('inbox_folder', $this->settings, 'A dry-run changes nothing.');
+
+		$this->service->run();
+		self::assertSame('Eingang', $this->settings['inbox_folder'] ?? null);
+		$this->defaultLanguage = 'fr';
+		self::assertSame('Eingang', $this->configService->get()->inboxFolder, 'Another default language must not rename it now.');
+	}
+
 	public function testRefusesToRunBeforeTheAppIsConfigured(): void {
 		$this->configService->reset();
 		$this->locking->expects(self::once())->method('acquireLock');

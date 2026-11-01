@@ -133,7 +133,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - [Delegate the settings](#delegating-the-settings) to a group, for the person who runs Paperless but isn't an administrator of Nextcloud
 - [Pickers in the settings](#target-user-and-tags) offer the users of Nextcloud for the target user and the tags of Paperless for the excluded tags, the tags to mirror and the tags of every import, and mark a user or a tag that doesn't exist, so that a typo shows before the first run
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
-- In English and German: the settings, their messages, their *Help* links to the guide and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
+- In English, German, French and Spanish: the settings, their messages, the Activity stream, the notifications and the folders that a new installation proposes follow the language of Nextcloud, the *Help* links open the guide in English or German, and the times follow the locale of your personal settings
 - [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
 - [`occ` commands](#command-line) for scripts, cron jobs and monitoring: a run or a dry-run with a batch size of its own or none, the status, and copies written again, with JSON output and exit codes
 - Accessible: the settings, the actions in Files and the form of the rule in Flow are checked with axe-core against WCAG 2.1 AA, with no serious or critical finding, in the light and the dark theme, on a computer and on a phone 320 pixels wide, where the settings and the form fit without scrolling sideways, and the settings work by keyboard alone, with a focus that shows and that the bar of the buttons never covers; the end-to-end tests check it in every change of the app
@@ -456,21 +456,21 @@ The connection checklist shows who also gets how many documents from the archive
 
 A new installation proposes the names of its folders, and the fallback names for metadata that a document lacks, in the default language of Nextcloud, `default_language` in its `config.php`. A Nextcloud without one, and a language that the app has no translation for yet, get the English names; a regional variant, such as `de_DE`, gets those of its language:
 
-| Setting | English, and every language without a translation | German: `de`, `de_DE` and the other variants |
-| --- | --- | --- |
-| Base folder | `Documents/Paperless` | `Dokumente/Paperless` |
-| Archive folder | `Archive` | `Archiv` |
-| Inbox folder | `Inbox` | `Eingang` |
-| Error folder | `Failed imports` | `Fehler` |
-| Deleted folder | `_Deleted` | `_Gelöscht` |
-| Missing correspondent | `_No correspondent` | `_Ohne Korrespondent` |
-| Missing document type | `_No document type` | `_Ohne Dokumenttyp` |
-| Missing date | `_No date` | `_Ohne Datum` |
-| Missing title | `Untitled` | `Ohne Titel` |
+| Setting | English, and every language without a translation | German: `de`, `de_DE` and the other variants | French: `fr` and its variants | Spanish: `es` and its variants |
+| --- | --- | --- | --- | --- |
+| Base folder | `Documents/Paperless` | `Dokumente/Paperless` | `Documents/Paperless` | `Documentos/Paperless` |
+| Archive folder | `Archive` | `Archiv` | `Archives` | `Archivo` |
+| Inbox folder | `Inbox` | `Eingang` | `Boîte de réception` | `Bandeja de entrada` |
+| Error folder | `Failed imports` | `Fehler` | `Imports échoués` | `Importaciones fallidas` |
+| Deleted folder | `_Deleted` | `_Gelöscht` | `_Supprimés` | `_Eliminados` |
+| Missing correspondent | `_No correspondent` | `_Ohne Korrespondent` | `_Sans correspondant` | `_Sin interlocutor` |
+| Missing document type | `_No document type` | `_Ohne Dokumenttyp` | `_Sans type de document` | `_Sin tipo de documento` |
+| Missing date | `_No date` | `_Ohne Datum` | `_Sans date` | `_Sin fecha` |
+| Missing title | `Untitled` | `Ohne Titel` | `Sans titre` | `Sin título` |
 
-The settings page shows the proposed names before the first save, so you can change them before the first run, and saving keeps them as the page shows them. Afterwards, a name changes only when you change it: neither another default language of Nextcloud nor an update renames a folder. The language is that of Nextcloud, not that of the administrator who opens the settings, so that every administrator and every scheduled run see the same names. For the German names on a Nextcloud without a default language, set it before you save, with `occ config:system:set default_language --value=de`, or type them.
+The settings page shows the proposed names before the first save, so you can change them before the first run, and saving keeps them as the page shows them. Afterwards, a name changes only when you change it: neither another default language of Nextcloud nor an update renames a folder. The first run stores the names that it uses, so this also holds for an installation set up with `occ`, which never saved them. The language is that of Nextcloud, not that of the administrator who opens the settings, so that every administrator and every scheduled run see the same names. For the German names on a Nextcloud without a default language, set it before you save, with `occ config:system:set default_language --value=de`, or type them.
 
-Earlier versions proposed the German names in every language. An installation that one of them set up, with a target user or with a run that left copies or imports behind, keeps them with the update, also those that it never saved, such as after a setup with `occ`, so that its archive stays where it is:
+An installation in use on a French or Spanish Nextcloud keeps the English names that it has from the versions before these languages. Earlier versions still proposed the German names in every language. An installation that one of them set up, with a target user or with a run that left copies or imports behind, keeps them with the update, also those that it never saved, such as after a setup with `occ`, so that its archive stays where it is:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-folder-names-an-installation-uses.dark.svg">
@@ -1005,6 +1005,8 @@ The [FAQ](https://dennis-otto.github.io/paperless-sync/faq.html) answers the com
 ## Development
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) says how a change gets in, and [Development](docs/development.md) how to build, check and test the app: `scripts/check.sh`, with ESLint for the JavaScript, the end-to-end tests in Docker against every supported Nextcloud version, which also measure how much of the JavaScript they run, the pictures of the documentation, which bots keep current, the website and the release process. [Automation](docs/automation.md) shows the bots that check, release and look after the app. A check that fails, the end-to-end tests and the other checks of this app included, says on the pull request what it found and how to fix it, also on a pull request from a fork, and fixes itself where a command can, such as the coding standard. The project follows [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md) and the [code of conduct](CODE_OF_CONDUCT.md). A change of `README.md`, or of a page of the website with a German version, changes the German one too, such as [README.de.md](README.de.md), and `scripts/check.sh` checks that both have the same headings, snippets and diagrams.
+
+**Translations are welcome too.** The French and Spanish texts were drafted with the help of an AI and wait for native speakers to read them: say what reads wrong in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general), or correct it in a pull request. [Translate Paperless Sync](docs/development.md#translate-paperless-sync) shows how, also for a language that the app doesn't speak yet. The website stays in English and German.
 
 ## Quality and security
 

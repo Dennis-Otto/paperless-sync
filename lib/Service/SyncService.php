@@ -90,6 +90,7 @@ final class SyncService {
 			$this->status->connected($paperless->testConnection());
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {
+				$this->configService->keepDefaultNames();
 				$this->storage->prepare($config);
 			}
 			if ($config->perUser()) {

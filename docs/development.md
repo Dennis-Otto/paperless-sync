@@ -102,7 +102,7 @@ The scripts of the app, `js/settings.js`, `js/files.js` and `js/flow.js`, have n
   <img src="images/diagrams/how-the-javascript-of-the-app-is-checked.svg" alt="How the JavaScript of the app is checked: The scripts of the app, js/settings.js, js/files.js and js/flow.js, run in the browser as they are written, without a build. scripts/check.sh runs ESLint on them, and on the tests and scripts, with the rules of scripts/eslint/eslint.config.mjs. A finding fails the check with its file, line and rule; the fix bot runs bash scripts/eslint.sh --fix, which turns a var and a let that never changes into a const, and a person fixes the rest. On the newest Nextcloud, the checks in the browser record in Chromium which parts of the scripts each page runs. coverage.mjs merges the coverage of every page and shows the share of the lines, branches and functions of each script in the summary of the job, with the lines that no check runs, and keeps lcov.info in the artifact e2e-coverage. A script that runs a smaller share of its lines or branches than its floor in tests/e2e/coverage-floor.json fails the check, and a new test in the browser raises the floor. The scripts of the app are light blue, the checks and the bot blue, your steps orange, and a check that passes green.">
 </picture>
 
-**ESLint** checks the scripts of the app, the German words of `l10n/de.js`, the end-to-end tests and the scripts with the rules of `scripts/eslint/eslint.config.mjs`: the recommended rules of ESLint and five more against what a script without a build gets wrong quietly, `eqeqeq` (`===` instead of `==`, which converts its sides first), `no-unused-vars`, `no-implicit-globals` (a function or a `var` at the top of a script becomes a global of the page, which another script may overwrite), `prefer-const` and `no-var`. `scripts/check-project.sh` runs it in its step *JavaScript and translations*, so every pull request does, and a warning fails as well:
+**ESLint** checks the scripts of the app, the words of the catalogs `l10n/*.js`, the end-to-end tests and the scripts with the rules of `scripts/eslint/eslint.config.mjs`: the recommended rules of ESLint and five more against what a script without a build gets wrong quietly, `eqeqeq` (`===` instead of `==`, which converts its sides first), `no-unused-vars`, `no-implicit-globals` (a function or a `var` at the top of a script becomes a global of the page, which another script may overwrite), `prefer-const` and `no-var`. `scripts/check-project.sh` runs it in its step *JavaScript and translations*, so every pull request does, and a warning fails as well:
 
 ```bash
 bash scripts/eslint.sh            # what the rules find
@@ -116,22 +116,88 @@ bash scripts/eslint.sh js/flow.js # one file
 
 ## Translations
 
-Paperless Sync speaks English and German. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The German texts are in `l10n/de.json`, which PHP reads, and in its copy `l10n/de.js` for the browser.
+Paperless Sync speaks English, German, French and Spanish. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The texts of each language are in `l10n/<language>.json`, which PHP reads, and in its copy `l10n/<language>.js` for the browser.
 
-`node scripts/check-l10n.mjs`, which `scripts/check-project.sh` runs, compares them with the code, so that no message stays English on a German page:
+`node scripts/check-l10n.mjs`, which `scripts/check-project.sh` runs, compares every catalog with the code, so that no message stays English on a page in another language:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/what-the-check-of-the-translations-finds.dark.svg">
-  <img src="images/diagrams/what-the-check-of-the-translations-finds.svg" alt="What the check of the translations finds: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck, an InvalidSettingException and the errors that a run keeps, with the constants that they name. It compares them with the German catalog l10n/de.json. A text that the catalog lacks, or a German text with other placeholders than its English one, fails the check with the place in the code; it needs German words. A text that no code translates, a text twice, or an l10n/de.js that differs from l10n/de.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/de.js anew. Otherwise the check passes.">
+  <img src="images/diagrams/what-the-check-of-the-translations-finds.svg" alt="What the check of the translations finds: scripts/check-l10n.mjs reads the texts that the code translates, translate() and translatePlural() in js, ->t() and ->n() in templates and lib, and the texts that lib translates later, of a ConnectionCheck, an InvalidSettingException and the errors that a run keeps, with the constants that they name. It compares them with every catalog l10n/LANGUAGE.json. A text that a catalog lacks, a translation with other placeholders than its English one or with a lone percent sign, or a plural with other forms than the rule of its language fails the check with its place; it needs words. A text that no code translates, a text twice, or an l10n/LANGUAGE.js that differs from its l10n/LANGUAGE.json fails as well, and node scripts/check-l10n.mjs --fix drops the text and writes l10n/LANGUAGE.js anew. Otherwise the check passes.">
 </picture>
 
-- **A text that the code translates** is the first argument of `translate()` and `translatePlural()` in `js/`, of `$l->t()` and `$l->n()` in `templates/` and `lib/`, and a text that `lib/` translates later, when it knows the language of the reader: the message and the hint of a `ConnectionCheck`, the text of an `InvalidSettingException`, and the text of an error that a run keeps, a `RunError`, a `RunException` or a `FullStorageException`. Write it as a string at that place, or as a class constant that the call names, such as `self::STATUS_HINT`, never as a variable: the check can't read it, so it fails with the file and the line, and `--fix` then changes nothing, instead of dropping the German words of a text that looks unused.
-- **A missing text** fails with its file and line, and **a German text whose placeholders differ** from those of its English one, `{name}` in JavaScript, `%s` or `%1$s` in PHP, `%n` in a plural, fails with both texts: PHP stops at a placeholder without its value, and one that is missing loses it.
-- **A text that no code translates any more, a text twice and an `l10n/de.js` that differs** fail as well; `node scripts/check-l10n.mjs --fix` removes them and writes `l10n/de.js` from `l10n/de.json`.
+- **A text that the code translates** is the first argument of `translate()` and `translatePlural()` in `js/`, of `$l->t()` and `$l->n()` in `templates/` and `lib/`, and a text that `lib/` translates later, when it knows the language of the reader: the message and the hint of a `ConnectionCheck`, the text of an `InvalidSettingException`, and the text of an error that a run keeps, a `RunError`, a `RunException` or a `FullStorageException`. Write it as a string at that place, or as a class constant that the call names, such as `self::STATUS_HINT`, never as a variable: the check can't read it, so it fails with the file and the line, and `--fix` then changes nothing, instead of dropping the words of a text that looks unused.
+- **A missing text** fails with its file and line, and **a translation whose placeholders differ** from those of its English one, `{name}` in JavaScript, `%s` or `%1$s` in PHP, `%n` in a plural, fails with both texts: PHP stops at a placeholder without its value, and one that is missing loses it. So does a lone `%`, such as in *100 %*, as PHP reads the text as a format.
+- **A plural** has as many forms as the `pluralForm` of its catalog names. Nextcloud picks a form in PHP by that rule, but in the browser by a table of its own: for French and Spanish, the rule has a form for millions in the middle, and the browser shows that one for every count but one, so the check asks for it to repeat the third form, as Nextcloud's own catalogs do.
+- **A label in quotes:** a message that names a setting by its label, such as *"Create missing tags"*, must hold the translation of that label.
+- **A language without its texts for the App Store** fails: `appinfo/info.xml` needs a `<summary lang="…">` and a `<description lang="…">` for each catalog.
+- **A text that no code translates any more, a text twice and an `l10n/<language>.js` that differs** fail as well; `node scripts/check-l10n.mjs --fix` removes them and writes each `l10n/<language>.js` from its `l10n/<language>.json`.
 
-A new text is English in the code; add it with its German words to `l10n/de.json`, in the terms of the settings page, such as *Basisordner* for *Base folder*, and run `node scripts/check-l10n.mjs --fix`. A message about a setting names it by its label in quotes, and an `InvalidSettingException` names the setting as well, so that the page moves the focus there.
+A new text is English in the code; add it with its words to every `l10n/<language>.json`, in the terms of the settings page, such as *Basisordner* for *Base folder* in German, and run `node scripts/check-l10n.mjs --fix`. If you don't speak a language, write the text as well as you can, with a translator if you need one: a native speaker can correct it later, and a missing one shows in English. A message about a setting names it by its label in quotes, and an `InvalidSettingException` names the setting as well, so that the page moves the focus there.
 
 A run, also a scheduled one, has no reader when it writes its errors, so it keeps each in English, as the log, `occ paperless_sync:status` and the status API show it, together with its record: the English text with `%s` or `%1$s` for its values, the values and the setting that it names. The settings page translates the records when it reads the status, through `StatusTranslation`: in the status that it opens with (`AdminSettings::getForm()`), in that of `SyncController::status()` and in the answer of a dry-run. Write an error of a run as `new RunError('Tags P%1$s: %2$s', [(string)$id, RunError::of($exception)])`, never by joining strings: `RunError::of()` keeps the text of an exception that the app wrote, such as an `InvalidSettingException`, and takes the message of Paperless or of Nextcloud as it came, which no translation changes. A status of an earlier version, which kept the English text alone, shows as it is. The unit tests read the German of `l10n/de.json` through `tests/Doubles/GermanTranslations.php`, and fail on a text that it lacks.
+
+## Translate Paperless Sync
+
+The app speaks English, German, French and Spanish. The French and Spanish texts were drafted with the help of an AI and wait for native speakers to read them: a word that sounds wrong is worth a note in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general) or a pull request, and so is a language that the app doesn't speak yet. You need a text editor or the editor of GitHub, no PHP and no build.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/how-a-translation-reaches-its-readers.dark.svg">
+  <img src="images/diagrams/how-a-translation-reaches-its-readers.svg" alt="How a translation reaches its readers: A translator corrects or adds a text in l10n/fr.json, the catalog of French, and the summary and the description in French in appinfo/info.xml. node scripts/check-l10n.mjs --fix writes l10n/fr.js, which the browser loads, from the catalog. The check of the translations then asks whether every text of the code has its translation, with its placeholders and the forms of its plurals, whether l10n/fr.js holds the same as l10n/fr.json, and whether appinfo/info.xml has a summary and a description in French. If not, its output names each problem and its fix. If so, the pull request is merged and released, and Nextcloud shows the settings, the notes in Files, the Activity stream and the notifications in French to every account set to French, a new French instance proposes the French folder names, and the App Store shows the summary and the description in French.">
+</picture>
+
+| Language | Catalog | Addresses you with | Written by |
+| --- | --- | --- | --- |
+| English | the texts in the code | *you* | the maintainer |
+| German | `l10n/de.json` | *du* | the maintainer |
+| French | `l10n/fr.json` | *vous* | an AI, waiting for review |
+| Spanish | `l10n/es.json` | *tú* | an AI, waiting for review |
+
+Each line of a catalog pairs a text of the code, in English, with its translation. Change only the right side: the code looks a translation up by the English text, character for character. Placeholders stay, such as `%s`, `%1$s`, `%n` and `{document}`, and the words around them may move; `%1$s` and `%2$s` may swap places.
+
+- **The words of Nextcloud and of Paperless:** a word that one of them shows as well takes its translation, such as the permission *View* of *Documents* in Paperless, which is *Afficher* in French and *Ver* in Spanish, or *Files* of Nextcloud, which is *Fichiers* and *Archivos*. The [catalogs of Nextcloud](https://github.com/nextcloud/server/tree/master/core/l10n) and those of [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx/tree/dev/src-ui/src/locale) have them.
+- **The words of this app** stay the same throughout:
+
+    | English | French | Spanish |
+    | --- | --- | --- |
+    | archive | archive | archivo |
+    | file | fichier | fichero, as *archivo* is the archive |
+    | inbox | boîte de réception | bandeja de entrada |
+    | to mirror | refléter | reflejar |
+    | run | exécution | ejecución |
+    | dry-run | simulation | simulación |
+    | scan | analyse | análisis |
+    | target user | utilisateur cible | usuario de destino |
+    | background job | tâche de fond | tarea en segundo plano |
+
+- **French typography:** a no-break space before `:`, `;`, `?` and `!` and inside `«` and `»`, and the apostrophe `’`.
+- **What stays in English:** the log, the command line and the lines of *Copy report*, for bug reports. The website and the pictures stay in English and German, so the *Help* links of the other languages open the English guide.
+- **A regional variant:** Nextcloud takes the catalog of the exact language of an account, so an account set to *Español (México)*, `es_MX`, reads the app in English until it has a catalog of its own. The names of the folders fall back to those of `es`.
+
+### Correct a translation
+
+1. Open the catalog in [`l10n/`](https://github.com/Dennis-Otto/paperless-sync/tree/main/l10n) on GitHub, such as `fr.json`, and edit it with the pencil, which makes a fork and a branch for you, or edit it in a clone. For the App Store, change `<summary lang="fr">` or `<description lang="fr">` in `appinfo/info.xml`.
+2. With Node.js, write the catalog for the browser and check the translations. Without it, open the pull request anyway: its check names each problem with its fix, and the fix bot writes the catalog for the browser, or suggests it on a fork.
+
+    ```sh
+    node scripts/check-l10n.mjs --fix
+    node scripts/check-l10n.mjs
+    ```
+
+3. Open a pull request with a title such as `fix(l10n): correct the French of the report`, and say what read wrong. Each commit needs a sign-off, `git commit -s`, which the editor of GitHub adds when you tick its box. [CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md) has the rest.
+
+### Add a language
+
+1. Start its catalogs with the code that Nextcloud has for the language, such as `it` for Italian or `pt_BR` for Brazilian Portuguese. For a language without a rule in `scripts/check-l10n.mjs`, the command says to copy `pluralForm` from `core/l10n/<language>.json` of Nextcloud:
+
+    ```sh
+    node scripts/check-l10n.mjs --new it
+    node scripts/check-l10n.mjs --new sv --plural-form "nplurals=2; plural=(n != 1);"
+    ```
+
+2. Translate every text of `l10n/<language>.json`; the check lists those that are still empty. A plural has one entry for each form of its rule, and where the rule has a form for millions, the second repeats the third. The names of the folders, such as *Archive* and *_Deleted*, become the folders of new installations in this language: keep them short, without a `/` and different from each other.
+3. Add `<summary lang="it">` and `<description lang="it">` to `appinfo/info.xml`, after those of the other languages, with the same versions of Nextcloud as the English one.
+4. Run `node scripts/check-l10n.mjs --fix` and `node scripts/check-l10n.mjs`, and name the language in *Translations*, in the table above and in the table of *Folder names* in `README.md` and `README.de.md`.
+5. Open a pull request with a title such as `feat(l10n): speak Italian`. An installation in use keeps the folders that it has: a run stores the names that it uses ([decision 0036](decisions/0036-more-languages-without-moving-an-archive.md)), so a new language needs no step of the update.
 
 ## Release process
 

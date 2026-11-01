@@ -296,6 +296,7 @@ run() {
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
 		E2E_COVERAGE="${coverage}" \
+		E2E_LANGUAGES="${coverage}" \
 		E2E_UPGRADE="${upgrades[index]}" \
 		E2E_ARTIFACTS="${E2E_ARTIFACTS:+${E2E_ARTIFACTS}/${key}}" \
 		"${limit[@]}" bash "${RUN_SCRIPT}" >"${LOG_DIR}/${key}.log" 2>&1 &

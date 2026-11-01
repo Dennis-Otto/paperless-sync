@@ -26,6 +26,8 @@
           - lib/Service/PaperlessAccountExistsException.php
           - lib/Migration/Version000111Date20261013000000.php
           - lib/Migration/Version000130Date20261014120000.php
+          - lib/Migration/KeepNamesStep.php
+          - lib/Migration/Version000160Date20261101000000.php
           - js/settings.js
           - css/settings.css
           - templates/settings.php
@@ -44,6 +46,7 @@
           - tests/Unit/Service/AccountSetupTest.php
           - tests/Unit/Migration/Version000111*
           - tests/Unit/Migration/Version000130*
+          - tests/Unit/Migration/Version000160*
 "area: archive":
   - changed-files:
       - any-glob-to-any-file:
