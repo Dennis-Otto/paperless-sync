@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Who may use the settings of Paperless Sync
+    accDescr: An administrator of Nextcloud reaches the settings page of Paperless Sync and the rest of the administration, and delegates the page to a group under Administration privileges. A member of that group reaches the page and its routes, with their own password, and neither the rest of the administration nor the keys of the app configuration through the provisioning API of Nextcloud: Nextcloud answers 403. So a setting reaches the app configuration only through the routes of the page, which check every value. Every other user gets 403 on every route of the page.
+
+    admin(["Administrator<br>of Nextcloud"])
+    member(["Member of the<br>delegated group"])
+    other(["Every other user"])
+    subgraph nextcloud ["Nextcloud server"]
+        rest["The rest of the<br>administration"]
+        page["The settings page of<br>Paperless Sync and its routes:<br>every value is checked"]
+        config[("App configuration")]
+    end
+
+    admin --> rest
+    admin -- "delegates the page<br>under Administration privileges" --> page
+    member -- "with their<br>own password" --> page
+    member -. "403" .-> rest
+    member -. "403 through the<br>provisioning API" .-> config
+    other -. "403" .-> page
+    page --> config
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef delegated fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class rest,page,config nextcloud
+    class member delegated

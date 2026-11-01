@@ -1,0 +1,3 @@
+### Features
+
+- **Delegate the settings to a group:** an administrator can now give the settings of Paperless Sync to a group, under *Administration settings → Administration privileges* or with `occ admin-delegation:add`, so that the person who runs Paperless needs no full administrator account of Nextcloud. The members of the group can do all that the page offers, with their own password, and nothing else of the administration. That includes pointing the archive and the inbox at the files of any user, so delegate it only to people whom you trust with those files.

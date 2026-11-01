@@ -509,6 +509,25 @@ status_api() {
 		"${BASE_URL}/ocs/v2.php/apps/paperless_sync/api/v1/status"
 }
 
+# Expects the answer $1 to the request of the user $2 to the route $4 of the app with the verb $3,
+# whose answer stays in route.json for a closer look. Nextcloud takes the header of the OCS API
+# in place of a request token, as for save_settings.
+expect_route() {
+	local expected="$1" user="$2" verb="$3" route="$4" status
+	status="$(curl --silent --show-error \
+		--user "${user}:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request "${verb}" \
+		--output "${TMP_DIR}/route.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync${route}")"
+	if [[ "${status}" != "${expected}" ]]; then
+		echo "${verb} ${route} answered HTTP ${status} instead of ${expected} to ${user}: $(cat "${TMP_DIR}/route.json")" >&2
+		exit 1
+	fi
+}
+
 # A call of the webhook as a workflow of Paperless makes it: from the container of the mock,
 # which plays Paperless, to Nextcloud by its name in the network, with the header
 # Authorization of $2, none when it is empty, and the JSON body $3. Writes the answer to the
@@ -1606,6 +1625,54 @@ notifications e2e-other "${TMP_DIR}/notifications-flow.json"
 assert_json notifications-flow "${TMP_DIR}/notifications-flow.json"
 assert_dav_file e2e-other 'scan-insurance.pdf' 'Synthetic inbox PDF scan'
 echo "Send to Paperless in Flow passes after ${SECONDS} s."
+
+# The settings delegated to a group, as an administrator does it under Administration privileges.
+# Its member reaches the routes that the page reads, and settings.mjs then uses the page as that
+# member. Nextcloud refuses them the status API and a key of the app past the checks of the app,
+# and another user every route of the page.
+occ group:add e2e-delegates >/dev/null
+add_user e2e-delegate
+occ group:adduser e2e-delegates e2e-delegate >/dev/null
+occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' e2e-delegates >/dev/null
+for route in 'GET /settings/users' 'GET /settings/users/sync-target' 'GET /settings/groups' \
+	'GET /settings/paperless/tags' 'GET /settings/webhook' 'POST /settings/webhook' 'DELETE /settings/webhook' \
+	'POST /settings' 'DELETE /settings' 'POST /settings/test' 'POST /settings/preview' 'POST /settings/account' \
+	'POST /sync/run' 'GET /sync/status'; do
+	expect_route 403 e2e-other "${route% *}" "${route#* }"
+done
+expect_route 200 e2e-delegate GET '/settings/users?search=sync'
+if ! grep --quiet --fixed-strings '"id":"sync-target"' "${TMP_DIR}/route.json" || grep --quiet '"email"' "${TMP_DIR}/route.json"; then
+	echo "The users to pick must name sync-target, without an e-mail address: $(cat "${TMP_DIR}/route.json")" >&2
+	exit 1
+fi
+expect_route 200 e2e-delegate GET /settings/users/e2e-other
+expect_route 404 e2e-delegate GET /settings/users/nobody-here
+expect_route 200 e2e-delegate GET '/settings/groups?search=e2e-del'
+if ! grep --quiet --fixed-strings '"id":"e2e-delegates"' "${TMP_DIR}/route.json"; then
+	echo "The groups to pick must name e2e-delegates: $(cat "${TMP_DIR}/route.json")" >&2
+	exit 1
+fi
+expect_route 200 e2e-delegate GET /settings/paperless/tags
+expect_route 200 e2e-delegate GET /settings/webhook
+expect_route 200 e2e-delegate GET /sync/status
+USER_API_STATUS="$(status_api e2e-delegate "${TMP_DIR}/status-api-delegate.json")"
+if [[ "${USER_API_STATUS}" != "403" ]]; then
+	echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a delegate: $(cat "${TMP_DIR}/status-api-delegate.json")" >&2
+	exit 1
+fi
+DIRECT_WRITE_STATUS="$(curl --silent --show-error \
+	--user "e2e-delegate:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--data-urlencode 'value=9' \
+	--output "${TMP_DIR}/direct-write.json" \
+	--write-out '%{http_code}' \
+	"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/batch_size")"
+if [[ "${DIRECT_WRITE_STATUS}" != "403" ]]; then
+	echo "A delegate wrote a key of the app past its checks, HTTP ${DIRECT_WRITE_STATUS}: $(cat "${TMP_DIR}/direct-write.json")" >&2
+	exit 1
+fi
+echo "The delegated settings pass after ${SECONDS} s."
 
 # The administration settings and the report of a dry-run over a larger archive, the actions
 # of the app in Files and the form of its rule in Flow meet WCAG 2.1 AA, also at 320 px, and

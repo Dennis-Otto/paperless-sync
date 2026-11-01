@@ -528,6 +528,8 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 			</div>
 		</details>
 
+		<p id="paperless-sync-delegation-hint" class="settings-hint"><?php p($l->t('An administrator can delegate this page to a group under Administration privileges. Its members can then do all that it offers, such as pointing the archive and the inbox at the files of any user, so delegate it only to people whom you trust with those files.')); ?> <?php $help('delegating-the-settings', $l->t('Delegating the settings')); ?></p>
+
 		<div class="paperless-sync-actions">
 			<button id="paperless-sync-save" type="submit" class="primary"><?php p($config->enabled ? $l->t('Test connection and save') : $l->t('Save')); ?></button>
 			<button id="paperless-sync-dry-run" type="button"><?php p($l->t('Run dry-run')); ?></button>

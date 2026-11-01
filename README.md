@@ -130,6 +130,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - Nextcloud's cron runs it at the interval that you set, and the batch size limits the changes of one run
 - [Changes within seconds](#changes-within-seconds): a workflow of Paperless calls the webhook of the app when it adds or changes a document, and its copy changes at once, without a container next to Paperless, its media folder or a password of Nextcloud
 - Runs on demand and dry runs from the settings, each with a report of its changes and errors in the language of the administrator, errors first, with a filter for each kind of change, links to the files and a button that copies it for a bug report, and the status of the last run; a dry-run tries changes of the settings before you save them, and a run on demand runs as a background job, so no proxy cuts it off
+- [Delegate the settings](#delegating-the-settings) to a group, for the person who runs Paperless but isn't an administrator of Nextcloud
 - [Pickers in the settings](#target-user-and-tags) offer the users of Nextcloud for the target user and the tags of Paperless for the excluded tags, the tags to mirror and the tags of every import, and mark a user or a tag that doesn't exist, so that a typo shows before the first run
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English and German: the settings, their messages, their *Help* links to the guide and the Activity stream follow the language of Nextcloud, and the times the locale of your personal settings
@@ -375,6 +376,29 @@ After a save, the form shows the settings as Nextcloud stored them: the URL with
 
 Results and errors appear in the bar of the buttons, which stays at the bottom of the window. **Synchronize now** doesn't wait for the run: it queues the run as a background job of Nextcloud and answers at once, the status says *Queued* until the next background jobs start it, within five minutes with the system cron, and the bar says how the run ended once the status shows its end. A run can so take as long as it needs, and no proxy in front of Nextcloud cuts it off. **Run dry-run** answers with its report; when a proxy or the web server answers for a long dry-run instead, such as with *504 Gateway Time-out*, the page asks for the status: while it shows the dry-run, the page says that it continues in the background and follows it until it ends; otherwise it names the status code of the web server, and the status shows how it ended.
 
+### Delegating the settings
+
+The person who runs Paperless is not always an administrator of Nextcloud. An administrator can give them this page alone: under **Administration settings → Administration privileges**, add a group to **Paperless Sync**, or run this command, with your group in place of `archive-admins`:
+
+```sh
+occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' archive-admins
+```
+
+The members of the group then find **Paperless Sync** in their administration settings. They can do all that the page offers, with their own password where the page asks for one, and nothing else of the administration of Nextcloud.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/who-may-use-the-settings.dark.svg">
+  <img src="docs/images/diagrams/who-may-use-the-settings.svg" alt="Who may use the settings of Paperless Sync: An administrator of Nextcloud reaches the settings page of Paperless Sync and the rest of the administration, and delegates the page to a group under Administration privileges. A member of that group reaches the page and its routes, with their own password, and neither the rest of the administration nor the keys of the app configuration through the provisioning API of Nextcloud: Nextcloud answers 403. So a setting reaches the app configuration only through the routes of the page, which check every value. Every other user gets 403 on every route of the page.">
+</picture>
+
+Delegate the page only to people whom you trust with the files of every user, because that is what it gives them:
+
+- **The files of every user.** They choose the target user or per-user ownership, and so where the archive is written, and they can turn on permanent deletion there. They also choose the inbox folder below the base folder of that user, whose files then go to Paperless and, as the settings say, leave the folder.
+- **The account of the app in Paperless.** Their dry-runs, runs and reports read Paperless with its token and name documents and files. They can replace the address and the token, and create the secret of the webhook.
+- **The names of the accounts.** The fields of the target user and of the groups offer the account names and display names of every user and group of Nextcloud, without their e-mail addresses.
+
+Everything else stays with the administrators, whatever the group: the [notification of a failing mirror](#being-notified), unless `notification_group` names the group of the members, the setup checks of *Administration → Overview*, whose warnings the page shows them too, the status API, the rules of Flow and `occ`. A key of the configuration of the app can't be written past the page either, so each value passes the same checks as for an administrator. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#delegated-settings) has the details.
+
 ### Target user and tags
 
 The field **Nextcloud target user ID** offers the users of Nextcloud whose account name, display name or e-mail address holds what you type: pick one with the arrow keys and Enter, or with a click. It takes the account name, as *Accounts* in the administration lists it, not the display name, and marks a disabled account as *disabled*. When you leave the field with an ID that Nextcloud doesn't know, it says so at once: *Nextcloud has no user with the ID …*. Saving tests the target user only together with the connection, so that a schedule can always be paused; the field shows a typo before that.
@@ -388,7 +412,7 @@ The fields **Additional excluded Paperless tags**, **Only mirror documents with 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.dark.svg">
-  <img src="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.svg" alt="Where the pickers of the settings take their names from: The field of the target user asks the provisioning API of Nextcloud for the users whose ID, name or e-mail address holds what is typed, and for the user ID that the field names, which it marks when Nextcloud has no such user. The fields of the excluded tags, the tags to mirror and the tags for every import ask Paperless Sync, which reads the tags from Paperless-ngx with the stored URL and API token, as a run does; the token stays on the server. A name that Paperless has no tag of can be added too, and is marked as not in Paperless.">
+  <img src="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.svg" alt="Where the pickers of the settings take their names from: The field of the target user asks Paperless Sync for the users of Nextcloud whose ID, name or e-mail address holds what is typed, and for the user ID that the field names, which it marks when Nextcloud has no such user. The fields of the excluded tags, the tags to mirror and the tags for every import ask Paperless Sync, which reads the tags from Paperless-ngx with the stored URL and API token, as a run does; the token stays on the server. A name that Paperless has no tag of can be added too, and is marked as not in Paperless.">
 </picture>
 
 ### Folder ownership
