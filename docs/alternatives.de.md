@@ -118,7 +118,10 @@ Der Mount zeigt die Dateien von Paperless in den Ordnern von `PAPERLESS_FILENAME
 | `{{ doc_pk }}` | `{{ id }}`, ohne die führenden Nullen: `123`, nicht `0000123` |
 | `{{ original_name }}` | `{{ original_filename }}` |
 | ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | noch keines: `{{ storage_path }}` setzt nur den Namen des Speicherpfads ein, als einen Ordner |
-| `{{ created_day }}`, die Namen der Monate, `{{ asn }}`, `{{ tag_list }}`, `{{ owner_username }}`, benutzerdefinierte Felder und Jinja-Logik | noch keines: nimm `{{ created }}` für das volle Datum, oder lass sie weg |
+| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_day }}`, `{{ added_month }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
+| `{{ owner_username }}` | dasselbe; das Konto der App braucht die Berechtigung, Benutzer anzuzeigen |
+| ein benutzerdefiniertes Feld, über `get_cf_value("Name")` | `{{ custom_fields.Name }}`; das Konto der App braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen |
+| `{{ created_month_name_short }}`, `{{ added_year_short }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ tags }}` und Jinja-Logik | noch keines: lass sie weg |
 
 ### Von paperless-nextcloud-sync
 

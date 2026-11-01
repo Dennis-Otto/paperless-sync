@@ -118,7 +118,10 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 | `{{ doc_pk }}` | `{{ id }}`, without the leading zeros: `123`, not `0000123` |
 | `{{ original_name }}` | `{{ original_filename }}` |
 | a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | none yet: `{{ storage_path }}` puts only the name of the storage path in, as one folder |
-| `{{ created_day }}`, the names of months, `{{ asn }}`, `{{ tag_list }}`, `{{ owner_username }}`, custom fields and Jinja logic | none yet: use `{{ created }}` for the full date, or leave them out |
+| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_day }}`, `{{ added_month }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | the same; the name of a month is in the language of Nextcloud |
+| `{{ owner_username }}` | the same; the account of the app needs the permission to view users |
+| a custom field, through `get_cf_value("Name")` | `{{ custom_fields.Name }}`; the account of the app needs the permission to view custom fields |
+| `{{ created_month_name_short }}`, `{{ added_year_short }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ tags }}` and Jinja logic | none yet: leave them out |
 
 ### From paperless-nextcloud-sync
 

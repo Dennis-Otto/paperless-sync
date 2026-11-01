@@ -114,7 +114,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="images/de/settings-connection-dark.png">
-      <img alt="Der Abschnitt Verbindung und Eigentümer: Paperless-URL, Paperless-API-Token, Nextcloud-Zielbenutzer-ID, Basisordner, die Auswahl Wer die Dokumente erhält mit dem, was jede ihrer Optionen tut, der Schalter Paperless läuft in meinem lokalen Netzwerk und der Knopf Verbindung testen" src="images/de/settings-connection-light.png">
+      <img alt="Der Abschnitt Verbindung und Eigentümer: Paperless-Adresse, Paperless-API-Token, Nextcloud-Zielbenutzer-ID, Basisordner, die Auswahl Wer die Dokumente erhält mit dem, was jede ihrer Optionen tut, der Schalter Paperless läuft in meinem lokalen Netzwerk und der Knopf Verbindung testen" src="images/de/settings-connection-light.png">
     </picture>
 
     Ein Benutzer kann das Archiv besitzen und teilen. Oder jeder Benutzer von Nextcloud erhält die Dokumente, die ihm in Paperless gehören, in seinen eigenen Dateien, über die eine Verbindung der App, und auf Wunsch auch die, die Paperless mit ihm teilt.
