@@ -347,7 +347,7 @@ When Renovate updates the image of Paperless-ngx, or another pull request change
 - On a pull request from a branch of this repository, also one of Renovate, it commits them as `test(fixtures): record the answers of Paperless-ngx X.Y.Z`, as the release app. The checks run again on that commit: the unit tests read the new fixtures, and the contract tests compare them. A new shape fails no job here, because the unit tests judge it in that commit.
 - On a pull request from a fork, which no bot may push to, it suggests them at their lines, where the diff of the pull request shows them, and a field that is gone or has another type still fails the job as above. `CONTRACT_RECORD=1` records them on your machine.
 - A run of the app that fails keeps nothing: it fails with its explanation, and nothing is pushed. Whether the app or the mock follows such an answer is the decision of a person.
-- The label `no-bot-fixes` leaves a pull request alone, the bot changes existing fixtures and adds none, and it takes only JSON at the paths of fixtures from an artifact. If the contract tests of its own commit record other bytes for a fixture that it just wrote, something differs from run to run: the bot stops and says so on the pull request, instead of committing again.
+- The label `no-bot-fixes` leaves a pull request alone, so a field that is gone or has another type fails the job there as on a fork. The bot changes existing fixtures and adds none, and it takes only JSON at the paths of fixtures from an artifact. If the contract tests of its own commit record other bytes for a fixture that it just wrote, something differs from run to run: the bot stops and says so on the pull request, instead of committing again.
 
 ```bash
 CONTRACT_FIXES=/tmp/fixes bash tests/e2e/run-contract.sh 3                          # keeps what a job keeps
@@ -360,4 +360,6 @@ Optional environment variables:
 
 - `CONTRACT_RECORD=1`: write the answers of Paperless into the fixtures instead of comparing them
 - `CONTRACT_RECORDINGS`: a folder that keeps the answers of the run
+- `CONTRACT_FIXES`: a folder that keeps the fixtures that differ once the app has passed, with the version of Paperless
+- `CONTRACT_BOT_COMMITS=1`: a new shape no longer fails the run when fixtures were kept, because the bot commits them
 - `E2E_PORT`, `E2E_PROJECT_NAME`, `KEEP_E2E=1`: as for `run.sh`; the port defaults to 18092 for 2.x and 18093 for 3.x

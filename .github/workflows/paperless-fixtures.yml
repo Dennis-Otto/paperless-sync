@@ -17,7 +17,7 @@ name: Paperless fixtures
 # tests read the new fixtures; on one from a fork, which no bot may push to, it suggests
 # them at their lines. A run whose app failed keeps nothing, so a real break of the
 # contract pushes nothing and fails with its explanation, and the label no-bot-fixes
-# leaves a pull request alone. Two recordings of one image are the same bytes
+# leaves a pull request alone, whose job then fails on a new shape as on a fork. Two recordings of one image are the same bytes
 # (tests/e2e/contract.py), so the contract tests of the bot's commit keep nothing; when
 # they do, the bot stops and says so on the pull request.
 #
@@ -81,8 +81,10 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/fixes"
+          # The API lists an artifact once for each attempt of the run; gh picks one by name.
           gh api "repos/$GH_REPO/actions/runs/$RUN/artifacts?per_page=100" \
             --jq '.artifacts[] | select(.expired | not) | .name | select(test("^fixes-paperless-ngx-[23]$"))' |
+            sort -u |
             while IFS= read -r name; do
               gh run download "$RUN" --name "$name" --dir "$RUNNER_TEMP/fixes/$name"
             done
@@ -157,3 +159,13 @@ jobs:
           URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh pr comment "$PULL" --body "The fixture bot could not bring the new fixtures of the contract tests: $URL. The artifacts \`fixes-paperless-ngx-*\` of the end-to-end tests hold them, and \`CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3\`, or \`2\`, records them on your machine."
+      - name: Wait until Harden-Runner has removed Docker
+        # Harden-Runner removes Docker with apt-get in the background; a job that ends
+        # before it finishes hangs in "Cleaning up orphan processes" until its timeout.
+        if: always()
+        run: |
+          for _ in {1..120}; do
+            pgrep -x 'apt-get|dpkg' >/dev/null || exit 0
+            sleep 1
+          done
+          echo "::warning::Harden-Runner still removes Docker after two minutes; the job may hang until its timeout."

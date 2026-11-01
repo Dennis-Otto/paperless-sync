@@ -1105,9 +1105,11 @@ def stable(recordings):
 
     result = {name: clean(entry) for name, entry in recordings.items()}
     tasks = [task for name in result if name.startswith("task-") for task in tasks_of(result[name])]
-    ranks = {task: rank for rank, task in enumerate(sorted({task["id"] for task in tasks}), 1)}
+    # Nothing has checked the shapes yet: a task without an ID is for `contract shapes` to report.
+    ranks = {task: rank for rank, task in enumerate(sorted({task["id"] for task in tasks if "id" in task}), 1)}
     for task in tasks:
-        task["id"] = ranks[task["id"]]
+        if "id" in task:
+            task["id"] = ranks[task["id"]]
     return result
 
 

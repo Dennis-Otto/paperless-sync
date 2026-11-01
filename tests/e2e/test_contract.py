@@ -166,6 +166,14 @@ def test_a_change_of_paperless_stays_in_the_recording() -> None:
     assert fresh["document.json"] != same["document.json"]
 
 
+def test_a_task_without_an_id_is_left_to_the_comparison_of_the_shapes() -> None:
+    recordings = run()
+    del recordings["task-success.json"]["body"][0]["id"]
+    stable = contract.stable(recordings)
+    assert "id" not in stable["task-success.json"]["body"][0]
+    assert stable["task-failure.json"]["body"][0]["id"] >= 1
+
+
 def test_answers_that_share_a_value_still_share_it() -> None:
     stable = contract.stable(run())
     downloads = stable["downloads.json"]["false"]

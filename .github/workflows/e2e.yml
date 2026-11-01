@@ -364,8 +364,10 @@ jobs:
           # The fixtures that differ, once the app passed, for paperless-fixtures.yml. On a
           # branch of this repository it commits them, so that a new shape fails nothing
           # there; a pull request from a fork gets suggestions, and the failure as before.
+          # So does one with the label no-bot-fixes, which the bot leaves alone: nothing
+          # would commit the fixtures there, so the failure has to stay.
           CONTRACT_FIXES: ${{ github.event_name == 'pull_request' && format('{0}/fixes-paperless-ngx-{1}', runner.temp, matrix.line) || '' }}
-          CONTRACT_BOT_COMMITS: ${{ github.event.pull_request.head.repo.full_name == github.repository && '1' || '0' }}
+          CONTRACT_BOT_COMMITS: ${{ github.event.pull_request.head.repo.full_name == github.repository && !contains(github.event.pull_request.labels.*.name, 'no-bot-fixes') && '1' || '0' }}
           # The log and the title of the run, from which failure.py names its first error.
           RUN_FOLDER: ${{ runner.temp }}/contract/paperless-ngx-${{ matrix.line }}
         run: |

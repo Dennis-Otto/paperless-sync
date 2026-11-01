@@ -340,6 +340,10 @@ def test_the_workflows_agree_on_the_run_and_its_artifacts() -> None:
     assert "name: fixes-paperless-ngx-${{ matrix.line }}" in end_to_end
     assert "path: ${{ runner.temp }}/fixes-paperless-ngx-${{ matrix.line }}/" in end_to_end
     assert '"^fixes-paperless-ngx-[23]$"' in bot
+    # A shape break under the label fails the job, because the bot leaves that pull request alone.
+    assert f"contains(github.event.pull_request.labels.*.name, '{fixture_bot.OPT_OUT}')" in end_to_end
+    # The API lists an artifact once for each attempt of the run.
+    assert "sort -u |" in bot
     # What run-contract.sh keeps is what load() reads.
     script = (ROOT / "tests" / "e2e" / "run-contract.sh").read_text(encoding="utf-8")
     assert '"${CONTRACT_FIXES}/files/${FIXTURES}/${name}"' in script
