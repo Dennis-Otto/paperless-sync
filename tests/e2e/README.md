@@ -68,11 +68,78 @@ Optional environment variables:
 - `E2E_ACCESSIBILITY=0`: leave out the accessibility check at the end
 - `E2E_COVERAGE=1`: measure which lines and branches of `js/*.js` the checks in the browser run, and fail below the floor, see [Coverage of the JavaScript](#coverage-of-the-javascript)
 - `E2E_UPGRADE=1`: run [the upgrade from the last release](#the-upgrade-from-the-last-release) instead of the scenario, with the packages in `E2E_RELEASE_PACKAGE` and `E2E_PACKAGE`, which `packages.sh` downloads and builds when they are empty; `E2E_RELEASE_REPOSITORY`, by default `Dennis-Otto/paperless-sync`, names the repository of the release
+- `E2E_ONLY`, `E2E_BROWSER` and `E2E_PLAN=1`: run [one scenario alone](#one-scenario-alone), one check in the browser, or print what a run would run
 - `KEEP_E2E=1`: keep containers and the disposable volume after the suite
 - `E2E_IGNORE_MAX_VERSION=1`: enable the app with `--force` on a Nextcloud newer than `max-version`, as `canary.sh` does
 - `E2E_ARTIFACTS`: a folder for the evidence of a failure and the traces of the checks in the browser, see [When a run fails](#when-a-run-fails), and with `E2E_COVERAGE=1` for the reports of the coverage, also when the run passes
 
 All credentials, users, filenames, document content, and metadata are synthetic. The Paperless mock rejects every token except the explicit `e2e-only-token` fixture, an account that is no superuser, with every permission of a run, and the owner of every document; `e2e-view-only-token`, an account without the permissions for the tags, for adding documents and for their tasks; `e2e-no-ui-settings-token`, an account without **View** for UI Settings; and `e2e-superuser-only-token`, a superuser, which alone may list, create and change users and gives the accounts that it created their tokens, `e2e-token-of-<username>`, for their passwords. It records whether uploads arrived intact. Like Paperless-ngx, it answers each endpoint only with its permission, names the ID and the permissions of the account in `/api/ui_settings/`, and filters the documents by their owner. Like Paperless, it refuses an upload without a `Content-Length` with `No file was submitted.` It plays Paperless-ngx 3.3.0, or 2.20.15 and 2.15.3 after `/control/paperless/<version>`: it serves the versions of the API that each of them serves, by the header `Accept` or its default, refuses the others with `406 Not Acceptable`, names itself in `X-Version` and `X-Api-Version`, and lists tasks in the shapes of their serializers. `/control/tasks/<end>` and `/control/task-of/<file>/<end>` end tasks with `success`, `failure`, `duplicate` or `revoked`, as Paperless-ngx 3.x stores them. After `/control/uploads/unavailable`, it answers every upload with `503`, as a Paperless behind a proxy whose worker is down, until `/control/uploads/available`.
+
+## One scenario alone
+
+A full run takes minutes, which is a long wait to try one fix. `E2E_ONLY` names the scenarios of a run, and `E2E_BROWSER` its checks in the browser:
+
+```bash
+E2E_ONLY=files bash tests/e2e/run.sh                   # Send to Paperless in Files, with files.mjs, in under 3 minutes
+E2E_ONLY="files flow" bash tests/e2e/run.sh            # two scenarios, in the order of a full run
+E2E_ONLY=files E2E_BROWSER=none bash tests/e2e/run.sh  # the same without the browser
+E2E_BROWSER=settings bash tests/e2e/run.sh             # one check in the browser
+E2E_PLAN=1 E2E_ONLY=files bash tests/e2e/run.sh        # what the run would run, without starting anything
+E2E_ONLY=files bash tests/e2e/run-all.sh               # on every supported version
+```
+
+The scenarios share one installation of Nextcloud and build on each other, so a selection also runs what it needs. Each entry of the list `SCENARIOS` in `run.sh` names the scenarios that leave what it needs, and the list has the order of a full run:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../../docs/images/diagrams/what-a-selection-of-scenarios-runs.dark.svg">
+  <img src="../../docs/images/diagrams/what-a-selection-of-scenarios-runs.svg" alt="What a selection of scenarios runs: E2E_ONLY=files sets up Nextcloud and the app, as every run does. It then runs the scenario files with what it needs, connection, dry-run and export, in the order of the list, and the check in the browser of the same name, files.mjs. The other 30 scenarios and the other checks in the browser stay out.">
+</picture>
+
+A run without either variable runs everything, which is what the CI does: `scripts/check-project.sh` fails when a workflow sets them. It also fails when a function `scenario_<name>` of `run.sh` has no entry in the list, which would leave it out of every run, or when an entry has no function or comes before what it needs; each start of `run.sh` stops for the same reasons.
+
+- A check in the browser runs with the scenario of its name, `files` and `flow`. `E2E_BROWSER` names others instead, `accessibility`, `keyboard`, `settings`, `files` and `flow`, or `none`; without `E2E_ONLY`, only what they need runs before them. `E2E_ONLY=browser` runs all five, and `E2E_ACCESSIBILITY=0` none of them.
+- Every scenario prints `The scenario <name> starts after <seconds> s.`, and a run that fails names the scenario and the command that runs it alone, after the line `The end-to-end tests fail`.
+- A scenario that fails alone but passes in a full run lacks a name in its entry: add the scenario that leaves what it needs.
+- `E2E_COVERAGE=1` applies [the floors of the coverage](#coverage-of-the-javascript) only to all of the checks in the browser, as a selection runs less of the scripts. It reports the table all the same.
+- `E2E_UPGRADE=1` runs no scenarios, so it refuses a selection.
+
+| Scenario | What it checks |
+| --- | --- |
+| `pages` | what a new installation shows: the form of the settings with its routes, the getting-started checklist, the setup check and the navigation |
+| `connection` | the setting for a Paperless in the local network, the connection checklist of accounts with too few permissions, and the save |
+| `dry-run` | dry-runs on the settings page and with `occ`, the preview of the path template and settings that are not saved |
+| `export` | *Synchronize now* as a background job, the first export and its entry in the Activity stream |
+| `moves` | moves of the metadata alone, with the SHA-256 and the MD5 checksums of Paperless, and a file that keeps its ID |
+| `webhook` | the webhook of a workflow of Paperless, its secret and the throttling of wrong ones |
+| `new-content` | a new content of a document, in place, also for a share of the file |
+| `schedule` | the background job as cron starts it, its interval and the version of the previous content |
+| `excluded-tags` | an excluded tag, pruning and the trash bin of the target user |
+| `included-tags` | tags to mirror |
+| `quota` | a full quota, which stops the exports, and its error in the language of an administrator |
+| `nextcloud-tags` | the tags of Paperless as tags of Nextcloud, beside those of a user |
+| `metadata` | the metadata next to the archive, its sidecar and its index |
+| `deletion` | the trash of Paperless, an incomplete scan and guarded deletion |
+| `inbox` | imports that succeed, fail, end as a duplicate or revoked, are refused or set aside, with their entries and notifications |
+| `status` | the status after all of the above, and what the mock saw of them |
+| `restore` | a document that comes back, after its deletion and from the trash of Paperless |
+| `conflicts` | a file of the user at the path of a document, with `skip` and `replace` |
+| `left-out` | pages that shift during a run and leave out a document that Paperless still has |
+| `vanished` | a document that vanishes without the trash, through its grace runs |
+| `names` | titles and long names that the path template keeps as text and shortens |
+| `files` | *Send to Paperless* from Files, and `files.mjs` |
+| `flow` | *Send to Paperless* by a rule of Flow, and `flow.mjs` |
+| `delegation` | the settings delegated to a group, by the routes of the page |
+| `browser` | all five checks in the browser, with all that they need |
+| `account` | the setup of the account of the app with the token of a superuser |
+| `clean-log` | no error of the app and no token in the log of Nextcloud |
+| `old-paperless` | a Paperless-ngx 2.15 without version 9 of the API |
+| `unknown-tag` | a tag to mirror that Paperless doesn't have |
+| `unreachable` | a run without Paperless, which keeps the token out of the log |
+| `repointed-url` | a Paperless URL changed past the settings page, which doesn't get the token |
+| `failing-mirror` | a mirror that keeps failing and recovers: notifications, setup check and status API |
+| `per-user` | per-user ownership and the inbox of each user |
+| `shared` | the documents that Paperless shares through a group |
+| `french` | the settings with Nextcloud in French, and `french.mjs` |
 
 ## Every supported version at once
 
@@ -164,7 +231,7 @@ The checks in the browser start Chromium through `browser.mjs`. With `E2E_ARTIFA
 npx playwright@1.64.1 show-trace browser/files-1.trace.zip
 ```
 
-After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
+The log names the scenario that failed, and the command that runs [it alone](#one-scenario-alone). After the run, `failure.py` names the first error of each run that failed, with the last step that passed and the other checks in the browser that failed, in the summary of the job and as its annotation: the line of a check in the browser that failed, an error of Python or Node.js, such as `AssertionError:` of `assert_json.py`, an exception of `occ` with its file and line, a run that the time limit stopped, or the last message of `run.sh` before its cleanup. The canary and the contract tests put it into their issue, and each further failure comments with its own. On your machine:
 
 ```bash
 E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run-all.sh
