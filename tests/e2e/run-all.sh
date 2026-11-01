@@ -33,8 +33,9 @@
 # passes.
 # E2E_PLAN=1 only prints the runs that it would start.
 # KEEP_E2E=1 keeps the containers of each, as with run.sh.
-# E2E_VERSION_TIMEOUT, by default 15m, ends a run that hangs before the job of the CI
-# ends after 20 minutes, so that the logs of all are still printed. The table of the
+# E2E_VERSION_TIMEOUT, by default 15m from its own start, ends a run that hangs before the
+# job of the CI ends after 25 minutes, also a run that first waited for a processor, so
+# that the logs of all are still printed. The table of the
 # results gives the time of each phase of each run, from the lines of its log, so that a
 # run that gets slower shows where.
 # E2E_PARALLEL, by default the number of processors, limits the runs at once: a run that

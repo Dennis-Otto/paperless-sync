@@ -33,7 +33,7 @@ services:
       start_interval: 1s
       interval: 1m
       timeout: 2s
-      retries: 1
+      retries: 2
 
   nextcloud:
     depends_on:

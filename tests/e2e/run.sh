@@ -120,6 +120,18 @@ keep_evidence() {
 	echo "The evidence of the failure is in ${E2E_ARTIFACTS}."
 }
 
+# Empties the folder of E2E_DATA_FOLDER, in the container as its files belong to the user of
+# the web server there. down doesn't touch a folder of the machine, whose old files would
+# fail the next installation and whose memory would stay taken until a reboot. A runner of
+# the CI starts without the folder and is thrown away with it. Runs after a down, and
+# removes again what it starts for this.
+empty_data_folder() {
+	if [[ -n "${E2E_DATA_FOLDER:-}" && -d "${E2E_DATA_FOLDER}" ]]; then
+		"${COMPOSE[@]}" run --rm --no-deps --entrypoint sh nextcloud -c 'find /var/www/html/data -mindepth 1 -delete' >/dev/null
+		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+	fi
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT
@@ -142,6 +154,7 @@ cleanup() {
 	elif [[ "${CI:-}" != "true" ]]; then
 		# A runner of the CI is thrown away with its containers after the job.
 		"${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+		empty_data_folder || echo "The folder ${E2E_DATA_FOLDER} could not be emptied." >&2
 	fi
 	exit "${status}"
 }
@@ -724,6 +737,7 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 	E2E_PACKAGE="${E2E_PACKAGE:-$(bash "${SCRIPT_DIR}/packages.sh" commit "${TMP_DIR}")}"
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
+empty_data_folder
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!

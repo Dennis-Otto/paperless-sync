@@ -69,7 +69,9 @@ fix = """Read the first error in the summary; for a check in the browser, downlo
 artifact *e2e-nextcloud* and open the trace of the window that failed, in its folder
 `browser`, with `npx playwright show-trace` or at https://trace.playwright.dev: it shows each
 step with a picture of the page, its requests and its console, and in the second attempt of
-the job, which the flaky-test bot starts, a snapshot of the page to inspect. Run the version that
+the job, which the flaky-test bot starts unless the same jobs failed for the commit before, a
+snapshot of the page to inspect; without a second attempt, the run on your machine below keeps
+it as well. Run the version that
 failed on your machine with Docker, by the command that the log names, fix what its output
 shows, and push. A finding of the accessibility names its
 fix: a name for a control, a color with more contrast, CSS that lets a wide element wrap
@@ -240,9 +242,12 @@ doesn't pin exactly one, which the upgrade test reads. *Changes that run the end
 `tests/e2e/run-all.sh`, which the two required jobs of `.github/workflows/e2e.yml`
 run, leave out a run of the whole suite or start one twice, or split a sample of
 versions otherwise than it expects. *The runs at once of the end-to-end tests*: `tests/e2e/run-all.sh` leaves out a run, or starts more at
-once than `E2E_PARALLEL` names. *The health checks of the end-to-end tests*: a health
-check of a Compose file of `tests/e2e/` has no `start_interval`, or an `interval` below 30 s,
-which would take the processors of the runner from the tests while its service runs.
+once than `E2E_PARALLEL` names. *The folder in memory of the end-to-end tests*: `tests/e2e/run.sh`
+doesn't empty the folder of `E2E_DATA_FOLDER` after its `down`, so a second run on a machine
+would fail to install. *The health checks of the end-to-end tests*: a health
+check of a Compose file of `tests/e2e/` has no `start_interval`, an `interval` below 30 s,
+which would take the processors of the runner from the tests while its service runs, or
+fewer than two `retries`, which would fail a run on one late answer.
 *Downloads that a script runs*: a pipe of a shell script
 hands a download to a program, such as `curl … | bash` or `curl … | docker exec
 … python`, which Scorecard reports as a download that runs without a pinned hash, or the

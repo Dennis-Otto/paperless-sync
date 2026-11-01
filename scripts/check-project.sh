@@ -367,7 +367,7 @@ ls "$LIMIT_FOLDER" | grep -c '\.going$' >>"$LIMIT_FOLDER/counts"
 python3 -c 'import time; time.sleep(0.5)' 2>/dev/null || python -c 'import time; time.sleep(0.5)'
 rm "$LIMIT_FOLDER/$E2E_PORT.going"
 EOF
-if ! LIMIT_FOLDER="$limit_folder" E2E_RUN_SCRIPT="$limit_folder/run.sh" E2E_PARALLEL=2 E2E_VERSIONS="33 34 35 36 37" E2E_VARIANTS=none \
+if ! GITHUB_STEP_SUMMARY='' LIMIT_FOLDER="$limit_folder" E2E_RUN_SCRIPT="$limit_folder/run.sh" E2E_PARALLEL=2 E2E_VERSIONS="33 34 35 36 37" E2E_VARIANTS=none \
   bash tests/e2e/run-all.sh >"$limit_folder/log" 2>&1; then
   cat "$limit_folder/log"
   echo "E2E_PARALLEL=2 bash tests/e2e/run-all.sh fails with a script that passes in place of run.sh."
@@ -382,26 +382,62 @@ if [[ "$started" != 5 || "$most" != 2 ]]; then
 fi
 echo "tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names."
 
+printf '\n== %s\n' "The folder in memory of the end-to-end tests"
+# down doesn't touch the folder of E2E_DATA_FOLDER, so a second run on a machine would find
+# the files of the first and fail to install. The function of run.sh runs here with a script
+# in place of Compose, and run.sh must call it after the down at its start and its end.
+memory_folder="$(mktemp -d)"
+empties() {
+  (
+    eval "$(sed -n '/^empty_data_folder() {$/,/^}$/p' tests/e2e/run.sh)"
+    compose() { echo "$*" >>"$memory_folder/calls"; }
+    COMPOSE=(compose)
+    E2E_DATA_FOLDER="$1" empty_data_folder
+  )
+}
+empties ""
+empties "$memory_folder/absent"
+if [[ -e "$memory_folder/calls" ]]; then
+  echo "empty_data_folder in tests/e2e/run.sh starts a container without a folder to empty, as on every runner of the CI."
+  exit 1
+fi
+empties "$memory_folder"
+if ! grep -q -- "run --rm --no-deps --entrypoint sh nextcloud -c find /var/www/html/data -mindepth 1 -delete" "$memory_folder/calls" ||
+  [[ "$(tail -n 1 "$memory_folder/calls")" != "down --volumes"* ]]; then
+  cat "$memory_folder/calls"
+  echo "empty_data_folder in tests/e2e/run.sh should empty the folder of a run through the container of Nextcloud, and then remove what that started."
+  exit 1
+fi
+rm -rf "$memory_folder"
+if [[ "$(grep -A1 -E '^\s*"\$\{COMPOSE\[@\]\}" down ' tests/e2e/run.sh | grep -cE '^\s*empty_data_folder')" != 2 ]]; then
+  echo "tests/e2e/run.sh should call empty_data_folder right after the down at its start and in its cleanup, or a second run on a machine fails to install."
+  exit 1
+fi
+echo "A run empties the folder in memory after the down at its start and at its end, and starts no container where there is no such folder."
+
 printf '\n== %s\n' "The health checks of the end-to-end tests"
 # Each check of the health of a container starts a process in it through Docker. With up to
 # five runs of two or three containers on the four cores of a runner, a check every two or
 # three seconds takes a good part of a core from the tests, so each one checks often only
-# while its service starts (start_interval) and seldom once it runs (interval).
+# while its service starts (start_interval) and seldom once it runs (interval). At that
+# pace, a single late answer would mark a container as unhealthy for a minute and fail each
+# later up --wait of the run, so it takes at least two in a row (retries).
 problems=0
 for file in tests/e2e/compose.yaml tests/e2e/compose.pgsql.yaml tests/e2e/compose.mysql.yaml tests/e2e/compose.s3.yaml; do
   checks="$(grep -cE '^ +healthcheck:$' "$file" || true)"
   quick="$(grep -cE '^ +start_interval: [0-9]+s$' "$file" || true)"
   # Up to 29 seconds, the interval is too short for a service that runs.
   seldom="$(grep -cE '^ +interval: ([0-9]+m|[3-9][0-9]s|[0-9]{3,}s)$' "$file" || true)"
-  if [[ "$checks" == 0 || "$quick" != "$checks" || "$seldom" != "$checks" ]]; then
-    echo "$file: of its $checks health checks, $quick have a start_interval and $seldom an interval of at least 30 s. Check often only while a service starts, and seldom once it runs: tests/e2e/README.md#how-the-suite-stays-quick."
+  patient="$(grep -cE '^ +retries: ([2-9]|[0-9]{2,})$' "$file" || true)"
+  if [[ "$checks" == 0 || "$quick" != "$checks" || "$seldom" != "$checks" || "$patient" != "$checks" ]]; then
+    echo "$file: of its $checks health checks, $quick have a start_interval, $seldom an interval of at least 30 s and $patient at least two retries. Check often only while a service starts, seldom once it runs, and let one late answer pass: tests/e2e/README.md#how-the-suite-stays-quick."
     problems=$((problems + 1))
   fi
 done
 if ((problems > 0)); then
   exit 1
 fi
-echo "The health checks of the end-to-end tests check often only while their services start."
+echo "The health checks of the end-to-end tests check often only while their services start, and let one late answer pass."
 
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a

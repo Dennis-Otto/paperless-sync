@@ -82,7 +82,7 @@ jobs:
     # The run of Monday morning is the coming Nextcloud's alone.
     if: github.event.schedule != '17 5 * * 1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -166,7 +166,7 @@ jobs:
     name: nextcloud on PostgreSQL, MariaDB and S3
     if: github.event.schedule != '17 5 * * 1'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:

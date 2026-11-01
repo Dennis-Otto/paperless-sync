@@ -25,12 +25,13 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       # Each check starts a process through Docker, which costs a runner more than the
       # suite can spare with several runs side by side: often while the service starts,
-      # and seldom once it runs (tests/e2e/README.md#how-the-suite-stays-quick).
+      # and seldom once it runs (tests/e2e/README.md#how-the-suite-stays-quick). One late
+      # answer doesn't count as unhealthy, which would fail each later up --wait: two do.
       start_period: 60s
       start_interval: 1s
       interval: 1m
       timeout: 2s
-      retries: 1
+      retries: 2
 
   nextcloud:
     image: ${NEXTCLOUD_IMAGE:-nextcloud:33.0.9-apache@sha256:a97666d6ae931bde78a80cfba8abdf46d436d7b540f31895803f6fb0a012d689}
@@ -56,7 +57,7 @@ services:
       start_interval: 1s
       interval: 1m
       timeout: 3s
-      retries: 1
+      retries: 2
 
 volumes:
   nextcloud_html:
