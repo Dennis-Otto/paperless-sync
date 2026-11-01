@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Der Ordner des Containers wird zum Basisordner von Paperless Sync
+    accDescr: Dem Konto des Containers gehört der Ordner Paperless, den es wie zuvor mit anderen teilt. Während des Umzugs enthält der Ordner die alten Ordner des Containers, etwa 2025 und 2026, und die Ordner von Paperless Sync: Archiv, das Archiv, Eingang, den Eingang zu Paperless, und Fehler, die Dateien, die Paperless nicht importieren konnte. Sobald das Archiv vollständig ist, gehen die alten Ordner in den Papierkorb des Kontos, und die Freigabe zeigt nur noch die Ordner von Paperless Sync. Die Ordner von Paperless Sync sind blau, die alten Ordner orange.
+
+    base["`📁 Paperless<br>*der Ordner des Containers,<br>wie zuvor geteilt,<br>jetzt der Basisordner*`"]
+    old["`📁 2025, 2026, …<br>*die alten Ordner des<br>Containers: in den Papierkorb,<br>sobald das Archiv<br>vollständig ist*`"]
+    archive["`📁 Archiv<br>*das Archiv von<br>Paperless Sync*`"]
+    inbox["`📁 Eingang<br>*Dateien für<br>Paperless*`"]
+    errors["`📁 Fehler<br>*Dateien, die Paperless<br>nicht importieren konnte*`"]
+
+    base --> old & archive
+    %% Invisible links put the inbox and the error folder one level lower, so that the diagram stays narrow.
+    old ~~~ inbox
+    archive ~~~ errors
+    base --> inbox & errors
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef old fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class base,archive,inbox,errors nextcloud
+    class old old
