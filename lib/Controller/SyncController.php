@@ -20,8 +20,10 @@ use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\StatusTranslation;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UnsavedSettingException;
+use OCA\PaperlessSync\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\BackgroundJob\IJobList;
@@ -58,6 +60,7 @@ final class SyncController extends Controller {
 	 * @param array<string, mixed>|null $settings
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/sync/run')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function run(bool $dryRun = true, ?array $settings = null): JSONResponse {
 		if ($settings !== null && !$dryRun) {
 			return new JSONResponse(['message' => $this->l10n->t('Save the settings first: only a dry-run can use settings that are not saved.')], Http::STATUS_BAD_REQUEST);
@@ -94,10 +97,11 @@ final class SyncController extends Controller {
 	}
 
 	/**
-	 * The status of the last run, with its errors in the language of the administrator who reads
+	 * The status of the last run, with its errors in the language of the person who reads
 	 * it: the run kept them in English, as the log shows them.
 	 */
 	#[FrontpageRoute(verb: 'GET', url: '/sync/status')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function status(): JSONResponse {
 		return new JSONResponse($this->overview($this->configService->get()));
 	}
@@ -105,7 +109,7 @@ final class SyncController extends Controller {
 	/**
 	 * Queues the run by hand, after the checks that a run would fail at once, so that the page says
 	 * so at once. The status says "queued" before the job exists, so that a job that starts at once
-	 * says "running" after it, never before. The job names the administrator who queued it, whom
+	 * says "running" after it, never before. The job names the person who queued it, whom
 	 * the Activity stream names as the author of the run, and Nextcloud queues it once for each.
 	 */
 	private function queue(): JSONResponse {

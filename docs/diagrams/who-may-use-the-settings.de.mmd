@@ -1,0 +1,30 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: Wer die Einstellungen von Paperless Sync nutzen darf
+    accDescr: Ein Administrator von Nextcloud erreicht die Einstellungsseite von Paperless Sync und den Rest der Administration und delegiert die Seite unter Administrationsrechte an eine Gruppe. Ein Mitglied dieser Gruppe erreicht die Seite und ihre Routen, mit dem eigenen Passwort, und weder den Rest der Administration noch die Schlüssel der App-Konfiguration über die Provisioning-API von Nextcloud: Nextcloud antwortet 403. Eine Einstellung erreicht die App-Konfiguration also nur über die Routen der Seite, die jeden Wert prüfen. Jeder andere Benutzer bekommt 403 auf jeder Route der Seite.
+
+    admin(["Administrator<br>von Nextcloud"])
+    member(["Mitglied der<br>delegierten Gruppe"])
+    other(["Jeder andere Benutzer"])
+    subgraph nextcloud ["Nextcloud-Server"]
+        rest["Der Rest der<br>Administration"]
+        page["Die Einstellungsseite von<br>Paperless Sync und ihre Routen:<br>jeder Wert wird geprüft"]
+        config[("App-Konfiguration")]
+    end
+
+    admin --> rest
+    admin -- "delegiert die Seite<br>unter Administrationsrechte" --> page
+    member -- "mit dem<br>eigenen Passwort" --> page
+    member -. "403" .-> rest
+    member -. "403 über die<br>Provisioning-API" .-> config
+    other -. "403" .-> page
+    page --> config
+
+    classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
+    classDef delegated fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class rest,page,config nextcloud
+    class member delegated

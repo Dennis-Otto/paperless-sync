@@ -21,15 +21,15 @@ use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IL10N;
 use OCP\IURLGenerator;
-use OCP\Settings\ISettings;
+use OCP\Settings\IDelegatedSettings;
 use OCP\SetupCheck\SetupResult;
 
-final class AdminSettings implements ISettings {
-	/** The users of the provisioning API of Nextcloud, at version 2 of its OCS API. */
-	private const USERS_PATH = '/ocs/v2.php/cloud/users';
-	/** The groups of the provisioning API, which the setting of the group that may send files picks from. */
-	private const GROUPS_PATH = '/ocs/v2.php/cloud/groups';
-
+/**
+ * The settings page, which an administrator can delegate to a group under Administration privileges
+ * of Nextcloud: the routes of the page name this class in #[AuthorizedAdminSetting]
+ * (decision 0035).
+ */
+final class AdminSettings implements IDelegatedSettings {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private ConfigService $configService,
@@ -80,11 +80,10 @@ final class AdminSettings implements ISettings {
 			'webhook' => $webhook,
 			'health' => $this->health(),
 			'tagsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.tags'),
-			// The users of Nextcloud, which the page offers for the target user, from the provisioning
-			// API of Nextcloud, which is always on and answers administrators. A path from the root of
-			// the server, as the page has it, also behind a proxy that changes the scheme or the host.
-			'usersUrl' => $this->urlGenerator->getWebroot() . self::USERS_PATH,
-			'groupsUrl' => $this->urlGenerator->getWebroot() . self::GROUPS_PATH,
+			// The users and groups of Nextcloud, which the page offers for the target user and its
+			// groups, from routes of the app: those of Nextcloud answer only its administrators.
+			'usersUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.directory.users'),
+			'groupsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.directory.groups'),
 		]);
 	}
 
@@ -112,5 +111,24 @@ final class AdminSettings implements ISettings {
 
 	public function getPriority(): int {
 		return 55;
+	}
+
+	/**
+	 * None: this form is the only one of the section, so Administration privileges lists it under
+	 * the name of the section alone.
+	 */
+	public function getName(): ?string {
+		return null;
+	}
+
+	/**
+	 * No key of the app configuration. What this names, a delegated group may write with the
+	 * provisioning API of Nextcloud, past every check of ConfigService, such as a base folder with
+	 * "..". The page saves through SettingsController, which checks every value, and needs none.
+	 *
+	 * @return array<string, list<string>>
+	 */
+	public function getAuthorizedAppConfig(): array {
+		return [];
 	}
 }

@@ -135,6 +135,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 - Der Cron von Nextcloud führt die Synchronisation im Intervall aus, das du einstellst, und die Batchgröße begrenzt die Änderungen eines Laufs
 - [Änderungen in Sekunden](#änderungen-in-sekunden): Ein Arbeitsablauf von Paperless ruft den Webhook der App auf, wenn er ein Dokument hinzufügt oder ändert, und seine Kopie ändert sich sofort, ohne einen Container neben Paperless, seinen Medienordner oder ein Passwort von Nextcloud
 - Läufe auf Abruf und Testläufe aus den Einstellungen, jeder mit einem Bericht seiner Änderungen und Fehler in der Sprache des Administrators, Fehler zuerst, mit einem Filter für jede Art von Änderung, Links zu den Dateien und einem Knopf, der ihn für einen Fehlerbericht kopiert, und mit dem Status des letzten Laufs; ein Testlauf probiert Änderungen der Einstellungen aus, bevor du sie speicherst, und ein Lauf auf Abruf läuft als Hintergrundjob, sodass kein Proxy ihn abschneidet
+- [Die Einstellungen an eine Gruppe delegieren](#die-einstellungen-delegieren), für die Person, die Paperless betreibt, aber kein Administrator von Nextcloud ist
 - [Auswahlfelder in den Einstellungen](#zielbenutzer-und-tags) bieten die Benutzer von Nextcloud für den Zielbenutzer und die Tags von Paperless für die ausgeschlossenen Tags, die Tags zum Spiegeln und die Tags jedes Imports an und markieren einen Benutzer oder einen Tag, den es nicht gibt, sodass sich ein Tippfehler vor dem ersten Lauf zeigt
 - Der [Aktivitätenstrom](#aktivität) des Zielbenutzers erzählt, was jeder Lauf geändert hat, mit Links zu seinen Dateien, und jeden Import, mit einem Link zum neuen Dokument in Paperless
 - Auf Englisch und Deutsch: Die Einstellungen, ihre Meldungen, ihre Links *Hilfe* zur Anleitung und der Aktivitätenstrom folgen der Sprache von Nextcloud, die Zeiten dem Gebietsschema deiner persönlichen Einstellungen
@@ -384,6 +385,32 @@ Nach einem Speichern zeigt das Formular die Einstellungen so, wie Nextcloud sie 
 
 Ergebnisse und Fehler erscheinen in der Leiste der Knöpfe, die unten im Fenster bleibt. **Jetzt synchronisieren** wartet nicht auf den Lauf: Es reiht den Lauf als Hintergrundjob von Nextcloud ein und antwortet sofort, der Status sagt *In der Warteschlange*, bis die nächsten Hintergrundjobs ihn starten, innerhalb von fünf Minuten mit dem System-Cron, und die Leiste sagt, wie der Lauf endete, sobald der Status sein Ende zeigt. Ein Lauf kann so lange dauern, wie er braucht, und kein Proxy vor Nextcloud schneidet ihn ab. **Testlauf starten** antwortet mit seinem Bericht; antwortet stattdessen ein Proxy oder der Webserver für einen langen Testlauf, etwa mit *504 Gateway Time-out*, fragt die Seite nach dem Status: Solange er den Testlauf zeigt, sagt die Seite, dass er im Hintergrund weiterläuft, und folgt ihm bis zu seinem Ende; sonst nennt sie den Statuscode des Webservers, und der Status zeigt, wie er endete.
 
+<a id="delegating-the-settings"></a>
+
+### Die Einstellungen delegieren
+
+Wer Paperless betreibt, ist nicht immer Administrator von Nextcloud. Ein Administrator kann dieser Person allein diese Seite geben: Füge unter **Administrationseinstellungen → Administrationsrechte** bei **Paperless Sync** eine Gruppe hinzu, oder führe diesen Befehl aus, mit deiner Gruppe anstelle von `archive-admins`:
+
+```sh
+occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' archive-admins
+```
+
+Die Mitglieder der Gruppe haben keinen Eintrag *Administrationseinstellungen* in ihrem Benutzermenü: Sie öffnen dort **Einstellungen** und finden **Paperless Sync** im Bereich *Administration* der Seitenleiste. Sie können alles tun, was die Seite bietet, mit dem eigenen Passwort, wo die Seite danach fragt, und nichts sonst in der Administration von Nextcloud.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/who-may-use-the-settings.de.dark.svg">
+  <img src="docs/images/diagrams/who-may-use-the-settings.de.svg" alt="Wer die Einstellungen von Paperless Sync nutzen darf: Ein Administrator von Nextcloud erreicht die Einstellungsseite von Paperless Sync und den Rest der Administration und delegiert die Seite unter Administrationsrechte an eine Gruppe. Ein Mitglied dieser Gruppe erreicht die Seite und ihre Routen, mit dem eigenen Passwort, und weder den Rest der Administration noch die Schlüssel der App-Konfiguration über die Provisioning-API von Nextcloud: Nextcloud antwortet 403. Eine Einstellung erreicht die App-Konfiguration also nur über die Routen der Seite, die jeden Wert prüfen. Jeder andere Benutzer bekommt 403 auf jeder Route der Seite.">
+</picture>
+
+Delegiere die Seite nur an Menschen, denen du die Dateien aller Benutzer und das Netzwerk des Servers anvertraust, denn das gibt sie ihnen:
+
+- **Die Dateien aller Benutzer.** Sie wählen den Zielbenutzer oder das Eigentum je Benutzer, also wohin das Archiv geschrieben wird, und können dort das endgültige Löschen einschalten. Sie wählen auch den Eingangsordner unterhalb des Basisordners dieses Benutzers, dessen Dateien dann an Paperless gehen und, wie die Einstellungen es sagen, den Ordner verlassen.
+- **Das Konto der App in Paperless.** Ihre Testläufe, Läufe und Berichte lesen Paperless mit ihrem Token und nennen Dokumente und Dateien. Sie können die Adresse und das Token ersetzen und das Geheimnis des Webhooks erstellen.
+- **Das Netzwerk des Servers.** Sie können *Paperless läuft in meinem lokalen Netzwerk* einschalten und die App auf jede Adresse dort richten, sodass der Server Anfragen an Geräte sendet, die sie selbst vielleicht nicht erreichen, und Antworten im Archiv landen können.
+- **Die Namen der Konten.** Die Felder des Zielbenutzers und der Gruppen bieten die Kontonamen und Anzeigenamen aller Benutzer und Gruppen von Nextcloud an, ohne ihre E-Mail-Adressen.
+
+Alles andere bleibt bei den Administratoren, egal welche Gruppe es ist: die [Benachrichtigung über eine scheiternde Spiegelung](#benachrichtigungen), es sei denn, `notification_group` nennt die Gruppe der Mitglieder, die Einrichtungsprüfungen unter *Administration → Übersicht*, deren Warnungen die Seite auch ihnen zeigt, die Status-API, die Regeln von Flow und `occ`. Auch ein Schlüssel der Konfiguration der App lässt sich nicht an der Seite vorbei schreiben, also besteht jeder Wert dieselben Prüfungen wie bei einem Administrator. [Das Sicherheitskonzept](https://dennis-otto.github.io/paperless-sync/security.html#delegated-settings) hat die Einzelheiten.
+
 ### Zielbenutzer und Tags
 
 Das Feld **Nextcloud-Zielbenutzer-ID** bietet die Benutzer von Nextcloud an, deren Kontoname, Anzeigename oder E-Mail-Adresse enthält, was du tippst: Wähle einen mit den Pfeiltasten und der Eingabetaste oder mit einem Klick. Es nimmt den Kontonamen, wie ihn *Konten* in der Administration auflistet, nicht den Anzeigenamen, und markiert ein deaktiviertes Konto als *deaktiviert*. Verlässt du das Feld mit einer ID, die Nextcloud nicht kennt, sagt es das sofort: *Nextcloud hat keinen Benutzer mit der ID …*. Das Speichern prüft den Zielbenutzer nur zusammen mit der Verbindung, sodass sich ein Zeitplan immer pausieren lässt; das Feld zeigt einen Tippfehler schon vorher.
@@ -397,7 +424,7 @@ Die Felder **Zusätzlich ausgeschlossene Paperless-Tags**, **Nur Dokumente mit d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.de.dark.svg">
-  <img src="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.de.svg" alt="Woher die Auswahlfelder der Einstellungen ihre Namen nehmen: Das Feld des Zielbenutzers fragt die Provisioning-API von Nextcloud nach den Benutzern, deren ID, Name oder E-Mail-Adresse das Getippte enthält, und nach der Benutzer-ID im Feld, die es markiert, wenn Nextcloud keinen solchen Benutzer hat. Die Felder der ausgeschlossenen Tags, der Tags zum Spiegeln und der Tags für jeden Import fragen Paperless Sync, das die Tags mit der gespeicherten Adresse und dem gespeicherten API-Token aus Paperless-ngx liest, wie ein Lauf es tut; das Token bleibt auf dem Server. Ein Name, zu dem Paperless keinen Tag hat, lässt sich ebenfalls hinzufügen und wird als nicht in Paperless markiert.">
+  <img src="docs/images/diagrams/where-the-pickers-of-the-settings-take-their-names-from.de.svg" alt="Woher die Auswahlfelder der Einstellungen ihre Namen nehmen: Das Feld des Zielbenutzers fragt Paperless Sync nach den Benutzern von Nextcloud, deren ID, Name oder E-Mail-Adresse das Getippte enthält, und nach der Benutzer-ID im Feld, die es markiert, wenn Nextcloud keinen solchen Benutzer hat. Die Felder der ausgeschlossenen Tags, der Tags zum Spiegeln und der Tags für jeden Import fragen Paperless Sync, das die Tags mit der gespeicherten Adresse und dem gespeicherten API-Token aus Paperless-ngx liest, wie ein Lauf es tut; das Token bleibt auf dem Server. Ein Name, zu dem Paperless keinen Tag hat, lässt sich ebenfalls hinzufügen und wird als nicht in Paperless markiert.">
 </picture>
 
 ### Eigentümer der Ordner

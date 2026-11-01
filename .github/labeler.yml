@@ -7,6 +7,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - lib/Controller/SettingsController.php
+          - lib/Controller/DirectoryController.php
           - lib/Settings/**
           - lib/Service/ConfigService.php
           - lib/Service/InvalidSettingException.php
@@ -29,6 +30,7 @@
           - css/settings.css
           - templates/settings.php
           - tests/Unit/Controller/SettingsController*
+          - tests/Unit/Controller/DirectoryController*
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Settings/**
           - tests/Unit/Service/ConfigServiceTest.php

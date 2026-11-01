@@ -26,6 +26,7 @@ use OCP\AppFramework\Services\IInitialState;
 use OCP\IDateTimeFormatter;
 use OCP\IL10N;
 use OCP\IURLGenerator;
+use OCP\Settings\IDelegatedSettings;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -43,7 +44,6 @@ final class AdminSettingsTest extends TestCase {
 	protected function setUp(): void {
 		$this->urlGenerator = $this->createStub(IURLGenerator::class);
 		$this->urlGenerator->method('linkToRoute')->willReturnCallback(static fn (string $route): string => '/route/' . $route);
-		$this->urlGenerator->method('getWebroot')->willReturn('/cloud');
 		$this->urlGenerator->method('imagePath')->willReturnCallback(static fn (string $app, string $file): string => "/apps/{$app}/img/{$file}");
 	}
 
@@ -74,8 +74,8 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.preview', $parameters['previewUrl']);
 		self::assertSame('/route/files.view.index', $parameters['filesUrl']);
 		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);
-		self::assertSame('/cloud/ocs/v2.php/cloud/users', $parameters['usersUrl'], 'The users come from the provisioning API, below the root of the server.');
-		self::assertSame('/cloud/ocs/v2.php/cloud/groups', $parameters['groupsUrl'], 'So do the groups.');
+		self::assertSame('/route/paperless_sync.directory.users', $parameters['usersUrl'], 'The users come from a route of the app, which a delegated group may ask too.');
+		self::assertSame('/route/paperless_sync.directory.groups', $parameters['groupsUrl'], 'So do the groups.');
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
 		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);
@@ -212,7 +212,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(15, $links[1], 'The getting-started checklist, each of the six sections, each warning of the setup checks, the setup of the account of the app, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(16, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, each warning of the setup checks, the setup of the account of the app, per-user ownership, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);
@@ -285,6 +285,25 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/apps/paperless_sync/img/app.svg', $section->getIcon());
 		self::assertSame(55, $section->getPriority());
 		self::assertSame(55, $settings->getPriority());
+	}
+
+	/**
+	 * Administration privileges of Nextcloud offers only such a setting, under the name of its section
+	 * when it names none itself. The form is the only one of the section, and the section says it all.
+	 */
+	public function testAdministrationPrivilegesOffersTheFormUnderTheNameOfItsSection(): void {
+		$settings = $this->adminSettings();
+
+		self::assertInstanceOf(IDelegatedSettings::class, $settings);
+		self::assertNull($settings->getName());
+	}
+
+	/**
+	 * What this names, a delegated group may write with the provisioning API of Nextcloud, past every
+	 * check of ConfigService. The form saves through the routes of the app, so it names nothing.
+	 */
+	public function testADelegatedGroupGetsNoKeyOfTheAppConfigurationPastTheChecks(): void {
+		self::assertSame([], $this->adminSettings()->getAuthorizedAppConfig());
 	}
 
 	private function adminSettings(): AdminSettings {
