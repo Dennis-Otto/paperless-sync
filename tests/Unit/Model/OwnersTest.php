@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Model;
 
+use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\Owners;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -44,6 +45,28 @@ final class OwnersTest extends TestCase {
 	#[DataProvider('documentOwners')]
 	public function testGivesADocumentToTheUserOfItsOwner(mixed $owner, ?string $user): void {
 		self::assertSame($user, $this->owners->userOf($owner));
+	}
+
+	/** Whoever may view a document, by themselves or through a group, counts once; a user that Paperless didn't list counts for nobody. */
+	public function testFindsWhoMayViewADocument(): void {
+		$owners = new Owners('paperless', [
+			1 => ['id' => 1, 'name' => 'alice', 'user' => 'alice', 'reason' => Owners::NAME, 'detail' => ''],
+			2 => ['id' => 2, 'name' => 'Bob', 'user' => 'bob.smith', 'reason' => Owners::TABLE, 'detail' => 'bob.smith'],
+			3 => ['id' => 3, 'name' => 'carol', 'user' => null, 'reason' => Owners::NONE, 'detail' => ''],
+			4 => ['id' => 4, 'name' => 'dave', 'user' => 'dave', 'reason' => Owners::NAME, 'detail' => ''],
+		], [], [8 => [2, 3, 42], 9 => []]);
+
+		$viewers = $owners->viewersOf(new DocumentPermissions([1, 2, 43], [8, 9]));
+
+		self::assertNotNull($viewers);
+		self::assertSame([[1, 'alice'], [2, 'bob.smith'], [3, null]], array_map(static fn (array $viewer): array => [$viewer['id'], $viewer['user']], $viewers));
+		self::assertSame([], $owners->viewersOf(new DocumentPermissions([], [])));
+		self::assertSame([], $owners->viewersOf(new DocumentPermissions([], [9])), 'A group without users names nobody.');
+	}
+
+	/** Whom a group holds that Paperless didn't list is not for the app to guess. */
+	public function testAGroupThatPaperlessDidNotListSaysNothing(): void {
+		self::assertNull($this->owners->viewersOf(new DocumentPermissions([1], [7])));
 	}
 
 	public function testKnowsTheUserOfPaperlessOfEachUserOfNextcloud(): void {

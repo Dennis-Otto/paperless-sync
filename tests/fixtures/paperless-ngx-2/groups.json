@@ -1,0 +1,24 @@
+{
+  "body": {
+    "all": [
+      1
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": 1,
+        "name": "contract-household",
+        "permissions": []
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "GET /api/groups/?page=1&page_size=1000",
+  "status": 200
+}

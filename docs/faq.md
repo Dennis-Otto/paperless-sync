@@ -80,7 +80,7 @@ Yes, with the [tags in Nextcloud](guide.md#tags-in-nextcloud) on. Each copy then
 
 ### Can every user get their own documents?
 
-Yes, when the documents of your Paperless have owners: set *Who gets the documents* to *Each user, those they own in Paperless*. Each user of Nextcloud then gets the documents of the user of Paperless with the same ID, whatever its case, as single sign-on gives them, or of the one that the table *Paperless users with another Nextcloud ID* names, in their own files; the files of their inbox become theirs in Paperless, and the target user gets the documents of nobody else. One administrator still connects Paperless with one token, whose account must see the documents of every user. [Per-user ownership](guide.md#per-user-ownership) has the details.
+Yes, when the documents of your Paperless have owners: set *Who gets the documents* to *Each user, those they own in Paperless*. Each user of Nextcloud then gets the documents of the user of Paperless with the same ID, whatever its case, as single sign-on gives them, or of the one that the table *Paperless users with another Nextcloud ID* names, in their own files; the files of their inbox become theirs in Paperless, and the target user gets the documents of nobody else. With *Each user, those they own or may view in Paperless*, they also get a copy of each document that Paperless shares with them, by itself or through a group, which counts against their quota. One administrator still connects Paperless with one token, whose account must see the documents of every user. [Per-user ownership](guide.md#per-user-ownership) and [Documents that Paperless shares](guide.md#documents-that-paperless-shares) have the details.
 
 ### Can I change the target user?
 

@@ -91,7 +91,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 
 ### Archive
 
-- A folder tree in the files of the configured Nextcloud user, or [of each user, with the documents that they own in Paperless](#per-user-ownership), by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
+- A folder tree in the files of the configured Nextcloud user, or [of each user, with the documents that they own in Paperless](#per-user-ownership) and, if you choose, [those that it shares with them](#documents-that-paperless-shares), by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
 - Variables with the names that Paperless-ngx uses for its own file names, such as the archive serial number, the owner, the tags, the name of the month and custom fields, and a preview under the template that shows where the newest documents go while you type, before you save
 - The archive PDF of each document, or its original file
 - Renames and moves when the metadata changes in Paperless, and no empty folders left behind
@@ -243,6 +243,7 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
 | [Per-user ownership](#per-user-ownership) | **View** for Users, **View** on the documents of every user, and with the inbox **Change** for Documents | finds the owner of each document, mirrors the documents of every user, and gives the document of an upload the user of Paperless of its user |
+| [Documents that Paperless shares](#documents-that-paperless-shares) | what per-user ownership needs, and **View** for Groups | finds who may view a document through a group |
 
 With per-user ownership, the documents belong to their users, not to the account of the app: give the account the permission *View* on them instead, or use a superuser, as [the security design](https://dennis-otto.github.io/paperless-sync/security.html#per-user-ownership) explains. Otherwise:
 
@@ -303,7 +304,7 @@ rm -rf "${SECRETS}"
 
 <!-- account-snippet:end -->
 
-The last command prints `{"token":"…"}`: enter that token in **Paperless API token**, and click **Test connection**. For the other modules, add their permissions to the list, as the table above names them: `"add_tag"` for *Create missing tags*, `"view_user"` for per-user ownership and `{{ owner_username }}`, `"change_document"` for per-user ownership with uploads, and `"view_customfield"` for custom fields.
+The last command prints `{"token":"…"}`: enter that token in **Paperless API token**, and click **Test connection**. For the other modules, add their permissions to the list, as the table above names them: `"add_tag"` for *Create missing tags*, `"view_user"` for per-user ownership and `{{ owner_username }}`, `"view_group"` for the documents that Paperless shares, `"change_document"` for per-user ownership with uploads, and `"view_customfield"` for custom fields.
 
 #### Connection checklist
 
@@ -403,8 +404,20 @@ The connection checklist shows who gets the documents of whom, with the number o
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/whose-archive-a-document-goes-to.dark.svg">
-  <img src="docs/images/diagrams/whose-archive-a-document-goes-to.svg" alt="Whose archive a document goes to: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list, or that the account of the app owns while an upload waits for its owner, stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, or outside the group of the setting, the document goes to the target user, so that none is lost. When another user of Paperless has the same user of Nextcloud, it stays where its copy is, as the run doesn't guess. The connection checklist names each case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files, and leaves every other archive.">
+  <img src="docs/images/diagrams/whose-archive-a-document-goes-to.svg" alt="Whose archive a document goes to: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list, or that the account of the app owns while an upload waits for its owner, stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, or outside the group of the setting, the document goes to the target user, so that none is lost. When another user of Paperless has the same user of Nextcloud, it stays where its copy is, as the run doesn't guess. The connection checklist names each case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files. With the option that also gives users what they may view, the run then asks Paperless who may view the document. When Paperless doesn't say, every other copy stays where it is, and the report counts the document. Otherwise each user of Nextcloud whose user of Paperless may view it, by itself or through a group, gets a copy at the same path. Then its copy leaves every other archive.">
 </picture>
+
+#### Documents that Paperless shares
+
+Paperless has permissions of its own: the owner of a document can let other users and groups view it, which Paperless calls *Shared with me*. In a household, bills, insurance and tax papers often belong to one person and are shared with the other. **Each user, those they own or may view in Paperless** gives each of them a copy, and does everything else as per-user ownership does ([decision 0032](https://dennis-otto.github.io/paperless-sync/decisions/0032-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.html)).
+
+- **Who gets a copy.** The owner, or the target user as above, and every user of Nextcloud whose user of Paperless may view the document, by itself or through a group of Paperless; whoever may change a document may view it too. The table and the group of the settings decide who that is, as for an owner. A user of Paperless without a user of Nextcloud gets no copy, and the target user gets none in their place, as they may not be allowed to see the document. A document without an owner, which Paperless shows to everyone, goes to the target user and to whom its permissions name.
+- **A copy of their own.** Each copy lies at the same path of the template in the files of its user, with its own shares, versions and search, and **counts against the quota of that user**: a document shared with four people takes the space of four files. A change to a copy stays in that copy, as for any other copy of the archive.
+- **A copy follows the permission.** When Paperless no longer lets a user view a document, the next run removes their copy, which goes to their trash bin, as for a document with an excluded tag; the copies of the others stay. So does turning the option off. A dry-run lists each change with its user, so run one first.
+- **Nothing is guessed here either.** When the answer of Paperless doesn't say who may view a document, or names a group that Paperless didn't list, the owner gets the document, every copy stays where it is, and the report counts these documents as an error. A document whose owner the run can't tell stays where its copies are, whoever may view it. Without the list of the groups, a run fails before a copy changes.
+- **What it needs.** The account of the token also needs *View* for Groups. Only this option asks Paperless for the permissions of the documents, which costs Paperless more work for each document.
+
+The connection checklist shows who also gets how many documents from the archive of whom, and who may view documents of others without getting a copy; it reads every document for that, once for each test.
 
 ### Folder names
 

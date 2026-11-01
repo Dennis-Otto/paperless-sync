@@ -158,6 +158,16 @@ try {
 		`Getting started, every section, the setup of the account, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
+	// Who gets the documents: both options of each user show the table and the group, which the target user alone doesn't need.
+	const ownership = page.locator('#paperless-sync-ownership')
+	const stored = await ownership.inputValue()
+	for (const [option, hidden] of [['per-user', false], ['per-user-shared', false], ['single', true]]) {
+		await ownership.selectOption(option)
+		const states = await page.locator('[data-per-user]').evaluateAll((fields) => fields.map((field) => field.hidden))
+		expect(states.length > 0 && states.every((state) => state === hidden), `With "${option}", the fields of per-user ownership must have hidden=${hidden}: ${JSON.stringify(states)}`)
+	}
+	await ownership.selectOption(stored)
+	console.log('Settings: each option of who gets the documents shows the fields that it needs.')
 
 	// After the first successful run of run.sh, Getting started is hidden, and its button brings
 	// it back with the focus on its heading: every step is done but the schedule, which run.sh

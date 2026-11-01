@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use OCA\PaperlessSync\Activity\ActivityPublisher;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\RunError;
@@ -154,7 +155,7 @@ final class SyncService {
 			// runs move or delete its copy, after the missing scans that the settings require, and
 			// the report without a change says so (WebhookService::result()).
 			$paperless = $this->clients->connect($connection);
-			$document = $paperless->document($documentId, $config->writeMetadata);
+			$document = $paperless->document($documentId, $config->writeMetadata, $config->sharedDocuments());
 			if ($document !== null && $config->perUser()) {
 				$this->syncUsers($paperless, $config->withBatchSize(1), $report, '', $document);
 			} elseif ($document !== null) {
@@ -290,7 +291,7 @@ final class SyncService {
 		$single = $document !== null;
 		// The metadata next to the archive, which a dry-run leaves as it is, holds the notes and names the custom fields.
 		$writesMetadata = $config->writeMetadata && !$report->dryRun;
-		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $paperless->documents($writesMetadata);
+		$documentScan = $single ? new PaperlessScan([$document], true, 1) : $paperless->documents($writesMetadata, $config->sharedDocuments());
 		$trashScan = $single ? new PaperlessScan([], true, 0) : $paperless->trash();
 		$documentsComplete = $this->checkScan($report, 'documents', $documentScan);
 		$trashComplete = $this->checkScan($report, 'trashed documents', $trashScan);
@@ -369,9 +370,10 @@ final class SyncService {
 	 * below the same base folder of each, each with a batch, a report and entries in the activity
 	 * stream and the notifications of their own; the report of the run takes in the report of
 	 * each user. A document goes to the archive of the user whose user of Paperless owns it, or
-	 * else to that of the target user, and its copy leaves every other archive, also one of a user
-	 * who gets no documents now, such as after they left the group of the setting. The run reads
-	 * Paperless once for all of them.
+	 * else to that of the target user, with the documents that Paperless shares also to the archive
+	 * of every user whose user of Paperless may view it, and its copy leaves every other archive,
+	 * also one of a user who gets no documents now, such as after they left the group of the
+	 * setting. The run reads Paperless once for all of them.
 	 *
 	 * An archive that Nextcloud can't reach, such as that of a user without a writable base
 	 * folder, is an error of the run, and the documents that it would get stay where their copies
@@ -383,6 +385,7 @@ final class SyncService {
 		[$owners, $users] = $this->owners($paperless, $config);
 		$getting = $owners->users();
 		$documentId = $document !== null && is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
+		$readers = $document !== null ? self::archivesOf($owners, $config, $document)['users'] : [];
 		/** @var array<string, SyncConfig> $archives the archives that the run reaches, by the IDs of their users */
 		$archives = [];
 		/** @var array<string, SyncReport> $reports */
@@ -393,7 +396,7 @@ final class SyncService {
 				// A user who is gone took their files along, and a run of one document reaches only
 				// the archives that get it or have a copy of it.
 				if ((!$gets && !$this->ownerMapping->exists($user))
-					|| ($document !== null && self::ownerOf($owners, $document) !== $user && $this->state->findExport($user, $documentId) === null)) {
+					|| ($document !== null && !in_array($user, $readers, true) && $this->state->findExport($user, $documentId) === null)) {
 					continue;
 				}
 				$reports[$user] = new SyncReport($report->dryRun, $report->startedAt);
@@ -439,38 +442,51 @@ final class SyncService {
 	 * the user gets, and the others, of which those that another archive takes leave it.
 	 *
 	 * The documents of the user of Paperless $held, the account of the app while an upload waits
-	 * for its owner, stay where their copies are, as heldOwner() explains.
+	 * for its owner, stay where their copies are, as heldOwner() explains. Those whose permissions
+	 * the run can't read go to their owner and stay in every archive that has them, and the report
+	 * says how many there are.
 	 *
 	 * @param ExportRead $read
 	 * @param array<string, SyncConfig> $archives
 	 * @param array<string, SyncReport> $reports
 	 */
 	private function exportArchives(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, array $read, Owners $owners, array $archives, array $reports, ?int $held): void {
-		/** @var array<int, string|null> $routes the user of each document, or null for one that the run holds */
+		/** @var array<int, array{users: list<string>, leaves: bool}> $routes the users of each document, none for one that the run holds, and whether its copy leaves every other archive */
 		$routes = [];
 		$mine = array_fill_keys(array_keys($archives), []);
+		$reached = array_keys($archives);
+		$unknown = 0;
 		foreach ($read['documents'] as $document) {
 			$documentId = is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
 			// A document without a valid ID fails the export of the target user, as in single ownership.
 			// Without a held owner ($held null), no owner equals it.
-			$user = match (true) {
-				$documentId <= 0 => $config->targetUser,
-				is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => null,
-				default => self::ownerOf($owners, $document),
+			$route = match (true) {
+				$documentId <= 0 => ['users' => [$config->targetUser], 'known' => true],
+				is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => ['users' => [], 'known' => false],
+				default => self::archivesOf($owners, $config, $document),
 			};
+			if ($route['users'] !== [] && !$route['known']) {
+				++$unknown;
+			}
 			if ($documentId > 0) {
-				$routes[$documentId] = $user;
+				// A copy leaves an archive only once an archive that the run reaches takes the document.
+				$routes[$documentId] = ['users' => $route['users'], 'leaves' => $route['known'] && array_intersect($route['users'], $reached) !== []];
 			}
-			if ($user !== null && isset($archives[$user])) {
-				$mine[$user][] = $document;
+			foreach ($route['users'] as $user) {
+				if (isset($archives[$user])) {
+					$mine[$user][] = $document;
+				}
 			}
+		}
+		if ($unknown > 0) {
+			$report->error(new RunError('Paperless did not say who may view %s documents, so only their owners get them, and their copies stay in every archive that has them. Check that no proxy changes the answers of Paperless.', [(string)$unknown]));
 		}
 		$missing = 0;
 		foreach ($archives as $user => $archive) {
 			$others = [];
-			foreach ($routes as $documentId => $to) {
-				if ($to !== $user) {
-					$others[$documentId] = $to !== null && isset($archives[$to]);
+			foreach ($routes as $documentId => $route) {
+				if (!in_array($user, $route['users'], true)) {
+					$others[$documentId] = $route['leaves'];
 				}
 			}
 			$missing += $this->exportArchive($paperless, $archive, $reports[$user], $read, $mine[$user], $others);
@@ -530,8 +546,13 @@ final class SyncService {
 		} catch (RuntimeException $exception) {
 			throw new RunException('Paperless did not list its users, which per-user ownership needs to give each document to the user who owns it; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception);
 		}
+		try {
+			$groups = $config->sharedDocuments() ? $paperless->groupMembers() : [];
+		} catch (RuntimeException $exception) {
+			throw new RunException('Paperless did not list its groups, which the documents that it shares need to find who may view each through a group; the user of the API token needs the permission to view groups: %s', [RunError::of($exception)], $exception);
+		}
 
-		return [$this->ownerMapping->owners($config, $users), $users];
+		return [$this->ownerMapping->owners($config, $users, $groups), $users];
 	}
 
 	/**
@@ -543,6 +564,34 @@ final class SyncService {
 	 */
 	private static function ownerOf(Owners $owners, array $document): ?string {
 		return array_key_exists('owner', $document) ? $owners->userOf($document['owner']) : null;
+	}
+
+	/**
+	 * The users of Nextcloud whose archives get a document, none for one that the run holds, and
+	 * whether the run knows them all: its owner's, as ownerOf() says, and with the documents that
+	 * Paperless shares, that of every user of Nextcloud whose user of Paperless may view it. When
+	 * its permissions don't say who may view it, the run knows only its owner.
+	 *
+	 * @param array<string, mixed> $document
+	 * @return array{users: list<string>, known: bool}
+	 */
+	private static function archivesOf(Owners $owners, SyncConfig $config, array $document): array {
+		$owner = self::ownerOf($owners, $document);
+		if ($owner === null) {
+			return ['users' => [], 'known' => false];
+		}
+		if (!$config->sharedDocuments()) {
+			return ['users' => [$owner], 'known' => true];
+		}
+		$permissions = DocumentPermissions::of($document);
+		$viewers = $permissions !== null ? $owners->viewersOf($permissions) : null;
+		if ($viewers === null) {
+			return ['users' => [$owner], 'known' => false];
+		}
+
+		$users = array_filter(array_column($viewers, 'user'), static fn (?string $user): bool => $user !== null);
+
+		return ['users' => array_values(array_unique([$owner, ...$users])), 'known' => true];
 	}
 
 	/**

@@ -574,7 +574,7 @@ def api(url, line):
     restored = paperless.get(f"/api/documents/{letter}/")
     check(restored["deleted_at"] is None, f"The restored document has {restored['deleted_at']!r}.")
 
-    per_user(paperless, url)
+    shared(paperless, *per_user(paperless, url))
     setup(paperless, url)
 
     save_state({"url": url, "line": line, "token": paperless.token, "version": version, "ids": ids})
@@ -588,8 +588,9 @@ def per_user(paperless, url):
     change and answers 404 when the account no longer sees it, though the owner changed, which the
     app takes as a success; 3.x answers 200. The counts of the documents of an owner and of those
     without one are those of the connection checklist. The document goes again, so that the runs of
-    the app see the documents of the scenario alone."""
-    permissions = ["view_document", "add_document", "change_document", "view_paperlesstask", "view_uisettings"]
+    the app see the documents of the scenario alone. The answer is the account and its user, for
+    the next step: Paperless-ngx 3.x allows few requests for a token in a row."""
+    permissions = ["view_document", "add_document", "change_document", "view_paperlesstask", "view_uisettings", "view_user", "view_group"]
     _, _, app_user = paperless.request(
         "POST",
         "/api/users/",
@@ -620,6 +621,73 @@ def per_user(paperless, url):
     check(document not in [item["id"] for item in unowned["results"]], f"A document with an owner counts as without one: {unowned!r}")
     paperless.request("DELETE", f"/api/documents/{document}/", expect=204)
     paperless.request("POST", "/api/trash/", {"action": "empty", "documents": [document]})
+    return app, app_user
+
+
+def shared(paperless, app, app_user):
+    """The documents that Paperless shares, with two users and one document: the owner and a user
+    who may view it by itself, and one who may through a group. An account of the app that is no
+    superuser reads who may view the document, only with full_perms=true, in the list and alone,
+    the groups and the users of each, as PaperlessApiService::documents(), document() and
+    groupMembers() do. Whoever may change a document may view it too, and a permission that is
+    taken away is gone from the answer. Everything goes again, so that the runs of the app see the
+    documents of the scenario alone."""
+    _, _, group = paperless.request("POST", "/api/groups/", {"name": "contract-household", "permissions": []}, expect=201)
+    created = []
+    for name, groups in (("contract-owner", []), ("contract-viewer", []), ("contract-editor", []), ("contract-member", [group["id"]])):
+        _, _, user = paperless.request("POST", "/api/users/", {"username": name, "password": PASSWORD, "groups": groups}, expect=201)
+        created.append(user)
+    owner, viewer, editor, _ = created
+    _, _, task_id = paperless.upload("shared.pdf", pdf("Synthetic shared contract test letter"))
+    task = paperless.task(task_id)
+    check(task["status"] == "SUCCESS", f"Paperless didn't consume the shared letter: {task!r}")
+    document = int(task["related_document"])
+
+    def share(view_users, view_groups, change_users):
+        paperless.request(
+            "PATCH",
+            f"/api/documents/{document}/",
+            {
+                "owner": owner["id"],
+                "set_permissions": {
+                    # The account of the app sees the document through a permission of its own.
+                    "view": {"users": [app_user["id"], *view_users], "groups": view_groups},
+                    "change": {"users": change_users, "groups": []},
+                },
+            },
+        )
+
+    share([viewer["id"]], [group["id"]], [])
+    query = f"ordering=id&fields={FIELDS},permissions&truncate_content=true&full_perms=true"
+    listed = app.get(f"/api/documents/?{query}&page=1&page_size=1000", record="documents-shared")
+    check([item["id"] for item in listed["results"]] == [document], f"The account sees other documents than the shared one: {listed!r}")
+    item = listed["results"][0]
+    check(item["owner"] == owner["id"], f"The shared document belongs to {item['owner']!r}, not to {owner['id']}.")
+    view = item["permissions"]["view"]
+    check(sorted(view["users"]) == sorted([app_user["id"], viewer["id"]]), f"The users who may view the document are {view!r}.")
+    check(view["groups"] == [group["id"]], f"The groups that may view the document are {view!r}.")
+    alone = app.get(f"/api/documents/{document}/?fields={FIELDS},permissions&truncate_content=true&full_perms=true", record="document-shared")
+    check(alone["permissions"] == item["permissions"], f"The document alone names other permissions: {alone!r}")
+    without = app.get(f"/api/documents/?ordering=id&fields={FIELDS},permissions&truncate_content=true&page=1&page_size=1000")
+    check("permissions" not in without["results"][0], f"Paperless sends the permissions without full_perms: {without!r}")
+    groups = app.get("/api/groups/?page=1&page_size=1000", record="groups")
+    expect_page("The groups", groups, 1)
+    check(groups["results"][0]["id"] == group["id"], f"The groups are {groups!r}.")
+    users = app.get("/api/users/?page=1&page_size=1000")
+    of_user = {user["username"]: user["groups"] for user in users["results"]}
+    check(of_user["contract-member"] == [group["id"]], f"The users have the groups {of_user!r}.")
+    check(of_user["contract-viewer"] == [], f"The users have the groups {of_user!r}.")
+    app.get("/api/users/?page=1&page_size=1000&username__iexact=contract-member", record="user-in-group")
+    # Whoever may change a document may view it too, so the list of view names everyone.
+    share([], [], [editor["id"]])
+    view = app.get(f"/api/documents/{document}/?fields={FIELDS},permissions&truncate_content=true&full_perms=true")["permissions"]["view"]
+    check(sorted(view["users"]) == sorted([app_user["id"], editor["id"]]), f"Who may change the document may not view it: {view!r}")
+    check(view["groups"] == [], f"A permission that was taken away stays: {view!r}")
+    paperless.request("DELETE", f"/api/documents/{document}/", expect=204)
+    paperless.request("POST", "/api/trash/", {"action": "empty", "documents": [document]})
+    for user in created:
+        paperless.request("DELETE", f"/api/users/{user['id']}/", expect=204)
+    paperless.request("DELETE", f"/api/groups/{group['id']}/", expect=204)
 
 
 # The permissions that the setup of the account grants for the settings of run-contract.sh:

@@ -17,7 +17,7 @@ Feature requests with the most reactions are considered next, in that order: any
 
 ## Done
 
-- **Each user their own documents** ([#84](https://github.com/Dennis-Otto/paperless-sync/issues/84)): with [per-user ownership](guide.md#per-user-ownership), each user of Nextcloud gets the documents that their user of Paperless owns, through the one connection of the administrator ([decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)).
+- **Each user their own documents** ([#84](https://github.com/Dennis-Otto/paperless-sync/issues/84)): with [per-user ownership](guide.md#per-user-ownership), each user of Nextcloud gets the documents that their user of Paperless owns, through the one connection of the administrator ([decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)), and, if the administrator chooses it, [a copy of those that Paperless shares with them](guide.md#documents-that-paperless-shares) ([decision 0032](decisions/0032-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md)).
 
 ## Not planned
 

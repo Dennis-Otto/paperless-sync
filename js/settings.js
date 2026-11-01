@@ -540,7 +540,7 @@
 
 		// The fields of per-user ownership show only while "Who gets the documents" asks for it.
 		function showOwnership() {
-			const perUser = ownership.value === 'per-user'
+			const perUser = ownership.value !== 'single'
 			root.querySelectorAll('[data-per-user]').forEach(function(field) {
 				field.hidden = !perUser
 			})
@@ -970,7 +970,7 @@
 			case 'remove-excluded':
 				return translate('The settings leave the document out, with an excluded tag or without a tag to mirror: its copy is removed.')
 			case 'remove-reassigned':
-				return translate('The document goes to another user now, as its owner in Paperless or the settings changed: this copy is removed.')
+				return translate('This user no longer gets the document, as its owner or its permissions in Paperless or the settings changed: this copy is removed.')
 			case 'wait':
 				return translate('Gone from Paperless in {scans} of {limit} scans in a row: the copy stays until then.', { scans: values.scans, limit: values.limit })
 			case 'import':

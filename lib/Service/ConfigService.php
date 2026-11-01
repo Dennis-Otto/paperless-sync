@@ -477,15 +477,15 @@ final class ConfigService {
 		if ($values['send_group'] !== '' && !$this->groupManager->groupExists($values['send_group'])) {
 			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['send_group']], 'send_group');
 		}
-		if (!in_array($values['ownership'], [SyncConfig::SINGLE, SyncConfig::PER_USER], true)) {
+		if (!in_array($values['ownership'], [SyncConfig::SINGLE, SyncConfig::PER_USER, SyncConfig::PER_USER_SHARED], true)) {
 			throw new InvalidSettingException('Choose one of the options of "Who gets the documents".', [], 'ownership');
 		}
 		$values['user_group'] = trim((string)$values['user_group']);
 		// The table and the group count only in per-user ownership, whose settings show them.
-		$values['user_map'] = $values['ownership'] === SyncConfig::PER_USER ? $this->normalizeUserMap((string)$values['user_map']) : trim((string)$values['user_map']);
+		$values['user_map'] = $values['ownership'] !== SyncConfig::SINGLE ? $this->normalizeUserMap((string)$values['user_map']) : trim((string)$values['user_map']);
 		// Its members get the documents that they own in Paperless, so a typo must not give them to
 		// a group that someone could create later under that name.
-		if ($values['ownership'] === SyncConfig::PER_USER && $values['user_group'] !== '' && !$this->groupManager->groupExists($values['user_group'])) {
+		if ($values['ownership'] !== SyncConfig::SINGLE && $values['user_group'] !== '' && !$this->groupManager->groupExists($values['user_group'])) {
 			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['user_group']], 'user_group');
 		}
 		// The numbers, by the labels of the settings page, which their messages name.

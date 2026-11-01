@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\IGroupManager;
@@ -27,6 +28,9 @@ use OCP\IUserManager;
  * longer exists gets nothing either: those documents, and those of every user of Paperless without
  * a user of Nextcloud, go to the target user, as every document did before per-user ownership.
  * The connection checklist names each of them.
+ *
+ * With the documents that Paperless shares, the same table and group decide who gets a copy of a
+ * document that their user of Paperless may view, by itself or through a group of Paperless.
  *
  * @psalm-import-type Route from Owners
  */
@@ -46,8 +50,9 @@ final class OwnerMapping {
 	 * lists: their names by their IDs.
 	 *
 	 * @param array<string, string> $paperlessUsers
+	 * @param array<int, list<int>> $groups the users of each group of Paperless, as PaperlessClientInterface::groupMembers() lists them, when the run reads who may view a document
 	 */
-	public function owners(SyncConfig $config, array $paperlessUsers): Owners {
+	public function owners(SyncConfig $config, array $paperlessUsers, array $groups = []): Owners {
 		$table = [];
 		foreach (self::parse($config->userMap, false) as $line) {
 			$table[mb_strtolower($line['paperless'])] = $line['nextcloud'];
@@ -99,7 +104,7 @@ final class OwnerMapping {
 			}
 		}
 
-		return new Owners($config->targetUser, $routes, $unmatched);
+		return new Owners($config->targetUser, $routes, $unmatched, $groups);
 	}
 
 	/**
@@ -111,13 +116,26 @@ final class OwnerMapping {
 	 * for two users of Paperless for one user of Nextcloud, is a warning that names the setting to
 	 * change. Without the list of
 	 * the users of Paperless, per-user ownership can't route a document, so the line of the users
-	 * fails then.
+	 * fails then, and so does one for the groups, with the documents that Paperless shares, for which
+	 * the lines end with who sees how many documents of whom.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
 	public function checks(SyncConfig $config, PaperlessClientInterface $paperless, NextcloudStorageInterface $storage): array {
 		try {
-			$owners = $this->owners($config, $paperless->users());
+			$users = $paperless->users();
+			try {
+				$groups = $config->sharedDocuments() ? $paperless->groupMembers() : [];
+			} catch (\RuntimeException $exception) {
+				return [new ConnectionCheck(
+					ConnectionCheck::OWNERS,
+					ConnectionCheck::FAILED,
+					'Paperless did not list its groups: %s',
+					[$exception->getMessage()],
+					'In Paperless, under Users & Groups, give the account the permission View for Groups: the documents that Paperless shares need it to find who may view each through a group, and a run fails without it.',
+				)];
+			}
+			$owners = $this->owners($config, $users, $groups);
 			$checks = [];
 			$routes = $owners->routes();
 			foreach (array_slice($routes, 0, self::CHECKED_USERS) as $route) {
@@ -127,6 +145,9 @@ final class OwnerMapping {
 				$checks[] = ConnectionCheck::passed(ConnectionCheck::OWNERS, 'And %s more users of Paperless, which a run gives to their users of Nextcloud in the same way.', [(string)(count($routes) - self::CHECKED_USERS)]);
 			}
 			$checks[] = ConnectionCheck::passed(ConnectionCheck::OWNERS, 'Without an owner → %1$s, the target user, documents: %2$s', [$config->targetUser, (string)$paperless->ownedDocuments(null)]);
+			if ($config->sharedDocuments()) {
+				array_push($checks, ...self::sharedChecks($owners, $paperless));
+			}
 		} catch (\RuntimeException $exception) {
 			return [new ConnectionCheck(
 				ConnectionCheck::OWNERS,
@@ -145,6 +166,77 @@ final class OwnerMapping {
 			} catch (\Throwable $exception) {
 				$checks[] = new ConnectionCheck(ConnectionCheck::FOLDER, ConnectionCheck::WARNING, 'Nextcloud cannot store the files of %1$s there: %2$s', [$user, $exception->getMessage()], 'Until it can, the documents of the user wait; check that the base folder of the user is a folder in which they may create files.');
 			}
+		}
+
+		return $checks;
+	}
+
+	/**
+	 * The lines of the documents that Paperless shares: how many documents from the archive of whom
+	 * each user of Nextcloud also gets, how many a user of Paperless without a user of Nextcloud may
+	 * view without getting a copy, and how many documents don't say who may view them. The account
+	 * of the app needs no line of its own: it may view the documents so that a run can read them.
+	 *
+	 * @return list<ConnectionCheck>
+	 */
+	private static function sharedChecks(Owners $owners, PaperlessClientInterface $paperless): array {
+		try {
+			$documents = $paperless->documents(false, true)->documents;
+		} catch (\RuntimeException $exception) {
+			return [new ConnectionCheck(
+				ConnectionCheck::OWNERS,
+				ConnectionCheck::FAILED,
+				'Paperless did not list who may view its documents: %s',
+				[$exception->getMessage()],
+				'A run reads that list to give each user the documents that they may view, and fails without it; check the line of the documents above.',
+			)];
+		}
+		$account = $paperless->accountId();
+		/** @var array<string, int> $shares the documents of each pair of users of Nextcloud, the viewer and the owner, as a line */
+		$shares = [];
+		/** @var array<array-key, int> $withoutUser the documents of each user of Paperless without a user of Nextcloud, by its name, which PHP turns into a number when it is one */
+		$withoutUser = [];
+		$unknown = 0;
+		foreach ($documents as $document) {
+			$owner = array_key_exists('owner', $document) ? $owners->userOf($document['owner']) : null;
+			// The run holds a document whose owner it can't tell, whoever may view it.
+			if ($owner === null) {
+				continue;
+			}
+			$permissions = DocumentPermissions::of($document);
+			$viewers = $permissions !== null ? $owners->viewersOf($permissions) : null;
+			if ($viewers === null) {
+				++$unknown;
+				continue;
+			}
+			foreach ($viewers as $viewer) {
+				if ($viewer['user'] === null) {
+					if ($viewer['id'] !== $account) {
+						$withoutUser[$viewer['name']] = ($withoutUser[$viewer['name']] ?? 0) + 1;
+					}
+				} elseif ($viewer['user'] !== $owner) {
+					$pair = $viewer['user'] . "\n" . $owner;
+					$shares[$pair] = ($shares[$pair] ?? 0) + 1;
+				}
+			}
+		}
+		ksort($shares, SORT_STRING);
+		ksort($withoutUser, SORT_STRING);
+		$checks = [];
+		foreach ($shares as $pair => $count) {
+			[$viewer, $owner] = explode("\n", $pair);
+			$checks[] = ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s also gets documents from the archive of %2$s: %3$s', [$viewer, $owner, (string)$count]);
+		}
+		foreach ($withoutUser as $name => $count) {
+			$checks[] = ConnectionCheck::passed(ConnectionCheck::OWNERS, '%1$s may view documents of others in Paperless but gets no copies, without a user of Nextcloud of its own: %2$s', [(string)$name, (string)$count]);
+		}
+		if (count($checks) > self::CHECKED_USERS) {
+			$more = count($checks) - self::CHECKED_USERS;
+			$checks = array_slice($checks, 0, self::CHECKED_USERS);
+			$checks[] = ConnectionCheck::passed(ConnectionCheck::OWNERS, 'And %s more lines of who also gets which documents, which a run treats in the same way.', [(string)$more]);
+		}
+		if ($unknown > 0) {
+			$checks[] = new ConnectionCheck(ConnectionCheck::OWNERS, ConnectionCheck::WARNING, 'Paperless did not say who may view documents: %s', [(string)$unknown], 'A run gives them to their owners alone, and their copies stay where they are; check that no proxy changes the answers of Paperless.');
 		}
 
 		return $checks;

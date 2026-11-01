@@ -92,6 +92,14 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public ?\Throwable $taskException = null;
 	/** @var array<string, string> the names of the users by their IDs */
 	public array $users = [];
+	/** @var array<int, list<int>> the users of each group by its ID */
+	public array $groupMembers = [];
+	/** The failure of the list of the groups, as for a token without the permission to view them. */
+	public ?\Throwable $groupsException = null;
+	/** @var list<bool> whether each read of documents asked for their permissions */
+	public array $permissionsAsked = [];
+	/** The failure of the scan of the documents. */
+	public ?\Throwable $documentsException = null;
 	/** @var array<string, array{name: string, type: string, options: array<string, string>}> the custom fields by their IDs */
 	public array $customFields = [];
 	/** The failure of the list of the users, as for a token without the permission to view them. */
@@ -154,11 +162,29 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		return $this->preflightChecks ?? [ConnectionCheck::passed(ConnectionCheck::PAPERLESS, 'Paperless answers at this URL.')];
 	}
 
-	public function documents(bool $notes = false): PaperlessScan {
+	public function documents(bool $notes = false, bool $permissions = false): PaperlessScan {
 		$this->notesAsked[] = $notes;
+		$this->permissionsAsked[] = $permissions;
+		if ($this->documentsException !== null) {
+			throw $this->documentsException;
+		}
 		$listed = array_values(array_filter($this->documents, fn (array $document): bool => !in_array($document['id'] ?? null, $this->leftOut, true)));
 
-		return self::scan($listed, $this->documentsListed);
+		return self::scan(array_map(static fn (array $document): array => self::withPermissions($document, $permissions), $listed), $this->documentsListed);
+	}
+
+	/**
+	 * A document as Paperless answers: with its permissions only for a request that asks for them.
+	 *
+	 * @param array<string, mixed> $document
+	 * @return array<string, mixed>
+	 */
+	private static function withPermissions(array $document, bool $permissions): array {
+		if (!$permissions) {
+			unset($document['permissions']);
+		}
+
+		return $document;
 	}
 
 	public function trash(): PaperlessScan {
@@ -166,16 +192,17 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	}
 
 	/** The active document with the ID, as Paperless answers for /api/documents/<id>/. */
-	public function document(int $documentId, bool $notes = false): ?array {
+	public function document(int $documentId, bool $notes = false, bool $permissions = false): ?array {
 		$this->documentReads[] = $documentId;
 		$this->notesAsked[] = $notes;
+		$this->permissionsAsked[] = $permissions;
 		if ($this->documentException !== null) {
 			throw $this->documentException;
 		}
 		// Paperless may give the ID as a string of digits, which PaperlessApiService::document() takes as well.
 		foreach ($this->documents as $document) {
 			if (is_numeric($document['id'] ?? null) && (int)$document['id'] === $documentId) {
-				return $document;
+				return self::withPermissions($document, $permissions);
 			}
 		}
 
@@ -221,6 +248,15 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 			throw $this->usersException;
 		}
 		return $this->users;
+	}
+
+	public function groupMembers(): array {
+		$this->listsRead[] = 'groups';
+		if ($this->groupsException !== null) {
+			throw $this->groupsException;
+		}
+
+		return $this->groupMembers;
 	}
 
 	/** The active documents with the owner, as the filters owner__id and owner__isnull count them. */

@@ -58,7 +58,7 @@ def account(user_id, username, permissions):
 
 
 ACCOUNTS = {
-    TOKEN: account(OWNER_ID, "nextcloud", [*RUN_PERMISSIONS, "view_uisettings"]),
+    TOKEN: account(OWNER_ID, "nextcloud", [*RUN_PERMISSIONS, "view_uisettings", "view_group"]),
     VIEW_ONLY_TOKEN: account(
         2,
         "nextcloud-view-only",
@@ -84,6 +84,7 @@ VIEW_PERMISSIONS = {
     "/api/tags/": "view_tag",
     "/api/tasks/": "view_paperlesstask",
     "/api/ui_settings/": "view_uisettings",
+    "/api/groups/": "view_group",
 }
 # The tags of the household of the tests; insurance is in lower case, as the folders of the
 # inbox may name it in another case. No document has Private or Draft, which the settings page
@@ -146,6 +147,9 @@ def reset_state():
                 "metadataRequests": 0,
                 # The ordering and the fields that each scan of the documents asked for.
                 "documentScans": [],
+                # Who may view each document, by its ID, as /control/permissions/... sets it; every
+                # other document is shared with nobody.
+                "permissions": {},
                 # The ID and the fields of every document that a run read alone, as the webhook asks.
                 "documentReads": [],
                 # The IDs of documents that the scan leaves out though Paperless has them, as pages
@@ -307,13 +311,23 @@ def document(title="Monthly invoice", modified="2026-08-26T10:00:00+02:00", tags
 
 # The users and the custom fields of Paperless, for {{ owner_username }} and
 # {{ custom_fields.<name> }}.
-USERS = [{"id": 3, "username": "e2e-owner"}, {"id": 4, "username": "E2E-Other"}]
+USERS = [{"id": 3, "username": "e2e-owner", "groups": []}, {"id": 4, "username": "E2E-Other", "groups": [8]}]
+# The group of the household, which E2E-Other is in, for the documents that Paperless shares.
+GROUPS = [{"id": 8, "name": "e2e-household", "permissions": []}]
 CUSTOM_FIELDS = [{"id": 1, "name": "Invoice number", "data_type": "string", "extra_data": {}}]
 
 
 def original_content(document_id):
     """The content of a document as the mock first serves it."""
     return f"%PDF-1.4\nSynthetic Paperless archive document P{document_id}.\n%%EOF\n".encode("utf-8")
+
+
+def permissions_of(shared):
+    """The field permissions of a document, as Paperless-ngx 2.x and 3.x send it."""
+    return {
+        "view": {"users": (shared or {}).get("users", []), "groups": (shared or {}).get("groups", [])},
+        "change": {"users": [], "groups": []},
+    }
 
 
 def document_content(document_id):
@@ -445,6 +459,11 @@ class Handler(BaseHTTPRequestHandler):
 
         documents, trash = scenario_documents()
         query = parse_qs(parsed.query)
+        # Paperless sends who may view a document only for a request with full_perms=true.
+        if query.get("full_perms") == ["true"]:
+            with LOCK:
+                shared = dict(STATE["permissions"])
+            documents = [{**item, "permissions": permissions_of(shared.get(item["id"]))} for item in documents]
         permission = VIEW_PERMISSIONS.get(parsed.path)
         if permission is not None and not superuser(token) and permission not in account_of(token)["permissions"]:
             self._json(403, FORBIDDEN)
@@ -474,7 +493,7 @@ class Handler(BaseHTTPRequestHandler):
             if "ordering" in query:
                 with LOCK:
                     STATE["documentScans"].append(
-                        {"ordering": query["ordering"][0], "fields": query.get("fields", [""])[0]}
+                        {"ordering": query["ordering"][0], "fields": query.get("fields", [""])[0], "fullPerms": query.get("full_perms", [""])[0]}
                     )
             if "fields" in query:
                 fields = query["fields"][0].split(",")
@@ -502,6 +521,8 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 created = [{"id": tag["id"], "name": tag["name"]} for tag in STATE["createdTags"]]
             self._page(showcase.TAGS if self._showcase() else [*TAGS, *created])
+        elif parsed.path == "/api/groups/":
+            self._page(GROUPS)
         elif parsed.path == "/api/users/" and superuser(token):
             # As a superuser sees them, with the filter of their username.
             username = query.get("username__iexact", [None])[0]
@@ -602,6 +623,13 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["checksum"] = algorithm
             self._json(200, {"checksum": algorithm})
+            return
+        if match := re.fullmatch(r"/control/permissions/(\d+)/(none|users|groups)/?(\d*)", parsed.path):
+            # Who may view a document: /control/permissions/123/users/4, /groups/8, or /none.
+            document_id, kind, member = match.groups()
+            with LOCK:
+                STATE["permissions"][int(document_id)] = None if kind == "none" else {kind: [int(member)]}
+            self._json(200, {"document": int(document_id), kind: member})
             return
         if match := re.fullmatch(r"/control/left-out/(none|\d+(?:,\d+)*)", parsed.path):
             # The documents that the scan leaves out: /control/left-out/123,124, or none.

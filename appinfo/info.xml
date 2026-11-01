@@ -13,7 +13,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 
 - Exports archive PDFs or original files through the Paperless API
 - Builds a configurable hierarchy from correspondent, document type, date, title, and document ID
-- Gives each Nextcloud user the documents they own in Paperless, through the one connection of the administrator (optional per-user ownership)
+- Gives each Nextcloud user the documents they own in Paperless, and if you choose those that it shares with them, through the one connection of the administrator (optional per-user ownership)
 - Moves or renames files when Paperless metadata changes
 - Skips Paperless inbox documents until they are finalized and removes previously mirrored copies when an exclusion tag is added
 - Imports files from a configurable Nextcloud inbox into Paperless
