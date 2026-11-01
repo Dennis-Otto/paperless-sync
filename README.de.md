@@ -78,7 +78,7 @@ cd paperless-sync
 docker compose -f demo/compose.yaml up
 ```
 
-Das startet Nextcloud und Paperless-ngx allein auf Ihrem Rechner, füllt Paperless mit einem erfundenen Archiv eines Haushalts, installiert die App aus dem App Store und verbindet sie, zuerst mit einem Probelauf und dann mit dem ersten Lauf. Danach nennt der Befehl die Adresse des Archivs und das Passwort, das er erzeugt hat und das in `demo/.env` bleibt. `docker compose -f demo/compose.yaml down --volumes` entfernt alles wieder. [Die README der Demo](https://github.com/Dennis-Otto/paperless-sync/tree/main/demo#readme) sagt auf Englisch, was Sie darin ausprobieren können.
+Das startet Nextcloud und Paperless-ngx allein auf Ihrem Rechner, füllt Paperless mit einem erfundenen Archiv eines Haushalts, installiert die App aus dem App Store und verbindet sie, zuerst mit einem Probelauf und dann mit dem ersten Lauf. Danach nennt der Befehl die Adresse des Archivs und das Passwort, das er erzeugt hat und das in `demo/.env` bleibt. `docker compose -f demo/compose.yaml down --volumes` entfernt alles wieder. [Die README der Demo](https://github.com/Dennis-Otto/paperless-sync/blob/main/demo/README.md) sagt auf Englisch, was Sie darin ausprobieren können.
 
 <!-- --8<-- [end:try-it] -->
 
