@@ -549,7 +549,7 @@ printf '\n== %s\n' "Versions in the README"
 # Nextcloud in badges that read appinfo/info.xml on main, so that they follow every
 # release and every raise of max-version by the upstream bot without an edit, and so
 # does that of README.de.md. The fields such as <span data-app="nextcloud">33–35</span>
-# in both READMEs, docs/index.md, docs/index.de.md and docs/alternatives.md are text on
+# in both READMEs and in the home pages and comparisons of the website are text on
 # GitHub, which the hook of the website fills with the versions of info.xml. They may lag behind a max-version that the upstream bot raised,
 # so that its pull request passes on its own, but they never name another minimum or
 # more than info.xml.
@@ -581,7 +581,7 @@ php_text="$(info_versions "$php_min" "$(attribute max-version "$php")")"
 problems=0
 info_xml='https%3A%2F%2Fraw.githubusercontent.com%2FDennis-Otto%2Fpaperless-sync%2Fmain%2Fappinfo%2Finfo.xml'
 readmes=(README.md README.de.md)
-version_pages=("${readmes[@]}" docs/index.md docs/index.de.md docs/alternatives.md)
+version_pages=("${readmes[@]}" docs/index.md docs/index.de.md docs/alternatives.md docs/alternatives.de.md)
 for readme in "${readmes[@]}"; do
   for query in '%2Finfo%2Fversion' \
     'concat%28%2F%2Fdependencies%2Fnextcloud%2F%40min-version%2C%27%E2%80%93%27%2C%2F%2Fdependencies%2Fnextcloud%2F%40max-version%29'; do

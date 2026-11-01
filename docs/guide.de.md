@@ -114,6 +114,8 @@ Ein Testlauf, ein Lauf von Hand oder ein Lauf von `occ paperless_sync:run` endet
 
 --8<-- "README.de.md:notifications"
 
+<a id="command-line"></a>
+
 ## Kommandozeile
 
 --8<-- "README.de.md:command-line"

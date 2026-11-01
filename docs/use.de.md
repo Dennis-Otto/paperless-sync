@@ -150,6 +150,8 @@ Das Archiv eines Haushalts, geteilt:
 
 Eine Freigabe einer Kopie bleibt bei ihr, wenn sie nach einer Änderung in Paperless wandert. Eine Freigabe eines Ordners zeigt, was die Pfadvorlage in diesen Ordner legt: Mit der Standardvorlage enthält der Ordner eines Jahres die Dokumente eines Korrespondenten und eines Typs, und eine Freigabe eines solchen Ordners, den die Pfadvorlage baut, verschwindet samt ihrem Link, wenn eine Änderung in Paperless oder an der Vorlage alle seine Kopien wegbewegt. Gib also den Ordner `Archiv` selbst frei, den die Vorlage nicht ändert, oder bitte deine Administration um eine Pfadvorlage, oder einen Speicherpfad von Paperless, deren oberster Ordner sammelt, was du freigibst, etwa die Dokumente einer Steuererklärung. Die [FAQ](faq.de.md#kann-ich-die-pfadvorlage-später-ändern) erklärt, warum.
 
+<a id="what-edits-renames-and-deletions-do"></a>
+
 ## Was Bearbeiten, Umbenennen und Löschen bewirken
 
 Das Archiv ist ein Spiegel von Paperless: Nichts, was du mit einer Kopie in Nextcloud tust, ändert Paperless. Ändere ein Dokument in Paperless, und der nächste Lauf bringt die Änderung zu seiner Kopie.
