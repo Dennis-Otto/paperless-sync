@@ -24,16 +24,20 @@ The split of decision 0029 counted a variant as half a version and an upgrade as
    - b. Traces without the snapshots of the page, as without them the trace still has each action with a picture of the page, its requests and what the page logged, and the failure has its screenshots.
    - c. As b, but only in the first attempt of a job: the flaky-test bot starts a second attempt of each failed job, which then keeps the snapshots, for a failure that stays.
 5. A split by what a run costs: a version with its browser checks counts as five, a variant as three and an upgrade as two.
+6. No more runs at once than the runner has processors, which keeps five stacks from slowing each other down on four, with the lightest run last.
+7. The folder `data` of Nextcloud in memory in the CI, as the databases of the variants have been. SQLite waits for the disk at each commit, and a tmpfs of Compose is empty after each restart of the container, which the suite makes, so it is a folder in `/dev/shm` of the runner.
 
 ## Decision
 
-Options 4a, 4c and 5.
+Options 4a, 4c, 5, 6 and 7.
 
 The health checks of the Compose files of the required checks use `start_interval: 1s` and `interval: 1m`, and `scripts/check-project.sh` fails when one checks often for longer than the start. A service that is up is noticed sooner than before, as the wait between checks while it starts is shorter.
 
 `run.sh` leaves the snapshots out of the traces when `GITHUB_RUN_ATTEMPT` is 1, and `E2E_BROWSER_SNAPSHOTS` chooses otherwise. The canary keeps them, as nobody waits for it and its issue stays open, and so does a run on a machine.
 
 `run-all.sh` weighs the runs of a shard as in option 5, which matches the phases of the table: 6 min 19 s, 4 min 15 s and 2 min 20 s in the same job. No scenario and no check goes away, in a pull request or elsewhere.
+
+`run-all.sh` starts no more runs at once than `E2E_PARALLEL`, by default the number of processors, which `scripts/check-project.sh` checks with a script in place of `run.sh`. The jobs of the CI set `E2E_MEMORY_FOLDER=/dev/shm`. `run.sh` downloads the image of Playwright from its start, while the tests don't need the processors yet.
 
 ## Consequences
 
