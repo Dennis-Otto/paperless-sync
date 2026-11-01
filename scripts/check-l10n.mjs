@@ -299,8 +299,8 @@ if (options.new !== undefined) {
 	const rule = options['plural-form'] ?? pluralRules[language]
 	const forms = formsOf(rule)
 	let refusal = null
-	if (!/^[a-z]{2,3}(?:_[A-Za-z]+)?$/.test(language)) {
-		refusal = `"${language}" is no code of a language in Nextcloud, such as it or pt_BR.`
+	if (!/^[a-z]{2,3}(?:_[A-Za-z0-9]+)?(?:@[a-z]+)?$/.test(language)) {
+		refusal = `"${language}" is no code of a language in Nextcloud, such as it, pt_BR, es_419 or sr@latin.`
 	} else if (existsSync(join(folder, `${language}.json`))) {
 		refusal = `l10n/${language}.json exists already; --new starts a language with empty texts, so it leaves that one alone.`
 	} else if (forms === null) {
@@ -444,8 +444,9 @@ for (const language of languages) {
 	}
 	for (const element of ['summary', 'description']) {
 		const store = storeLanguages(element)
-		if (store !== null && !store.includes(language.split('_')[0])) {
-			problems.push(`appinfo/info.xml has no <${element} lang="${language.split('_')[0]}">, so the App Store shows its English one to whoever reads the app in ${language}.`)
+		const storeLanguage = language.split(/[_@]/)[0]
+		if (store !== null && !store.includes(storeLanguage)) {
+			problems.push(`appinfo/info.xml has no <${element} lang="${storeLanguage}">, so the App Store shows its English one to whoever reads the app in ${language}.`)
 		}
 	}
 
@@ -473,10 +474,12 @@ if (fixedLanguages.length > 0) {
 	process.stdout.write(`Wrote the catalogs of ${fixedLanguages.join(', ')}, and each l10n/<language>.js from its l10n/<language>.json.\n`)
 }
 
+// No process.exit() here: it drops what a pipe hasn't taken yet, on Linux all after the first 64 KB.
 if (problems.length > 0) {
 	process.stdout.write(`${problems.join('\n')}\n\n`)
 	process.stdout.write(`${problems.length} problem(s) in the catalogs: an administrator who reads the language sees the English text of a missing one, and a wrong placeholder loses a value or breaks the message.\n`)
 	process.stdout.write('Fix: add each missing text with its words and the same placeholders to its l10n/<language>.json, then run node scripts/check-l10n.mjs --fix, which drops the unused and repeated texts and writes each l10n/<language>.js. docs/development.md#translations explains the check.\n')
-	process.exit(1)
+	process.exitCode = 1
+} else {
+	process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, and appinfo/info.xml has a summary and a description in each language.\n`)
 }
-process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, and appinfo/info.xml has a summary and a description in each language.\n`)

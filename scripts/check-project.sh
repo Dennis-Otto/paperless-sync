@@ -1109,6 +1109,13 @@ if ! grep -qF '"_%n minute_::_%n minutes_": [' "$l10n_copy/it.json" \
   exit 1
 fi
 node scripts/check-l10n.mjs --new sv --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
+# The codes of Nextcloud also have digits, as Spanish of Latin America has, and a script. The
+# App Store knows only the language itself.
+for language in es_419 sr@latin; do
+  node scripts/check-l10n.mjs --new "$language" --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
+  broken_catalog "l10n/$language.json has no words for \"Paperless Sync\""
+done
+broken_catalog 'appinfo/info.xml has no <summary lang="sr">'
 for refused in 'it|exists already' 'sv|exists already' 'tlh|need their rule' 'Not a code|is no code of a language'; do
   if output="$(node scripts/check-l10n.mjs --new "${refused%%|*}" "$l10n_copy" 2>&1)" || [[ "$output" != *"${refused##*|}"* ]]; then
     echo "scripts/check-l10n.mjs --new ${refused%%|*} should say \"${refused##*|}\", but says: $output"

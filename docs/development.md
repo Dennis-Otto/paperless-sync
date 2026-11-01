@@ -183,7 +183,7 @@ Each line of a catalog pairs a text of the code, in English, with its translatio
     node scripts/check-l10n.mjs
     ```
 
-3. Open a pull request with a title such as `fix(l10n): correct the French of the report`, and say what read wrong. Each commit needs a sign-off, `git commit -s`, which the editor of GitHub adds when you tick its box. [CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md) has the rest.
+3. Open a pull request with a title such as `fix(i18n): correct the French of the report`, and say what read wrong. Each commit needs a sign-off, `git commit -s`, which the editor of GitHub adds when you tick its box. [CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md) has the rest.
 
 ### Add a language
 
@@ -197,7 +197,7 @@ Each line of a catalog pairs a text of the code, in English, with its translatio
 2. Translate every text of `l10n/<language>.json`; the check lists those that are still empty. A plural has one entry for each form of its rule, and where the rule has a form for millions, the second repeats the third. The names of the folders, such as *Archive* and *_Deleted*, become the folders of new installations in this language: keep them short, without a `/` and different from each other.
 3. Add `<summary lang="it">` and `<description lang="it">` to `appinfo/info.xml`, after those of the other languages, with the same versions of Nextcloud as the English one.
 4. Run `node scripts/check-l10n.mjs --fix` and `node scripts/check-l10n.mjs`, and name the language in *Translations*, in the table above and in the table of *Folder names* in `README.md` and `README.de.md`.
-5. Open a pull request with a title such as `feat(l10n): speak Italian`. An installation in use keeps the folders that it has: a run stores the names that it uses ([decision 0036](decisions/0036-more-languages-without-moving-an-archive.md)), so a new language needs no step of the update.
+5. Open a pull request with a title such as `feat(i18n): speak Italian`. An installation in use keeps the folders that it has: a run stores the names that it uses ([decision 0036](decisions/0036-more-languages-without-moving-an-archive.md)), so a new language needs no step of the update.
 
 ## Release process
 

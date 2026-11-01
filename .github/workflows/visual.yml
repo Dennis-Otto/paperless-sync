@@ -23,7 +23,7 @@ on:
       - css/**
       - img/**
       - js/**
-      - l10n/**
+      - l10n/de.*
       - lib/**
       - templates/**
       - tests/e2e/screenshots.sh

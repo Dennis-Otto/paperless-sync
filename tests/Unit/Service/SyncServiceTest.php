@@ -4805,6 +4805,20 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->trash = [$trashed];
 	}
 
+	/** The webhook may write first on an installation set up with occ: its archive stays where it is as well. */
+	public function testTheRunOfOneDocumentKeepsTheNamesThatItUses(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		unset($this->settings['inbox_folder']);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+
+		self::assertSame(1, $this->service->syncDocument(123)->exported);
+
+		self::assertSame('Eingang', $this->settings['inbox_folder'] ?? null);
+		$this->defaultLanguage = 'fr';
+		self::assertSame('Eingang', $this->configService->get()->inboxFolder, 'Another default language must not rename it now.');
+	}
+
 	/**
 	 * The run of one document, which the webhook of Paperless asks for, takes the way of a run
 	 * through the export: the same path, the same fingerprints, a move without a download, with a
