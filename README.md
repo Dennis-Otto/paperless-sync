@@ -113,7 +113,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - [Send to Paperless](#send-from-files) in the menu of a file or a folder in Files: the members of a group that you choose, the administrators by default, send it with the tags of the inbox, it stays where it is, and a notification tells them when Paperless has it, with a link to the new document
 - [Rules of Flow](#send-by-a-rule-of-flow) that send files on their own, such as every PDF that a member of a group uploads, with tags of their own; only the administrators make them
 - *Open in Paperless* in the menu of every copy of the archive opens its document in Paperless
-- [A note above the list](#using-the-archive) says what a folder of the app does: that the archive is a mirror, when the inbox sends its files, and where the reasons of failed imports are; also for people who reach the folder through a share
+- [A note above the list](https://dennis-otto.github.io/paperless-sync/use.html#what-edits-renames-and-deletions-do) says what a folder of the app does: that the archive is a mirror, when the inbox sends its files, and where the reasons of failed imports are; also for people who reach the folder through a share
 - A file whose content Paperless has already isn't uploaded again, so Paperless-ngx 3.x makes no duplicate; the sender learns the document that has it
 
 ### Safety

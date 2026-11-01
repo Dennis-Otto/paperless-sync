@@ -118,7 +118,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 - [An Paperless senden](#aus-dateien-senden) im Menü einer Datei oder eines Ordners in Dateien: Die Mitglieder einer Gruppe, die du wählst, standardmäßig die Administratoren, senden sie mit den Tags des Eingangs, sie bleibt, wo sie ist, und eine Benachrichtigung sagt ihnen, sobald Paperless sie hat, mit einem Link zum neuen Dokument
 - [Regeln von Flow](#durch-eine-regel-von-flow-senden), die Dateien von selbst senden, etwa jedes PDF, das ein Mitglied einer Gruppe hochlädt, mit eigenen Tags; nur die Administratoren legen sie an
 - *In Paperless öffnen* im Menü jeder Kopie des Archivs öffnet ihr Dokument in Paperless
-- [Ein Hinweis über der Liste](#das-archiv-nutzen) sagt, was ein Ordner der App tut: dass das Archiv ein Spiegel ist, wann der Eingang seine Dateien sendet und wo die Gründe fehlgeschlagener Importe stehen; auch für alle, die den Ordner über eine Freigabe erreichen
+- [Ein Hinweis über der Liste](https://dennis-otto.github.io/paperless-sync/de/use.html#was-bearbeiten-umbenennen-und-löschen-bewirken) sagt, was ein Ordner der App tut: dass das Archiv ein Spiegel ist, wann der Eingang seine Dateien sendet und wo die Gründe fehlgeschlagener Importe stehen; auch für alle, die den Ordner über eine Freigabe erreichen
 - Eine Datei, deren Inhalt Paperless schon hat, wird nicht noch einmal hochgeladen, Paperless-ngx 3.x legt also kein Duplikat an; der Absender erfährt das Dokument, das ihn hat
 
 ### Sicherheit
