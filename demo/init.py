@@ -31,6 +31,9 @@ ENV_FILE = Path("/demo/.env")
 SHARED = Path("/secrets")
 # Set up once: another docker compose up says so and ends.
 READY = SHARED / "ready"
+# The first run has begun, so its documents may be in the archive already: a dry run after
+# this no longer lists all of them.
+FIRST_RUN = SHARED / "first-run-started"
 PASSWORD = "DEMO_PASSWORD"
 SECRET_KEY = "PAPERLESS_SECRET_KEY"
 ENV_HEADER = "# The passwords of the demo, made on its first start. Git ignores this file; never commit them."
@@ -285,31 +288,48 @@ def connect(nextcloud: Server, paperless: Server, token: str, password: str, por
         paperless.json("PATCH", f"/api/documents/{document['id']}/", {"owner": account["id"]})
 
 
-def first_run(nextcloud: Server, port: str, expected: int) -> None:
-    """The dry run, the schedule, the first run and what it wrote."""
-    report = nextcloud.form("POST", RUN_URL, {"dryRun": "true"})
-    say(f"The dry run changes nothing and lists {report['exported']} documents to export.")
-    if report["exported"] != expected:
-        raise DemoError(f"The dry run lists {report['exported']} documents instead of {expected}.")
-    nextcloud.form("POST", SETTINGS_URL, settings(port, enabled=True))
-    say("Synchronization is on. The first run exports them.")
-    nextcloud.form("POST", RUN_URL, {"dryRun": "false"}, expect=(202,))
+def wait_for_run(nextcloud: Server) -> dict:
+    """The status of the run that is queued or running, once it has ended."""
     deadline = time.monotonic() + RUN_TIMEOUT
     while True:
         status = nextcloud.json("GET", STATUS_URL)
         if status["state"] not in ("queued", "running"):
-            break
+            return status
         if time.monotonic() > deadline:
             raise DemoError(
                 f"The first run didn't end within {RUN_TIMEOUT} s. "
                 "The log of the worker tells why: docker compose -f demo/compose.yaml logs worker"
             )
         time.sleep(1)
-    exported = status["summary"]["exported"]
-    if status["state"] != "completed" or exported != expected:
-        raise DemoError(
-            f"The first run ended as {status['state']} with {exported} of the {expected} documents: {status['error']}"
-        )
+
+
+def first_run(nextcloud: Server, port: str, expected: int, started: Path = FIRST_RUN) -> None:
+    """The dry run, the schedule, the first run and what it wrote.
+
+    A start that ended during the first run left part of the archive or all of it, so the next
+    start exports only what the dry run still lists.
+    """
+    again = started.exists()
+    if again:
+        say("An earlier start began the first run; this one finishes it.")
+        wait_for_run(nextcloud)
+    report = nextcloud.form("POST", RUN_URL, {"dryRun": "true"})
+    remaining = report["exported"]
+    say(f"The dry run changes nothing and lists {remaining} documents to export.")
+    if not again and remaining != expected:
+        raise DemoError(f"The dry run lists {remaining} documents instead of {expected}.")
+    nextcloud.form("POST", SETTINGS_URL, settings(port, enabled=True))
+    started.touch()
+    if remaining:
+        say("Synchronization is on. The first run exports them.")
+        nextcloud.form("POST", RUN_URL, {"dryRun": "false"}, expect=(202,))
+        status = wait_for_run(nextcloud)
+        exported = status["summary"]["exported"]
+        if status["state"] != "completed" or exported != remaining:
+            raise DemoError(
+                f"The first run ended as {status['state']} with {exported} of the {remaining} documents: "
+                f"{status['error']}"
+            )
     say(f"The archive has {expected} documents.")
 
 
@@ -370,6 +390,7 @@ def main(arguments: list[str]) -> int:
             return 2
     except DemoError as error:
         say(f"The demo didn't start: {error}")
+        say("Another docker compose up tries again; docker compose -f demo/compose.yaml down --volumes starts over.")
         return 1
     return 0
 

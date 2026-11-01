@@ -121,14 +121,19 @@ class Nextcloud:
         return self.status
 
 
-def first_run_error(nextcloud: Nextcloud) -> str:
+def first_run_error(nextcloud: Nextcloud, *, again: bool = False) -> str:
     silent, init.say = init.say, lambda message="": None
-    try:
-        init.first_run(nextcloud, "8581", 14)
-    except init.DemoError as error:
-        return str(error)
-    finally:
-        init.say = silent
+    with tempfile.TemporaryDirectory() as name:
+        started = Path(name) / "first-run-started"
+        if again:
+            started.touch()
+        try:
+            init.first_run(nextcloud, "8581", 14, started)
+        except init.DemoError as error:
+            return str(error)
+        finally:
+            init.say = silent
+        assert started.exists(), "the next start must know that the archive may have documents"
     return ""
 
 
@@ -148,6 +153,56 @@ def test_an_archive_that_stays_empty_fails_the_demo() -> None:
     assert "completed with 0 of the 14" in first_run_error(Nextcloud(14, "completed", 0))
     failed = first_run_error(Nextcloud(14, "failed", 0))
     assert "failed with 0 of the 14" in failed and "Paperless is gone" in failed, failed
+
+
+def test_a_start_after_a_complete_first_run_ends_with_the_settings_on() -> None:
+    nextcloud = Nextcloud(0, "completed", 14)
+    assert first_run_error(nextcloud, again=True) == ""
+    assert [path for path, _ in nextcloud.posted] == [init.RUN_URL, init.SETTINGS_URL], nextcloud.posted
+    assert nextcloud.posted[1][1]["settings[enabled]"] == "1"
+
+
+def test_a_start_after_an_interrupted_first_run_exports_the_rest() -> None:
+    nextcloud = Nextcloud(5, "completed", 5)
+    assert first_run_error(nextcloud, again=True) == ""
+    assert [path for path, _ in nextcloud.posted] == [init.RUN_URL, init.SETTINGS_URL, init.RUN_URL]
+    assert "completed with 2 of the 5" in first_run_error(Nextcloud(5, "completed", 2), again=True)
+
+
+def test_a_start_waits_for_the_first_run_that_is_still_going() -> None:
+    nextcloud = Nextcloud(0, "running", 0)
+    answers = iter([{"state": "running"}, {"state": "completed"}])
+    nextcloud.json = lambda method, path: next(answers)
+    sleep, init.time.sleep = init.time.sleep, lambda seconds: None
+    try:
+        assert first_run_error(nextcloud, again=True) == ""
+    finally:
+        init.time.sleep = sleep
+    assert next(answers, None) is None, "the dry run only comes after the run has ended"
+
+
+def test_a_failure_says_how_to_start_over() -> None:
+    lines: list[str] = []
+    say, init.say = init.say, lines.append
+    run, init.run = init.run, lambda: (_ for _ in ()).throw(init.DemoError("It broke."))
+    try:
+        assert init.main(["run"]) == 1
+    finally:
+        init.say, init.run = say, run
+    assert "It broke." in lines[0] and "down --volumes" in lines[1], lines
+
+
+def test_a_dry_run_without_the_documents_keeps_the_marker_away() -> None:
+    with tempfile.TemporaryDirectory() as name:
+        started = Path(name) / "first-run-started"
+        say, init.say = init.say, lambda message="": None
+        try:
+            init.first_run(Nextcloud(0, "completed", 0), "8581", 14, started)
+        except init.DemoError:
+            pass
+        finally:
+            init.say = say
+        assert not started.exists(), "the first run hasn't begun, so the next start checks the dry run again"
 
 
 def test_the_smoke_test_fails_on_an_empty_archive() -> None:

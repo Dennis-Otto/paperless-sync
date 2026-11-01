@@ -49,5 +49,11 @@
       matchUpdateTypes: ["major"],
       enabled: false,
     },
+    {
+      // The job of the demo is no required check, so GitHub would merge an image that breaks
+      // the demo. Renovate merges these itself instead, only once every check is green.
+      matchFileNames: ["demo/compose.yaml"],
+      platformAutomerge: false,
+    },
   ],
 }

@@ -2,7 +2,7 @@
 
 See Paperless Sync at work in a few minutes, on your machine, without a Nextcloud or a Paperless-ngx of your own. Everything in it is made up, and nothing leaves your machine except the downloads of the images and of the app.
 
-You need Docker with Compose 2.20 or newer: Docker Engine on Linux, or Docker Desktop on Windows or macOS. The containers take about 1.5 GB of memory and 4 GB of disk.
+You need Docker 25 or newer with Compose 2.20.2 or newer, which the health checks of the demo ask for: Docker Engine on Linux, or Docker Desktop on Windows or macOS. The containers take about 1.5 GB of memory and 4 GB of disk.
 
 ```sh
 git clone https://github.com/Dennis-Otto/paperless-sync.git
@@ -35,7 +35,7 @@ All three use one password, which stays in `demo/.env`. Git ignores that file.
 
 1. Open the archive as `demo`, and go through a correspondent, a type and a year to a document.
 2. In Paperless, change the title of a document. Then, as `admin`, click **Synchronize now** in the settings of the app: within seconds, its copy has the new name and keeps its file ID.
-3. Put a PDF into `Documents/Paperless/Inbox` of the user `demo`. The next run sends it to Paperless, and it comes back into the archive once it is finished there.
+3. Put a PDF into `Documents/Paperless/Inbox` of the user `demo`. The next run sends it to Paperless. Remove its tag *Inbox* there, as for the scan that is waiting, and the next run brings it into the archive.
 4. Move a document to the trash in Paperless, and see its copy move to the folder `_Deleted` of the archive.
 
 The [guide](https://dennis-otto.github.io/paperless-sync/guide.html) explains every setting that you see.
@@ -56,6 +56,8 @@ Other ports, when something else listens on 8580 or 8581, come from the environm
 ```sh
 DEMO_NEXTCLOUD_PORT=9080 DEMO_PAPERLESS_PORT=9081 docker compose -f demo/compose.yaml up
 ```
+
+Choose the port of Paperless before the first start, or run `docker compose -f demo/compose.yaml down --volumes` first: the app keeps the address of Paperless from the setup, and a new address needs the setup again.
 
 The app of your checkout instead of that of the App Store, to try a change:
 
