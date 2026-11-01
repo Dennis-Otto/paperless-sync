@@ -32,7 +32,7 @@
 # appinfo/info.xml counts only with info_xml_change_affects_app.
 path_affects_app() {
 	case "$1" in
-		tests/e2e/*.md | tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		tests/e2e/*.md | tests/e2e/contract.py | tests/e2e/test_contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
 		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
 		lib/* | appinfo/* | templates/* | js/* | css/* | l10n/* | img/* | composer.json | tests/e2e/*) return 0 ;;
@@ -65,7 +65,7 @@ path_affects_variants() {
 path_affects_upgrade() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/*.mjs | tests/e2e/package.json | tests/e2e/package-lock.json) return 1 ;;
-		tests/e2e/screenshots.* | tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		tests/e2e/screenshots.* | tests/e2e/contract.py | tests/e2e/test_contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
 		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		lib/Migration/* | lib/Service/ConfigService.php | lib/Service/SyncStateRepository* | lib/Model/SyncConfig.php) return 0 ;;
 		lib/Service/WebhookService.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;

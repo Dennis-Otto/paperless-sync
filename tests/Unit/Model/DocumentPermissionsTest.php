@@ -22,7 +22,7 @@ final class DocumentPermissionsTest extends TestCase {
 	 */
 	public static function paperlessLines(): array {
 		return [
-			'Paperless-ngx 2.x' => ['2', [6, 8]],
+			'Paperless-ngx 2.x' => ['2', [4, 7]],
 			'Paperless-ngx 3.x' => ['3', [3, 6]],
 		];
 	}

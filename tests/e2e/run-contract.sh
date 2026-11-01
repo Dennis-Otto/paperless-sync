@@ -19,9 +19,15 @@
 # can't read.
 #
 # The answers of Paperless become the fixtures of the unit tests in
-# tests/fixtures/paperless-ngx-<line>/. The script compares their shapes with those of the
-# fixtures and fails when a field is gone or has another type; CONTRACT_RECORD=1 writes
-# the new answers there instead. CONTRACT_RECORDINGS=<folder> keeps them in that folder.
+# tests/fixtures/paperless-ngx-<line>/, the same bytes in every run of one image: contract.py
+# writes fixed values for its times, IDs and the rest of what differs from run to run. The
+# script compares their shapes with those of the fixtures and fails when a field is gone or
+# has another type; CONTRACT_RECORD=1 writes the new answers there instead.
+# CONTRACT_RECORDINGS=<folder> keeps them in that folder. CONTRACT_FIXES=<folder> keeps, once
+# the app has passed against them, the fixtures that differ, as an artifact fixes-* holds
+# them, with the version of Paperless next to them, for the bot of paperless-fixtures.yml;
+# with CONTRACT_BOT_COMMITS=1, that bot commits them, so a new shape no longer fails the run:
+# the unit tests judge it in the commit of the bot, and the next run compares it.
 
 set -euo pipefail
 
@@ -48,6 +54,7 @@ COMPOSE=("${DOCKER_BIN}" compose --project-name "${PROJECT_NAME}"
 	--file "${SCRIPT_DIR}/compose.yaml" --file "${SCRIPT_DIR}/compose.paperless.yaml" --profile "paperless-${LINE}")
 TMP_DIR="$(mktemp -d)"
 PATHS=()
+FIXES_KEPT=0
 
 export E2E_PORT
 
@@ -282,6 +289,23 @@ contract status < "${TMP_DIR}/status.json"
 "${COMPOSE[@]}" exec -T nextcloud sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
 	| contract log
 
+# The fixtures that differ from the answers, for the bot; it changes fixtures and adds none.
+keep_fixes() {
+	local answer name
+	for answer in "${RECORDINGS}"/*.json; do
+		name="${answer##*/}"
+		if [[ -f "${FIXTURES}/${name}" ]] && ! cmp --silent "${answer}" "${FIXTURES}/${name}"; then
+			mkdir -p "${CONTRACT_FIXES}/files/${FIXTURES}"
+			cp "${answer}" "${CONTRACT_FIXES}/files/${FIXTURES}/${name}"
+			FIXES_KEPT=$((FIXES_KEPT + 1))
+		fi
+	done
+	if ((FIXES_KEPT > 0)); then
+		contract version >"${CONTRACT_FIXES}/version.txt"
+		echo "${FIXES_KEPT} of the fixtures in ${FIXTURES} differ from the answers of Paperless-ngx $(cat "${CONTRACT_FIXES}/version.txt")."
+	fi
+}
+
 # The answers of Paperless: into the fixtures, or compared with them.
 RECORDINGS="${CONTRACT_RECORDINGS:-${TMP_DIR}/recordings}"
 if [[ "${CONTRACT_RECORD:-0}" == "1" ]]; then
@@ -292,10 +316,20 @@ mkdir -p "${RECORDINGS}"
 contract fixtures | tar -xf - -C "${RECORDINGS}"
 if [[ "${CONTRACT_RECORD:-0}" == "1" ]]; then
 	echo "The answers of Paperless are the fixtures in ${FIXTURES} now."
-elif ! contract shapes "/fixtures/paperless-ngx-${LINE}"; then
-	echo "Paperless answers in another shape than the fixtures in ${FIXTURES}: a field that the unit tests" >&2
-	echo "read is gone or has another type. Adapt the app, then record them anew:" >&2
-	echo "CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh ${LINE}" >&2
-	exit 1
+else
+	if [[ -n "${CONTRACT_FIXES:-}" ]]; then
+		keep_fixes
+	fi
+	if ! contract shapes "/fixtures/paperless-ngx-${LINE}"; then
+		if [[ "${CONTRACT_BOT_COMMITS:-0}" == "1" ]] && ((FIXES_KEPT > 0)); then
+			echo "Paperless answers in another shape than the fixtures in ${FIXTURES}, and the app passes against it:"
+			echo "the bot commits the new fixtures, and the unit tests read them in that commit."
+		else
+			echo "Paperless answers in another shape than the fixtures in ${FIXTURES}: a field that the unit tests" >&2
+			echo "read is gone or has another type. Adapt the app, then record them anew:" >&2
+			echo "CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh ${LINE}" >&2
+			exit 1
+		fi
+	fi
 fi
 echo "Paperless Sync works with Paperless-ngx ${LINE}.x after ${SECONDS} s."

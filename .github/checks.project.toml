@@ -173,7 +173,9 @@ the app expects. Only these tests show that a real Paperless answers that way, s
 release of Paperless can't break the app unnoticed."""
 fix = """Run the line that failed on your machine with Docker. When the app or the mock
 expects an answer that Paperless no longer gives, adapt them; when Paperless answers in a
-new shape that the app reads correctly, record the answers anew for the unit tests with
+new shape that the app reads correctly, a pull request from a branch of this repository
+gets the new fixtures from the bot by itself and doesn't fail here; on a pull request from
+a fork, take its suggestions, or record the answers anew for the unit tests with
 `CONTRACT_RECORD=1` and commit the changed fixtures."""
 commands = [
   "bash tests/e2e/run-contract.sh 2  # the job Paperless-ngx 2.x",
@@ -181,9 +183,13 @@ commands = [
   "CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2  # or 3: record the fixtures anew",
 ]
 docs = "tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx"
-autofix = """Whether the app or the fixtures follow a new answer of Paperless is the
-decision of a person, who reads what Paperless changed; the job keeps the answers as its
-artifact paperless-ngx-2 or paperless-ngx-3 for that."""
+autofix = """When the app passes against the new answers of Paperless, the job keeps the
+fixtures that differ as its artifact fixes-paperless-ngx-2 or fixes-paperless-ngx-3, and
+the workflow Paperless fixtures commits them onto a branch of this repository, where the
+unit tests read them, and suggests them on a pull request from a fork. When the run of the
+app fails, nothing is committed: whether the app or the mock follows a new answer of
+Paperless is the decision of a person, who reads what Paperless changed in the artifact
+paperless-ngx-2 or paperless-ngx-3."""
 
 [check."Demo *"]
 title = "The smoke test of the demo"
@@ -289,7 +295,10 @@ archive. *Checks of the upgrade test*: a test of
 `tests/e2e/assert_upgrade.py` fails, so the upgrade test would let an upgrade that loses a
 row, a setting, a credential, a file ID or a retry pass. *First error of a failed
 end-to-end run*: a test of `tests/e2e/failure.py` fails, so the summary of a failed run
-or the issue of the canary would name another line than its first error. *Check of the package*: a test of
+or the issue of the canary would name another line than its first error. *The fixtures of
+the contract tests and their bot*: two recordings of one image of Paperless would differ,
+a fixture in `tests/fixtures/` is not what a recording writes, or a test of
+`.github/fixture_bot.py` fails. *Check of the package*: a test of
 `scripts/check-package.sh` fails. *JavaScript and translations*: a script doesn't
 parse, ESLint finds what a rule of `scripts/eslint/eslint.config.mjs` forbids, such as a
 variable that nothing uses, a comparison with `==`, a function that becomes a global of the
@@ -329,6 +338,9 @@ a new check, fix `tests/e2e/assert_upgrade.py` or its samples in
 `tests/e2e/test_assert_upgrade.py` until `python3 tests/e2e/test_assert_upgrade.py` passes,
 fix `tests/e2e/failure.py` or its samples in `tests/e2e/test_failure.py` until
 `python3 tests/e2e/test_failure.py` passes,
+add what differs from run to run to `stable()` in `tests/e2e/contract.py`, or record a
+fixture anew with `CONTRACT_RECORD=1`, until `python3 tests/e2e/test_contract.py` passes,
+fix `.github/fixture_bot.py` until `python3 tests/coach/test_fixture_bot.py` passes,
 fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
 look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`

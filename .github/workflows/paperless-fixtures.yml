@@ -1,0 +1,171 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Paperless fixtures
+
+# The fixture bot: new answers of Paperless reach the unit tests in the pull request that
+# brings them, such as an update of the image of Paperless-ngx by Renovate.
+#
+# When the app passes against a real Paperless in the contract tests of a pull request
+# (the jobs Paperless-ngx 2.x and 3.x of e2e.yml), and the fixtures in tests/fixtures/
+# differ from its answers, the job keeps them as an artifact fixes-paperless-ngx-<line>.
+# After the end-to-end tests, this workflow takes these artifacts as data that the pull
+# request made: it runs nothing of them, with .github/fixture_bot.py of main, and lets
+# through only files of JSON at the paths of existing fixtures. On a pull request from a
+# branch of this repository, also one of Renovate or another bot, it commits them as one
+# commit onto the branch, as the release app, so that the checks run again and the unit
+# tests read the new fixtures; on one from a fork, which no bot may push to, it suggests
+# them at their lines. A run whose app failed keeps nothing, so a real break of the
+# contract pushes nothing and fails with its explanation, and the label no-bot-fixes
+# leaves a pull request alone, whose job then fails on a new shape as on a fork. Two recordings of one image are the same bytes
+# (tests/e2e/contract.py), so the contract tests of the bot's commit keep nothing; when
+# they do, the bot stops and says so on the pull request.
+#
+# The fix bot of after-checks.yml takes the fixes of the workflows Lint and CI alone, and
+# only those of checks that failed, which is why this workflow exists next to it.
+
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] takes the fixtures of the contract tests as data, never the code of the pull request
+    workflows: [Docker E2E]
+    types: [completed]
+
+permissions: {}
+
+env:
+  # The GitHub CLI of the jobs sends no telemetry to GitHub.
+  GH_TELEMETRY: "false"
+
+jobs:
+  fixtures:
+    name: bring the new fixtures
+    if: >-
+      !github.event.repository.fork && github.event.workflow_run.event == 'pull_request' &&
+      contains(fromJSON('["success", "failure"]'), github.event.workflow_run.conclusion)
+    # One run at a time for each branch, so that two runs never commit onto it at once.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The environment holds the private key of the release app; only main may use it.
+    environment:
+      name: release
+      deployment: false
+    permissions:
+      actions: read # the fixtures that the run kept
+      contents: read # .github/fixture_bot.py of main, and the files of the commit
+      pull-requests: write # the suggestions on a pull request from a fork, and the comment when the bot fails
+    steps:
+      # The job holds the key of the release app, so it reaches GitHub alone; Harden-Runner
+      # itself allows the storage of the artifacts. Without sudo and Docker no step can
+      # lift the block.
+      - name: Block every host that the job doesn't need
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: block
+          disable-sudo-and-containers: true
+          allowed-endpoints: >-
+            api.github.com:443
+            github.com:443
+      # The bot of main, never the code of the pull request; the fixtures are data.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+      - name: Download the fixtures that the contract tests kept
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/fixes"
+          # The API lists an artifact once for each attempt of the run; gh picks one by name.
+          gh api "repos/$GH_REPO/actions/runs/$RUN/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | .name | select(test("^fixes-paperless-ngx-[23]$"))' |
+            sort -u |
+            while IFS= read -r name; do
+              gh run download "$RUN" --name "$name" --dir "$RUNNER_TEMP/fixes/$name"
+            done
+      - name: Decide what the bot does with them
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python3 .github/fixture_bot.py plan --sha "$SHA" --folder "$RUNNER_TEMP/fixes" \
+            --output "$GITHUB_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Suggest them on the pull request from a fork
+        if: steps.plan.outputs.action == 'suggest'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          PULL: ${{ steps.plan.outputs.pull }}
+        run: |
+          python3 .github/blueprint.py --repo "$GH_REPO" fix suggest --sha "$SHA" --pull "$PULL" \
+            --folder "$RUNNER_TEMP/fixes" >> "$GITHUB_STEP_SUMMARY"
+      # Without the release app of the owner, the run names what is missing rather than
+      # fail at the token, as in the workflows of the blueprint.
+      - name: Check that the release app is set up
+        id: release-app
+        if: steps.plan.outputs.action == 'commit'
+        env:
+          CLIENT_ID: ${{ vars.RELEASE_AUTOMATION_CLIENT_ID }}
+          KEY_SET: ${{ secrets.RELEASE_AUTOMATION_PRIVATE_KEY != '' }}
+        run: |
+          if [[ -z "$CLIENT_ID" ]]; then
+            missing="names no release app in the variable RELEASE_AUTOMATION_CLIENT_ID"
+          elif [[ "$KEY_SET" != true ]]; then
+            missing="has no private key of its release app in the secret RELEASE_AUTOMATION_PRIVATE_KEY of the environment release"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          without="the artifacts fixes-paperless-ngx-* of the contract tests hold the files, and CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh records them"
+          echo "::warning::This repository $missing, which the fixture bot needs to commit the new fixtures; $without."
+          echo "This repository $missing, which the fixture bot needs to commit the new fixtures; $without." >> "$GITHUB_STEP_SUMMARY"
+      - name: Create a token of the release app for the branch
+        id: app
+        if: steps.release-app.outputs.ready == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_PRIVATE_KEY }}
+          # Only what one commit on the branch needs.
+          permission-contents: write
+      - name: Commit them onto the branch of the pull request
+        if: steps.app.outputs.token != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          # The commit goes through GitHub's API as the release app: GitHub signs it, and
+          # the push starts the checks again.
+          python3 .github/fixture_bot.py commit --sha "$SHA" --branch "$BRANCH" --app "$APP_SLUG" \
+            --url "$URL" --folder "$RUNNER_TEMP/fixes" >> "$GITHUB_STEP_SUMMARY"
+      - name: Say on the pull request that the bot failed
+        if: failure() && steps.plan.outputs.pull != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PULL: ${{ steps.plan.outputs.pull }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh pr comment "$PULL" --body "The fixture bot could not bring the new fixtures of the contract tests: $URL. The artifacts \`fixes-paperless-ngx-*\` of the end-to-end tests hold them, and \`CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 3\`, or \`2\`, records them on your machine."
+      - name: Wait until Harden-Runner has removed Docker
+        # Harden-Runner removes Docker with apt-get in the background; a job that ends
+        # before it finishes hangs in "Cleaning up orphan processes" until its timeout.
+        if: always()
+        run: |
+          for _ in {1..120}; do
+            pgrep -x 'apt-get|dpkg' >/dev/null || exit 0
+            sleep 1
+          done
+          echo "::warning::Harden-Runner still removes Docker after two minutes; the job may hang until its timeout."

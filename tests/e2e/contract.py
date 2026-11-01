@@ -28,7 +28,9 @@ container of the mock, inside the network of Compose, with Python alone:
                                       standard input
     python contract.py shapes DIR     compares the shapes of the answers with the fixtures in DIR,
                                       and fails when a field is gone or has another type
-    python contract.py fixtures       the recorded answers, as a tar archive on standard output
+    python contract.py fixtures       the recorded answers, the same bytes in every run of one image
+                                      of Paperless, as a tar archive on standard output
+    python contract.py version        the version that Paperless names
 
 The answers that api records become the fixtures of the unit tests (tests/fixtures/), so
 that those read the shapes of a real Paperless instead of the shapes that the mock assumes.
@@ -78,9 +80,28 @@ NOTE = "Paid on 1 September."
 # A file of no type that Paperless takes: the zero bytes first make it application/octet-stream.
 UNSUPPORTED = bytes(16) + b"Synthetic unsupported contract test file.\n"
 
+# What differs in every run of one image of Paperless, though it answers the same: stable()
+# writes these values into the fixtures instead, so that a change of a fixture is a change of
+# Paperless. The day of a recording, and its time with the digits and the offset of the answer.
+RECORDED_DAY = "2026-01-01"
+RECORDED_TIME = f"{RECORDED_DAY}T00:00:00"
+# The size of the archived version, which holds the time of the run.
+RECORDED_ARCHIVE_SIZE = 50000
+# The checksums of that archived version, which the metadata and the downloads share.
+RECORDED_ARCHIVE = b"The archived version of the invoice, whose bytes differ in every run."
+UUIDS = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+TIMES = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})")
+# The folder of a single run of OCR, which a failed upload names in its reason.
+TEMPORARY = re.compile(r"/tmp/[^/\s:]+")
+
 
 class ContractError(AssertionError):
     """A difference between what the app reads and what Paperless answers."""
+
+
+def fixture_text(entry):
+    """A recording as a file of tests/fixtures/."""
+    return json.dumps(entry, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
 
 
 def check(condition, message):
@@ -182,9 +203,7 @@ class Paperless:
             if not raw:
                 entry["body"] = decoded
             RECORDINGS.mkdir(parents=True, exist_ok=True)
-            (RECORDINGS / f"{record}.json").write_text(
-                json.dumps(entry, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            (RECORDINGS / f"{record}.json").write_text(fixture_text(entry), encoding="utf-8")
         if expect is not None and status != expect:
             raise ContractError(f"{method} {path} answered HTTP {status} instead of {expect}: {payload[:500]!r}")
         return status, received, decoded
@@ -546,7 +565,7 @@ def api(url, line):
             f"{field} is {metadata.get(field)!r}, not the {kind} {downloads[original][kind]} of the download.",
         )
     RECORDINGS.mkdir(parents=True, exist_ok=True)
-    (RECORDINGS / "downloads.json").write_text(json.dumps(downloads, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    (RECORDINGS / "downloads.json").write_text(fixture_text(downloads), encoding="utf-8")
 
     # The look-up of a file of the inbox whose upload's answer got lost: by its checksum, the
     # ID alone. A filter that Paperless doesn't know would return every document instead.
@@ -1013,13 +1032,95 @@ def shapes(directory):
     return 1 if any(line.startswith(("- ", "~ ")) for line in found) else 0
 
 
+def leaves(value, key=""):
+    """Each value of an answer that is no list or object, in a fixed order, with its key."""
+    if isinstance(value, dict):
+        for name in sorted(value):
+            yield from leaves(value[name], name)
+    elif isinstance(value, list):
+        for item in value:
+            yield from leaves(item, key)
+    else:
+        yield key, value
+
+
+def tasks_of(entry):
+    """The tasks of a recording, in a plain list (version 9) or in pages (version 10)."""
+    body = entry["body"]
+    return body if isinstance(body, list) else body["results"]
+
+
+def stable(recordings):
+    """The recordings of a run, by the names of their files, without what differs from run to run.
+
+    Two runs of one image of Paperless give the same bytes, and a value that an answer shares
+    with another stays the same in both: the checksums of the archived version in the metadata
+    and the downloads, the ID of a task in the upload and the task, the ID of a choice in the
+    custom field and the document, the ID of a task of version 9 and of version 10. The types
+    stay as well, so that the shapes of the answers don't change. What the app reads of a
+    document, its ID, title, tags and owner, is the same in every run of a fresh Paperless;
+    only the IDs of the tasks can differ, when Paperless runs a task of its own in between.
+    """
+    made_up = digests(RECORDED_ARCHIVE)
+    texts = {value: made_up[kind] for kind, value in recordings["downloads.json"]["false"].items()}
+    choices = [
+        choice["id"]
+        for field in recordings["custom_fields.json"]["body"]["results"]
+        for choice in field["extra_data"]["select_options"]
+    ]
+    texts |= {choice: f"choice{index:010d}" for index, choice in enumerate(choices, 1)}
+    found = [(key, value) for name in sorted(recordings) for key, value in leaves(recordings[name]) if isinstance(value, str)]
+    uuids = dict.fromkeys(match for _, value in found for match in UUIDS.findall(value))
+    texts |= {match: f"00000000-0000-4000-8000-{index:012d}" for index, match in enumerate(uuids, 1)}
+    # Paperless dates a document without a date of its own, and names its file, by that day.
+    days = {value[:10] for key, value in found if key == "added"}
+
+    def stable_time(match):
+        fraction = "." + "0" * (len(match[1]) - 1) if match[1] else ""
+        return f"{RECORDED_TIME}{fraction}{match[2]}"
+
+    def stable_text(value):
+        for old, new in texts.items():
+            value = value.replace(old, new)
+        value = TEMPORARY.sub("/tmp/contract", TIMES.sub(stable_time, value))
+        for day in days:
+            value = value.replace(day, RECORDED_DAY)
+        return value
+
+    def clean(value, key=""):
+        if isinstance(value, dict):
+            return {name: clean(item, name) for name, item in value.items()}
+        if isinstance(value, list):
+            items = [clean(item, key) for item in value]
+            # A set inside Paperless, in another order in every run.
+            is_set = key.endswith("permissions") and all(isinstance(item, str) for item in items)
+            return sorted(items) if is_set else items
+        if key == "base64" or isinstance(value, bool) or value is None:
+            return value
+        if isinstance(value, str):
+            return stable_text(value)
+        if key.endswith("_seconds"):
+            return type(value)(1)
+        return RECORDED_ARCHIVE_SIZE if key == "archive_size" else value
+
+    result = {name: clean(entry) for name, entry in recordings.items()}
+    tasks = [task for name in result if name.startswith("task-") for task in tasks_of(result[name])]
+    # Nothing has checked the shapes yet: a task without an ID is for `contract shapes` to report.
+    ranks = {task: rank for rank, task in enumerate(sorted({task["id"] for task in tasks if "id" in task}), 1)}
+    for task in tasks:
+        if "id" in task:
+            task["id"] = ranks[task["id"]]
+    return result
+
+
 def fixtures():
     """The recorded answers as a tar archive, which run-contract.sh unpacks into tests/fixtures/."""
+    recordings = {path.name: json.loads(path.read_text(encoding="utf-8")) for path in RECORDINGS.glob("*.json")}
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as archive:
-        for path in sorted(RECORDINGS.iterdir()):
-            info = tarfile.TarInfo(path.name)
-            data = path.read_bytes()
+        for name, entry in sorted(stable(recordings).items()):
+            info = tarfile.TarInfo(name)
+            data = fixture_text(entry).encode("utf-8")
             info.size = len(data)
             info.mode = 0o644
             archive.addfile(info, io.BytesIO(data))
@@ -1062,6 +1163,8 @@ def main(arguments):
         return shapes(*rest)
     elif command == "fixtures":
         fixtures()
+    elif command == "version":
+        print(load_state()["version"])
     else:
         print(__doc__, file=sys.stderr)
         return 2
