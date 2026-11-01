@@ -536,7 +536,8 @@ final class SyncService {
 
 	/**
 	 * The owners of per-user ownership, from the users of Paperless, which a run without them would
-	 * give to the wrong users, so it fails, with the permission that its token may lack.
+	 * give to the wrong users, so it fails, with the permission that its token may lack; with the
+	 * documents that Paperless shares, so it does without the groups and the ID of the account.
 	 *
 	 * @return array{Owners, array<string, string>} the owners and the names of the users of Paperless by their IDs
 	 */
@@ -552,7 +553,14 @@ final class SyncService {
 			throw new RunException('Paperless did not list its groups, which the documents that it shares need to find who may view each through a group; the user of the API token needs the permission to view groups: %s', [RunError::of($exception)], $exception);
 		}
 
-		return [$this->ownerMapping->owners($config, $users, $groups), $users];
+		// The account may view the documents so that a run can read them, which is no reason to give
+		// the user of Nextcloud of the same name a copy of each.
+		$account = $config->sharedDocuments() ? $paperless->accountId() : null;
+		if ($config->sharedDocuments() && $account === null) {
+			throw new RunException('Paperless did not name its account, which the documents that it shares need, as the account gets no copy of what it may view: in Paperless, under Users & Groups, give the account the permission View for UI Settings.');
+		}
+
+		return [$this->ownerMapping->owners($config, $users, $groups, $account), $users];
 	}
 
 	/**

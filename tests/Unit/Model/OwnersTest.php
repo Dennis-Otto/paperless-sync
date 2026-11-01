@@ -64,6 +64,18 @@ final class OwnersTest extends TestCase {
 		self::assertSame([], $owners->viewersOf(new DocumentPermissions([], [9])), 'A group without users names nobody.');
 	}
 
+	/** The account of the app is no viewer, by itself or through a group, also with a user of Nextcloud; its documents stay its own. */
+	public function testTheAccountOfTheAppViewsNothing(): void {
+		$owners = new Owners('paperless', [
+			1 => ['id' => 1, 'name' => 'alice', 'user' => 'alice', 'reason' => Owners::NAME, 'detail' => ''],
+			9 => ['id' => 9, 'name' => 'paperless', 'user' => 'paperless', 'reason' => Owners::NAME, 'detail' => ''],
+		], [], [8 => [1, 9]], 9);
+
+		self::assertSame([], $owners->viewersOf(new DocumentPermissions([9], [])));
+		self::assertSame([1], array_column($owners->viewersOf(new DocumentPermissions([], [8])) ?? [], 'id'));
+		self::assertSame('paperless', $owners->userOf(9));
+	}
+
 	/** Whom a group holds that Paperless didn't list is not for the app to guess. */
 	public function testAGroupThatPaperlessDidNotListSaysNothing(): void {
 		self::assertNull($this->owners->viewersOf(new DocumentPermissions([1], [7])));

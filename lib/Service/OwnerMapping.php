@@ -30,7 +30,8 @@ use OCP\IUserManager;
  * The connection checklist names each of them.
  *
  * With the documents that Paperless shares, the same table and group decide who gets a copy of a
- * document that their user of Paperless may view, by itself or through a group of Paperless.
+ * document that their user of Paperless may view, by itself or through a group of Paperless; the
+ * account of the app gets none, whatever it may view.
  *
  * @psalm-import-type Route from Owners
  */
@@ -51,8 +52,9 @@ final class OwnerMapping {
 	 *
 	 * @param array<string, string> $paperlessUsers
 	 * @param array<int, list<int>> $groups the users of each group of Paperless, as PaperlessClientInterface::groupMembers() lists them, when the run reads who may view a document
+	 * @param int|null $account the ID of the account of the app, as PaperlessClientInterface::accountId() names it, when the run reads who may view a document
 	 */
-	public function owners(SyncConfig $config, array $paperlessUsers, array $groups = []): Owners {
+	public function owners(SyncConfig $config, array $paperlessUsers, array $groups = [], ?int $account = null): Owners {
 		$table = [];
 		foreach (self::parse($config->userMap, false) as $line) {
 			$table[mb_strtolower($line['paperless'])] = $line['nextcloud'];
@@ -104,7 +106,7 @@ final class OwnerMapping {
 			}
 		}
 
-		return new Owners($config->targetUser, $routes, $unmatched, $groups);
+		return new Owners($config->targetUser, $routes, $unmatched, $groups, $account);
 	}
 
 	/**
@@ -116,8 +118,9 @@ final class OwnerMapping {
 	 * for two users of Paperless for one user of Nextcloud, is a warning that names the setting to
 	 * change. Without the list of
 	 * the users of Paperless, per-user ownership can't route a document, so the line of the users
-	 * fails then, and so does one for the groups, with the documents that Paperless shares, for which
-	 * the lines end with who sees how many documents of whom.
+	 * fails then, and so does one for the groups and one for the account of the app, with the
+	 * documents that Paperless shares, for which the lines end with who sees how many documents of
+	 * whom.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
@@ -135,7 +138,17 @@ final class OwnerMapping {
 					'In Paperless, under Users & Groups, give the account the permission View for Groups: the documents that Paperless shares need it to find who may view each through a group, and a run fails without it.',
 				)];
 			}
-			$owners = $this->owners($config, $users, $groups);
+			$account = $config->sharedDocuments() ? $paperless->accountId() : null;
+			if ($config->sharedDocuments() && $account === null) {
+				return [new ConnectionCheck(
+					ConnectionCheck::OWNERS,
+					ConnectionCheck::FAILED,
+					'Paperless did not name its account.',
+					[],
+					'In Paperless, under Users & Groups, give the account the permission View for UI Settings: the documents that Paperless shares need its ID, as the account gets no copy of what it may view, and a run fails without it.',
+				)];
+			}
+			$owners = $this->owners($config, $users, $groups, $account);
 			$checks = [];
 			$routes = $owners->routes();
 			foreach (array_slice($routes, 0, self::CHECKED_USERS) as $route) {
@@ -175,7 +188,8 @@ final class OwnerMapping {
 	 * The lines of the documents that Paperless shares: how many documents from the archive of whom
 	 * each user of Nextcloud also gets, how many a user of Paperless without a user of Nextcloud may
 	 * view without getting a copy, and how many documents don't say who may view them. The account
-	 * of the app needs no line of its own: it may view the documents so that a run can read them.
+	 * of the app has no line: it may view the documents so that a run can read them, so
+	 * Owners::viewersOf() leaves it out.
 	 *
 	 * @return list<ConnectionCheck>
 	 */
@@ -191,7 +205,6 @@ final class OwnerMapping {
 				'A run reads that list to give each user the documents that they may view, and fails without it; check the line of the documents above.',
 			)];
 		}
-		$account = $paperless->accountId();
 		/** @var array<string, int> $shares the documents of each pair of users of Nextcloud, the viewer and the owner, as a line */
 		$shares = [];
 		/** @var array<array-key, int> $withoutUser the documents of each user of Paperless without a user of Nextcloud, by its name, which PHP turns into a number when it is one */
@@ -211,9 +224,7 @@ final class OwnerMapping {
 			}
 			foreach ($viewers as $viewer) {
 				if ($viewer['user'] === null) {
-					if ($viewer['id'] !== $account) {
-						$withoutUser[$viewer['name']] = ($withoutUser[$viewer['name']] ?? 0) + 1;
-					}
+					$withoutUser[$viewer['name']] = ($withoutUser[$viewer['name']] ?? 0) + 1;
 				} elseif ($viewer['user'] !== $owner) {
 					$pair = $viewer['user'] . "\n" . $owner;
 					$shares[$pair] = ($shares[$pair] ?? 0) + 1;

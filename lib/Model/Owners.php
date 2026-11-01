@@ -23,6 +23,8 @@ namespace OCA\PaperlessSync\Model;
  * With the documents that Paperless shares, a document also goes to the user of Nextcloud of each
  * user of Paperless who may view it, by itself or through a group. A user of Paperless without a
  * user of Nextcloud gets no copy then: the target user may not be allowed to see the document.
+ * Neither does the account of the app for what it may view: it has that permission so that a run
+ * can read the documents of others, which says nothing about whom they are meant for.
  *
  * @psalm-type Route = array{id: int, name: string, user: string|null, reason: self::*, detail: string}
  */
@@ -48,12 +50,14 @@ final class Owners {
 	 * @param array<int, Route> $routes every user of Paperless, by its ID, with the user of Nextcloud that gets its documents, or null for the target user or, for Owners::SHARED, for nobody, and why
 	 * @param list<string> $unmatched the users of Paperless that the table names but Paperless doesn't have
 	 * @param array<int, list<int>> $groups the IDs of the users of each group of Paperless, by its ID, when the run reads who may view a document
+	 * @param int|null $account the ID of the account of the app, which is no viewer, when the run reads who may view a document
 	 */
 	public function __construct(
 		public readonly string $fallback,
 		private array $routes,
 		public readonly array $unmatched = [],
 		private array $groups = [],
+		private ?int $account = null,
 	) {
 		foreach ($routes as $id => $route) {
 			if ($route['user'] !== null) {
@@ -83,8 +87,8 @@ final class Owners {
 	/**
 	 * The users of Paperless who may view a document with these permissions, by themselves or
 	 * through a group, each once, with the user of Nextcloud of each that has one. A user that
-	 * Paperless didn't list counts for nobody. Null for a group that Paperless didn't list: whom it
-	 * holds is not for the app to guess.
+	 * Paperless didn't list counts for nobody, and neither does the account of the app. Null for a
+	 * group that Paperless didn't list: whom it holds is not for the app to guess.
 	 *
 	 * @return list<Route>|null
 	 */
@@ -97,7 +101,7 @@ final class Owners {
 			$ids[] = $this->groups[$group];
 		}
 
-		return array_values(array_intersect_key($this->routes, array_flip(array_merge(...$ids))));
+		return array_values(array_intersect_key($this->routes, array_flip(array_diff(array_merge(...$ids), [$this->account]))));
 	}
 
 	/** The ID of the user of Paperless whose documents go to this user of Nextcloud, or null for none. */

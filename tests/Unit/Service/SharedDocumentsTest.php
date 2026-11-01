@@ -143,6 +143,39 @@ final class SharedDocumentsTest extends TestCase {
 		self::assertSame(['[alice] EXPORT P1: ' . $this->path(1)], $report->actions);
 	}
 
+	/**
+	 * The account may view every document so that a run can read it, which gives the user of
+	 * Nextcloud of the same name no copy, directly or through a group, here the target user; what
+	 * the account owns still goes there.
+	 */
+	public function testTheAccountOfTheAppGetsNoCopyWithAUserOfNextcloud(): void {
+		$this->paperless->users[(string)self::ACCOUNT] = 'paperless';
+		$this->paperless->groupMembers = [self::HOUSEHOLD => [self::ACCOUNT, self::BOB]];
+
+		$report = $this->sync([$this->document(1, self::ALICE, [self::ACCOUNT]), $this->document(2, self::ALICE, [], [self::HOUSEHOLD]), $this->document(3, self::ACCOUNT)]);
+
+		self::assertEqualsCanonicalizing([
+			'[paperless] EXPORT P3: ' . $this->path(3),
+			'[alice] EXPORT P1: ' . $this->path(1),
+			'[alice] EXPORT P2: ' . $this->path(2),
+			'[bob] EXPORT P2: ' . $this->path(2),
+		], $report->actions);
+	}
+
+	/** Without the ID of the account, a copy could reach the user of the same name, so a run fails before a copy changes. */
+	public function testARunFailsWithoutTheIdOfTheAccount(): void {
+		$this->sync([$this->document(1, self::ALICE, [self::BOB])]);
+		$this->paperless->accountId = null;
+
+		try {
+			$this->sync([$this->document(1, self::ALICE, [])]);
+			self::fail('The run needs the ID of the account.');
+		} catch (RuntimeException $exception) {
+			self::assertStringStartsWith('Paperless did not name its account, which the documents that it shares need', $exception->getMessage());
+		}
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('bob')));
+	}
+
 	/** The target user keeps the documents without an owner and those whose owner has no user of Nextcloud, and who may view them gets a copy. */
 	public function testADocumentOfTheTargetUserIsSharedAsWell(): void {
 		$report = $this->sync([$this->document(1, null, [self::BOB]), $this->document(2, self::DAVE, [self::CAROL])]);
@@ -338,6 +371,18 @@ final class SharedDocumentsTest extends TestCase {
 
 		self::assertSame(['[bob] REMOVE REASSIGNED P1: ' . $this->path(1)], $report->actions);
 		self::assertSame([$this->path(1)], array_keys($this->filesOf('alice')));
+	}
+
+	/** One target user for all of them reads only the state of the target user, so every copy stays in the files of its user, no longer updated. */
+	public function testChoosingTheTargetUserLeavesTheCopiesWhereTheyAre(): void {
+		$this->sync([$this->document(1, self::ALICE, [self::BOB])]);
+		$this->configService->save(self::validSettings() + ['ownership' => SyncConfig::SINGLE]);
+
+		$report = $this->sync([$this->document(1, self::ALICE)]);
+
+		self::assertSame(['EXPORT P1: ' . $this->path(1)], $report->actions);
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('alice')));
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('bob')));
 	}
 
 	/** @param list<array<string, mixed>> $documents */
