@@ -278,6 +278,11 @@ final class StatusServiceTest extends TestCase {
 		$this->service->failed(new RuntimeException('Paperless was unavailable'));
 
 		self::assertSame(1060, $this->service->get()['lastSuccess']);
+		self::assertSame(1060, $this->service->lastSuccess(), 'The note in Files asks for this time alone.');
+	}
+
+	public function testNoRunHasSucceededYet(): void {
+		self::assertSame(0, $this->service->lastSuccess());
 	}
 
 	public function testFailedRunKeepsAShortenedErrorAndTheEndOfTheLastCompletedRun(): void {

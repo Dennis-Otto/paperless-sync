@@ -19,8 +19,9 @@ use OCP\Util;
 
 /**
  * Brings the actions of the app into Files when Files loads the scripts of other apps: js/files.js,
- * which registers "Send to Paperless" and "Open in Paperless", with what it may offer the user
- * as the initial state files. A user who may use neither gets no script.
+ * which registers "Send to Paperless", "Open in Paperless" and the note above the list in a folder
+ * of the app, with what it may offer the user as the initial state files, and css/files.css, the
+ * look of that note. A user who may use none of them gets neither.
  *
  * @template-implements IEventListener<Event>
  */
@@ -52,5 +53,6 @@ final class LoadAdditionalScriptsListener implements IEventListener {
 		// An init script, which Nextcloud loads before Files reads the registered actions, with the
 		// translations of the app.
 		Util::addInitScript(AppConstants::APP_ID, 'files');
+		Util::addStyle(AppConstants::APP_ID, 'files');
 	}
 }

@@ -278,6 +278,11 @@ final class StatusService {
 		];
 	}
 
+	/** When the last run that was no dry-run succeeded, without reading the rest of the status; 0 before the first. */
+	public function lastSuccess(): int {
+		return $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_SUCCESS, 0, lazy: true);
+	}
+
 	/**
 	 * The runs in a row, not dry-runs, that did not succeed: none after a successful run, and before
 	 * the first run.

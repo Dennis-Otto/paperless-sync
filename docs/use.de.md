@@ -154,6 +154,13 @@ Eine Freigabe einer Kopie bleibt bei ihr, wenn sie nach einer Änderung in Paper
 
 Das Archiv ist ein Spiegel von Paperless: Nichts, was du mit einer Kopie in Nextcloud tust, ändert Paperless. Ändere ein Dokument in Paperless, und der nächste Lauf bringt die Änderung zu seiner Kopie.
 
+Dateien sagt das auch: Ein Hinweis über der Liste im Archiv und darunter, auch in einem Archiv, das jemand mit dir teilt, sagt, dass der Ordner ein Spiegel von Paperless ist und wann er zuletzt aktualisiert wurde. Im Eingang sagt er, wann die Dateien an Paperless gehen, und in `Fehler`, dass der Grund jedes Fehlers in der `.error.txt` neben der Datei steht. Blende einen Hinweis mit seinem Knopf aus, sobald du ihn kennst; *Was ist das für ein Ordner?* holt ihn zurück.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/folder-note-dark.png">
+  <img alt="Nextcloud Dateien im Ordner Archiv mit einem Hinweis über der Liste: Spiegel von Paperless, aktualisiert vor 5 Minuten. Änderungen hier erreichen Paperless nicht, und die nächsten Läufe können sie rückgängig machen. Bearbeite das Dokument in Paperless. Ein Link öffnet Paperless, und ein Knopf blendet den Hinweis aus. Darunter die Ordner der Korrespondenten" src="images/de/folder-note-light.png">
+</picture>
+
 Erhält ein Dokument in Paperless etwa einen neuen Typ und einen neuen Titel, verschiebt der nächste Lauf seine Kopie und benennt sie um:
 
 <picture>

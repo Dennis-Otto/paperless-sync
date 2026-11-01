@@ -746,6 +746,18 @@ try {
 		await context.close()
 	}
 
+	// The note above the list of the archive, which says that the folder is a mirror of Paperless.
+	for (const theme of THEMES) {
+		const { context, page } = await open(browser, owner, theme, files(ARCHIVE))
+		const note = page.locator('.paperless-sync-folder-note')
+		await note.waitFor()
+		const folder = page.locator('[data-cy-files-list-row-name="City Utilities"]')
+		await folder.waitFor()
+		await settle(page)
+		save(`${IMAGES}/folder-note-${theme}.png`, await shotFromTo(page, note, folder, 4))
+		await context.close()
+	}
+
 
 	// The menu of a file in Files: the administrator, a member of the group that may send
 	// files, sends a scanned letter to Paperless, and a copy of the archive opens its

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/stubs/Emitter.php';
 require_once __DIR__ . '/stubs/OC.php';
+require_once __DIR__ . '/stubs/OC_Util.php';
 require_once __DIR__ . '/stubs/Doctrine/ArrayParameterType.php';
 require_once __DIR__ . '/stubs/Doctrine/ExpressionBuilder.php';
 require_once __DIR__ . '/stubs/Doctrine/ParameterType.php';

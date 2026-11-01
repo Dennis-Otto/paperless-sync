@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Controller;
 
 use OCA\PaperlessSync\Controller\FileActionController;
+use OCA\PaperlessSync\Controller\FolderInfoController;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Controller\StatusApiController;
 use OCA\PaperlessSync\Controller\SyncController;
@@ -42,6 +43,8 @@ final class ControllerRoutesTest extends TestCase {
 			'webhook secret' => [WebhookController::class, 'create', 'POST', '/settings/webhook'],
 			'webhook off' => [WebhookController::class, 'remove', 'DELETE', '/settings/webhook'],
 			'send to Paperless from Files' => [FileActionController::class, 'send', 'POST', '/api/v1/send'],
+			'the note in Files' => [FolderInfoController::class, 'show', 'GET', '/api/v1/folder-info'],
+			'hide the note in Files' => [FolderInfoController::class, 'dismiss', 'POST', '/api/v1/folder-info/dismissed'],
 		];
 	}
 

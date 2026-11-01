@@ -13,6 +13,10 @@
 // sent it, since Chromium refuses every script and style of a page that a route answered when
 // they come from a server in a private network, such as the containers of screenshots.sh; a
 // script that runs before those of the page (frozenInitialState) freezes its initial state.
+//
+// The note above the list of Files says how long ago the archive was updated and how soon the
+// next run starts, by the clock of the browser, as Files does for its files: it says the same
+// on every run (frozenFolderInfo).
 
 // When the story of the pictures starts: the quick start, with its first dry-run.
 export const STORY_START = '2026-10-18T10:20:00+02:00'
@@ -52,6 +56,7 @@ export const EXAMPLE_SECRET = 'example-secret-of-the-screenshots-0123456789'
 // the files in WebDAV.
 const APP = /^\/(?:index\.php\/|ocs\/v[12]\.php\/)?apps\/paperless_sync\//
 const DAV = /^\/remote\.php\/(?:dav|webdav)\//
+const FOLDER_INFO = /\/apps\/paperless_sync\/api\/v1\/folder-info$/
 // The requests of WebDAV that list files with their properties.
 const LISTINGS = new Set(['PROPFIND', 'REPORT', 'SEARCH'])
 
@@ -147,6 +152,13 @@ export function frozenInitialState(answer, { seen, now, secret }) {
 	}, true)
 }
 
+// The answer for the note above the list of Files, at the moment now, in milliseconds: the archive
+// was updated 5 minutes ago, and the next run starts in 10.
+export function frozenFolderInfo(answer, now) {
+	const seconds = Math.round(now / 1000)
+	return { ...answer, lastSuccess: seconds - 5 * 60, nextRun: seconds + 10 * 60 }
+}
+
 // A list of files in WebDAV, in which every file changed at the moment now, in milliseconds:
 // Files shows "a few seconds ago" for each, whenever the run synchronized or uploaded it.
 export function changedNow(xml, now) {
@@ -192,8 +204,13 @@ export function closed(error) {
 // answers of the app, the initial state of its settings page and the lists of files in WebDAV.
 export async function freeze(context, story, now = Date.now) {
 	await context.addInitScript({ content: story.initialStateScript() })
-	await context.route((url) => APP.test(url.pathname), (route) => rewritten(route, async (response, type) =>
-		type.includes('json') ? JSON.stringify(story.answer(await response.json())) : undefined))
+	await context.route((url) => APP.test(url.pathname), (route) => rewritten(route, async (response, type) => {
+		if (!type.includes('json')) {
+			return undefined
+		}
+		const answer = await response.json()
+		return JSON.stringify(FOLDER_INFO.test(new URL(route.request().url()).pathname) ? frozenFolderInfo(answer, now()) : story.answer(answer))
+	}))
 	await context.route((url) => DAV.test(url.pathname), (route) => {
 		if (!LISTINGS.has(route.request().method())) {
 			return route.fallback()
