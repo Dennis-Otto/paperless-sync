@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-10-19
 - Amends [0002](0002-the-filesystem-api-of-nextcloud.md): besides the one target user who owns the archive, per-user ownership gives each user of Nextcloud the documents of their user of Paperless
+- Amended by [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md): a new option also gives a document to every mapped user who may view it in Paperless
 
 ## Context
 

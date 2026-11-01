@@ -66,6 +66,10 @@ final class AccountPermissionsTest extends TestCase {
 				['export_enabled' => true, 'ownership' => 'per-user'] + $none,
 				['view_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_uisettings', 'view_user'],
 			],
+			'the documents that Paperless shares, also with a group' => [
+				['export_enabled' => true, 'ownership' => 'per-user-shared'] + $none,
+				['view_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_uisettings', 'view_user', 'view_group'],
+			],
 			'per-user ownership with the inbox, whose uploads get their owner' => [
 				['export_enabled' => true, 'inbox_enabled' => true, 'ownership' => 'per-user'] + $none,
 				['view_document', 'add_document', 'change_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_paperlesstask', 'view_uisettings', 'view_user'],

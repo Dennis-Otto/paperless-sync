@@ -1,6 +1,6 @@
 flowchart TB
     accTitle: Whose archive a document goes to
-    accDescr: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list, or that the account of the app owns while an upload waits for its owner, stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, or outside the group of the setting, the document goes to the target user, so that none is lost. When another user of Paperless has the same user of Nextcloud, it stays where its copy is, as the run doesn't guess. The connection checklist names each case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files, and leaves every other archive.
+    accDescr: With per-user ownership, a run asks of every active document who owns it in Paperless. A document without an owner goes to the target user. A document whose owner Paperless didn't list, or that the account of the app owns while an upload waits for its owner, stays where its copy is. For every other owner, the run looks for one user of Nextcloud: the one that the table Paperless users with another Nextcloud ID names, or else the one with the same ID, whatever its case. Without such a user, or outside the group of the setting, the document goes to the target user, so that none is lost. When another user of Paperless has the same user of Nextcloud, it stays where its copy is, as the run doesn't guess. The connection checklist names each case. Otherwise it goes to that user. Its copy is written in the archive of that user, below the same base folder of their own files. With the option that also gives users what they may view, the run then asks Paperless who may view the document. When Paperless doesn't say, every other copy stays where it is, and the report counts the document. Otherwise each user of Nextcloud whose user of Paperless may view it, by itself or through a group, gets a copy at the same path. Then its copy leaves every other archive.
 
     document["Each active document<br>of Paperless"] --> owner{"Who owns it<br>in Paperless?"}
     owner -->|nobody| target["The archive of<br>the target user"]
@@ -13,11 +13,17 @@ flowchart TB
     group -->|yes| shared{"Has another user of Paperless<br>the same user of Nextcloud?"}
     shared -->|yes| held
     shared -->|no| user["The archive of that user,<br>below the same base folder<br>of their own files"]
-    target --> copy["The copy is written there<br>and leaves every other archive"]
+    target --> copy["The copy is written there"]
     user --> copy
+    copy --> option{"Do users also get what<br>they may view in Paperless?"}
+    option -->|no, only what they own| leaves["Its copy leaves<br>every other archive"]
+    option -->|yes| viewers{"Does Paperless say<br>who may view it?"}
+    viewers -->|no| stays["Every other copy stays<br>where it is, and the<br>report counts the document"]
+    viewers -->|yes| also["A copy at the same path for each<br>user of Nextcloud whose user of<br>Paperless may view it, by itself<br>or through a group"]
+    also --> leaves
     classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
     classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
-    class document,owner,match,group,shared check
-    class user,copy kept
-    class target,held changed
+    class document,owner,match,group,shared,option,viewers check
+    class user,copy,also,leaves kept
+    class target,held,stays changed

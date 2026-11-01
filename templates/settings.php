@@ -225,9 +225,12 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 						<option value="single" <?php if (!$config->perUser()) {
 							print_unescaped('selected');
 						} ?>><?php p($l->t('The target user, all of them')); ?></option>
-						<option value="per-user" <?php if ($config->perUser()) {
+						<option value="per-user" <?php if ($config->ownership === $config::PER_USER) {
 							print_unescaped('selected');
 						} ?>><?php p($l->t('Each user, those they own in Paperless')); ?></option>
+						<option value="per-user-shared" <?php if ($config->sharedDocuments()) {
+							print_unescaped('selected');
+						} ?>><?php p($l->t('Each user, those they own or may view in Paperless')); ?></option>
 					</select>
 				</label>
 				<div class="paperless-sync-field" data-per-user<?php if (!$config->perUser()) { ?> hidden<?php } ?>>
@@ -244,7 +247,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					<span id="paperless-sync-user-map-hint" class="paperless-sync-field-hint"><?php p($l->t('One on each line: the user of Paperless, an equals sign and the user ID of Nextcloud. Without a line, a user of Paperless gets the user of Nextcloud with the same ID, whatever its case, as single sign-on gives them.')); ?></span>
 				</label>
 			</div>
-			<p class="settings-hint" id="paperless-sync-ownership-hint"><?php p($l->t('With "Each user", every user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files, and the files of their inbox become theirs in Paperless. The target user gets the documents without an owner and those whose owner has no user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of its own, and the connection checklist shows who gets which. The account of the token needs to see the documents of every user.')); ?> <?php $help('per-user-ownership', $l->t('Per-user ownership')); ?></p>
+			<p class="settings-hint" id="paperless-sync-ownership-hint"><?php p($l->t('With "Each user", every user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files, and the files of their inbox become theirs in Paperless. The target user gets the documents without an owner and those whose owner has no user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of its own, and the connection checklist shows who gets which. The account of the token needs to see the documents of every user.')); ?> <?php p($l->t('With "or may view", each also gets a copy of every document that their user of Paperless may view, by itself or through a group, which counts against their quota, and loses it when Paperless takes the permission away; the account of the token also needs View for Groups.')); ?> <?php $help('per-user-ownership', $l->t('Per-user ownership')); ?></p>
 			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving, testing or disconnecting may ask for your password.')); ?></p>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {

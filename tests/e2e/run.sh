@@ -1898,9 +1898,45 @@ assert_dav_missing e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf'
 assert_trashed e2e-owner 'owner-letter.pdf' "${TMP_DIR}/trash-before-per-user-sent.txt"
 SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
 assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
+
+# The documents that Paperless shares: a document of e2e-owner that the group of the household may
+# view gets a copy in the files of e2e-other, who is in the group, at the same path, and the copy
+# leaves their files, into their trash bin, once the permission is gone. The copy of e2e-owner
+# stays where it is all along.
+save_settings "${TMP_DIR}/shared-settings.json" ownership=per-user-shared
+control /control/permissions/123/groups/8
+curl --fail-with-body --silent --show-error \
+	--user "e2e-admin:${PASSWORD}" \
+	--header 'Accept: application/json' \
+	--header 'OCS-APIRequest: true' \
+	--request POST \
+	--data-urlencode 'settings[ownership]=per-user-shared' \
+	--output "${TMP_DIR}/checklist-shared.json" \
+	"${BASE_URL}/apps/paperless_sync/settings/test"
+assert_json checklist-shared "${TMP_DIR}/checklist-shared.json"
+sync_run false "${TMP_DIR}/shared-added.json"
+assert_json shared-added "${TMP_DIR}/shared-added.json"
+SHARED_PATH="$(host_python -c '
+import json, sys
+from urllib.parse import quote
+print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if entry["type"] == "export"))' < "${TMP_DIR}/shared-added.json")"
+assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
+assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
+control /control/permissions/123/none
+sync_run true "${TMP_DIR}/shared-dry-run.json"
+assert_json shared-dry-run "${TMP_DIR}/shared-dry-run.json"
+assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
+trash_names e2e-other > "${TMP_DIR}/trash-before-unshared.txt"
+sync_run false "${TMP_DIR}/shared-removed.json"
+assert_json shared-removed "${TMP_DIR}/shared-removed.json"
+assert_dav_missing e2e-other "${SHARED_PATH}"
+assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
+assert_trashed e2e-other "$(basename -- "$(printf '%b' "${SHARED_PATH//%/\\x}")")" "${TMP_DIR}/trash-before-unshared.txt"
+mock_state > "${TMP_DIR}/mock-shared-scans.json"
+assert_json mock-shared-scans "${TMP_DIR}/mock-shared-scans.json"
 save_settings "${TMP_DIR}/single-settings.json" ownership=single
 
-checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, deletions into the trash bin of the user of each copy, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user'
+checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, deletions into the trash bin of the user of each copy, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user, the documents that Paperless shares through a group, whose copy leaves with the permission'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi

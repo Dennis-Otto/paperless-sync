@@ -228,6 +228,18 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('', $this->service->save(['send_group' => ''] + self::validSettings())->sendGroup, 'An empty group turns the action off.');
 	}
 
+	/** The documents that Paperless shares are per-user ownership and more: they take its table and its group, and per-user ownership alone doesn't read who may view a document. */
+	public function testTheDocumentsThatPaperlessSharesTakeTheSettingsOfPerUserOwnership(): void {
+		$config = $this->service->save(['ownership' => 'per-user-shared', 'user_map' => ' jdoe=ADMIN ', 'user_group' => ' scanners '] + self::validSettings(), 'secret-token');
+
+		self::assertSame([true, true, 'jdoe = admin', 'scanners'], [$config->perUser(), $config->sharedDocuments(), $config->userMap, $config->userGroup]);
+		self::assertSame('per-user-shared', $this->settings['ownership']);
+		$perUser = $this->service->save(['ownership' => 'per-user'] + self::validSettings());
+		self::assertSame([true, false], [$perUser->perUser(), $perUser->sharedDocuments()]);
+		$single = $this->service->save(['ownership' => 'single'] + self::validSettings());
+		self::assertSame([false, false], [$single->perUser(), $single->sharedDocuments()]);
+	}
+
 	/**
 	 * Single ownership stays the default, as before per-user ownership; per-user ownership keeps
 	 * the table with the IDs of the users as Nextcloud spells them, so that a run finds them.
@@ -598,6 +610,8 @@ final class ConfigServiceTest extends TestCase {
 			// A user whom someone creates later under the ID must not get the documents unasked.
 			'a user of Nextcloud in the table that does not exist' => [['ownership' => 'per-user', 'user_map' => 'jdoe = john.doe'], '"Paperless users with another Nextcloud ID", line 1: Nextcloud has no user with the ID john.doe.', 'user_map', '„Paperless-Benutzer mit einer anderen Nextcloud-ID“, Zeile 1: Nextcloud hat keinen Benutzer mit der ID john.doe.'],
 			'a group of the users that does not exist' => [['ownership' => 'per-user', 'user_group' => 'scaners'], 'Nextcloud group scaners does not exist.', 'user_group', 'Die Nextcloud-Gruppe scaners gibt es nicht.'],
+			'a group of the users that does not exist, with the documents that Paperless shares' => [['ownership' => 'per-user-shared', 'user_group' => 'scaners'], 'Nextcloud group scaners does not exist.', 'user_group', 'Die Nextcloud-Gruppe scaners gibt es nicht.'],
+			'a line of the table that is no mapping, with the documents that Paperless shares' => [['ownership' => 'per-user-shared', 'user_map' => 'jdoe'], '"Paperless users with another Nextcloud ID", line 1: write the user of Paperless, an equals sign and the user ID of Nextcloud, such as jdoe = john.doe.', 'user_map', '„Paperless-Benutzer mit einer anderen Nextcloud-ID“, Zeile 1: Schreibe den Benutzer von Paperless, ein Gleichheitszeichen und die Benutzer-ID von Nextcloud, etwa jdoe = john.doe.'],
 		];
 	}
 

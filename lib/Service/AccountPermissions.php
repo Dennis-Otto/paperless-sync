@@ -32,6 +32,7 @@ final class AccountPermissions {
 	public const VIEW_PAPERLESS_TASK = 'view_paperlesstask';
 	public const VIEW_UI_SETTINGS = 'view_uisettings';
 	public const VIEW_USER = 'view_user';
+	public const VIEW_GROUP = 'view_group';
 
 	/** Each permission as the settings of Paperless show it, in the order of the table. */
 	private const LABELS = [
@@ -47,6 +48,7 @@ final class AccountPermissions {
 		self::VIEW_PAPERLESS_TASK => 'View for Paperless Tasks',
 		self::VIEW_UI_SETTINGS => 'View for UI Settings',
 		self::VIEW_USER => 'View for Users',
+		self::VIEW_GROUP => 'View for Groups',
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -66,7 +68,8 @@ final class AccountPermissions {
 	 * - an upload, from the inbox or with "Send to Paperless", Add for Documents and View for
 	 *   Paperless Tasks, and the tags of the inbox View for Tags, with Add for Tags to create them;
 	 * - per-user ownership View for Users, and with uploads Change for Documents, which gives the
-	 *   document of an upload its owner.
+	 *   document of an upload its owner; with the documents that Paperless shares also View for
+	 *   Groups, which name the users who may view a document through a group.
 	 *
 	 * The access to the documents of other owners is no permission of an account but one of each
 	 * document, which Paperless gives through its owner, its permissions or a workflow.
@@ -99,6 +102,9 @@ final class AccountPermissions {
 			$permissions[] = self::VIEW_USER;
 			if ($uploads) {
 				$permissions[] = self::CHANGE_DOCUMENT;
+			}
+			if ($config->sharedDocuments()) {
+				$permissions[] = self::VIEW_GROUP;
 			}
 		}
 

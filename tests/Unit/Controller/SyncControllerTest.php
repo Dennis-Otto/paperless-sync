@@ -255,6 +255,7 @@ final class SyncControllerTest extends TestCase {
 			'another target user' => ['target_user', 'someone-else'],
 			// Who gets the documents decides whose files a run reads, as the target user does.
 			'per-user ownership' => ['ownership', 'per-user'],
+			'the documents that Paperless shares' => ['ownership', 'per-user-shared'],
 			'another table of users' => ['user_map', 'jdoe = paperless'],
 			'another group of users' => ['user_group', 'scanners'],
 		];

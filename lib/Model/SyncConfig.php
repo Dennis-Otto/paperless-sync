@@ -14,6 +14,8 @@ final class SyncConfig implements \JsonSerializable {
 	public const SINGLE = 'single';
 	/** Each user of Nextcloud gets the documents that their user of Paperless owns. */
 	public const PER_USER = 'per-user';
+	/** Each user of Nextcloud gets the documents that their user of Paperless owns or may view. */
+	public const PER_USER_SHARED = 'per-user-shared';
 
 	public function __construct(
 		public readonly string $paperlessUrl,
@@ -81,8 +83,9 @@ final class SyncConfig implements \JsonSerializable {
 		 */
 		public readonly bool $nextcloudTags = false,
 		/**
-		 * Who gets the documents: single, the target user all of them, or per-user, each user of
-		 * Nextcloud those that their user of Paperless owns, and the target user the others.
+		 * Who gets the documents: single, the target user all of them; per-user, each user of
+		 * Nextcloud those that their user of Paperless owns, and the target user the others; or
+		 * per-user-shared, each user of Nextcloud those that their user of Paperless owns or may view.
 		 */
 		public readonly string $ownership = self::SINGLE,
 		/**
@@ -95,9 +98,14 @@ final class SyncConfig implements \JsonSerializable {
 	) {
 	}
 
-	/** Whether each user of Nextcloud gets the documents that their user of Paperless owns. */
+	/** Whether each user of Nextcloud gets the documents that their user of Paperless owns, also those that it may view or not. */
 	public function perUser(): bool {
-		return $this->ownership === self::PER_USER;
+		return in_array($this->ownership, [self::PER_USER, self::PER_USER_SHARED], true);
+	}
+
+	/** Whether each user of Nextcloud also gets the documents that their user of Paperless may view. */
+	public function sharedDocuments(): bool {
+		return $this->ownership === self::PER_USER_SHARED;
 	}
 
 	/** Whether a run can start: with the address of Paperless, its token and the target user. */
