@@ -390,7 +390,10 @@ memory_folder="$(mktemp -d)"
 empties() {
   (
     eval "$(sed -n '/^empty_data_folder() {$/,/^}$/p' tests/e2e/run.sh)"
+    # The function from run.sh, which ShellCheck doesn't see in the eval, uses both.
+    # shellcheck disable=SC2317
     compose() { echo "$*" >>"$memory_folder/calls"; }
+    # shellcheck disable=SC2034
     COMPOSE=(compose)
     E2E_DATA_FOLDER="$1" empty_data_folder
   )
