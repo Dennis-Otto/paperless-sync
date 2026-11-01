@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.4.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.1...v1.4.0) (2026-11-01)
+
+
+### Features
+
+* a Docker demo that starts Nextcloud, Paperless-ngx and the app with sample documents ([#327](https://github.com/Dennis-Otto/paperless-sync/issues/327)) ([81f3ad5](https://github.com/Dennis-Otto/paperless-sync/commit/81f3ad5434c66cd78a2bd12d295938f13328901b))
+* **archive:** give each user also the documents that Paperless shares with them ([#312](https://github.com/Dennis-Otto/paperless-sync/issues/312)) ([8e418d9](https://github.com/Dennis-Otto/paperless-sync/commit/8e418d962d6fd7708dde85c14d3ffa95b6deaca4))
+* **files:** tell in Files that the archive is a mirror of Paperless and what the inbox does ([#313](https://github.com/Dennis-Otto/paperless-sync/issues/313)) ([7eea26d](https://github.com/Dennis-Otto/paperless-sync/commit/7eea26d21a2aebfb02ae132aa8f1d96d7230f902))
+* **i18n:** French and Spanish, and a check that keeps every language complete ([#319](https://github.com/Dennis-Otto/paperless-sync/issues/319)) ([d6903e7](https://github.com/Dennis-Otto/paperless-sync/commit/d6903e7cdd0a9164800754121b697c667e102496))
+* **settings:** let administrators delegate the settings of Paperless Sync to a group ([#315](https://github.com/Dennis-Otto/paperless-sync/issues/315)) ([c4167d0](https://github.com/Dennis-Otto/paperless-sync/commit/c4167d030148a4fe963b79bcc398bee2eea527d1))
+* the inbox sets aside videos, programs and archives instead of uploading them ([#301](https://github.com/Dennis-Otto/paperless-sync/issues/301)) ([7377615](https://github.com/Dennis-Otto/paperless-sync/commit/737761570157d12f37449b142371440d9e4e3ef0))
+
+
+### Bug fixes
+
+* strip the [P&lt;ID&gt;] marker from inbox files moved into the error folder ([#305](https://github.com/Dennis-Otto/paperless-sync/issues/305)) ([8e5eb79](https://github.com/Dennis-Otto/paperless-sync/commit/8e5eb796e7b5ee537a7df259b6809f5208a42ef8))
+* the trash hint of the connection checklist says plainly what it means ([#303](https://github.com/Dennis-Otto/paperless-sync/issues/303)) ([5bf685d](https://github.com/Dennis-Otto/paperless-sync/commit/5bf685dc7b33ec51a7abe1b2ceaa862198a13e36))
+
+
+### Performance
+
+* the required nextcloud check stops growing with every Nextcloud version ([#306](https://github.com/Dennis-Otto/paperless-sync/issues/306)) ([332d0e3](https://github.com/Dennis-Otto/paperless-sync/commit/332d0e3a7f2e510260eea67c22ba85b4bf76df2b))
+
 ## [1.3.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.0...v1.3.1) (2026-10-31)
 
 ### Bug fixes
