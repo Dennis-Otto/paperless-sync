@@ -6,10 +6,10 @@
     "results": [
       {
         "acknowledged": false,
-        "date_created": "2026-10-14T11:56:04.055736Z",
-        "date_done": "2026-10-14T11:56:05.562207Z",
-        "date_started": "2026-10-14T11:56:04.065946Z",
-        "duration_seconds": 1.496261,
+        "date_created": "2026-01-01T00:00:00.000000Z",
+        "date_done": "2026-01-01T00:00:00.000000Z",
+        "date_started": "2026-01-01T00:00:00.000000Z",
+        "duration_seconds": 1.0,
         "id": 1,
         "input_data": {
           "filename": "invoice.pdf",
@@ -30,12 +30,12 @@
         },
         "status": "success",
         "status_display": "Success",
-        "task_id": "5469925f-a164-444c-a1df-9cd499b4fefc",
+        "task_id": "00000000-0000-4000-8000-000000000004",
         "task_type": "consume_file",
         "task_type_display": "Consume File",
         "trigger_source": "api_upload",
         "trigger_source_display": "API Upload",
-        "wait_time_seconds": 0.01021
+        "wait_time_seconds": 1.0
       }
     ]
   },
@@ -44,6 +44,6 @@
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "GET /api/tasks/?task_id=5469925f-a164-444c-a1df-9cd499b4fefc&page_size=10",
+  "request": "GET /api/tasks/?task_id=00000000-0000-4000-8000-000000000004&page_size=10",
   "status": 200
 }

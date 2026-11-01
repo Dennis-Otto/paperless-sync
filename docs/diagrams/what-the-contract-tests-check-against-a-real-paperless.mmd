@@ -5,7 +5,7 @@ config:
 ---
 flowchart TB
     accTitle: What the contract tests check against a real Paperless
-    accDescr: run-contract.sh starts a real Paperless-ngx, the last release of 2.x or the current release of 3.x, next to Nextcloud. contract.py seeds Paperless through its REST API and checks every answer that the app reads, then the app runs its export, a move, the trash and the inbox against it. The answers of Paperless become the fixtures of the unit tests in tests/fixtures/, which PaperlessApiServiceTest reads; a later run compares their shapes with the fixtures and fails when a field that the tests read is gone. Every Monday a failure opens an issue.
+    accDescr: run-contract.sh starts a real Paperless-ngx, the last release of 2.x or the current release of 3.x, next to Nextcloud. contract.py seeds Paperless through its REST API and checks every answer that the app reads, then the app runs its export, a move, the trash and the inbox against it. The answers of Paperless become the fixtures of the unit tests in tests/fixtures/, which PaperlessApiServiceTest reads; a later run compares their shapes with the fixtures and fails when a field that the tests read is gone. When the app passes in a pull request and the fixtures differ, the fixture bot commits the new fixtures onto its branch, or suggests them on a pull request from a fork. Every Monday a failure opens an issue.
 
     run["run-contract.sh 2 or 3"]
     subgraph compose ["Docker Compose project"]
@@ -15,6 +15,7 @@ flowchart TB
     end
     fixtures[("tests/fixtures/<br>paperless-ngx-2,<br>paperless-ngx-3")]
     unit["PaperlessApiServiceTest<br>reads the answers<br>of Paperless"]
+    bot["In a pull request:<br>the fixture bot<br>brings new fixtures"]
     issue["Every Monday:<br>an issue when<br>Paperless answers<br>differently"]
 
     run --> contract
@@ -24,6 +25,8 @@ flowchart TB
     contract -- "answers,<br>CONTRACT_RECORD=1" --> fixtures
     fixtures -- "shapes compared<br>in every run" --> contract
     fixtures --> unit
+    run -- "the app passed,<br>fixtures differ" --> bot
+    bot -- "commit or<br>suggestion" --> fixtures
     run -. "failure" .-> issue
 
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
@@ -32,3 +35,4 @@ flowchart TB
     class nextcloud nextcloud
     class paperless,contract paperless
     class fixtures,unit data
+    class bot nextcloud

@@ -1,20 +1,20 @@
 {
   "body": {
     "all": [
-      10
+      9
     ],
     "count": 1,
     "next": null,
     "previous": null,
     "results": [
       {
-        "date_joined": "2026-11-01T02:30:13.114907Z",
+        "date_joined": "2026-01-01T00:00:00.000000Z",
         "email": "",
         "first_name": "",
         "groups": [
           1
         ],
-        "id": 10,
+        "id": 9,
         "inherited_permissions": [],
         "is_active": true,
         "is_mfa_enabled": false,

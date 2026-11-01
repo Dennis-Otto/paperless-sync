@@ -2,15 +2,15 @@
   "body": [
     {
       "acknowledged": false,
-      "date_created": "2026-10-14T11:56:03.975372Z",
-      "date_done": "2026-10-14T11:56:04.416535Z",
-      "id": 4,
+      "date_created": "2026-01-01T00:00:00.000000Z",
+      "date_done": "2026-01-01T00:00:00.000000Z",
+      "id": 2,
       "owner": 3,
       "related_document": null,
-      "result": "broken.pdf: Error occurred while consuming document broken.pdf: RuntimeError: /tmp/ocrmypdf.io.senrk7mv/origin: seek before beginning of buffer",
+      "result": "broken.pdf: Error occurred while consuming document broken.pdf: RuntimeError: /tmp/contract/origin: seek before beginning of buffer",
       "status": "FAILURE",
       "task_file_name": "broken.pdf",
-      "task_id": "da6f8e40-24af-4964-9610-02834c6cc480",
+      "task_id": "00000000-0000-4000-8000-000000000003",
       "task_name": "consume_file",
       "type": "auto_task"
     }
@@ -20,6 +20,6 @@
     "X-Api-Version": "9",
     "X-Version": "2.20.15"
   },
-  "request": "GET /api/tasks/?task_id=da6f8e40-24af-4964-9610-02834c6cc480&page_size=10",
+  "request": "GET /api/tasks/?task_id=00000000-0000-4000-8000-000000000003&page_size=10",
   "status": 200
 }

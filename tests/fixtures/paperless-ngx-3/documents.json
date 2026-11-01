@@ -10,7 +10,7 @@
     "previous": null,
     "results": [
       {
-        "added": "2026-10-14T11:56:05.465170Z",
+        "added": "2026-01-01T00:00:00.000000Z",
         "archive_serial_number": null,
         "archived_file_name": "2026-08-26 Example GmbH Monthly invoice.pdf",
         "correspondent": 1,
@@ -18,13 +18,13 @@
         "custom_fields": [
           {
             "field": 1,
-            "value": "QfmUvBu3lNqMlhNa"
+            "value": "choice0000000001"
           }
         ],
         "document_type": 1,
         "id": 1,
         "mime_type": "application/pdf",
-        "modified": "2026-10-14T11:56:13.522396Z",
+        "modified": "2026-01-01T00:00:00.000000Z",
         "original_file_name": "invoice.pdf",
         "owner": 2,
         "page_count": 1,
@@ -35,7 +35,7 @@
         "title": "Monthly invoice"
       },
       {
-        "added": "2026-10-14T11:56:07.479601Z",
+        "added": "2026-01-01T00:00:00.000000Z",
         "archive_serial_number": null,
         "archived_file_name": "2026-08-27 Example GmbH Annual statement.pdf",
         "correspondent": 1,
@@ -44,7 +44,7 @@
         "document_type": 2,
         "id": 2,
         "mime_type": "application/pdf",
-        "modified": "2026-10-14T11:56:13.692216Z",
+        "modified": "2026-01-01T00:00:00.000000Z",
         "original_file_name": "statement.pdf",
         "owner": 2,
         "page_count": 1,
@@ -55,7 +55,7 @@
         "title": "Annual statement"
       },
       {
-        "added": "2026-10-14T11:56:09.559564Z",
+        "added": "2026-01-01T00:00:00.000000Z",
         "archive_serial_number": null,
         "archived_file_name": "2026-08-28 Example Insurance Unread letter.pdf",
         "correspondent": 2,
@@ -64,7 +64,7 @@
         "document_type": 3,
         "id": 3,
         "mime_type": "application/pdf",
-        "modified": "2026-10-14T11:56:13.811186Z",
+        "modified": "2026-01-01T00:00:00.000000Z",
         "original_file_name": "unread.pdf",
         "owner": 2,
         "page_count": 1,

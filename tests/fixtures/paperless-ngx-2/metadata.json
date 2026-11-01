@@ -1,6 +1,6 @@
 {
   "body": {
-    "archive_checksum": "802deabad7fc7c9da264ab17cb8bfd89",
+    "archive_checksum": "f835cc5eec9bf8a9dcf5d619e61c034e",
     "archive_media_filename": "0000001.pdf",
     "archive_metadata": [
       {
@@ -13,19 +13,19 @@
         "key": "ModifyDate",
         "namespace": "http://ns.adobe.com/xap/1.0/",
         "prefix": "xmp",
-        "value": "2026-10-14T11:55:58+00:00"
+        "value": "2026-01-01T00:00:00+00:00"
       },
       {
         "key": "CreateDate",
         "namespace": "http://ns.adobe.com/xap/1.0/",
         "prefix": "xmp",
-        "value": "2026-10-14T11:55:58Z"
+        "value": "2026-01-01T00:00:00Z"
       },
       {
         "key": "MetadataDate",
         "namespace": "http://ns.adobe.com/xap/1.0/",
         "prefix": "xmp",
-        "value": "2026-10-14T11:55:58.486123+00:00"
+        "value": "2026-01-01T00:00:00.000000+00:00"
       },
       {
         "key": "CreatorTool",
@@ -37,7 +37,7 @@
         "key": "DocumentID",
         "namespace": "http://ns.adobe.com/xap/1.0/mm/",
         "prefix": "xmpMM",
-        "value": "uuid:c4c48a2d-ffe2-11fc-0000-189a561f7c09"
+        "value": "uuid:00000000-0000-4000-8000-000000000001"
       },
       {
         "key": "RenditionClass",
@@ -76,7 +76,7 @@
         "value": "None"
       }
     ],
-    "archive_size": 52810,
+    "archive_size": 50000,
     "has_archive_version": true,
     "lang": "en",
     "media_filename": "0000001.pdf",

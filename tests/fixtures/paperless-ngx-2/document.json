@@ -1,6 +1,6 @@
 {
   "body": {
-    "added": "2026-10-17T23:22:30.331237Z",
+    "added": "2026-01-01T00:00:00.000000Z",
     "archive_serial_number": null,
     "archived_file_name": "2026-08-26 Example GmbH Monthly invoice.pdf",
     "correspondent": 1,
@@ -8,13 +8,13 @@
     "custom_fields": [
       {
         "field": 1,
-        "value": "nzMs97iWZ9VKCQU3"
+        "value": "choice0000000001"
       }
     ],
     "document_type": 1,
     "id": 1,
     "mime_type": "application/pdf",
-    "modified": "2026-10-17T23:22:38.786419Z",
+    "modified": "2026-01-01T00:00:00.000000Z",
     "original_file_name": "invoice.pdf",
     "owner": 3,
     "page_count": 1,

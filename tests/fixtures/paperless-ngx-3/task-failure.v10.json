@@ -6,11 +6,11 @@
     "results": [
       {
         "acknowledged": false,
-        "date_created": "2026-10-14T11:56:10.257359Z",
-        "date_done": "2026-10-14T11:56:10.554702Z",
-        "date_started": "2026-10-14T11:56:10.265102Z",
-        "duration_seconds": 0.2896,
-        "id": 4,
+        "date_created": "2026-01-01T00:00:00.000000Z",
+        "date_done": "2026-01-01T00:00:00.000000Z",
+        "date_started": "2026-01-01T00:00:00.000000Z",
+        "duration_seconds": 1.0,
+        "id": 2,
         "input_data": {
           "filename": "broken.pdf",
           "mime_type": "application/pdf",
@@ -24,18 +24,18 @@
         "owner": 2,
         "related_document_ids": [],
         "result_data": {
-          "error_message": "broken.pdf: Error occurred while consuming document broken.pdf: RuntimeError: /tmp/ocrmypdf.io.63uon7bj/origin: seek before beginning of buffer",
+          "error_message": "broken.pdf: Error occurred while consuming document broken.pdf: RuntimeError: /tmp/contract/origin: seek before beginning of buffer",
           "error_type": "ConsumerError",
           "traceback": "  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 585, in trace_task\n    R = retval = fun(*args, **kwargs)\n                 ~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 858, in __protected_call__\n    return self.run(*args, **kwargs)\n           ~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/asgiref/sync.py\", line 361, in main_wrap\n    raise exc_info[1]\n  File \"/usr/src/paperless/src/documents/tasks.py\", line 247, in consume_file\n    msg = plugin.run()\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 576, in run\n    self._fail(\n    ~~~~~~~~~~^\n        str(e),\n        ^^^^^^^\n    ...<2 lines>...\n        exception=e,\n        ^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 239, in _fail\n    raise ConsumerError(f\"{self.filename}: {log_message or message}\") from exception\n"
         },
         "status": "failure",
         "status_display": "Failure",
-        "task_id": "22acf478-53ab-4e02-916f-71f03df5eea7",
+        "task_id": "00000000-0000-4000-8000-000000000003",
         "task_type": "consume_file",
         "task_type_display": "Consume File",
         "trigger_source": "api_upload",
         "trigger_source_display": "API Upload",
-        "wait_time_seconds": 0.007743
+        "wait_time_seconds": 1.0
       }
     ]
   },
@@ -44,6 +44,6 @@
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "GET /api/tasks/?task_id=22acf478-53ab-4e02-916f-71f03df5eea7&page_size=10",
+  "request": "GET /api/tasks/?task_id=00000000-0000-4000-8000-000000000003&page_size=10",
   "status": 200
 }
