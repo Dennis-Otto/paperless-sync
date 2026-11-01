@@ -7,13 +7,17 @@ The scenario showcase is a small household archive in Paperless; showcase-update
 the same archive a few days later, with one document renamed, one in the trash, one
 excluded by a tag and two new ones, so that a dry-run shows every kind of change;
 showcase-error adds a document whose file Paperless doesn't hand out, so that a run
-ends with an error. screenshots.mjs switches between them. Every name, date and text
-is invented.
+ends with an error. A week later, in showcase-moved, a letter becomes a contract with
+a new title, so that its copy moves and is renamed; in showcase-trashed a bill goes to
+the trash as well, and in showcase-restored it is back. screenshots.mjs switches
+between them. Every name, date and text is invented.
 """
 
 import hashlib
 
-SCENARIOS = {"showcase", "showcase-update", "showcase-error"}
+# The archive a week later, each scenario one step of the story after the other.
+WEEK_LATER = ("showcase-moved", "showcase-trashed", "showcase-restored")
+SCENARIOS = {"showcase", "showcase-update", "showcase-error", *WEEK_LATER}
 
 CORRESPONDENTS = [
     {"id": 1, "name": "Example GmbH"},
@@ -83,10 +87,16 @@ TAGGED = {140: [7, 8], 141: [7], 143: [7]}
 PAID_LATER = {141: [7, 8]}
 TRASHED = {142: "2026-10-06T09:30:00+02:00"}
 PRIVATE = {125}
+# A week later: the credit card terms become a contract, with a new title, which moves their
+# copy from the folder Letter of Example Bank to Contract; the content stays the same.
+MOVED = {190: ("Credit card agreement", 2, "2026-10-25T08:28:00+02:00")}
+# Then the electricity bill of March goes to the trash, and comes back in the next scenario.
+TRASHED_LATER = {140: "2026-10-25T08:32:00+02:00"}
 
 
 def _document(entry, title=None, tags=None):
     document_id, first_title, correspondent, document_type, created = entry
+    modified = f"{created}T09:00:00+02:00" if title is None else "2026-10-05T18:00:00+02:00"
     return {
         "id": document_id,
         "title": title or first_title,
@@ -96,7 +106,7 @@ def _document(entry, title=None, tags=None):
         "tags": tags or [],
         "created": created,
         "added": f"{created}T09:00:00+02:00",
-        "modified": f"{created}T09:00:00+02:00" if title is None else "2026-10-05T18:00:00+02:00",
+        "modified": modified,
         "original_file_name": f"scan-{document_id}.pdf",
         "archived_file_name": f"{document_id}.pdf",
         "mime_type": "application/pdf",
@@ -107,16 +117,21 @@ def documents(scenario):
     """The active documents and the trash of a scenario."""
     if scenario == "showcase":
         return [_document(entry, tags=TAGGED.get(entry[0])) for entry in ARCHIVE] + [_document(UNFINISHED, tags=[1])], []
+    week_later = scenario in WEEK_LATER
+    in_trash = TRASHED | (TRASHED_LATER if scenario == "showcase-trashed" else {})
     active, trash = [], []
     for entry in ARCHIVE + LATER:
         document_id = entry[0]
-        if document_id in TRASHED:
+        if document_id in in_trash:
             trashed = _document(entry)
-            trashed["deleted_at"] = TRASHED[document_id]
+            trashed["deleted_at"] = in_trash[document_id]
             trash.append(trashed)
-        else:
-            tags = [2] if document_id in PRIVATE else PAID_LATER.get(document_id, TAGGED.get(document_id))
-            active.append(_document(entry, RENAMED.get(document_id), tags))
+            continue
+        tags = [2] if document_id in PRIVATE else PAID_LATER.get(document_id, TAGGED.get(document_id))
+        document = _document(entry, RENAMED.get(document_id), tags)
+        if week_later and document_id in MOVED:
+            document["title"], document["document_type"], document["modified"] = MOVED[document_id]
+        active.append(document)
     if scenario == "showcase-error":
         active.append(_document(UNAVAILABLE))
     return active, trash

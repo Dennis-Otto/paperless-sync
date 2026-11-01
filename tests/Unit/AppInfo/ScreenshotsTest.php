@@ -76,7 +76,7 @@ final class ScreenshotsTest extends TestCase {
 		$address = sprintf(self::ADDRESS, (string)$info->version);
 		$screenshots = self::screenshots($xml);
 
-		self::assertCount(3, $screenshots);
+		self::assertCount(5, $screenshots);
 		foreach ($screenshots as ['url' => $url, 'thumbnail' => $thumbnail]) {
 			self::assertStringStartsWith($address, $url);
 			self::assertStringEndsWith('.png', $url);

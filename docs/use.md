@@ -59,6 +59,13 @@ Every file that you put into `Documents/Paperless/Inbox`, or, as a rule, into a 
 - **A video, a program or an archive stays where it is:** `mp4`, `exe`, `zip` and the like never go to Paperless, which can't use them as documents, and the report of each run names them as *Set aside* until you move or delete them. How many files you put in the inbox doesn't matter: a large batch of scans goes through as one page does.
 - **A folder below the inbox can name tags:** with *Subfolders become tags*, a file in `Inbox/Taxes/2026` gets the tags *Taxes* and *2026* in Paperless. Your administrator says whether that is on.
 
+Two scans in the inbox: Paperless imports the first, and the second, which it couldn't import, waits in `Failed imports` next to its reason:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.gif">
+  <img alt="Nextcloud Files in the folder Inbox: two scans arrive, and a caption says that the next runs send them to Paperless and that a scan leaves the inbox once Paperless has finished its import. The inbox is empty again, and the pointer opens the folder Failed imports in the folder tree, which holds the second scan next to its .error.txt, as Paperless could not import it" src="images/inbox.gif">
+</picture>
+
 The [guide](guide.md#nextcloud-inbox) has the details for the administrator, such as the retries and the tags of every import.
 
 ### Send to Paperless in the menu of a file
@@ -134,11 +141,25 @@ Whoever may share a folder of the archive, its owner or someone that it was shar
 - **With a user or a group of Nextcloud:** type the name and choose **View only**, so that nobody edits a copy that the next change in Paperless replaces.
 - **With someone without an account,** such as a tax adviser: **Share link** makes a public link. Choose **View only**, set an **expiration date** and a **password**, and send the password another way than the link. Whoever has the link sees the files, not Paperless.
 
+The archive of a household, shared:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/sharing-the-archive-with-your-household.dark.svg">
+  <img src="images/diagrams/sharing-the-archive-with-your-household.svg" alt="Sharing the archive with your household: Every run writes the documents of the household from Paperless-ngx into the folder Archive of the target user. The target user shares the folder Archive itself, which the path template doesn't change, with the group of the household in Nextcloud, View only, so that each member finds the documents in Files on the web, with the desktop client and in the Nextcloud app on the phone. The folder Inbox is shared with those who may send documents, with the permission to edit, so that they scan or save into it, and the next run sends the files to Paperless. Someone without an account, such as a tax adviser, gets a share link to a folder, View only, with an expiration date and a password. Instead of one shared archive, per-user ownership gives each member an archive of their own, with the documents that they own in Paperless. Paperless-ngx is green, the folders of Nextcloud blue, the people orange and the other way indigo.">
+</picture>
+
 A share of a copy stays with it when it moves after a change in Paperless. A share of a folder shows what the path template puts into that folder: with the default template, the folder of a year holds the documents of one correspondent and one type, and a share of such a folder, which the path template builds, disappears when a change in Paperless or of the template moves all its copies away, and with it its link. So share the folder `Archive` itself, which the template doesn't change, or ask your administrator for a path template, or a storage path of Paperless, whose top folder collects what you share, such as the documents of a tax return. The [FAQ](faq.md#can-i-change-the-path-template-later) explains why.
 
 ## What edits, renames and deletions do
 
 The archive is a mirror of Paperless: nothing that you do with a copy in Nextcloud changes Paperless. Change a document in Paperless, and the next run brings the change to its copy.
+
+When a document gets a new type and a new title in Paperless, for example, the next run moves its copy and renames it:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/move-dark.gif">
+  <img alt="Nextcloud Files in the folder Example Bank/Letter/2026 of the archive with the copy 2026-10-07 - Credit card terms [P190].pdf. A caption says that in Paperless the document becomes a Contract with the new title Credit card agreement, then that the next run moves the copy into the folder of its new type with its new name. The pointer opens Example Bank, which now holds Contract and Statement and no folder Letter, then Contract and 2026, where the copy is named 2026-10-07 - Credit card agreement [P190].pdf" src="images/move.gif">
+</picture>
 
 | What you do in Nextcloud | What happens |
 | --- | --- |
@@ -148,3 +169,10 @@ The archive is a mirror of Paperless: nothing that you do with a copy in Nextclo
 | Put a file into the inbox | It goes to Paperless, and its copy comes into the archive once the document is finished there. |
 
 When a document goes to the trash of Paperless, its copy moves into the folder `_Deleted` of the archive, and when it comes back from there, so does its copy. The [FAQ](faq.md#the-archive-in-nextcloud) answers more: [what happens to an edit](faq.md#what-happens-when-i-edit-a-mirrored-file), [where deleted files go](faq.md#where-do-deleted-files-go) and [whether a change reaches Paperless](faq.md#do-my-changes-in-nextcloud-reach-paperless).
+
+A bill goes to the trash of Paperless and comes back:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/trash-dark.gif">
+  <img alt="Nextcloud Files in the folder City Utilities/Invoice/2026 of the archive with three electricity bills. A caption says that Electricity bill March goes to the trash in Paperless; after the next run, the folder holds two bills, and the pointer opens _Deleted, 2026-10-25, City Utilities, Invoice and 2026, where the copy of the bill of March is. A caption says that the bill is restored in Paperless, and the folder of the archive holds all three bills again" src="images/trash.gif">
+</picture>

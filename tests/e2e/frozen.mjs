@@ -17,6 +17,32 @@
 // When the story of the pictures starts: the quick start, with its first dry-run.
 export const STORY_START = '2026-10-18T10:20:00+02:00'
 
+// The size of the square in each corner of a box that blackCorners() looks at, and how many
+// black pixels in it are still a part of the page, such as of an icon.
+const CORNER = 16
+const BLACK_PIXELS_OF_THE_PAGE = 4
+
+// Whether a picture of pngjs shows a corner of a box of the page, such as the panel of Nextcloud,
+// black. After a change of the theme, Chromium now and then draws the corners of a part of the
+// page that scrolls black, in other frames on each run, and for longer than two pictures in a
+// row, so that only looking at the picture finds it. No theme of Nextcloud has this black.
+export function blackCorners({ width, height, data }, { left, top, right, bottom }) {
+	const across = [Math.round(left), Math.round(right) - CORNER]
+	const down = [Math.round(top), Math.round(bottom) - CORNER]
+	return across.some((x0) => down.some((y0) => {
+		let black = 0
+		for (let y = Math.max(y0, 0); y < Math.min(y0 + CORNER, height); y++) {
+			for (let x = Math.max(x0, 0); x < Math.min(x0 + CORNER, width); x++) {
+				const pixel = (y * width + x) * 4
+				if (data[pixel] === 0 && data[pixel + 1] === 0 && data[pixel + 2] === 0) {
+					black++
+				}
+			}
+		}
+		return black > BLACK_PIXELS_OF_THE_PAGE
+	}))
+}
+
 // The secret of the webhook in the pictures, as the page shows it once after its creation:
 // plainly an example, which no one takes for a real one.
 export const EXAMPLE_SECRET = 'example-secret-of-the-screenshots-0123456789'
