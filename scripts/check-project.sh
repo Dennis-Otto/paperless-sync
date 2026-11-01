@@ -977,7 +977,7 @@ echo "The lock file of ESLint holds a minimatch with the fix of GHSA-g3hv-75wg-m
 node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
 echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail, each pixel the average of those it covers."
 # The language of the pictures: the German ones find every text of the app that they look
-# for in its catalog, l10n/de.json.
+# for in its catalog, l10n/de.json, and the languages without pictures have their folders.
 node --test --test-reporter=dot tests/e2e/language.test.mjs
 echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German."
 # The animations of the documentation: each that the script records is there in both
@@ -1011,18 +1011,24 @@ node --test --test-reporter=dot tests/e2e/compare.test.mjs
 echo "tests/e2e/compare.mjs draws the changed pixels in red, and the visual check renders on the paths of .github/screenshots-paths.txt."
 node scripts/check-l10n.mjs
 
-# And the check finds what it must in broken copies of the catalog: a text that the code
-# translates but the catalog lacks, also the text of an error that a run keeps, one that no code
-# translates, a German text without the placeholder of its English one, a text twice, and a copy
-# for the browser that differs; --fix then drops the unused text and writes the copy for the
-# browser anew.
+# And the check finds what it must in broken copies of each catalog, in German and in French,
+# whose plurals have a third form: a text that the code translates but the catalog lacks, also the
+# text of an error that a run keeps, one that no code translates, a translation without the
+# placeholder of its English one or with a lone %, a text twice, a plural with too few forms or
+# with another form for millions, and a copy for the browser that differs; --fix then drops the
+# unused text and writes the copy for the browser anew.
 l10n_copy="$(mktemp -d)"
 trap 'rm -rf "$l10n_copy"' EXIT
-# Runs the JavaScript of the argument on the translations, t, of the copy of l10n/de.json.
+fresh_catalogs() {
+  rm -f "$l10n_copy"/*.json "$l10n_copy"/*.js
+  cp l10n/*.json l10n/*.js "$l10n_copy/"
+}
+# Runs the JavaScript of the second argument on the catalog of the language of the first, with its
+# translations as t and the whole catalog as c.
 edit_catalog() {
   node -e 'const fs = require("fs"); const [file, change] = process.argv.slice(1);
-    const catalog = JSON.parse(fs.readFileSync(file, "utf8")); new Function("t", change)(catalog.translations);
-    fs.writeFileSync(file, JSON.stringify(catalog, null, "\t") + "\n")' "$l10n_copy/de.json" "$1"
+    const catalog = JSON.parse(fs.readFileSync(file, "utf8")); new Function("t", "c", change)(catalog.translations, catalog);
+    fs.writeFileSync(file, JSON.stringify(catalog, null, "\t") + "\n")' "$l10n_copy/$1.json" "$2"
 }
 broken_catalog() {
   local expected="$1" output
@@ -1031,33 +1037,97 @@ broken_catalog() {
     exit 1
   fi
 }
-cp l10n/de.json l10n/de.js "$l10n_copy/"
-edit_catalog 'delete t["Paperless Sync"]'
-broken_catalog 'translates a text that l10n/de.json lacks: "Paperless Sync"'
-# The errors that a run keeps count too, as the settings page translates them later.
-cp l10n/de.json l10n/de.js "$l10n_copy/"
-edit_catalog 'delete t["Tags: %s"]'
-broken_catalog 'translates a text that l10n/de.json lacks: "Tags: %s"'
-cp l10n/de.json l10n/de.js "$l10n_copy/"
-edit_catalog 't["A text that no code translates"] = "Ein Text, den kein Code übersetzt"'
-broken_catalog 'translates a text that no code translates: "A text that no code translates"'
-broken_catalog 'l10n/de.js, which the browser loads, and l10n/de.json, which PHP loads, differ.'
+for language in de fr; do
+  catalog="l10n/$language.json"
+  fresh_catalogs
+  edit_catalog "$language" 'delete t["Paperless Sync"]'
+  broken_catalog "translates a text that $catalog lacks: \"Paperless Sync\""
+  # The errors that a run keeps count too, as the settings page translates them later.
+  fresh_catalogs
+  edit_catalog "$language" 'delete t["Tags: %s"]'
+  broken_catalog "translates a text that $catalog lacks: \"Tags: %s\""
+  fresh_catalogs
+  edit_catalog "$language" 't["A text that no code translates"] = "Words"'
+  broken_catalog "$catalog translates a text that no code translates: \"A text that no code translates\""
+  broken_catalog "l10n/$language.js, which the browser loads, and $catalog, which PHP loads, differ."
+  node scripts/check-l10n.mjs --fix "$l10n_copy" >/dev/null
+  node scripts/check-l10n.mjs "$l10n_copy" >/dev/null
+  if ! cmp -s "$catalog" "$l10n_copy/$language.json" || ! cmp -s "l10n/$language.js" "$l10n_copy/$language.js"; then
+    echo "scripts/check-l10n.mjs --fix should drop the unused text and write l10n/$language.js as it was."
+    exit 1
+  fi
+  edit_catalog "$language" 't["Nextcloud user %s does not exist."] = "Words without the user."'
+  broken_catalog 'has the placeholders none, but "Nextcloud user %s does not exist." has argument 1.'
+  # PHP stops at a % that starts no placeholder, such as in 100 %.
+  fresh_catalogs
+  edit_catalog "$language" 't["Paperless Sync"] = "100 % Paperless Sync"'
+  broken_catalog 'has the placeholders a lone %, but "Paperless Sync" has none.'
+  fresh_catalogs
+  edit_catalog "$language" 't["_%n minute_::_%n minutes_"] = ["%n x"]'
+  broken_catalog "$catalog has 1 form(s) for \"_%n minute_::_%n minutes_\""
+  fresh_catalogs
+  sed -n '3p' "$catalog" >"$l10n_copy/line"
+  sed -i "3r $l10n_copy/line" "$l10n_copy/$language.json"
+  broken_catalog "$catalog has a text twice"
+  rm -f "$l10n_copy/line"
+done
+# The browser shows the form for millions for every count but one, so it repeats the other form.
+fresh_catalogs
+edit_catalog fr 't["_%n minute_::_%n minutes_"][1] = "%n de minutes"'
+broken_catalog 'has the form "%n de minutes" for millions of "_%n minute_::_%n minutes_"'
+# A rule of the plurals that names no number of forms, or a form beyond it.
+fresh_catalogs
+edit_catalog fr 'c.pluralForm = "plural=(n > 1);"'
+broken_catalog 'l10n/fr.json has no "pluralForm" that names the number of its forms'
+fresh_catalogs
+edit_catalog fr 'c.pluralForm = "nplurals=3; plural=n + 2;"'
+broken_catalog 'l10n/fr.json has no "pluralForm" that names the number of its forms'
+# A translator's typo, a copy for the browser that is missing, and one without its catalog.
+fresh_catalogs
+printf '{' >"$l10n_copy/es.json"
+broken_catalog 'l10n/es.json is no valid JSON'
+fresh_catalogs
+rm "$l10n_copy/es.js"
+broken_catalog 'l10n/es.js, which the browser loads, and l10n/es.json, which PHP loads, differ.'
 node scripts/check-l10n.mjs --fix "$l10n_copy" >/dev/null
-node scripts/check-l10n.mjs "$l10n_copy" >/dev/null
-if ! cmp -s l10n/de.json "$l10n_copy/de.json" || ! cmp -s l10n/de.js "$l10n_copy/de.js"; then
-  echo "scripts/check-l10n.mjs --fix should drop the unused text and write l10n/de.js as it was."
+cmp -s l10n/es.js "$l10n_copy/es.js" || { echo 'scripts/check-l10n.mjs --fix should write a missing l10n/es.js.'; exit 1; }
+fresh_catalogs
+cp l10n/es.js "$l10n_copy/xx.js"
+broken_catalog 'l10n/xx.js has no l10n/xx.json'
+# A label that a message names in quotes is the same words in both.
+fresh_catalogs
+edit_catalog fr 't["Create missing tags"] = "Autres mots"'
+broken_catalog 'names "Create missing tags" in quotes, but its translation doesn'"'"'t hold "Autres mots"'
+# --new writes an empty catalog in the format of Nextcloud that the check lists, and refuses what
+# it can't or must not do; a folder without a catalog fails as well.
+fresh_catalogs
+node scripts/check-l10n.mjs --new it "$l10n_copy" >/dev/null
+broken_catalog 'l10n/it.json has no words for "Paperless Sync"'
+if ! grep -qF '"_%n minute_::_%n minutes_": [' "$l10n_copy/it.json" \
+  || [[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).translations["_%n minute_::_%n minutes_"].length' "$l10n_copy/it.json")" != 3 ]]; then
+  echo 'scripts/check-l10n.mjs --new it should write three forms for a plural, as Italian has.'
   exit 1
 fi
-edit_catalog 't["Nextcloud user %s does not exist."] = "Den Nextcloud-Benutzer gibt es nicht."'
-broken_catalog 'has the placeholders none, but "Nextcloud user %s does not exist." has argument 1.'
-cp l10n/de.json l10n/de.js "$l10n_copy/"
-sed -n '3p' l10n/de.json >"$l10n_copy/line"
-sed -i "3r $l10n_copy/line" "$l10n_copy/de.json"
-broken_catalog 'l10n/de.json has a text twice'
+node scripts/check-l10n.mjs --new sv --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
+# The codes of Nextcloud also have digits, as Spanish of Latin America has, and a script. The
+# App Store knows only the language itself.
+for language in es_419 sr@latin; do
+  node scripts/check-l10n.mjs --new "$language" --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
+  broken_catalog "l10n/$language.json has no words for \"Paperless Sync\""
+done
+broken_catalog 'appinfo/info.xml has no <summary lang="sr">'
+for refused in 'it|exists already' 'sv|exists already' 'tlh|need their rule' 'Not a code|is no code of a language'; do
+  if output="$(node scripts/check-l10n.mjs --new "${refused%%|*}" "$l10n_copy" 2>&1)" || [[ "$output" != *"${refused##*|}"* ]]; then
+    echo "scripts/check-l10n.mjs --new ${refused%%|*} should say \"${refused##*|}\", but says: $output"
+    exit 1
+  fi
+done
+rm -f "$l10n_copy"/*.json "$l10n_copy"/*.js
+broken_catalog 'holds no catalog, such as de.json.'
 # A text that the check can't read, such as a variable, would make its translation look unused,
 # and --fix would drop it: the check names the call instead, and --fix leaves the catalog alone.
 mkdir -p "$l10n_copy/app/scripts" "$l10n_copy/app/lib/Model"
-cp -r js templates l10n "$l10n_copy/app/"
+cp -r appinfo js templates l10n "$l10n_copy/app/"
 cp scripts/check-l10n.mjs "$l10n_copy/app/scripts/"
 # shellcheck disable=SC2016 # PHP code, whose variables the shell must not expand.
 printf '%s\n' '<?php' 'ConnectionCheck::failed(ConnectionCheck::PAPERLESS, $message, $details);' >"$l10n_copy/app/lib/Model/Unreadable.php"
@@ -1067,4 +1137,11 @@ if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" --fix 2>&1)" \
   echo "scripts/check-l10n.mjs --fix should refuse a text that it can't read and keep the catalog, but says: $output"
   exit 1
 fi
-echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text and a wrong placeholder, and --fix writes l10n/de.js anew."
+# The App Store shows a language only with its own summary and description.
+rm "$l10n_copy/app/lib/Model/Unreadable.php"
+sed -i '/<summary lang="fr">/d' "$l10n_copy/app/appinfo/info.xml"
+if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <summary lang="fr">'* ]]; then
+  echo "scripts/check-l10n.mjs should report a language without its summary in appinfo/info.xml, but says: $output"
+  exit 1
+fi
+echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."

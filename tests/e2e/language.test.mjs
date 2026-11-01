@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { pictureLanguage } from './language.mjs'
+import { appLanguage, pictureLanguage } from './language.mjs'
 
 const catalog = JSON.parse(readFileSync(new URL('../../l10n/de.json', import.meta.url), 'utf8')).translations
 const script = readFileSync(new URL('screenshots.mjs', import.meta.url), 'utf8')
@@ -72,4 +72,37 @@ test('a text without German fails, as does a language without pictures', () => {
 	assert.throws(() => german.nextcloud('A text of Nextcloud'), /texts of Nextcloud .* has no German for "A text of Nextcloud"/)
 	assert.throws(() => pictureLanguage('de', {}), /l10n\/de\.json has no German for "Documents\/Paperless"/)
 	assert.throws(() => pictureLanguage('fr'), /English \(en\) or German \(de\), not in "fr"/)
+})
+
+for (const [code, base, archive, inbox, failed, deleted] of [
+	['fr', 'Documents/Paperless', 'Archives', 'Boîte de réception', 'Imports échoués', '_Supprimés'],
+	['es', 'Documentos/Paperless', 'Archivo', 'Bandeja de entrada', 'Importaciones fallidas', '_Eliminados'],
+]) {
+	test(`the app in ${code} proposes the folders of its catalog, without pictures`, () => {
+		const words = JSON.parse(readFileSync(new URL(`../../l10n/${code}.json`, import.meta.url), 'utf8')).translations
+		const language = appLanguage(code, words)
+		assert.deepEqual([language.base, language.archive, language.inbox], [base, archive, inbox])
+		assert.deepEqual([language.failed, language.deleted], [failed, deleted])
+		assert.equal(language.t('Save'), words.Save)
+		assert.notEqual(language.t('Save'), 'Save')
+		assert.equal(language.nextcloudLocale.slice(0, 2), code)
+		assert.throws(() => pictureLanguage(code, words), /English \(en\) or German \(de\)/)
+		assert.throws(() => appLanguage(code, {}), new RegExp(`l10n/${code}\\.json has no \\w+ for "Documents/Paperless"`))
+	})
+}
+
+test('a language that the end-to-end tests do not know fails', () => {
+	assert.throws(() => appLanguage('xx'), /know the languages en, de, fr, es, not "xx"/)
+})
+
+test('french.mjs checks every name that a new installation proposes, as run.sh takes them away', () => {
+	const french = readFileSync(new URL('french.mjs', import.meta.url), 'utf8')
+	const run = readFileSync(new URL('run.sh', import.meta.url), 'utf8')
+	const names = /for name in ([a-z_ ]+); do/.exec(run)
+	assert.ok(names, 'run.sh names the names that it takes away.')
+	const taken = names[1].trim().split(' ')
+	assert.equal(taken.length, 9)
+	for (const name of taken) {
+		assert.match(french, new RegExp(`\\b${name}:`), `french.mjs doesn't check ${name}.`)
+	}
 })

@@ -138,7 +138,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 - [Die Einstellungen an eine Gruppe delegieren](#die-einstellungen-delegieren), für die Person, die Paperless betreibt, aber kein Administrator von Nextcloud ist
 - [Auswahlfelder in den Einstellungen](#zielbenutzer-und-tags) bieten die Benutzer von Nextcloud für den Zielbenutzer und die Tags von Paperless für die ausgeschlossenen Tags, die Tags zum Spiegeln und die Tags jedes Imports an und markieren einen Benutzer oder einen Tag, den es nicht gibt, sodass sich ein Tippfehler vor dem ersten Lauf zeigt
 - Der [Aktivitätenstrom](#aktivität) des Zielbenutzers erzählt, was jeder Lauf geändert hat, mit Links zu seinen Dateien, und jeden Import, mit einem Link zum neuen Dokument in Paperless
-- Auf Englisch und Deutsch: Die Einstellungen, ihre Meldungen, ihre Links *Hilfe* zur Anleitung und der Aktivitätenstrom folgen der Sprache von Nextcloud, die Zeiten dem Gebietsschema deiner persönlichen Einstellungen
+- Auf Englisch, Deutsch, Französisch und Spanisch: Die Einstellungen, ihre Meldungen, der Aktivitätenstrom, die Benachrichtigungen und die Ordner, die eine neue Installation vorschlägt, folgen der Sprache von Nextcloud, die Links *Hilfe* öffnen die Anleitung auf Englisch oder Deutsch, und die Zeiten folgen dem Gebietsschema deiner persönlichen Einstellungen
 - [Benachrichtigungen, Einrichtungsprüfungen und eine Status-API](#benachrichtigungen) sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant
 - [`occ`-Befehle](#kommandozeile) für Skripte, Cron-Jobs und Überwachung: ein Lauf oder ein Testlauf mit eigener oder ohne Batchgröße, der Status und neu geschriebene Kopien, mit JSON-Ausgabe und Exit-Codes
 - Barrierefrei: Die Einstellungen, die Aktionen in Dateien und das Formular der Regel in Flow werden mit axe-core gegen WCAG 2.1 AA geprüft, ohne ernsten oder kritischen Befund, im hellen und im dunklen Design, am Computer und auf einem Telefon mit 320 Pixeln Breite, auf dem die Einstellungen und das Formular ohne seitliches Scrollen passen, und die Einstellungen lassen sich allein mit der Tastatur bedienen, mit einem sichtbaren Fokus, den die Leiste der Knöpfe nie verdeckt; die End-to-End-Tests prüfen das bei jeder Änderung der App
@@ -471,25 +471,25 @@ Die Verbindungs-Checkliste zeigt, wer auch wie viele Dokumente aus dem Archiv vo
 
 Eine neue Installation schlägt die Namen ihrer Ordner und die Ersatznamen für Metadaten, die einem Dokument fehlen, in der Standardsprache von Nextcloud vor, `default_language` in seiner `config.php`. Ein Nextcloud ohne Standardsprache und eine Sprache, für die die App noch keine Übersetzung hat, bekommen die englischen Namen; eine regionale Variante, etwa `de_DE`, bekommt die ihrer Sprache:
 
-| Einstellung | Englisch, und jede Sprache ohne Übersetzung | Deutsch: `de`, `de_DE` und die anderen Varianten |
-| --- | --- | --- |
-| Basisordner | `Documents/Paperless` | `Dokumente/Paperless` |
-| Archivordner | `Archive` | `Archiv` |
-| Eingangsordner | `Inbox` | `Eingang` |
-| Fehlerordner | `Failed imports` | `Fehler` |
-| Gelöscht-Ordner | `_Deleted` | `_Gelöscht` |
-| Fehlender Korrespondent | `_No correspondent` | `_Ohne Korrespondent` |
-| Fehlender Dokumenttyp | `_No document type` | `_Ohne Dokumenttyp` |
-| Fehlendes Datum | `_No date` | `_Ohne Datum` |
-| Fehlender Titel | `Untitled` | `Ohne Titel` |
+| Einstellung | Englisch, und jede Sprache ohne Übersetzung | Deutsch: `de`, `de_DE` und die anderen Varianten | Französisch: `fr` und seine Varianten | Spanisch: `es` und seine Varianten |
+| --- | --- | --- | --- | --- |
+| Basisordner | `Documents/Paperless` | `Dokumente/Paperless` | `Documents/Paperless` | `Documentos/Paperless` |
+| Archivordner | `Archive` | `Archiv` | `Archives` | `Archivo` |
+| Eingangsordner | `Inbox` | `Eingang` | `Boîte de réception` | `Bandeja de entrada` |
+| Fehlerordner | `Failed imports` | `Fehler` | `Imports échoués` | `Importaciones fallidas` |
+| Gelöscht-Ordner | `_Deleted` | `_Gelöscht` | `_Supprimés` | `_Eliminados` |
+| Fehlender Korrespondent | `_No correspondent` | `_Ohne Korrespondent` | `_Sans correspondant` | `_Sin interlocutor` |
+| Fehlender Dokumenttyp | `_No document type` | `_Ohne Dokumenttyp` | `_Sans type de document` | `_Sin tipo de documento` |
+| Fehlendes Datum | `_No date` | `_Ohne Datum` | `_Sans date` | `_Sin fecha` |
+| Fehlender Titel | `Untitled` | `Ohne Titel` | `Sans titre` | `Sin título` |
 
-Die Einstellungsseite zeigt die vorgeschlagenen Namen vor dem ersten Speichern, sodass du sie vor dem ersten Lauf ändern kannst, und das Speichern behält sie so, wie die Seite sie zeigt. Danach ändert sich ein Name nur, wenn du ihn änderst: Weder eine andere Standardsprache von Nextcloud noch ein Update benennt einen Ordner um. Die Sprache ist die von Nextcloud, nicht die des Administrators, der die Einstellungen öffnet, damit jeder Administrator und jeder geplante Lauf dieselben Namen sehen. Für die deutschen Namen auf einem Nextcloud ohne Standardsprache setze sie vor dem Speichern, mit `occ config:system:set default_language --value=de`, oder tippe die Namen ein.
+Die Einstellungsseite zeigt die vorgeschlagenen Namen vor dem ersten Speichern, sodass du sie vor dem ersten Lauf ändern kannst, und das Speichern behält sie so, wie die Seite sie zeigt. Danach ändert sich ein Name nur, wenn du ihn änderst: Weder eine andere Standardsprache von Nextcloud noch ein Update benennt einen Ordner um. Der erste Lauf speichert die Namen, die er verwendet, also gilt das auch für eine mit `occ` eingerichtete Installation, die sie nie gespeichert hat. Die Sprache ist die von Nextcloud, nicht die des Administrators, der die Einstellungen öffnet, damit jeder Administrator und jeder geplante Lauf dieselben Namen sehen. Für die deutschen Namen auf einem Nextcloud ohne Standardsprache setze sie vor dem Speichern, mit `occ config:system:set default_language --value=de`, oder tippe die Namen ein.
 
-Frühere Versionen haben in jeder Sprache die deutschen Namen vorgeschlagen. Eine Installation, die eine von ihnen eingerichtet hat, mit einem Zielbenutzer oder mit einem Lauf, der Kopien oder Importe hinterlassen hat, behält sie mit dem Update, auch die, die sie nie gespeichert hat, etwa nach einer Einrichtung mit `occ`, damit ihr Archiv bleibt, wo es ist:
+Eine Installation, die auf einem französischen oder spanischen Nextcloud in Gebrauch ist, behält die englischen Namen aus den Versionen vor diesen Sprachen. Noch frühere Versionen haben in jeder Sprache die deutschen Namen vorgeschlagen. Eine Installation, die eine von ihnen eingerichtet hat, mit einem Zielbenutzer oder mit einem Lauf, der Kopien oder Importe hinterlassen hat, behält sie mit dem Update, auch die, die sie nie gespeichert hat, etwa nach einer Einrichtung mit `occ`, damit ihr Archiv bleibt, wo es ist:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-folder-names-an-installation-uses.de.dark.svg">
-  <img src="docs/images/diagrams/which-folder-names-an-installation-uses.de.svg" alt="Welche Ordnernamen eine Installation verwendet: Für jeden Ordnernamen und jeden Ersatznamen verwendet eine Installation den Namen, den ihre Einstellungen gespeichert haben, gleich in welcher Sprache. Eine Installation, die eine frühere Version eingerichtet hat, mit einem Zielbenutzer oder mit Kopien und Importen ihrer Läufe, behält für einen Namen, den sie nie gespeichert hat, den deutschen Namen dieser Versionen, etwa Archiv. Eine neue Installation schlägt den Namen in der Standardsprache von Nextcloud vor, wenn die App einen Katalog für diese Sprache oder für ihre allgemeine Sprache hat, etwa Deutsch für de_DE, und sonst auf Englisch, etwa Archive. Das Speichern der Einstellungen behält die Namen, die die Seite zeigt. Die Fragen sind indigo und die Namen in Nextcloud blau.">
+  <img src="docs/images/diagrams/which-folder-names-an-installation-uses.de.svg" alt="Welche Ordnernamen eine Installation verwendet: Für jeden Ordnernamen und jeden Ersatznamen verwendet eine Installation den Namen, den ihre Einstellungen gespeichert haben, gleich in welcher Sprache. Eine Installation, die eine frühere Version eingerichtet hat, mit einem Zielbenutzer oder mit Kopien und Importen ihrer Läufe, behält für einen Namen, den sie nie gespeichert hat, den deutschen Namen dieser Versionen, etwa Archiv. Eine Installation, die auf einer französischen oder spanischen Nextcloud läuft, behält den englischen Namen aus den Versionen vor diesen Sprachen. Eine neue Installation schlägt den Namen in der Standardsprache von Nextcloud vor, wenn die App einen Katalog für diese Sprache oder für ihre allgemeine Sprache hat, etwa Deutsch für de_DE, und sonst auf Englisch, etwa Archive. Das Speichern der Einstellungen behält die Namen, die die Seite zeigt, und der erste Lauf speichert einen Namen, den er verwendet, sodass danach keine andere Sprache den Ordner umbenennt. Die Fragen sind indigo und die Namen in Nextcloud blau.">
 </picture>
 
 Das Umbenennen des Basisordners oder des Archivordners eines Archivs in Gebrauch verschiebt seine Dateien in den nächsten Läufen, im Rahmen der Batchgröße, wie es eine neue [Pfadvorlage](#variablen-der-pfadvorlage) tut.
@@ -1044,6 +1044,8 @@ Die [FAQ](https://dennis-otto.github.io/paperless-sync/de/faq.html) beantworten 
 ## Entwicklung
 
 Beiträge sind willkommen. [CONTRIBUTING.md](CONTRIBUTING.md) sagt, wie eine Änderung hineinkommt, und [Development](docs/development.md), wie man die App baut, prüft und testet: `scripts/check.sh`, mit ESLint für das JavaScript, die End-to-End-Tests in Docker gegen jede unterstützte Version von Nextcloud, die auch messen, wie viel des JavaScripts sie ausführen, die Bilder der Dokumentation, die Bots aktuell halten, die Website und den Release-Prozess. [Automation](docs/automation.md) zeigt die Bots, die die App prüfen, veröffentlichen und pflegen. Eine Prüfung, die scheitert, auch die End-to-End-Tests und die anderen Prüfungen dieser App, sagt auf dem Pull Request, was sie gefunden hat und wie man es behebt, auch auf einem Pull Request aus einem Fork, und behebt es selbst, wo ein Befehl es kann, etwa beim Coding-Standard. Das Projekt folgt [GOVERNANCE.md](GOVERNANCE.md), [SUPPORT.md](SUPPORT.md) und dem [Verhaltenskodex](CODE_OF_CONDUCT.md); diese Seiten sind auf Englisch. Eine Änderung an `README.md` oder an einer Seite der Website mit deutscher Fassung ändert auch die deutsche, etwa diese Datei, und `scripts/check.sh` prüft, dass beide dieselben Überschriften, Ausschnitte und Diagramme haben.
+
+**Auch Übersetzungen sind willkommen.** Die französischen und spanischen Texte wurden mit Hilfe einer KI entworfen und warten darauf, dass Muttersprachler sie lesen: Sag in den [Diskussionen](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general), was sich falsch liest, oder korrigiere es in einem Pull Request. [Translate Paperless Sync](docs/development.md#translate-paperless-sync) zeigt, wie das geht, auch für eine Sprache, die die App noch nicht spricht. Die Website bleibt auf Englisch und Deutsch.
 
 ## Qualität und Sicherheit
 

@@ -90,6 +90,7 @@ final class SyncService {
 			$this->status->connected($paperless->testConnection());
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {
+				$this->configService->keepDefaultNames();
 				$this->storage->prepare($config);
 			}
 			if ($config->perUser()) {
@@ -150,6 +151,7 @@ final class SyncService {
 		$report = new SyncReport(false, $this->now());
 		try {
 			$this->storage->test($config->targetUser, $config->basePath);
+			$this->configService->keepDefaultNames();
 			$this->storage->prepare($config);
 			// Paperless shows no document in its trash, deleted or of another owner: the scheduled
 			// runs move or delete its copy, after the missing scans that the settings require, and

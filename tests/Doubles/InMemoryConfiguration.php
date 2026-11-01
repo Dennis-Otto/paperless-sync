@@ -179,28 +179,31 @@ trait InMemoryConfiguration {
 
 	/**
 	 * Nextcloud's translations of the app, with $defaultLanguage as the language of the instance:
-	 * German from the catalog l10n/de.json, so that a test also finds a text that the catalog
-	 * lacks, and English, the language of the texts in the code; the app has no other catalog.
+	 * each language from its catalog in l10n/, so that a test also finds a text that a catalog
+	 * lacks, and English, the language of the texts in the code.
 	 *
 	 * @return IFactory&MockObject
 	 */
 	private function l10nFactory(): IFactory {
-		$catalog = json_decode((string)file_get_contents(__DIR__ . '/../../l10n/de.json'), true, 512, JSON_THROW_ON_ERROR);
-		/** @var array<string, string> $german */
-		$german = $catalog['translations'];
+		/** @var array<string, array<string, string>> $catalogs */
+		$catalogs = [];
+		foreach (glob(__DIR__ . '/../../l10n/*.json') ?: [] as $file) {
+			$catalogs[basename($file, '.json')] = json_decode((string)file_get_contents($file), true, 512, JSON_THROW_ON_ERROR)['translations'];
+		}
+		$languages = ['en', ...array_keys($catalogs)];
 		$factory = $this->createStub(IFactory::class);
 		// Like Nextcloud, findGenericLanguage() of the app gives English for a language without a
 		// catalog of the app, even when its generic language has one, which the app must not rely on.
-		$factory->method('findGenericLanguage')->willReturnCallback(fn (?string $app = null): string => $app === null || in_array($this->defaultLanguage, ['en', 'de'], true) ? $this->defaultLanguage : 'en');
-		$factory->method('languageExists')->willReturnCallback(static fn (?string $app, string $language): bool => in_array($language, ['en', 'de'], true));
-		$factory->method('get')->willReturnCallback(function (string $app, ?string $language = null) use ($german): IL10N {
+		$factory->method('findGenericLanguage')->willReturnCallback(fn (?string $app = null): string => $app === null || in_array($this->defaultLanguage, $languages, true) ? $this->defaultLanguage : 'en');
+		$factory->method('languageExists')->willReturnCallback(static fn (?string $app, string $language): bool => in_array($language, $languages, true));
+		$factory->method('get')->willReturnCallback(function (string $app, ?string $language = null) use ($catalogs, $languages): IL10N {
 			// Nextcloud would take the language of whoever reads instead of one without a catalog.
-			self::assertContains($language, ['en', 'de'], 'The app has no catalog for this language.');
+			self::assertContains($language, $languages, 'The app has no catalog for this language.');
 			$l10n = $this->createStub(IL10N::class);
-			$l10n->method('t')->willReturnCallback(static function (string $text, array|string $parameters = []) use ($language, $german): string {
-				if ($language === 'de') {
-					self::assertArrayHasKey($text, $german, 'l10n/de.json has no translation of this text.');
-					$text = $german[$text];
+			$l10n->method('t')->willReturnCallback(static function (string $text, array|string $parameters = []) use ($language, $catalogs): string {
+				if ($language !== 'en') {
+					self::assertArrayHasKey($text, $catalogs[$language], "l10n/{$language}.json has no translation of this text.");
+					$text = $catalogs[$language][$text];
 				}
 
 				return vsprintf($text, (array)$parameters);

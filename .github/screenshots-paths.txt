@@ -10,12 +10,13 @@
 .github/social-preview/Dockerfile
 scripts/social-preview.sh
 
-# The app as the pictures show it: its pages, scripts, styles, icons and texts, and its
-# code, which writes the reports, the status and the files of the archive.
+# The app as the pictures show it: its pages, scripts, styles, icons and German texts, as
+# the pictures are in English and German, and its code, which writes the reports, the
+# status and the files of the archive.
 css/**
 img/**
 js/**
-l10n/**
+l10n/de.*
 lib/**
 templates/**
 

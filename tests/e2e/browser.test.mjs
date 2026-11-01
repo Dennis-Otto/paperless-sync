@@ -246,7 +246,7 @@ test('without a folder the browser records nothing and only names the failure', 
 })
 
 test('every check in the browser starts its browser here, and keeps what it has before it closes it', () => {
-	for (const check of ['accessibility', 'keyboard', 'settings', 'files', 'flow']) {
+	for (const check of ['accessibility', 'keyboard', 'settings', 'files', 'flow', 'french']) {
 		const source = readFileSync(new URL(`./${check}.mjs`, import.meta.url), 'utf8')
 		assert.match(source, new RegExp(`const browser = await launch\\('${check}'\\)`), `${check}.mjs starts Chromium itself`)
 		assert.doesNotMatch(source, /chromium\.launch\(/, `${check}.mjs starts Chromium itself`)

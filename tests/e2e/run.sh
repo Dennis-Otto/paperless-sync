@@ -65,6 +65,10 @@ E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
 # on the newest version. Its table is in the log, and with E2E_ARTIFACTS its reports are in
 # the folder coverage there, also when the run passes.
 E2E_COVERAGE="${E2E_COVERAGE:-0}"
+# E2E_LANGUAGES=1 checks the settings with Nextcloud in French at the end of the run (french.mjs);
+# run-all.sh sets it for the run on the newest version alone, as Nextcloud loads a catalog of an
+# app the same way in every version.
+E2E_LANGUAGES="${E2E_LANGUAGES:-${E2E_ACCESSIBILITY}}"
 TMP_DIR="$(mktemp -d)"
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
 # playwright-core in package.json; Renovate updates both together, and
@@ -257,7 +261,8 @@ mock_state() {
 # connects again with the token, and checks what the page says about unsaved changes,
 # results and errors, also in German. files.mjs checks the actions of the app in the
 # menu of Files for a member of the group of the setting and for another user, and flow.mjs
-# the form of a rule of "Send to Paperless" in the settings of Flow. The files
+# the form of a rule of "Send to Paperless" in the settings of Flow, while french.mjs, at the
+# end of the run, checks the settings with Nextcloud in French. The files
 # of the checks reach the browser through standard input, so that npm leaves nothing in
 # the checkout. Each check runs, also after one that failed, so that one run names every
 # page that broke, and the browser fails at the end. With E2E_ARTIFACTS, each window records
@@ -285,7 +290,7 @@ BROWSER_CHECKS='
 		export E2E_BROWSER_COVERAGE=/tmp/artifacts/coverage/v8
 	fi
 	failed=""
-	for check in accessibility keyboard settings files flow; do
+	for check in ${E2E_CHECKS}; do
 		node "${check}.mjs" || failed="${failed} ${check}.mjs"
 	done
 	if [ -n "${failed}" ]; then
@@ -299,15 +304,16 @@ BROWSER_CHECKS='
 		node coverage.mjs /tmp/artifacts/coverage coverage-floor.json
 	fi
 '
-accessibility() {
-	local status=0
+browser_checks() {
+	local checks="$1" coverage="$2" status=0
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
 	mkdir -p "${BROWSER_ARTIFACTS}"
 	# Git Bash on Windows would turn the paths of the container into paths of Windows.
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs coverage.mjs coverage-floor.json \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs french.mjs language.mjs coverage.mjs coverage-floor.json \
+		-C "${REPOSITORY_ROOT}" l10n/fr.json \
 		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -318,7 +324,9 @@ accessibility() {
 			--env E2E_SUPERUSER_TOKEN=e2e-superuser-only-token \
 			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
 			--env "E2E_BROWSER_SNAPSHOTS=${E2E_BROWSER_SNAPSHOTS}" \
-			--env "E2E_COVERAGE=${E2E_COVERAGE}" \
+			--env "E2E_COVERAGE=${coverage}" \
+			--env "E2E_CHECKS=${checks}" \
+			--env E2E_CATALOG=/tmp/browser/l10n/fr.json \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c "${BROWSER_CHECKS}" \
 		| tar -C "${BROWSER_ARTIFACTS}" -xf - || status=$?
@@ -329,6 +337,9 @@ accessibility() {
 		mv "${BROWSER_ARTIFACTS}/coverage" "${E2E_ARTIFACTS}/coverage"
 	fi
 	return "${status}"
+}
+accessibility() {
+	browser_checks 'accessibility keyboard settings files flow' "${E2E_COVERAGE}"
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -2003,8 +2014,24 @@ mock_state > "${TMP_DIR}/mock-shared-scans.json"
 assert_json mock-shared-scans "${TMP_DIR}/mock-shared-scans.json"
 save_settings "${TMP_DIR}/single-settings.json" ownership=single
 
+# Nextcloud in French, as a new installation sees it: its default language, an administrator
+# without a language of their own, and none of the names that the steps above stored. Last,
+# because it takes these names away and leaves the installation in French.
+if [[ "${E2E_LANGUAGES}" == "1" ]]; then
+	occ config:system:set default_language --value=fr >/dev/null
+	occ user:setting --delete e2e-admin core lang >/dev/null
+	for name in base_path archive_folder inbox_folder error_folder deleted_folder empty_correspondent empty_document_type empty_date untitled; do
+		occ config:app:delete paperless_sync "${name}" >/dev/null
+	done
+	browser_checks french 0
+	echo "The settings in French pass after ${SECONDS} s."
+fi
+
 checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, deletions into the trash bin of the user of each copy, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user, the documents that Paperless shares through a group, whose copy leaves with the permission'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
+fi
+if [[ "${E2E_LANGUAGES}" == "1" ]]; then
+	checks="${checks}, the settings and the folders in French"
 fi
 echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, a URL changed past the settings page that does not get the token, and a failing mirror that notifies the administrators, shows in the setup checks and the status API, and clears after a success."
