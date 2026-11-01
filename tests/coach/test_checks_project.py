@@ -197,7 +197,7 @@ def test_the_autofix_of_this_project_fixes_what_it_promises() -> None:
     assert step is not None and step.autofix
     with tempfile.TemporaryDirectory() as folder:
         copy = Path(folder)
-        for name in ("img", "docs/images", "js", "templates", "lib", "l10n"):
+        for name in ("appinfo", "img", "docs/images", "js", "templates", "lib", "l10n"):
             shutil.copytree(ROOT / name, copy / name)
         (copy / "scripts").mkdir()
         shutil.copy2(ROOT / "scripts" / "check-l10n.mjs", copy / "scripts")
@@ -238,7 +238,7 @@ def test_the_autofix_of_this_project_fixes_what_it_promises() -> None:
         assert flow.read_bytes() == (ROOT / "js" / "flow.js").read_bytes(), (
             "js/flow.js differs after the autofix"
         )
-        for name in ("de.json", "de.js"):
+        for name in sorted(path.name for path in (ROOT / "l10n").iterdir()):
             assert (copy / "l10n" / name).read_bytes() == (
                 ROOT / "l10n" / name
             ).read_bytes(), f"l10n/{name} differs after the autofix"

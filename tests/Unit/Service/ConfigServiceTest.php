@@ -48,13 +48,19 @@ final class ConfigServiceTest extends TestCase {
 	public static function defaultLanguages(): array {
 		$english = ['Documents/Paperless', 'Archive', 'Inbox', 'Failed imports', '_Deleted', '_No correspondent', '_No document type', '_No date', 'Untitled'];
 		$german = ['Dokumente/Paperless', 'Archiv', 'Eingang', 'Fehler', '_Gelöscht', '_Ohne Korrespondent', '_Ohne Dokumenttyp', '_Ohne Datum', 'Ohne Titel'];
+		$french = ['Documents/Paperless', 'Archives', 'Boîte de réception', 'Imports échoués', '_Supprimés', '_Sans correspondant', '_Sans type de document', '_Sans date', 'Sans titre'];
+		$spanish = ['Documentos/Paperless', 'Archivo', 'Bandeja de entrada', 'Importaciones fallidas', '_Eliminados', '_Sin interlocutor', '_Sin tipo de documento', '_Sin fecha', 'Sin título'];
 
 		return [
 			'English' => ['en', $english],
 			'British English, without a catalog of its own' => ['en_GB', $english],
 			'German' => ['de', $german],
 			'formal German, with the catalog of German' => ['de_DE', $german],
-			'French, without a catalog yet' => ['fr', $english],
+			'French' => ['fr', $french],
+			'French of Canada, with the catalog of French' => ['fr_CA', $french],
+			'Spanish' => ['es', $spanish],
+			'Spanish of Mexico, with the catalog of Spanish' => ['es_MX', $spanish],
+			'Italian, without a catalog yet' => ['it', $english],
 			'Brazilian Portuguese, without a catalog of it or of Portuguese' => ['pt_BR', $english],
 		];
 	}
@@ -123,6 +129,19 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame(['Dokumente/Paperless', 'Akten', 'Inbox', ''], [$config->basePath, $config->archiveFolder, $config->inboxFolder, $config->paperlessUrl], 'Only the names without a value of their own, and no other setting.');
 		self::assertArrayHasKey('base_path', $this->lazyKeys);
 		self::assertSame(0, $this->service->keepNames(['base_path' => 'Scans']), 'A kept name is a saved one.');
+	}
+
+	/** What a run uses stays, whatever the default language of Nextcloud becomes or the catalogs bring. */
+	public function testKeepsTheDefaultNamesThatARunUses(): void {
+		$this->defaultLanguage = 'fr';
+		$this->settings = ['target_user' => 'paperless', 'archive_folder' => 'Akten'];
+
+		self::assertSame(8, $this->service->keepDefaultNames());
+
+		$this->defaultLanguage = 'de';
+		$config = $this->service->get();
+		self::assertSame(['Documents/Paperless', 'Akten', 'Boîte de réception', 'Sans titre'], [$config->basePath, $config->archiveFolder, $config->inboxFolder, $config->untitled]);
+		self::assertSame(0, $this->service->keepDefaultNames(), 'Names that are kept once need no second time.');
 	}
 
 	public function testSavesNormalizedSettingsAndTheToken(): void {

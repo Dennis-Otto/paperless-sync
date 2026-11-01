@@ -56,14 +56,23 @@ const NEXTCLOUD = {
 	},
 }
 
+// The languages that the end-to-end tests know: the language of Nextcloud, its locale and that of
+// the browser. French and Spanish have no pictures: the website stays in English and German.
+const LANGUAGES = {
+	en: { name: 'English', nextcloudLocale: 'en_US', browserLocale: 'en-US' },
+	de: { name: 'German', nextcloudLocale: 'de_DE', browserLocale: 'de-DE' },
+	fr: { name: 'French', nextcloudLocale: 'fr_FR', browserLocale: 'fr-FR' },
+	es: { name: 'Spanish', nextcloudLocale: 'es_ES', browserLocale: 'es-ES' },
+}
+
 /**
- * The language `code`, en or de, with the catalog of the app, the translations of
- * l10n/de.json, which only German needs.
+ * The language `code` of the app, with its catalog, the translations of l10n/<code>.json, which
+ * only English doesn't need: its texts, and the folders that a new installation proposes.
  */
-export function pictureLanguage(code, catalog = {}) {
-	const story = STORIES[code]
-	if (story === undefined) {
-		throw new Error(`The pictures come in English (en) or German (de), not in "${code}".`)
+export function appLanguage(code, catalog = {}) {
+	const language = LANGUAGES[code]
+	if (language === undefined) {
+		throw new Error(`The end-to-end tests know the languages ${Object.keys(LANGUAGES).join(', ')}, not "${code}".`)
 	}
 	const english = code === 'en'
 	const translated = (texts, kind) => (text) => {
@@ -72,20 +81,15 @@ export function pictureLanguage(code, catalog = {}) {
 		}
 		const translation = texts[text]
 		if (typeof translation !== 'string' || translation === '') {
-			throw new Error(`${kind} has no German for "${text}".`)
+			throw new Error(`${kind} has no ${language.name} for "${text}".`)
 		}
 		return translation
 	}
-	const t = translated(catalog, 'l10n/de.json')
+	const t = translated(catalog, `l10n/${code}.json`)
 	return {
 		code,
-		// The language and the locale of Nextcloud, and the locale of the browser.
-		nextcloudLocale: english ? 'en_US' : 'de_DE',
-		browserLocale: english ? 'en-US' : 'de-DE',
-		// The folder of the pictures of the documentation, and whether the App Store gets
-		// screenshots, which it shows in English only.
-		images: english ? 'docs/images' : `docs/images/${code}`,
-		appStore: english,
+		nextcloudLocale: language.nextcloudLocale,
+		browserLocale: language.browserLocale,
 		// A text of the app as it shows it, and one of Nextcloud.
 		t,
 		nextcloud: translated(NEXTCLOUD[code] ?? {}, 'The table of the texts of Nextcloud in tests/e2e/language.mjs'),
@@ -95,6 +99,24 @@ export function pictureLanguage(code, catalog = {}) {
 		inbox: t('Inbox'),
 		failed: t('Failed imports'),
 		deleted: t('_Deleted'),
+	}
+}
+
+/**
+ * The language `code` of the pictures, en or de, with the catalog of the app, the translations of
+ * l10n/de.json, which only German needs.
+ */
+export function pictureLanguage(code, catalog = {}) {
+	const story = STORIES[code]
+	if (story === undefined) {
+		throw new Error(`The pictures come in English (en) or German (de), not in "${code}".`)
+	}
+	return {
+		...appLanguage(code, catalog),
+		// The folder of the pictures of the documentation, and whether the App Store gets
+		// screenshots, which it shows in English only.
+		images: code === 'en' ? 'docs/images' : `docs/images/${code}`,
+		appStore: code === 'en',
 		...story,
 	}
 }

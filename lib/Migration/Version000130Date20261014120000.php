@@ -10,10 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Migration;
 
 use Closure;
-use OCA\PaperlessSync\Service\ConfigService;
-use OCP\IDBConnection;
 use OCP\Migration\IOutput;
-use OCP\Migration\SimpleMigrationStep;
 
 /**
  * The names of the folders and the fallbacks for empty metadata follow the default language of
@@ -26,7 +23,7 @@ use OCP\Migration\SimpleMigrationStep;
  * update: a later update must not give German names to an installation that started with
  * English ones. A new installation runs it too, with nothing set up yet, and keeps nothing.
  */
-final class Version000130Date20261014120000 extends SimpleMigrationStep {
+final class Version000130Date20261014120000 extends KeepNamesStep {
 	/** The names that every earlier version proposed. */
 	private const GERMAN_NAMES = [
 		'base_path' => 'Dokumente/Paperless',
@@ -40,39 +37,13 @@ final class Version000130Date20261014120000 extends SimpleMigrationStep {
 		'untitled' => 'Ohne Titel',
 	];
 
-	/** The tables in which a run leaves its state: the copies of the archive and the imports of the inbox. */
-	private const STATE_TABLES = ['paperless_sync_export', 'paperless_sync_import'];
-
-	/** @psalm-suppress PossiblyUnusedMethod Nextcloud creates the step through its container. */
-	public function __construct(
-		private ConfigService $configService,
-		private IDBConnection $connection,
-	) {
-	}
-
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
-		if ($this->configService->targetUser() === '' && !$this->hasRun()) {
+		if (!$this->inUse()) {
 			return;
 		}
 		$kept = $this->configService->keepNames(self::GERMAN_NAMES);
 		if ($kept > 0) {
 			$output->info("Kept {$kept} German names of folders of Paperless Sync, which earlier versions proposed in every language.");
 		}
-	}
-
-	/** Whether a run left a state: a copy in the archive or an import of the inbox. */
-	private function hasRun(): bool {
-		foreach (self::STATE_TABLES as $table) {
-			$query = $this->connection->getQueryBuilder();
-			$query->select('id')->from($table)->setMaxResults(1);
-			$result = $query->executeQuery();
-			$row = $result->fetchOne();
-			$result->closeCursor();
-			if ($row !== false) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 }

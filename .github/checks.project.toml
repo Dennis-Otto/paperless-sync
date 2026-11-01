@@ -307,9 +307,11 @@ test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots
 the browser that fails and records the coverage of the scripts of the app, or a check in the
 browser starts Chromium without it, a test of `tests/e2e/coverage.mjs` fails, which reports
 that coverage and holds it to its floor, or a script of `js/` has no floor in
-`tests/e2e/coverage-floor.json`, or `l10n/de.json` lacks a text that the code
-translates, has one that no code translates, a placeholder of another kind or a text
-twice, or differs from `l10n/de.js`."""
+`tests/e2e/coverage-floor.json`, or a catalog in `l10n/`, such as `l10n/fr.json`, lacks a text that the code
+translates, has one that no code translates, a placeholder of another kind, a lone `%`, a text
+twice, another number of forms for a plural than its `pluralForm` names or a form for millions that
+differs, names a label in quotes in other words than the label, or differs from its
+copy for the browser, such as `l10n/fr.js`, or `appinfo/info.xml` has no summary or description in its language."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
 their browser and their rules, the scripts free of downloads that run unchecked, which
 would fail the workflow Findings on `main`, the website, the README and its German twin
@@ -346,10 +348,10 @@ fix `tests/e2e/a11y.mjs` until `node --test tests/e2e/a11y.test.mjs` passes, sta
 of a check with `launch()` of `tests/e2e/browser.mjs` and keep what it has before it closes
 until `node --test tests/e2e/browser.test.mjs` passes, fix `tests/e2e/coverage.mjs` until
 `node --test tests/e2e/coverage.test.mjs` passes and give a new script of `js/` its floor of
-lines and branches, 0 until the end-to-end tests have measured it, and add a new text with its German words to `l10n/de.json`. Three of them a command fixes: `cp` copies the icon of the app,
+lines and branches, 0 until the end-to-end tests have measured it, and add a new text with its words to each catalog in `l10n/`, and for a new language its summary and description to `appinfo/info.xml`. Three of them a command fixes: `cp` copies the icon of the app,
 `eslint.sh --fix` makes a `var` and a `let` that never changes a `const`, and
-`check-l10n.mjs --fix` drops the texts that no code translates and writes `l10n/de.js`
-anew. Then run the checks again:"""
+`check-l10n.mjs --fix` drops the texts that no code translates and writes each
+copy for the browser anew. Then run the checks again:"""
 commands = [
   "bash scripts/check-project.sh",
   "cp img/app.svg docs/images/app.svg  # Icon of the website",

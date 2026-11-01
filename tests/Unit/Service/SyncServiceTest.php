@@ -216,6 +216,20 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([], $this->state->exports);
 	}
 
+	/** An archive stays where a run put it, also when the names that it never saved would change. */
+	public function testARunKeepsTheNamesThatItUsesAndADryRunDoesNot(): void {
+		// Set up with occ, which stores only the settings that it names.
+		unset($this->settings['inbox_folder']);
+
+		$this->service->run(dryRun: true);
+		self::assertArrayNotHasKey('inbox_folder', $this->settings, 'A dry-run changes nothing.');
+
+		$this->service->run();
+		self::assertSame('Eingang', $this->settings['inbox_folder'] ?? null);
+		$this->defaultLanguage = 'fr';
+		self::assertSame('Eingang', $this->configService->get()->inboxFolder, 'Another default language must not rename it now.');
+	}
+
 	public function testRefusesToRunBeforeTheAppIsConfigured(): void {
 		$this->configService->reset();
 		$this->locking->expects(self::once())->method('acquireLock');
@@ -4789,6 +4803,20 @@ final class SyncServiceTest extends TestCase {
 		$trashed['deleted_at'] = '2026-08-27T08:00:00+02:00';
 		$this->paperless->documents = [];
 		$this->paperless->trash = [$trashed];
+	}
+
+	/** The webhook may write first on an installation set up with occ: its archive stays where it is as well. */
+	public function testTheRunOfOneDocumentKeepsTheNamesThatItUses(): void {
+		$this->configService->save(['enabled' => true] + self::validSettings());
+		unset($this->settings['inbox_folder']);
+		$this->paperless->documents = [$this->document()];
+		$this->paperless->contents[123] = '%PDF-content-v1';
+
+		self::assertSame(1, $this->service->syncDocument(123)->exported);
+
+		self::assertSame('Eingang', $this->settings['inbox_folder'] ?? null);
+		$this->defaultLanguage = 'fr';
+		self::assertSame('Eingang', $this->configService->get()->inboxFolder, 'Another default language must not rename it now.');
 	}
 
 	/**

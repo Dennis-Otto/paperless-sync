@@ -1,16 +1,20 @@
 flowchart TB
     accTitle: Welche Ordnernamen eine Installation verwendet
-    accDescr: Für jeden Ordnernamen und jeden Ersatznamen verwendet eine Installation den Namen, den ihre Einstellungen gespeichert haben, gleich in welcher Sprache. Eine Installation, die eine frühere Version eingerichtet hat, mit einem Zielbenutzer oder mit Kopien und Importen ihrer Läufe, behält für einen Namen, den sie nie gespeichert hat, den deutschen Namen dieser Versionen, etwa Archiv. Eine neue Installation schlägt den Namen in der Standardsprache von Nextcloud vor, wenn die App einen Katalog für diese Sprache oder für ihre allgemeine Sprache hat, etwa Deutsch für de_DE, und sonst auf Englisch, etwa Archive. Das Speichern der Einstellungen behält die Namen, die die Seite zeigt. Die Fragen sind indigo und die Namen in Nextcloud blau.
+    accDescr: Für jeden Ordnernamen und jeden Ersatznamen verwendet eine Installation den Namen, den ihre Einstellungen gespeichert haben, gleich in welcher Sprache. Eine Installation, die eine frühere Version eingerichtet hat, mit einem Zielbenutzer oder mit Kopien und Importen ihrer Läufe, behält für einen Namen, den sie nie gespeichert hat, den deutschen Namen dieser Versionen, etwa Archiv. Eine Installation, die auf einer französischen oder spanischen Nextcloud läuft, behält den englischen Namen aus den Versionen vor diesen Sprachen. Eine neue Installation schlägt den Namen in der Standardsprache von Nextcloud vor, wenn die App einen Katalog für diese Sprache oder für ihre allgemeine Sprache hat, etwa Deutsch für de_DE, und sonst auf Englisch, etwa Archive. Das Speichern der Einstellungen behält die Namen, die die Seite zeigt, und der erste Lauf speichert einen Namen, den er verwendet, sodass danach keine andere Sprache den Ordner umbenennt. Die Fragen sind indigo und die Namen in Nextcloud blau.
 
     name["Ein Ordnername oder<br>ein Ersatzname"] --> saved{"In den Einstellungen<br>gespeichert?"}
     saved -->|ja| keep["Der gespeicherte Name"]
     saved -->|nein| earlier{"Von einer früheren<br>Version eingerichtet, mit<br>Zielbenutzer oder Lauf?"}
     earlier -->|ja| german["Der deutsche Name<br>der früheren Versionen,<br>etwa Archiv"]
-    earlier -->|nein| language{"Ein Katalog für die<br>Standardsprache von<br>Nextcloud oder für ihre<br>allgemeine Sprache?"}
+    earlier -->|nein| inuse{"Auf einer französischen<br>oder spanischen Nextcloud<br>in Betrieb, bevor es<br>diese Sprachen gab?"}
+    inuse -->|ja| kept["Der englische Name,<br>den sie hat, etwa Archive"]
+    inuse -->|nein| language{"Ein Katalog für die<br>Standardsprache von<br>Nextcloud oder für ihre<br>allgemeine Sprache?"}
     language -->|ja| localized["Der Name in dieser<br>Sprache, etwa<br>Archiv für de oder de_DE"]
     language -->|nein| english["Der englische Name,<br>etwa Archive"]
+    localized --> stored["Der erste Lauf speichert<br>den verwendeten Namen, also<br>benennt keine andere<br>Sprache ihn um"]
+    english --> stored
 
     classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
     classDef nextcloud fill:#0082c92e,stroke:#0082c9,stroke-width:2px
-    class saved,earlier,language check
-    class keep,german,localized,english nextcloud
+    class saved,earlier,inuse,language check
+    class keep,german,kept,localized,english,stored nextcloud

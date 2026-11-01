@@ -72,8 +72,9 @@ final class ConfigService {
 	/**
 	 * The names of the folders and the fallbacks for empty metadata that a new installation
 	 * proposes, in English. They follow the default language of Nextcloud through the catalog of the
-	 * app, so that a German instance proposes Dokumente/Paperless, Archiv and Eingang, and an
-	 * English one Documents/Paperless, Archive and Inbox. Once saved, a name stays as it is.
+	 * app, so that a German instance proposes Dokumente/Paperless, Archiv and Eingang, a French one
+	 * Documents/Paperless, Archives and Boîte de réception, and an English one Documents/Paperless,
+	 * Archive and Inbox. Once saved, or used by a run, a name stays as it is.
 	 */
 	private const NAMES = [
 		'base_path' => 'Documents/Paperless',
@@ -369,6 +370,15 @@ final class ConfigService {
 	}
 
 	/**
+	 * Keep the names that a run uses: store each that only its default gives, so that neither a
+	 * catalog of a new language, nor another default language of Nextcloud, nor a new default of a
+	 * later version moves an archive that exists. Returns how many it stored.
+	 */
+	public function keepDefaultNames(): int {
+		return $this->keepNames($this->defaultNames());
+	}
+
+	/**
 	 * The configured Paperless URL alone, without a trailing slash. Unlike get(), it doesn't read the
 	 * token, which a link to Paperless, such as in the activity stream, doesn't need.
 	 */
@@ -416,13 +426,18 @@ final class ConfigService {
 	 * @return array<string, bool|int|string>
 	 */
 	private function defaults(): array {
+		return self::DEFAULTS + $this->defaultNames();
+	}
+
+	/** @return array<string, string> the name of each setting of a name, in the default language of Nextcloud */
+	private function defaultNames(): array {
 		$l10n = $this->l10nFactory->get(AppConstants::APP_ID, $this->defaultLanguage());
-		$defaults = self::DEFAULTS;
+		$names = [];
 		foreach (array_keys(self::NAMES) as $key) {
-			$defaults[$key] = $l10n->t(self::NAMES[$key]);
+			$names[$key] = $l10n->t(self::NAMES[$key]);
 		}
 
-		return $defaults;
+		return $names;
 	}
 
 	/**
@@ -434,7 +449,7 @@ final class ConfigService {
 	 * fall back to the language of the user who reads, which differs between administrators and is
 	 * missing in a scheduled run.
 	 */
-	private function defaultLanguage(): string {
+	public function defaultLanguage(): string {
 		$language = $this->config->getSystemValueString('force_language', '');
 		// force_language true, read as '1', only keeps users from choosing a language.
 		if (in_array($language, ['', '1'], true)) {

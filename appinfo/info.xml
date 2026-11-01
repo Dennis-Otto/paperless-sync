@@ -4,6 +4,8 @@
 	<name>Paperless Sync</name>
 	<summary>Mirror Paperless-ngx documents into Nextcloud Files and send files from Nextcloud to Paperless</summary>
 	<summary lang="de">Paperless-ngx-Dokumente nach Nextcloud spiegeln und Dateien aus Nextcloud an Paperless senden</summary>
+	<summary lang="es">Refleja documentos de Paperless-ngx en Archivos de Nextcloud y envía ficheros de Nextcloud a Paperless</summary>
+	<summary lang="fr">Refléter les documents de Paperless-ngx dans Fichiers de Nextcloud et envoyer des fichiers de Nextcloud vers Paperless</summary>
 	<description><![CDATA[
 ### A native bridge between Paperless-ngx and Nextcloud
 
@@ -75,6 +77,82 @@ Das Paperless-API-Token liegt ausschließlich serverseitig im Zugangsdatenmanage
 - Ein eigener Paperless-Dienstbenutzer mit ausschließlich den für die aktivierten Funktionen benötigten Rechten
 
 Paperless Sync ist unabhängig von [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide Apps verstehen stabile Dokumentkennzeichnungen wie `[P123]` und können getrennt installiert werden.
+]]></description>
+	<description lang="es"><![CDATA[
+### Un puente nativo entre Paperless-ngx y Nextcloud
+
+Paperless Sync refleja los documentos finalizados de Paperless-ngx en una estructura de carpetas legible de Nextcloud. Paperless sigue siendo el archivo de referencia de los documentos, mientras que Nextcloud ofrece el acceso de siempre mediante Archivos, la sincronización de escritorio, las aplicaciones móviles, los recursos compartidos y su visor integrado.
+
+### Estructurado, automático y reversible
+
+- Exporta los PDF de archivo o los ficheros originales mediante la API de Paperless
+- Crea una jerarquía configurable a partir del interlocutor, el tipo de documento, la fecha, el título y el ID del documento
+- Da a cada usuario de Nextcloud los documentos que posee en Paperless y, si quieres, los que comparte con él, mediante la única conexión del administrador (propiedad por usuario opcional)
+- Mueve o cambia el nombre de los ficheros cuando cambian los metadatos de Paperless
+- Omite los documentos de la bandeja de entrada de Paperless hasta que estén finalizados y quita las copias ya reflejadas cuando se añade una etiqueta de exclusión
+- Importa en Paperless los ficheros de una bandeja de entrada configurable de Nextcloud
+- Envía un fichero o una carpeta a Paperless desde su menú en Archivos, para un grupo a tu elección, y abre en Paperless el documento de una copia reflejada
+- Envía ficheros a Paperless mediante reglas de Flow, como cada PDF que sube un miembro de un grupo, con etiquetas propias
+- Refleja la papelera de Paperless en una carpeta específica de Nextcloud
+- Opcionalmente, quita los ficheros cuando se eliminan definitivamente de Paperless
+- Quita las carpetas vacías del archivo tras movimientos y eliminaciones
+- Se ejecuta con las tareas en segundo plano nativas de Nextcloud y un estado que se puede reanudar
+- Refleja un documento nuevo o cambiado en segundos cuando un flujo de trabajo de Paperless llama a su webhook, protegido con un secreto
+- Avisa a los administradores cuando el reflejo falla repetidamente, con comprobaciones de la configuración en Administración y una API de estado para monitores como Uptime Kuma o Home Assistant
+
+### Seguro por defecto
+
+La sincronización está desactivada hasta que un administrador completa y valida la configuración. La eliminación definitiva hay que activarla expresamente y se puede proteger con varias confirmaciones de que falta el documento. Una simulación muestra los cambios sin modificar ningún fichero.
+
+El token de API de Paperless se guarda en el servidor, en el gestor de credenciales de Nextcloud, y nunca se devuelve al navegador. La aplicación trabaja directamente con la API del sistema de ficheros de Nextcloud, así que no necesita ninguna contraseña de Nextcloud ni credenciales de WebDAV.
+
+### Requisitos
+
+- Nextcloud 33 a 35 con tareas cron en segundo plano fiables
+- Una instancia accesible de Paperless-ngx, versión 2.16 o más reciente, incluida la 3.x, con acceso a la API
+- Una cuenta de servicio de Paperless dedicada, solo con los permisos que necesitan las funciones activadas
+
+Paperless Sync es independiente de [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Ambas aplicaciones entienden marcadores estables de documento como `[P123]` y se pueden instalar por separado.
+
+La documentación está en [inglés](https://dennis-otto.github.io/paperless-sync/) y [alemán](https://dennis-otto.github.io/paperless-sync/de/).
+]]></description>
+	<description lang="fr"><![CDATA[
+### Un pont natif entre Paperless-ngx et Nextcloud
+
+Paperless Sync reflète les documents finalisés de Paperless-ngx dans une arborescence de dossiers lisible de Nextcloud. Paperless reste l’archive de référence des documents, tandis que Nextcloud offre un accès familier par Fichiers, la synchronisation de bureau, les applications mobiles, le partage et sa visionneuse intégrée.
+
+### Structuré, automatique et réversible
+
+- Exporte les PDF d’archive ou les fichiers originaux par l’API de Paperless
+- Construit une hiérarchie configurable à partir du correspondant, du type de document, de la date, du titre et de l’identifiant du document
+- Donne à chaque utilisateur de Nextcloud les documents qu’il possède dans Paperless et, si vous le souhaitez, ceux que Paperless partage avec lui, par l’unique connexion de l’administrateur (propriété par utilisateur facultative)
+- Déplace ou renomme les fichiers quand les métadonnées de Paperless changent
+- Ignore les documents de la boîte de réception de Paperless jusqu’à leur finalisation et retire les copies déjà reflétées quand une étiquette d’exclusion est ajoutée
+- Importe dans Paperless les fichiers d’une boîte de réception Nextcloud configurable
+- Envoie un fichier ou un dossier vers Paperless depuis son menu dans Fichiers, pour un groupe de votre choix, et ouvre dans Paperless le document d’une copie reflétée
+- Envoie des fichiers vers Paperless par des règles de Flow, comme chaque PDF qu’un membre d’un groupe téléverse, avec leurs propres étiquettes
+- Reflète la corbeille de Paperless dans un dossier Nextcloud dédié
+- Retire, en option, les fichiers après leur suppression définitive de Paperless
+- Retire les dossiers d’archive vides après les déplacements et les suppressions
+- S’exécute par les tâches de fond natives de Nextcloud, avec un état qui peut reprendre
+- Reflète un document nouveau ou modifié en quelques secondes quand un workflow de Paperless appelle son webhook, protégé par un secret
+- Prévient les administrateurs quand le miroir échoue à répétition, avec des vérifications de la configuration sous Administration et une API d’état pour des outils de supervision comme Uptime Kuma ou Home Assistant
+
+### Sûr par défaut
+
+La synchronisation reste désactivée jusqu’à ce qu’un administrateur complète et valide la configuration. La suppression définitive doit être activée explicitement et peut être protégée par plusieurs confirmations de l’absence du document. Une simulation montre les changements sans modifier aucun fichier.
+
+Le jeton d’API de Paperless est stocké côté serveur dans le gestionnaire d’identifiants de Nextcloud et n’est jamais renvoyé au navigateur. L’application travaille directement avec l’API du système de fichiers de Nextcloud : aucun mot de passe Nextcloud ni identifiant WebDAV n’est nécessaire.
+
+### Prérequis
+
+- Nextcloud 33 à 35 avec des tâches de fond cron fiables
+- Une instance Paperless-ngx joignable, version 2.16 ou plus récente, 3.x comprise, avec accès à l’API
+- Un compte de service Paperless dédié, avec uniquement les permissions nécessaires aux fonctions activées
+
+Paperless Sync est indépendant de [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Les deux applications comprennent des marqueurs de document stables comme `[P123]` et peuvent être installées séparément.
+
+La documentation est en [anglais](https://dennis-otto.github.io/paperless-sync/) et en [allemand](https://dennis-otto.github.io/paperless-sync/de/).
 ]]></description>
 	<version>1.3.1</version>
 	<licence>AGPL-3.0-or-later</licence>
