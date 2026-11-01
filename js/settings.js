@@ -102,20 +102,19 @@
 		}
 	}
 
-	// A request to Nextcloud with the request token of the page. options.headers adds headers, such
-	// as the one that the OCS API of Nextcloud asks for; options.confirmed tells the request again
-	// after the password was confirmed.
+	// A request to Nextcloud with the request token of the page. options.confirmed tells the request
+	// again after the password was confirmed.
 	async function request(url, method, body, options = {}) {
 		let response
 		try {
 			response = await window.fetch(url, {
 				method,
 				credentials: 'same-origin',
-				headers: Object.assign({
+				headers: {
 					Accept: 'application/json',
 					'Content-Type': 'application/json',
 					requesttoken: window.OC.requestToken,
-				}, options.headers),
+				},
 				body: body === undefined ? undefined : JSON.stringify(body),
 			})
 		} catch {
@@ -125,7 +124,7 @@
 		const data = await answerData(response)
 		if (response.status === 403 && data !== null && data.message === PASSWORD_CONFIRMATION_REQUIRED && !options.confirmed) {
 			await confirmPassword()
-			return request(url, method, body, Object.assign({}, options, { confirmed: true }))
+			return request(url, method, body, { confirmed: true })
 		}
 		if (response.ok && data !== null) {
 			return data
@@ -1681,9 +1680,9 @@
 		})
 
 		// The target user: the users of Nextcloud whose ID, name or e-mail address holds what is typed,
-		// from its provisioning API, which answers administrators. A user ID that Nextcloud doesn't
-		// know is marked at once, so that a typo doesn't wait for the save or the next run.
-		const ocs = { headers: { 'OCS-APIRequest': 'true' } }
+		// from a route of the app, which answers whoever may open this page, also a member of a group
+		// that it is delegated to. A user ID that Nextcloud doesn't know is marked at once, so that a
+		// typo doesn't wait for the save or the next run.
 		// The user ID that the hint of the field speaks of, null before the first check.
 		let checkedUser = null
 		// Whether the hint of the field says that the last search failed, which says nothing about
@@ -1692,17 +1691,14 @@
 
 		async function searchUsers(text) {
 			try {
-				const query = new URLSearchParams({ search: text, limit: '10' })
-				const answer = await request(root.dataset.usersUrl + '/details?' + query, 'GET', undefined, ocs)
+				const query = new URLSearchParams({ search: text })
+				const answer = await request(root.dataset.usersUrl + '?' + query, 'GET')
 				if (searchFailed) {
 					searchFailed = false
 					setText(targetUserHint, '')
 				}
-				const users = answer.ocs && answer.ocs.data && answer.ocs.data.users ? Object.values(answer.ocs.data.users) : []
-				return users.filter(function(user) {
-					return user !== null && typeof user === 'object' && typeof user.id === 'string'
-				}).map(function(user) {
-					const name = typeof user.displayname === 'string' && user.displayname.trim() !== '' ? user.displayname : user.id
+				return answer.users.map(function(user) {
+					const name = user.displayname.trim() !== '' ? user.displayname : user.id
 					const notes = name === user.id ? [] : [user.id]
 					// A disabled user can't own the archive: a run fails until the account is enabled.
 					if (user.enabled === false) {
@@ -1744,7 +1740,7 @@
 			}
 			let known = true
 			try {
-				await request(root.dataset.usersUrl + '/' + encodeURIComponent(id), 'GET', undefined, ocs)
+				await request(root.dataset.usersUrl + '/' + encodeURIComponent(id), 'GET')
 			} catch (error) {
 				known = error.status !== 404
 			}
@@ -1763,8 +1759,8 @@
 		targetUser.addEventListener('change', checkTargetUser)
 
 		// The group that may send files from Files, and the one whose members alone get their documents
-		// in per-user ownership: the groups of Nextcloud whose ID or name holds what is typed, from the
-		// same provisioning API, with the problem of a search below its field. The save checks that
+		// in per-user ownership: the groups of Nextcloud whose ID or name holds what is typed, from
+		// another route of the app, with the problem of a search below its field. The save checks that
 		// the group exists.
 		const sendGroup = element('send-group')
 		const sendGroupProblem = element('send-group-problem')
@@ -1773,14 +1769,11 @@
 
 		async function searchGroups(text, problem = sendGroupProblem) {
 			try {
-				const query = new URLSearchParams({ search: text, limit: '10' })
-				const answer = await request(root.dataset.groupsUrl + '/details?' + query, 'GET', undefined, ocs)
+				const query = new URLSearchParams({ search: text })
+				const answer = await request(root.dataset.groupsUrl + '?' + query, 'GET')
 				setText(problem, '')
-				const groups = answer.ocs && answer.ocs.data && Array.isArray(answer.ocs.data.groups) ? answer.ocs.data.groups : []
-				return groups.filter(function(group) {
-					return group !== null && typeof group === 'object' && typeof group.id === 'string'
-				}).map(function(group) {
-					const name = typeof group.displayname === 'string' && group.displayname.trim() !== '' ? group.displayname : group.id
+				return answer.groups.map(function(group) {
+					const name = group.displayname.trim() !== '' ? group.displayname : group.id
 					return { value: group.id, label: name, note: name === group.id ? '' : group.id }
 				})
 			} catch (error) {

@@ -23,13 +23,16 @@
 // connecting again and the schedule as they happen. run.sh starts it in the image of Playwright,
 // inside the network of the Compose project, after the accessibility check, while
 // Paperless and the saved configuration of run.sh are there, and it leaves that
-// configuration as it found it.
+// configuration as it found it. At its end, a member of the group that run.sh delegated the
+// settings to uses the page: the pickers answer them, and they test, save and start a dry-run.
 
 import { request } from 'playwright-core'
 import { launch } from './browser.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
 const USER = process.env.E2E_USER ?? 'e2e-admin'
+// The member of the group that run.sh delegated the settings to, who is no administrator.
+const DELEGATE = process.env.E2E_DELEGATE ?? 'e2e-delegate'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'e2e-only-password'
 // The synthetic token of the mock, which run.sh saved, to connect again after Disconnect.
 const TOKEN = process.env.E2E_TOKEN ?? 'e2e-only-token'
@@ -154,8 +157,8 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 14 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
-		`Getting started, every section, the setup of the account, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
+		helpLinks.length === 15 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Getting started, the delegation of the page, every section, the setup of the account, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
 	// Who gets the documents: both options of each user show the table and the group, which the target user alone doesn't need.
@@ -945,6 +948,56 @@ try {
 	} finally {
 		await setLanguage('en')
 	}
+
+	// A member of the delegated group has the page as an administrator has it. The fields of the
+	// target user and the groups answer them too, and don't call a user who exists unknown.
+	const delegated = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+	await delegated.goto(`${BASE_URL}/index.php/login`)
+	await delegated.locator('input[name="user"]').fill(DELEGATE)
+	await delegated.locator('input[name="password"]').fill(PASSWORD)
+	await delegated.locator('input[name="password"]').press('Enter')
+	await delegated.waitForURL((address) => !address.pathname.endsWith('/login'))
+	await delegated.goto(`${BASE_URL}${PAGE}`)
+	const delegatedSave = delegated.locator('#paperless-sync-save')
+	await delegatedSave.waitFor()
+	expect(await delegated.locator('#paperless-sync-delegation-hint').isVisible(), 'The page says what a delegation gives.')
+	const delegatedTarget = delegated.locator('#paperless-sync-target-user')
+	const delegatedTargetUser = await delegatedTarget.inputValue()
+	const delegatedUsers = delegated.locator('#paperless-sync-target-user-options [role="option"]')
+	await delegatedTarget.fill('sync')
+	await delegatedUsers.first().waitFor()
+	const usersOfTheDelegate = await delegatedUsers.allTextContents()
+	expect(JSON.stringify(usersOfTheDelegate) === JSON.stringify(['sync-target']), `The target user must offer the users to a delegate as well: ${JSON.stringify(usersOfTheDelegate)}`)
+	const otherUser = delegated.waitForResponse((response) => response.url().endsWith('/settings/users/e2e-other'))
+	await delegatedTarget.fill('e2e-other')
+	await delegatedTarget.press('Tab')
+	expect((await otherUser).ok(), 'A user who exists must be known to a delegate as well.')
+	const delegatedHint = delegated.locator('#paperless-sync-target-user-hint')
+	expect((await delegatedHint.textContent()) === '' && (await delegatedTarget.getAttribute('aria-invalid')) === null, `A user who exists must not be marked: ${await delegatedHint.textContent()}`)
+	await delegatedTarget.fill(delegatedTargetUser)
+	await delegatedTarget.press('Tab')
+	const delegatedGroup = delegated.locator('#paperless-sync-send-group')
+	const delegatedSendGroup = await delegatedGroup.inputValue()
+	await delegatedGroup.fill('e2e-del')
+	const delegatedGroups = delegated.locator('#paperless-sync-send-group-options [role="option"]')
+	await delegatedGroups.first().waitFor()
+	expect((await delegatedGroups.first().textContent()) === 'e2e-delegates', `The group that may send files must offer the groups to a delegate as well: ${await delegatedGroups.first().textContent()}`)
+	await delegatedGroup.fill(delegatedSendGroup)
+	await delegatedGroup.press('Escape')
+	const settleDelegated = () => delegated.locator('#paperless-sync-save:enabled').waitFor()
+	await delegated.locator('#paperless-sync-test').click()
+	await settleDelegated()
+	const delegatedPaperless = await delegated.locator('[data-check="paperless"]').evaluate((line) => line.className)
+	expect(delegatedPaperless.includes('paperless-sync-check--passed'), `A delegate must test the connection: ${delegatedPaperless}`)
+	await delegatedSave.click()
+	await settleDelegated()
+	const delegatedMessage = await delegated.locator('#paperless-sync-message').textContent()
+	expect([SAVED, SAVED_UNTESTED].includes(delegatedMessage), `A delegate must save the settings: ${delegatedMessage}`)
+	await delegated.locator('#paperless-sync-dry-run').click()
+	await settleDelegated()
+	await delegated.locator('#paperless-sync-report-meta').filter({ hasText: /^Dry-run, finished/ }).waitFor({ timeout: 5000 })
+	await delegated.context().close()
+	console.log('Settings: a member of the delegated group picks a user and a group, tests the connection, saves and starts a dry-run.')
 } catch (error) {
 	await browser.keep(error)
 	throw error

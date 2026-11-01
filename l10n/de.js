@@ -336,6 +336,8 @@ OC.L10N.register(
 		"Missing document type": "Fehlender Dokumenttyp",
 		"Missing date": "Fehlendes Datum",
 		"Missing title": "Fehlender Titel",
+		"An administrator can delegate this page to a group under Administration privileges. Its members can then do all that it offers, such as pointing the archive and the inbox at the files of any user, so delegate it only to people whom you trust with those files.": "Ein Administrator kann diese Seite unter Administrationsrechte an eine Gruppe delegieren. Deren Mitglieder können dann alles, was sie bietet, etwa das Archiv und den Eingang auf die Dateien jedes Benutzers richten; delegiere sie also nur an Menschen, denen du diese Dateien anvertraust.",
+		"Delegating the settings": "Die Einstellungen delegieren",
 		"Test connection and save": "Verbindung testen und speichern",
 		"Save": "Speichern",
 		"Run dry-run": "Testlauf starten",

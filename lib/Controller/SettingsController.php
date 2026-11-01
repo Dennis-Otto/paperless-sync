@@ -23,8 +23,10 @@ use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\PasswordConfirmationRequired;
 use OCP\AppFramework\Http\JSONResponse;
@@ -69,6 +71,7 @@ final class SettingsController extends Controller {
 	 * @param array<string, mixed> $settings
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings/preview')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function preview(array $settings = []): JSONResponse {
 		$saved = $this->configService->get();
 		/** @psalm-suppress MixedAssignment */
@@ -118,6 +121,7 @@ final class SettingsController extends Controller {
 	 * @param array<string, mixed> $settings
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function save(array $settings = [], #[\SensitiveParameter] string $token = ''): JSONResponse {
 		$tokenEntered = trim($token) !== '';
@@ -175,6 +179,7 @@ final class SettingsController extends Controller {
 	 * @param array<string, mixed> $settings
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings/test')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function test(array $settings = [], #[\SensitiveParameter] string $token = ''): JSONResponse {
 		try {
@@ -226,10 +231,11 @@ final class SettingsController extends Controller {
 	 * mirror and the tags for every import, read with the stored URL and token, as a run reads them. Without both, there is nothing to read: the page
 	 * then takes names as they are typed. A name that the setting can't hold, with a comma or a line
 	 * break, which separate its names, is left out, and so is an empty one or one that comes twice.
-	 * The names are in the order of their letters, case aside. Only administrators may ask, as for
-	 * every route of the controller.
+	 * The names are in the order of their letters, case aside. Only those who may open the settings
+	 * may ask, as for every route of the controller.
 	 */
 	#[FrontpageRoute(verb: 'GET', url: '/settings/paperless/tags')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function tags(): JSONResponse {
 		[$config, $connection] = $this->configService->snapshot();
 		if ($config->paperlessUrl === '' || !$config->tokenConfigured) {
@@ -265,6 +271,7 @@ final class SettingsController extends Controller {
 	 * configuration that stays, for the page to show.
 	 */
 	#[FrontpageRoute(verb: 'DELETE', url: '/settings')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function reset(): JSONResponse {
 		$this->status->checkedConnection('', false);
@@ -280,8 +287,8 @@ final class SettingsController extends Controller {
 	 * settings are saved with that token, as a save with a typed token saves them.
 	 *
 	 * The token of the superuser goes only to the Paperless URL of the form, for the requests of the
-	 * setup: it is never stored, logged or answered. So Nextcloud asks for the password of the
-	 * administrator first, as for a save.
+	 * setup: it is never stored, logged or answered. So Nextcloud asks for the password of whoever
+	 * sends it first, as for a save.
 	 *
 	 * The settings are checked first, and the folder of the target user, so that Paperless gets no
 	 * account for settings that can't be saved. A user that exists already is changed only with
@@ -292,6 +299,7 @@ final class SettingsController extends Controller {
 	 * @param array<string, mixed> $settings
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings/account')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function account(array $settings = [], #[\SensitiveParameter] string $superuserToken = '', string $username = '', bool $update = false): JSONResponse {
 		$superuserToken = trim($superuserToken);

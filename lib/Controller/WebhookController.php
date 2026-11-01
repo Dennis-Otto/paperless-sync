@@ -14,9 +14,11 @@ use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\RunsOffException;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\WebhookService;
+use OCA\PaperlessSync\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -132,6 +134,7 @@ final class WebhookController extends Controller {
 
 	/** The webhook as the settings page shows it, without the secret. */
 	#[FrontpageRoute(verb: 'GET', url: '/settings/webhook')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function state(): JSONResponse {
 		return new JSONResponse($this->webhook->state());
 	}
@@ -141,6 +144,7 @@ final class WebhookController extends Controller {
 	 * answers with it: the one time that anyone sees it.
 	 */
 	#[FrontpageRoute(verb: 'POST', url: '/settings/webhook')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function create(): JSONResponse {
 		$secret = $this->webhook->create();
@@ -150,6 +154,7 @@ final class WebhookController extends Controller {
 
 	/** Turns the webhook off: Paperless's calls are refused until a new secret is created. */
 	#[FrontpageRoute(verb: 'DELETE', url: '/settings/webhook')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	#[PasswordConfirmationRequired]
 	public function remove(): JSONResponse {
 		$this->webhook->remove();

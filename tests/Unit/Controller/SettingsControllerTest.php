@@ -26,6 +26,7 @@ use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\SyncService;
 use OCA\PaperlessSync\Service\UserTimeZones;
+use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedActivities;
@@ -858,19 +859,22 @@ final class SettingsControllerTest extends TestCase {
 	}
 
 	/**
-	 * Every action of the controller is for administrators alone, the list of tags too, which is
-	 * read with the token of the app. Nextcloud lets others in only with one of these attributes.
+	 * Every action of the controller is for administrators and the group that they delegate the
+	 * settings to, the list of tags too, which is read with the token of the app. Nextcloud lets
+	 * others in only with one of the other attributes.
 	 */
 	#[DataProvider('actions')]
-	public function testOnlyAdministratorsReachTheSettings(string $method): void {
+	public function testOnlyAdministratorsAndTheirDelegatesReachTheSettings(string $method): void {
+		$reflection = new ReflectionMethod(SettingsController::class, $method);
 		$attributes = array_map(
 			static fn (\ReflectionAttribute $attribute): string => $attribute->getName(),
-			(new ReflectionMethod(SettingsController::class, $method))->getAttributes(),
+			$reflection->getAttributes(),
 		);
 
 		self::assertSame([], array_values(array_intersect($attributes, [
-			NoAdminRequired::class, SubAdminRequired::class, AuthorizedAdminSetting::class, PublicPage::class, NoCSRFRequired::class,
+			NoAdminRequired::class, SubAdminRequired::class, PublicPage::class, NoCSRFRequired::class,
 		])));
+		self::assertSame(AdminSettings::class, $reflection->getAttributes(AuthorizedAdminSetting::class)[0]->newInstance()->getSettings());
 	}
 
 	/**
