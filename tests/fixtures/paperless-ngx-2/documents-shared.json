@@ -8,18 +8,18 @@
     "previous": null,
     "results": [
       {
-        "added": "2026-11-01T02:30:14.781067Z",
+        "added": "2026-01-01T00:00:00.000000Z",
         "archive_serial_number": null,
-        "archived_file_name": "2026-11-01 shared.pdf",
+        "archived_file_name": "2026-01-01 shared.pdf",
         "correspondent": null,
-        "created": "2026-11-01",
+        "created": "2026-01-01",
         "custom_fields": [],
         "document_type": null,
         "id": 5,
         "mime_type": "application/pdf",
-        "modified": "2026-11-01T02:30:15.554440Z",
+        "modified": "2026-01-01T00:00:00.000000Z",
         "original_file_name": "shared.pdf",
-        "owner": 7,
+        "owner": 6,
         "page_count": 1,
         "permissions": {
           "change": {
@@ -31,8 +31,8 @@
               1
             ],
             "users": [
-              6,
-              8
+              4,
+              7
             ]
           }
         },

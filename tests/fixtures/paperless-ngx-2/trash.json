@@ -8,7 +8,7 @@
     "previous": null,
     "results": [
       {
-        "added": "2026-10-14T11:56:03.159099Z",
+        "added": "2026-01-01T00:00:00.000000Z",
         "archive_serial_number": null,
         "archived_file_name": "2026-08-28 Example Insurance Unread letter.pdf",
         "content": "Synthetic contract test document unread.pdf of Paperless Sync.",
@@ -16,12 +16,12 @@
         "created": "2026-08-28",
         "created_date": "2026-08-28",
         "custom_fields": [],
-        "deleted_at": "2026-10-14T11:56:07.058188Z",
+        "deleted_at": "2026-01-01T00:00:00.000000Z",
         "document_type": 3,
         "id": 3,
         "is_shared_by_requester": false,
         "mime_type": "application/pdf",
-        "modified": "2026-10-14T11:56:06.416818Z",
+        "modified": "2026-01-01T00:00:00.000000Z",
         "notes": [],
         "original_file_name": "unread.pdf",
         "owner": 3,

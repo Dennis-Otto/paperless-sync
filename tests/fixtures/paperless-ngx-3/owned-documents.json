@@ -1,0 +1,54 @@
+{
+  "body": {
+    "all": [
+      5
+    ],
+    "count": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "added": "2026-01-01T00:00:00.000000Z",
+        "archive_serial_number": null,
+        "archived_file_name": "2026-01-01 per-user.pdf",
+        "content": "Synthetic per-user contract test letter",
+        "correspondent": null,
+        "created": "2026-01-01",
+        "created_date": "2026-01-01",
+        "custom_fields": [],
+        "deleted_at": null,
+        "document_type": null,
+        "duplicate_documents": [],
+        "id": 5,
+        "is_shared_by_requester": false,
+        "mime_type": "application/pdf",
+        "modified": "2026-01-01T00:00:00.000000Z",
+        "notes": [],
+        "original_file_name": "per-user.pdf",
+        "owner": 4,
+        "page_count": 1,
+        "root_document": null,
+        "storage_path": null,
+        "tags": [],
+        "title": "per-user",
+        "user_can_change": true,
+        "versions": [
+          {
+            "added": "2026-01-01T00:00:00.000000Z",
+            "checksum": "3a91bc9f9f317ce16c893cc708889f4a186f9dbc62fdcf96de1c2ef656f3782d",
+            "id": 5,
+            "is_root": true,
+            "version_label": null
+          }
+        ]
+      }
+    ]
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/?page=1&page_size=1&owner__id=4",
+  "status": 200
+}

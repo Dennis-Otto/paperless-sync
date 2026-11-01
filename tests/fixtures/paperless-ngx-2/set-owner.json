@@ -1,0 +1,12 @@
+{
+  "body": {
+    "detail": "No Document matches the given query."
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "9",
+    "X-Version": "2.20.15"
+  },
+  "request": "PATCH /api/documents/4/",
+  "status": 404
+}

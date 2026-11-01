@@ -1,10 +1,10 @@
 {
   "body": {
-    "date_joined": "2026-10-24T22:19:46.643581Z",
+    "date_joined": "2026-01-01T00:00:00.000000Z",
     "email": "",
     "first_name": "",
     "groups": [],
-    "id": 5,
+    "id": 9,
     "inherited_permissions": [],
     "is_active": true,
     "is_mfa_enabled": false,
@@ -24,6 +24,6 @@
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "PATCH /api/users/5/",
+  "request": "PATCH /api/users/9/",
   "status": 200
 }

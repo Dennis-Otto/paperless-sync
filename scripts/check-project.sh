@@ -94,8 +94,9 @@ for path in README.md README.de.md CHANGELOG.md docs/guide.md docs/guide.de.md d
   expect skip "$path"
 done
 # The contract tests against a real Paperless are a job of their own.
-for path in tests/e2e/contract.py tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml \
-  tests/fixtures/paperless-ngx-3/documents.json; do
+for path in tests/e2e/contract.py tests/e2e/test_contract.py tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml \
+  tests/fixtures/paperless-ngx-3/documents.json .github/fixture_bot.py tests/coach/test_fixture_bot.py \
+  .github/workflows/paperless-fixtures.yml; do
   expect skip "$path"
 done
 # The scripts of the pictures alone are the visual check's (visual.yml), whose story shares
@@ -152,7 +153,7 @@ for path in lib/Migration/Version000130Date20261014120000.php lib/Service/Config
 done
 for path in lib/Service/SyncService.php lib/Service/PaperlessApiService.php templates/settings.php \
   js/settings.js l10n/de.json README.md tests/e2e/README.md tests/e2e/accessibility.mjs \
-  tests/e2e/package-lock.json tests/e2e/screenshots.sh tests/e2e/contract.py; do
+  tests/e2e/package-lock.json tests/e2e/screenshots.sh tests/e2e/contract.py tests/e2e/test_contract.py; do
   expect_upgrade skip "$path"
 done
 
@@ -176,7 +177,8 @@ for path in lib/Service/PaperlessApiService.php lib/Service/PaperlessClientInter
   expect_contract run "$path"
 done
 for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php templates/settings.php \
-  tests/e2e/run.sh tests/e2e/README.md tests/Unit/Service/PaperlessApiServiceTest.php README.md; do
+  tests/e2e/run.sh tests/e2e/README.md tests/e2e/test_contract.py tests/Unit/Service/PaperlessApiServiceTest.php \
+  README.md .github/fixture_bot.py .github/workflows/paperless-fixtures.yml; do
   expect_contract skip "$path"
 done
 
@@ -905,6 +907,17 @@ if [[ -n "$python" ]]; then
   "$python" -B tests/e2e/test_failure.py
 else
   echo "Python 3.11 or newer is not installed here; the CI checks the first error of a failed end-to-end run."
+fi
+
+printf '\n== %s\n' "The fixtures of the contract tests and their bot"
+# tests/e2e/contract.py, whose recording of two runs of one image of Paperless must be the
+# same bytes, with the fixtures in tests/fixtures/ as they stand, and .github/fixture_bot.py,
+# which commits new fixtures onto a pull request after the contract tests.
+if [[ -n "$python" ]]; then
+  "$python" -B tests/e2e/test_contract.py
+  "$python" -B tests/coach/test_fixture_bot.py
+else
+  echo "Python 3.11 or newer is not installed here; the CI checks the fixtures of the contract tests and their bot."
 fi
 
 printf '\n== %s\n' "Check of the package"

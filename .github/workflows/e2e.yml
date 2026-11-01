@@ -42,7 +42,10 @@ name: Docker E2E
 # Paperless-ngx instead of the mock (tests/e2e/run-contract.sh): the last release of 2.x
 # and the current one of 3.x, side by side. They check every answer that the app reads
 # and then run the app against it, and they compare the shapes of the answers with the
-# fixtures of the unit tests (tests/fixtures/). They are no required check either; a
+# fixtures of the unit tests (tests/fixtures/). In a pull request whose app passes against
+# that Paperless, the fixtures that differ from its answers become an artifact
+# fixes-paperless-ngx-<line>, which paperless-fixtures.yml commits onto a branch of this
+# repository and suggests on one from a fork. They are no required check either; a
 # failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
 # or adds the run to it, each with its first error, and closes it once they pass again.
 #
@@ -358,6 +361,13 @@ jobs:
           LINE: ${{ matrix.line }}
           # The answers of Paperless, for the fixtures of the unit tests when they changed.
           CONTRACT_RECORDINGS: ${{ runner.temp }}/paperless-ngx-${{ matrix.line }}
+          # The fixtures that differ, once the app passed, for paperless-fixtures.yml. On a
+          # branch of this repository it commits them, so that a new shape fails nothing
+          # there; a pull request from a fork gets suggestions, and the failure as before.
+          # So does one with the label no-bot-fixes, which the bot leaves alone: nothing
+          # would commit the fixtures there, so the failure has to stay.
+          CONTRACT_FIXES: ${{ github.event_name == 'pull_request' && format('{0}/fixes-paperless-ngx-{1}', runner.temp, matrix.line) || '' }}
+          CONTRACT_BOT_COMMITS: ${{ github.event.pull_request.head.repo.full_name == github.repository && !contains(github.event.pull_request.labels.*.name, 'no-bot-fixes') && '1' || '0' }}
           # The log and the title of the run, from which failure.py names its first error.
           RUN_FOLDER: ${{ runner.temp }}/contract/paperless-ngx-${{ matrix.line }}
         run: |
@@ -365,6 +375,10 @@ jobs:
           mkdir -p "$RUN_FOLDER"
           echo "Paperless-ngx $LINE.x" >"$RUN_FOLDER/title.txt"
           bash tests/e2e/run-contract.sh "$LINE" 2>&1 | tee "$RUN_FOLDER/run.log"
+          if [[ -f "$CONTRACT_FIXES/version.txt" ]]; then
+            echo "### The fixtures of Paperless-ngx $LINE.x differ from its answers" >> "$GITHUB_STEP_SUMMARY"
+            echo "The app passed against Paperless-ngx $(cat "$CONTRACT_FIXES/version.txt"), so the workflow *Paperless fixtures* takes the new fixtures from the artifact \`fixes-paperless-ngx-$LINE\`: it commits them onto a branch of this repository and suggests them on a pull request from a fork." >> "$GITHUB_STEP_SUMMARY"
+          fi
       # The first error of the line, in the summary of the check, as its annotation and
       # for the issue.
       - name: Name the first error
@@ -392,6 +406,15 @@ jobs:
           path: ${{ runner.temp }}/paperless-ngx-${{ matrix.line }}
           if-no-files-found: ignore
           retention-days: 14
+      # Only a run whose app passed has them, so a real break of the contract pushes nothing.
+      - name: Keep the new fixtures for the bot
+        if: always() && steps.changes.outputs.contract != 'false'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fixes-paperless-ngx-${{ matrix.line }}
+          path: ${{ runner.temp }}/fixes-paperless-ngx-${{ matrix.line }}/
+          if-no-files-found: ignore
+          retention-days: 3
 
   # The issues about the coming Nextcloud and about Paperless-ngx: one job for each, with
   # one step that opens the issue with the first error of each run that failed, adds each
