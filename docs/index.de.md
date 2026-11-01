@@ -24,6 +24,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 </ul>
 
 [Im App Store holen](https://apps.nextcloud.com/apps/paperless_sync){ .md-button .md-button--primary }
+[Ausprobieren](#ausprobieren){ .md-button }
 [Schnellstart](#schnellstart){ .md-button }
 [Voraussetzungen](guide.de.md#voraussetzungen){ .md-button }
 { .ps-hero-actions }
@@ -300,6 +301,17 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
 Die Einstellungen sprechen Englisch und Deutsch. Sie, die Aktionen in Dateien und das Formular der Regel in Flow werden in jeder Änderung der App auf Barrierefreiheit nach WCAG 2.1 AA geprüft. Jedes Release ist signiert, dasselbe Paket im Nextcloud App Store und auf GitHub, mit einer SBOM und signierter Build-Provenienz.
 
 --8<-- "README.de.md:how-it-works"
+
+## Ausprobieren
+
+--8<-- "README.de.md:try-it"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/de/try-it-dark.gif">
+  <img alt="Ein Terminal führt docker compose -f demo/compose.yaml up aus: Paperless-ngx und Nextcloud starten, die Einrichtung füllt Paperless mit erfundenen Dokumenten, verbindet die App, startet einen Probelauf und den ersten Lauf und nennt die Adressen der Demo. Dann zeigt Nextcloud Dateien das Archiv, von den Ordnern der Korrespondenten über einen Korrespondenten und einen Dokumenttyp bis zu einem Jahr" src="images/de/try-it.gif">
+</picture>
+
+`demo/README.md` im [Repository](https://github.com/Dennis-Otto/paperless-sync) sagt auf Englisch, was Sie darin ausprobieren können.
 
 ## Schnellstart
 

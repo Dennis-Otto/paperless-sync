@@ -305,6 +305,22 @@ Optional environment variables, besides those of `run.sh`:
 - `CANARY_IMAGE`: the local image the script builds, default `paperless-sync-e2e:coming`
 - `E2E_ARTIFACTS`: a folder that gets the folder `coming` when the tests fail, as with `run-all.sh`
 
+## The demo
+
+[`demo/compose.yaml`](../../demo/README.md) is what the README offers to try the app, and `demo.sh` tests it as a person starts it: Nextcloud with the app, a real Paperless-ngx with the household archive of `showcase.py`, and the container `init`, which connects them.
+
+```sh
+bash tests/e2e/demo.sh            # the app from the App Store
+bash tests/e2e/demo.sh --local    # the app of this checkout
+KEEP_E2E=1 bash tests/e2e/demo.sh --local    # keeps the containers afterwards
+```
+
+It waits for `init` and fails unless that ended with 0, the archive of the user `demo` has the 14 documents that are finished in Paperless, Git ignores `demo/.env`, and the password in that file signs in to Nextcloud through WebDAV and to Paperless through its API, each on its port of `127.0.0.1`. Then it starts the demo a second time, which must keep the password and the archive. Its project and its ports, `18580` and `18581`, are its own, so it runs beside a demo that someone uses.
+
+The job `demo` of `.github/workflows/e2e.yml` runs it every Monday and by hand with both sources of the app, and in a pull request that changes the demo, the documents that it seeds or the test (`E2E_QUESTION=demo` of `affected.sh`) with the checkout alone: such a pull request can need an app that the App Store doesn't have yet. The job is no required check; a failure on Monday opens the issue *The demo of the README fails*, adds each further failure with its first error, and closes the issue once the demo passes again.
+
+`test_demo.py`, which `scripts/check-project.sh` runs without containers, tests the rest of what the demo promises: the secrets, which are made once and survive a lost `demo/.env`; every image pinned by its digest, every port on `127.0.0.1` and no password in `demo/compose.yaml`; a Nextcloud that `appinfo/info.xml` supports; and that a first run and `demo.sh` fail with an archive that stays empty.
+
 ## Contract tests against a real Paperless-ngx
 
 The mock answers as the app expects Paperless to answer, and so do the answers in the unit tests; twice, both had drifted from Paperless, in the checksums of Paperless-ngx 2.x and in the tasks of 3.x. The contract tests start a real Paperless-ngx instead, the last release of 2.x (2.20) or the current release of 3.x, and check what it answers:

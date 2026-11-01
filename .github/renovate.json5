@@ -39,5 +39,21 @@
       matchPackageNames: ["mariadb"],
       allowedVersions: "<12",
     },
+    {
+      // Renovate keeps the images of demo/compose.yaml current by their digests, as those of
+      // the end-to-end tests. Two new major versions move by hand: the Nextcloud with the
+      // max-version of appinfo/info.xml, which tests/e2e/test_demo.py compares, and the
+      // PostgreSQL, which doesn't read the tables of a demo that someone keeps.
+      matchFileNames: ["demo/compose.yaml"],
+      matchPackageNames: ["nextcloud", "postgres"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+    {
+      // The job of the demo is no required check, so GitHub would merge an image that breaks
+      // the demo. Renovate merges these itself instead, only once every check is green.
+      matchFileNames: ["demo/compose.yaml"],
+      platformAutomerge: false,
+    },
   ],
 }

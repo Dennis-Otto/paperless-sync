@@ -49,6 +49,12 @@ name: Docker E2E
 # failure on Monday opens the issue "The contract tests against Paperless-ngx fail",
 # or adds the run to it, each with its first error, and closes it once they pass again.
 #
+# On the same Monday, when started by hand, and in a pull request that changes the demo
+# (tests/e2e/affected.sh), tests/e2e/demo.sh starts the demo that the README offers
+# (demo/compose.yaml): with the app from the App Store, as people get it, and with that of
+# the checkout, the only one in a pull request. No required check either; a failure on Monday
+# opens the issue "The demo of the README fails", as above.
+#
 # A job that fails says what failed, why that matters and how to fix it, from
 # .github/checks.project.toml: in its summary, as its annotation and, after the checks,
 # in the comment of the PR coach on the pull request, also on one from a fork.
@@ -416,20 +422,95 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  # The issues about the coming Nextcloud and about Paperless-ngx: one job for each, with
+  demo:
+    name: Demo ${{ matrix.source }}
+    if: >-
+      github.event.schedule == '17 5 * * 1' || github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # The first error of each run has a name of its own, as a job of a matrix would overwrite
+    # the output of another of the same name.
+    outputs:
+      first-error-app-store: ${{ steps.failure.outputs.first-error-app-store }}
+      first-error-checkout: ${{ steps.failure.outputs.first-error-checkout }}
+    strategy:
+      # Each source of the app tells its own story.
+      fail-fast: false
+      matrix:
+        source: [app-store, checkout]
+    steps:
+      - name: Record the network traffic of the job
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit of a pull request and its base, which affected.sh compares.
+          fetch-depth: 2
+      - name: Find out whether the change can break the demo
+        id: changes
+        if: github.event_name == 'pull_request'
+        env:
+          E2E_QUESTION: demo
+        run: bash tests/e2e/affected.sh
+      # A pull request can need an app that the App Store doesn't have yet, so it tries the
+      # checkout alone; the App Store has its turn on Monday.
+      - name: Start the demo with the app of ${{ matrix.source }}
+        if: >-
+          steps.changes.outputs.demo != 'false' &&
+          (github.event_name != 'pull_request' || matrix.source == 'checkout')
+        env:
+          SOURCE: ${{ matrix.source }}
+          # The log and the title of the run, from which failure.py names its first error.
+          RUN_FOLDER: ${{ runner.temp }}/demo/${{ matrix.source }}
+        run: |
+          set -o pipefail
+          mkdir -p "$RUN_FOLDER"
+          echo "Demo $SOURCE" >"$RUN_FOLDER/title.txt"
+          arguments=()
+          if [[ "$SOURCE" == checkout ]]; then
+            arguments=(--local)
+          fi
+          bash tests/e2e/demo.sh "${arguments[@]}" 2>&1 | tee "$RUN_FOLDER/run.log"
+      # The first error of the run, in the summary of the check, as its annotation and for
+      # the issue.
+      - name: Name the first error
+        id: failure
+        if: failure()
+        env:
+          RUNS: ${{ runner.temp }}/demo
+          OUTPUT: first-error-${{ matrix.source }}
+        run: python3 tests/e2e/failure.py "$RUNS" "$OUTPUT"
+      # The PR coach: what failed, why it matters and how to fix it, in the summary
+      # of the check and as its annotation, from .github/checks.project.toml.
+      - name: Explain the failure
+        if: failure()
+        env:
+          CHECK: Demo ${{ matrix.source }}
+        run: |
+          script=.github/blueprint.py
+          [[ -f "$script" ]] || script=blueprint.py
+          python3 "$script" coach explain "$CHECK"
+
+  # The issues about the coming Nextcloud, about Paperless-ngx and about the demo: one job for each, with
   # one step that opens the issue with the first error of each run that failed, adds each
   # further failure with its own, and closes the issue once the tests pass again. The
   # only jobs that may write issues, so they run no code of the repository and reach
   # GitHub alone. A run started by hand on another branch than main reports nothing.
   issue:
     name: issue
-    needs: [coming, paperless]
+    needs: [coming, paperless, demo]
     if: >-
       always() &&
       (github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && github.ref_name == github.event.repository.default_branch)) &&
       (contains(fromJSON('["success", "failure"]'), needs.coming.result) ||
-      contains(fromJSON('["success", "failure"]'), needs.paperless.result))
+      contains(fromJSON('["success", "failure"]'), needs.paperless.result) ||
+      contains(fromJSON('["success", "failure"]'), needs.demo.result))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -438,7 +519,7 @@ jobs:
       fail-fast: false
       matrix:
         # The texts of each issue are in the step, so that the names of the runs stay short.
-        job: [coming, paperless]
+        job: [coming, paperless, demo]
     steps:
       - name: Allow the network traffic to GitHub alone
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -501,6 +582,25 @@ jobs:
 
             The job adds every further failed run here and closes this issue once the
             tests pass again.
+          DEMO_TITLE: The demo of the README fails
+          DEMO_TESTS: smoke tests of the demo
+          DEMO_AGAINST: the app from the App Store and that of the checkout
+          DEMO_ABOUT: >-
+            The job `demo` of `.github/workflows/e2e.yml` runs `tests/e2e/demo.sh`, which
+            starts `demo/compose.yaml` as the README offers it and checks that the archive
+            has every seeded document and that the generated password signs in. A failure
+            means that people who try the app get a demo that doesn't work: a new image, a
+            release of the app in the App Store or a change of the app no longer fits
+            `demo/init.py` or `demo/compose.yaml`.
+
+
+            The log of the failed job names the step, with the logs of the containers below
+            it. `bash tests/e2e/demo.sh`, with `--local` for the checkout, runs the same
+            test locally.
+
+
+            The job adds every further failed run here and closes this issue once the
+            tests pass again.
           RESULT: ${{ needs[matrix.job].result }}
           # The outputs of the job: the version of the coming Nextcloud, and the first
           # error of each run that failed, which tests/e2e/failure.py wrote.
@@ -510,6 +610,7 @@ jobs:
           set -euo pipefail
           case "$JOB" in
             coming) prefix=COMING ;;
+            demo) prefix=DEMO ;;
             *) prefix=PAPERLESS ;;
           esac
           for name in TITLE TESTS AGAINST ABOUT; do

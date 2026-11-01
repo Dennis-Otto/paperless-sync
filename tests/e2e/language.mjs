@@ -18,6 +18,7 @@ const STORIES = {
 		flowTag: 'To Paperless',
 		flowTags: ['Letters', 'Bank'],
 		captions: {
+			tryIt: 'The first run of the demo has filled the archive in Nextcloud Files: by correspondent, type and year',
 			inboxArrive: 'Two scans arrive in the folder Inbox, such as from the Nextcloud app on a phone',
 			inboxRun: 'The next runs send both to Paperless: a scan leaves the inbox once Paperless has finished its import',
 			inboxFailed: 'Paperless could not import the second scan: it waits in the folder Failed imports, next to a text file with the reason',
@@ -34,6 +35,7 @@ const STORIES = {
 		flowTag: 'An Paperless',
 		flowTags: ['Briefe', 'Bank'],
 		captions: {
+			tryIt: 'Der erste Lauf der Demo hat das Archiv in Nextcloud Dateien gefüllt: nach Korrespondent, Typ und Jahr',
 			inboxArrive: 'Zwei Scans kommen im Ordner Eingang an, etwa aus der Nextcloud-App auf dem Handy',
 			inboxRun: 'Die nächsten Läufe schicken beide an Paperless: Ein Scan verlässt den Eingang, sobald Paperless seinen Import beendet hat',
 			inboxFailed: 'Den zweiten Scan konnte Paperless nicht importieren: Er wartet im Ordner Fehler, neben einer Textdatei mit dem Grund',

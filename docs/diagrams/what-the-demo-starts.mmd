@@ -1,0 +1,31 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+---
+flowchart TB
+    accTitle: What the demo starts
+    accDescr: docker compose up first runs the container secrets, which makes the password into demo/.env and a volume. Paperless-ngx with Redis and Nextcloud with PostgreSQL, the cron and a worker then start from that volume, and the app comes from the App Store or the checkout. The container init fills Paperless with the synthetic documents, creates the user demo and the account of the app, connects the app, starts a dry run and then the first run, and prints where everything is.
+
+    up["docker compose up"]
+    secrets["secrets:<br>one password, in<br>demo/.env and a volume"]
+    paperless["Paperless-ngx<br>with Redis,<br>on 127.0.0.1:8581"]
+    nextcloud["Nextcloud with<br>PostgreSQL, cron and<br>a worker, on 127.0.0.1:8580"]
+    app["The app from the<br>App Store, or the checkout<br>with compose.local.yaml"]
+    init["init: 15 synthetic documents,<br>the user demo, the account of the app,<br>a dry run, the first run"]
+    ready["The archive in Files,<br>with 14 documents"]
+
+    up --> secrets
+    secrets --> paperless
+    secrets --> nextcloud
+    app --> nextcloud
+    paperless --> init
+    nextcloud --> init
+    init --> ready
+
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef person fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class up person
+    class secrets,paperless,nextcloud,app,init bot
+    class ready done

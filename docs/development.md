@@ -45,6 +45,13 @@ CONTRACT_RECORD=1 bash tests/e2e/run-contract.sh 2
 
 The second command records the answers of Paperless as the fixtures of the unit tests, the same bytes for one image of Paperless. You rarely need it: when the app passes against the new answers in a pull request from a branch of this repository, such as the update of the image by Renovate, [a bot commits the fixtures that differ](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx).
 
+The demo that the README offers has a smoke test of its own: it starts `demo/compose.yaml` with real containers and fails unless the archive has every seeded document and the generated password signs in. CI runs it every Monday and in every pull request that changes the demo.
+
+```bash
+bash tests/e2e/demo.sh
+bash tests/e2e/demo.sh --local
+```
+
 A job of the end-to-end tests that fails names the first error of each run that failed, with the last step that passed, in its summary, and keeps the evidence for 14 days as its artifact: the log of the run, the log of Nextcloud, its apps, the logs of the containers and, of a check in the browser that failed, its Playwright trace and screenshots, which `npx playwright show-trace` opens. `E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run-all.sh` keeps the same on your machine, as *When a run fails* in `tests/e2e/README.md` describes.
 
 See [`tests/e2e/README.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md) for details and [`tests/e2e/MANUAL_ACCEPTANCE_TESTS.md`](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/MANUAL_ACCEPTANCE_TESTS.md) for the release matrix.

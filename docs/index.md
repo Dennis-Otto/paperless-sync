@@ -24,6 +24,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 </ul>
 
 [Get it from the App Store](https://apps.nextcloud.com/apps/paperless_sync){ .md-button .md-button--primary }
+[Try it](#try-it){ .md-button }
 [Quick start](#quick-start){ .md-button }
 [Requirements](guide.md#requirements){ .md-button }
 { .ps-hero-actions }
@@ -300,6 +301,17 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
 The settings speak English and German. They, the actions in Files and the form of the rule in Flow are checked for accessibility against WCAG 2.1 AA in every change of the app. Every release is signed, the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance.
 
 --8<-- "README.md:how-it-works"
+
+## Try it
+
+--8<-- "README.md:try-it"
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/try-it-dark.gif">
+  <img alt="A terminal runs docker compose -f demo/compose.yaml up: Paperless-ngx and Nextcloud start, the setup fills Paperless with synthetic documents, connects the app, starts a dry run and the first run, and prints the addresses of the demo. Then Nextcloud Files shows the archive, from the folders of the correspondents through a correspondent and a document type to a year" src="images/try-it.gif">
+</picture>
+
+`demo/README.md` in [the repository](https://github.com/Dennis-Otto/paperless-sync) says what to try in it.
 
 ## Quick start
 

@@ -20,17 +20,20 @@
 # release, so that run-all.sh runs that on PostgreSQL and MariaDB too (upgrade.sh). With
 # E2E_QUESTION=contract, it asks instead whether the change can alter what the app asks
 # Paperless or how it reads the answers, and writes contract=true or contract=false, for
-# the contract tests against a real Paperless-ngx (run-contract.sh).
+# the contract tests against a real Paperless-ngx (run-contract.sh). With E2E_QUESTION=demo,
+# it asks whether the change can break the demo in demo/, and writes demo=true or demo=false,
+# for its smoke test (demo.sh).
 # scripts/check-project.sh sources it to test its rules.
 
 # A file whose change can make the end-to-end tests pass or fail: the code, the
 # metadata and the assets of the app, the tests themselves and their workflow. The
-# contract tests against a real Paperless are no part of them, and neither are the
+# contract tests against a real Paperless and the smoke test of the demo are no part of them, and neither are the
 # scripts of the pictures alone, which the visual check renders (visual.yml).
 # appinfo/info.xml counts only with info_xml_change_affects_app.
 path_affects_app() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/contract.py | tests/e2e/test_contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
 		lib/* | appinfo/* | templates/* | js/* | css/* | l10n/* | img/* | composer.json | tests/e2e/*) return 0 ;;
 		.github/workflows/e2e.yml) return 0 ;;
@@ -46,6 +49,7 @@ path_affects_app() {
 path_affects_variants() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/screenshots.* | tests/e2e/frozen.* | tests/e2e/compare.*) return 1 ;;
+		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		lib/Migration/* | lib/Service/SyncStateRepository* | lib/Service/NextcloudStorage*) return 0 ;;
 		lib/Service/PaperlessApiService.php | tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
@@ -62,6 +66,7 @@ path_affects_upgrade() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/*.mjs | tests/e2e/package.json | tests/e2e/package-lock.json) return 1 ;;
 		tests/e2e/screenshots.* | tests/e2e/contract.py | tests/e2e/test_contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
+		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		lib/Migration/* | lib/Service/ConfigService.php | lib/Service/SyncStateRepository* | lib/Model/SyncConfig.php) return 0 ;;
 		lib/Service/WebhookService.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;
 		tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
@@ -79,6 +84,17 @@ path_affects_contract() {
 		tests/fixtures/paperless-ngx-*) return 0 ;;
 		tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.yaml | tests/e2e/compose.paperless.yaml) return 0 ;;
 		tests/e2e/mock_server.py | .github/workflows/e2e.yml) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# A file whose change can break the demo: the demo, the documents that it seeds, its smoke
+# test and the workflow of that test. A change of the app reaches the demo with a release, and
+# the weekly run tests the checkout as well.
+path_affects_demo() {
+	case "$1" in
+		demo/*.md) return 1 ;;
+		demo/* | tests/e2e/demo.sh | tests/e2e/showcase.py | .nextcloudignore | .github/workflows/e2e.yml) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -162,12 +178,15 @@ HEAD="${2:-HEAD}"
 QUESTION="${E2E_QUESTION:-app}"
 
 # The answers for the end-to-end tests, affected, variants and upgrade, or with
-# E2E_QUESTION=contract the fourth one alone.
+# E2E_QUESTION=contract the fourth one alone, and with E2E_QUESTION=demo the fifth one,
+# which is true when no other call names it: when the commits aren't both here.
 decide() {
 	if [[ -z "${GITHUB_OUTPUT:-}" ]]; then
 		return
 	elif [[ "${QUESTION}" == contract ]]; then
 		printf 'contract=%s\n' "$4" >>"${GITHUB_OUTPUT}"
+	elif [[ "${QUESTION}" == demo ]]; then
+		printf 'demo=%s\n' "${5:-true}" >>"${GITHUB_OUTPUT}"
 	else
 		printf 'affected=%s\nvariants=%s\nupgrade=%s\n' "$1" "$2" "$3" >>"${GITHUB_OUTPUT}"
 	fi
@@ -197,6 +216,7 @@ reaching=()
 varying=()
 upgrading=()
 contracting=()
+demoing=()
 while IFS= read -r -d '' path; do
 	count=$((count + 1))
 	if [[ "${path}" == appinfo/info.xml ]]; then
@@ -220,7 +240,24 @@ while IFS= read -r -d '' path; do
 	if path_affects_contract "${path}"; then
 		contracting+=("${path}")
 	fi
+	if path_affects_demo "${path}"; then
+		demoing+=("${path}")
+	fi
 done <"${CHANGED}"
+
+if [[ "${QUESTION}" == demo ]]; then
+	if ((${#demoing[@]} > 0)); then
+		echo "${#demoing[@]} of the ${count} changed file(s) can break the demo, so its smoke test runs:"
+		printf '  %s\n' "${demoing[@]:0:20}"
+		decide true true true true true
+	else
+		message="None of the ${count} changed file(s) can break the demo: not demo/, the documents that it seeds, its smoke test or the workflow of that test."
+		echo "${message}"
+		summary "Smoke test of the demo skipped: the change cannot break the demo" "${message}"
+		decide true true true true false
+	fi
+	exit 0
+fi
 
 if [[ "${QUESTION}" == contract ]]; then
 	if ((${#contracting[@]} > 0)); then

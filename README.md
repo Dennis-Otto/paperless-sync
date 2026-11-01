@@ -14,7 +14,7 @@ raise of max-version by the upstream bot; scripts/check-project.sh checks that t
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-website-526cfe?logo=materialformkdocs&logoColor=white)](https://dennis-otto.github.io/paperless-sync/)
 
-[**Get it from the App Store**](https://apps.nextcloud.com/apps/paperless_sync) · [Requirements](#requirements) · [Quick start](#quick-start) · [Documentation](https://dennis-otto.github.io/paperless-sync/) · [FAQ](https://dennis-otto.github.io/paperless-sync/faq.html) · [Troubleshooting](https://dennis-otto.github.io/paperless-sync/troubleshooting.html) · [Help](#help-and-feedback) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
+[**Get it from the App Store**](https://apps.nextcloud.com/apps/paperless_sync) · [Try it](#try-it) · [Requirements](#requirements) · [Quick start](#quick-start) · [Documentation](https://dennis-otto.github.io/paperless-sync/) · [FAQ](https://dennis-otto.github.io/paperless-sync/faq.html) · [Troubleshooting](https://dennis-otto.github.io/paperless-sync/troubleshooting.html) · [Help](#help-and-feedback) · [Changelog](CHANGELOG.md) · [Deutsch](README.de.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/archive-dark.gif">
@@ -61,6 +61,29 @@ At the configured interval, Nextcloud's cron starts a run of the app inside Next
 | Paperless-ngx | 2.20, the last release of 2.x, and the current release of 3.x | the [contract tests](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#contract-tests-against-a-real-paperless-ngx) against a real Paperless in Docker, every week and in every change of how the app talks to Paperless |
 
 <!-- --8<-- [end:requirements] -->
+## Try it
+
+<!-- --8<-- [start:try-it] -->
+
+See the app at work in a few minutes, without a Nextcloud or a Paperless-ngx of your own. With Docker on Linux, or Docker Desktop on Windows or macOS:
+
+```sh
+git clone https://github.com/Dennis-Otto/paperless-sync.git
+cd paperless-sync
+docker compose -f demo/compose.yaml up
+```
+
+It starts Nextcloud and Paperless-ngx on your machine alone, fills Paperless with a made-up household archive, installs the app from the App Store and connects it, with a dry run first and then the first run. Then the command prints the address of the archive and the password that it made, which stays in `demo/.env`. `docker compose -f demo/compose.yaml down --volumes` removes it all again.
+
+<!-- --8<-- [end:try-it] -->
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/try-it-dark.gif">
+  <img alt="A terminal runs docker compose -f demo/compose.yaml up: Paperless-ngx and Nextcloud start, the setup fills Paperless with synthetic documents, connects the app, starts a dry run and the first run, and prints the addresses of the demo. Then Nextcloud Files shows the archive, from the folders of the correspondents through a correspondent and a document type to a year" src="docs/images/try-it.gif">
+</picture>
+
+[The README of the demo](demo/README.md) says what to try in it.
+
 <!-- --8<-- [start:quick-start-section] -->
 
 ## Quick start

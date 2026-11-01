@@ -1,0 +1,193 @@
+# SPDX-FileCopyrightText: 2026 Dennis Otto
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The demo of Paperless Sync: a Nextcloud with the app, a Paperless-ngx with a synthetic
+# household archive, and the app connected to it, on this machine alone. See README.md.
+#
+#   docker compose -f demo/compose.yaml up
+#   docker compose -f demo/compose.yaml down --volumes
+#
+# No password is written here: the service secrets makes them on the first start, in the
+# volume that the others read and in demo/.env, which Git ignores. Every port stays on
+# 127.0.0.1. tests/e2e/demo.sh tests this file every week, and Renovate keeps its images
+# current by their digests (.github/renovate.json5).
+
+name: paperless-sync-demo
+
+x-python: &python
+  read_only: true
+  tmpfs:
+    - /tmp
+  environment: &python-environment
+    PYTHONDONTWRITEBYTECODE: "1"
+    # The output of a script in Docker comes in blocks without this, long after each step.
+    PYTHONUNBUFFERED: "1"
+
+services:
+  # Makes the password of the accounts and the key of Paperless on the first start.
+  secrets:
+    <<: *python
+    image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+    command: ["python", "/demo/init.py", "secrets"]
+    volumes:
+      # :z lets a system with SELinux share the folder with the container.
+      - ./:/demo:z
+      - secrets:/secrets
+
+  redis:
+    image: redis:8.10.2-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
+    attach: false
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # The tables of Nextcloud. Its cron, its worker and its web server work side by side, and
+  # SQLite would answer one of them with "database is locked" now and then.
+  database:
+    image: postgres:17.11-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    attach: false
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD_FILE: /secrets/DEMO_PASSWORD
+    volumes:
+      - database:/var/lib/postgresql/data
+      - secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=nextcloud", "--dbname=nextcloud"]
+      start_period: 5m
+      start_interval: 1s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Nextcloud and the containers beside it share the network of this one, as the containers
+  # of a pod do: Paperless is at http://localhost:8581 for each of them and for the browser
+  # alike, so that the address in the settings of the app also opens the documents.
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:3.3.1@sha256:cb91bfb468e63025a9d10c01b54c33665113668eee61b490db96de19b860b9c4
+    attach: false
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_ADMIN_USER: admin
+      PAPERLESS_ADMIN_PASSWORD_FILE: /secrets/DEMO_PASSWORD
+      PAPERLESS_SECRET_KEY_FILE: /secrets/PAPERLESS_SECRET_KEY
+      PAPERLESS_PORT: ${DEMO_PAPERLESS_PORT:-8581}
+      PAPERLESS_URL: http://localhost:${DEMO_PAPERLESS_PORT:-8581}
+      PAPERLESS_TIME_ZONE: UTC
+      # The documents of the demo have their text, so no OCR, and little work on a small machine.
+      PAPERLESS_OCR_MODE: skip
+      PAPERLESS_TASK_WORKERS: "1"
+      PAPERLESS_THREADS_PER_WORKER: "1"
+      PAPERLESS_WEBSERVER_WORKERS: "1"
+      PAPERLESS_ENABLE_NLTK: "false"
+    ports:
+      - 127.0.0.1:${DEMO_NEXTCLOUD_PORT:-8580}:80
+      - 127.0.0.1:${DEMO_PAPERLESS_PORT:-8581}:${DEMO_PAPERLESS_PORT:-8581}
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --output /dev/null http://127.0.0.1:$${PAPERLESS_PORT}/"]
+      start_period: 15m
+      start_interval: 2s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  nextcloud:
+    image: nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+    attach: false
+    network_mode: service:paperless
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: database
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD_FILE: /secrets/DEMO_PASSWORD
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD_FILE: /secrets/DEMO_PASSWORD
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost 127.0.0.1
+      DEMO_NEXTCLOUD_PORT: ${DEMO_NEXTCLOUD_PORT:-8580}
+    volumes:
+      - nextcloud:/var/www/html
+      - secrets:/secrets:ro
+      # Runs before the web server starts, and needs the executable flag that Git keeps.
+      - ./nextcloud-hook.sh:/docker-entrypoint-hooks.d/before-starting/paperless-sync.sh:ro,z
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1/status.php >/dev/null"]
+      start_period: 15m
+      start_interval: 2s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # The system cron of Nextcloud, which starts the scheduled runs of the app.
+  cron:
+    image: nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+    attach: false
+    init: true
+    network_mode: service:paperless
+    entrypoint: /cron.sh
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    volumes:
+      - nextcloud:/var/www/html
+
+  # Runs "Synchronize now" of the settings within seconds, instead of within five minutes of the
+  # cron. Each turn reads the settings anew, which a worker that keeps running doesn't (#323).
+  worker:
+    image: nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
+    attach: false
+    init: true
+    network_mode: service:paperless
+    user: www-data
+    command:
+      - sh
+      - -c
+      - while true; do php /var/www/html/occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'; sleep 5; done
+    depends_on:
+      nextcloud:
+        condition: service_healthy
+    volumes:
+      - nextcloud:/var/www/html
+
+  # Fills Paperless, connects the app and prints where everything is. It says each step.
+  init:
+    <<: *python
+    image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+    network_mode: service:paperless
+    command: ["python", "/demo/init.py", "run"]
+    depends_on:
+      secrets:
+        condition: service_completed_successfully
+    environment:
+      <<: *python-environment
+      DEMO_NEXTCLOUD_PORT: ${DEMO_NEXTCLOUD_PORT:-8580}
+      DEMO_PAPERLESS_PORT: ${DEMO_PAPERLESS_PORT:-8581}
+      PYTHONPATH: /showcase
+    volumes:
+      - ./:/demo:ro,z
+      - ../tests/e2e/showcase.py:/showcase/showcase.py:ro,z
+      - secrets:/secrets
+
+volumes:
+  secrets:
+  database:
+  paperless_data:
+  paperless_media:
+  nextcloud:
