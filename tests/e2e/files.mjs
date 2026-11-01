@@ -90,6 +90,15 @@ function asUser(user, path, options) {
 	})
 }
 
+async function setLocaleOfTarget(locale) {
+	const response = await asUser(TARGET, `/ocs/v2.php/cloud/users/${TARGET}`, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ key: 'locale', value: locale }),
+	})
+	expect(response.ok, `The locale of the target user could not be set: HTTP ${response.status}`)
+}
+
 function folderOfTarget(method, name) {
 	return asUser(TARGET, `/remote.php/dav/files/${TARGET}${ARCHIVE}/${name}`, { method })
 }
@@ -135,25 +144,30 @@ async function expectNote(page, kind, ...texts) {
 	return note
 }
 
-// Answers the question of the note for the folders of the user with some of its fields changed.
+// Answers the question of the note for the folders of the user with some of its fields changed, by
+// an object or by a function that gives one as the answer goes out, as a slow page must not age a
+// moment that the note words in minutes.
 function changeFolderInfo(page, change) {
 	return page.route(FOLDER_INFO, async (route) => {
 		const response = await route.fetch({ maxRetries: 3 })
-		await route.fulfill({ response, json: { ...(await response.json()), ...change } })
+		await route.fulfill({ response, json: { ...(await response.json()), ...(typeof change === 'function' ? change() : change) } })
 	})
+}
+
+function secondsFromNow(seconds) {
+	return Math.round(Date.now() / 1000) + seconds
 }
 
 // The inbox says when the next run sends its files, for each of the answers of the app.
 async function checkTheNextRun(page, files) {
-	const now = Math.round(Date.now() / 1000)
-	for (const [nextRun, words] of [
+	for (const [seconds, words] of [
 		[null, 'Scheduled synchronization is off'],
-		[now - 60, 'with the next background job'],
-		[now + 10 * 60, 'in about 10 minutes'],
-		[now + 3 * 3600, 'in about 3 hours'],
-		[now + 3 * 86400, 'in about 3 days'],
+		[-60, 'with the next background job'],
+		[10 * 60, 'in about 10 minutes'],
+		[3 * 3600, 'in about 3 hours'],
+		[3 * 86400, 'in about 3 days'],
 	]) {
-		await changeFolderInfo(page, { nextRun })
+		await changeFolderInfo(page, () => ({ nextRun: seconds === null ? null : secondsFromNow(seconds) }))
 		await openFolder(page, files, INBOX)
 		await expectNote(page, 'inbox', words, 'Videos, programs and archives stay here.')
 		await page.unroute(FOLDER_INFO)
@@ -226,9 +240,17 @@ async function checkTheFoldersOfTheTarget(browser) {
 		expect(await link.getAttribute('target') === '_blank' && /^https?:\/\//.test(await link.getAttribute('href')), 'Open Paperless opens the address of the settings in a window of its own.')
 		console.log('Files: the note follows into the archive and below it.')
 
-		await changeFolderInfo(page, { lastSuccess: Math.round(Date.now() / 1000) - 5 * 60 })
+		await changeFolderInfo(page, () => ({ lastSuccess: secondsFromNow(-5 * 60) }))
 		await openFolder(page, files, ARCHIVE)
 		await expectNote(page, 'archive', 'Updated 5 minutes ago')
+		// The times stand in a sentence of the language, so a locale of another language stays out.
+		await setLocaleOfTarget('de_DE')
+		try {
+			await openFolder(page, files, ARCHIVE)
+			await expectNote(page, 'archive', 'Updated 5 minutes ago')
+		} finally {
+			await setLocaleOfTarget('en_US')
+		}
 		await page.unroute(FOLDER_INFO)
 		await changeFolderInfo(page, { lastSuccess: 0 })
 		await openFolder(page, files, ARCHIVE)

@@ -198,10 +198,11 @@
 	let noteMount = null
 	let noteFolder = null
 
-	// The locale of Nextcloud for the times of the note, as in settings.js.
-	function nextcloudLocale() {
+	// The language of Nextcloud for the times of the note: they stand in sentences of that language,
+	// so it comes before the locale, unlike the dates of settings.js.
+	function nextcloudLanguage() {
 		const html = document.documentElement
-		for (const name of [html.dataset.locale, html.lang]) {
+		for (const name of [html.lang, html.dataset.locale]) {
 			const tag = (name || '').replace(/@.*$/, '').replace(/_/g, '-')
 			try {
 				if (tag !== '' && Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0) {
@@ -224,20 +225,22 @@
 		return hours < 48 ? { value: hours, unit: 'hour' } : { value: Math.round(hours / 24), unit: 'day' }
 	}
 
+	// From the moment of the answer, so that the note changes only with a new answer, at most every
+	// FOLDER_INFO_MAX_AGE, and the same answer always draws the same note.
 	function secondsSince(moment) {
-		return Date.now() / 1000 - moment
+		return folderInfoTime / 1000 - moment
 	}
 
-	// "5 minutes ago", in the words of the browser for the locale.
+	// "5 minutes ago", in the words of the browser for the language.
 	function timeAgo(moment) {
 		const { value, unit } = timeSpan(secondsSince(moment))
-		return new Intl.RelativeTimeFormat(nextcloudLocale()).format(-value, unit)
+		return new Intl.RelativeTimeFormat(nextcloudLanguage()).format(-value, unit)
 	}
 
 	// "5 minutes".
 	function timeUntil(moment) {
 		const { value, unit } = timeSpan(secondsSince(moment))
-		return new Intl.NumberFormat(nextcloudLocale(), { style: 'unit', unit, unitDisplay: 'long' }).format(value)
+		return new Intl.NumberFormat(nextcloudLanguage(), { style: 'unit', unit, unitDisplay: 'long' }).format(value)
 	}
 
 	function element(tag, className, text) {
