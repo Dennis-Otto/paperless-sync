@@ -1,0 +1,26 @@
+---
+config:
+  flowchart:
+    nodeSpacing: 24
+    wrappingWidth: 240
+---
+flowchart TB
+    accTitle: What a selection of scenarios runs
+    accDescr: E2E_ONLY=files sets up Nextcloud and the app, as every run does. It then runs the scenario files with what it needs, connection, dry-run and export, in the order of the list, and the check in the browser of the same name, files.mjs. The other 30 scenarios and the other checks in the browser stay out.
+
+    only["E2E_ONLY=files"]
+    setup["Nextcloud and the app,<br>as in every run"]
+    needs["connection, dry-run, export:<br>what files needs, from<br>the list SCENARIOS"]
+    files["files: Send to Paperless<br>through its API"]
+    browser["files.mjs: the check in<br>the browser of its name"]
+    left["the other 30 scenarios<br>and 4 checks in the<br>browser stay out"]
+
+    only --> setup --> needs --> files --> browser
+    only -.-> left
+
+    classDef mine fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    classDef bot fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef done fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    class only mine
+    class setup,needs bot
+    class files,browser done

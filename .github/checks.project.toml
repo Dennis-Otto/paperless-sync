@@ -86,6 +86,8 @@ commands = [
   "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache bash tests/e2e/run.sh  # one version, as the log names it",
   "E2E_SHARD=1 bash tests/e2e/run-all.sh  # the versions of this check side by side, as it runs them",
   "E2E_PLAN=1 E2E_SHARD=1 bash tests/e2e/run-all.sh  # which versions this check runs",
+  "E2E_ONLY=SCENARIO bash tests/e2e/run.sh  # the scenario that failed alone, with what it needs, as the log names it",
+  "E2E_BROWSER=CHECK bash tests/e2e/run.sh  # one check in the browser alone, such as files, with what it needs",
   "KEEP_E2E=1 bash tests/e2e/run.sh  # keep the containers to look inside",
   "E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # keep the evidence of a failure, as the CI does",
   "NEXTCLOUD_IMAGE=nextcloud:VERSION-apache E2E_COVERAGE=1 E2E_ARTIFACTS=build/e2e-evidence bash tests/e2e/run.sh  # the coverage of the JavaScript, on max-version",
@@ -271,7 +273,11 @@ doesn't pin exactly one, which the upgrade test reads. *Changes that run the end
 `tests/e2e/run-all.sh`, which the two required jobs of `.github/workflows/e2e.yml`
 run, leave out a run of the whole suite or start one twice, or split a sample of
 versions otherwise than it expects. *The runs at once of the end-to-end tests*: `tests/e2e/run-all.sh` leaves out a run, or starts more at
-once than `E2E_PARALLEL` names. *The folder in memory of the end-to-end tests*: `tests/e2e/run.sh`
+once than `E2E_PARALLEL` names. *The scenarios of the end-to-end tests*: a function
+`scenario_<name>` of `tests/e2e/run.sh` has no entry in its list `SCENARIOS`, an entry has no
+function or comes before a scenario that it needs, the table of `tests/e2e/README.md` lacks a
+scenario, a selection such as `E2E_ONLY=files` plans otherwise than its sample, or a workflow
+selects scenarios, though the CI runs them all. *The folder in memory of the end-to-end tests*: `tests/e2e/run.sh`
 doesn't empty the folder of `E2E_DATA_FOLDER` after its `down`, so a second run on a machine
 would fail to install. *The health checks of the end-to-end tests*: a health
 check of a Compose file of `tests/e2e/` has no `start_interval`, an `interval` below 30 s,

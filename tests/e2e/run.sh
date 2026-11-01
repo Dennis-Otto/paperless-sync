@@ -69,7 +69,18 @@ E2E_COVERAGE="${E2E_COVERAGE:-0}"
 # run-all.sh sets it for the run on the newest version alone, as Nextcloud loads a catalog of an
 # app the same way in every version.
 E2E_LANGUAGES="${E2E_LANGUAGES:-${E2E_ACCESSIBILITY}}"
-TMP_DIR="$(mktemp -d)"
+# E2E_ONLY names scenarios of the list SCENARIOS below: E2E_ONLY="files flow" sets up Nextcloud
+# and runs them with what they need, and the checks in the browser of their names. E2E_BROWSER
+# names checks of the list BROWSER_SCRIPTS below instead, or none, and without E2E_ONLY only what
+# they need runs before them. E2E_PLAN=1 prints what a run would run, and starts nothing. The CI
+# sets none of them.
+E2E_ONLY="${E2E_ONLY:-}"
+E2E_BROWSER="${E2E_BROWSER:-}"
+E2E_PLAN="${E2E_PLAN:-0}"
+if [[ "${E2E_UPGRADE}" == "1" && -n "${E2E_ONLY}${E2E_BROWSER}" ]]; then
+	echo "E2E_UPGRADE=1 runs the upgrade in place of the scenarios, so E2E_ONLY and E2E_BROWSER select nothing there." >&2
+	exit 1
+fi
 # The browser of the accessibility check (accessibility.mjs). Keep its version equal to
 # playwright-core in package.json; Renovate updates both together, and
 # scripts/check-project.sh compares them.
@@ -82,8 +93,6 @@ PLAYWRIGHT_PULL=""
 E2E_ARTIFACTS="${E2E_ARTIFACTS:-}"
 # A relative folder is one of the directory that the script started in.
 [[ -z "${E2E_ARTIFACTS:-}" || "${E2E_ARTIFACTS}" == /* ]] || E2E_ARTIFACTS="${PWD}/${E2E_ARTIFACTS}"
-# What the checks in the browser keep of a failure, which keep_evidence takes along.
-BROWSER_ARTIFACTS="${TMP_DIR}/browser"
 # E2E_BROWSER_SNAPSHOTS=1 also keeps a snapshot of the page at each action in the trace of a
 # window, with E2E_ARTIFACTS. It takes about a fifth of the time of the checks in the browser,
 # so the first attempt of a job of the CI leaves it out; a failure that stays gets it from the
@@ -136,6 +145,19 @@ empty_data_folder() {
 	fi
 }
 
+# What chose the stack of this run, for the command that repeats a scenario of it: compose.yaml
+# has another version of Nextcloud on SQLite without it, where a failure may not show.
+stack_of_run() {
+	local stack="${NEXTCLOUD_IMAGE:+NEXTCLOUD_IMAGE=${NEXTCLOUD_IMAGE} }"
+	if [[ "${E2E_DATABASE}" != sqlite ]]; then
+		stack+="E2E_DATABASE=${E2E_DATABASE} "
+	fi
+	if [[ "${E2E_OBJECTSTORE}" != local ]]; then
+		stack+="E2E_OBJECTSTORE=${E2E_OBJECTSTORE} "
+	fi
+	echo "${stack}${E2E_IGNORE_MAX_VERSION:+E2E_IGNORE_MAX_VERSION=${E2E_IGNORE_MAX_VERSION} }"
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT
@@ -143,6 +165,11 @@ cleanup() {
 		# The first line of the cleanup, which tests/e2e/failure.py reads as the end of the
 		# output of the tests.
 		echo "The end-to-end tests fail with exit code ${status}." >&2
+		case "${CURRENT_SCENARIO:-}" in
+			"") ;;
+			browser) echo "The checks in the browser fail. One of them runs alone, with what it needs, with: $(stack_of_run)E2E_BROWSER=<check> bash tests/e2e/run.sh" >&2 ;;
+			*) echo "The scenario ${CURRENT_SCENARIO} fails. It runs alone, with what it needs, with: $(stack_of_run)E2E_ONLY=${CURRENT_SCENARIO} bash tests/e2e/run.sh" >&2 ;;
+		esac
 		if [[ -n "${E2E_ARTIFACTS}" ]]; then
 			keep_evidence || echo "The evidence of the failure could not be kept." >&2
 		fi
@@ -162,10 +189,6 @@ cleanup() {
 	fi
 	exit "${status}"
 }
-trap cleanup EXIT
-# A signal to stop, such as the time limit of run-all.sh, fails the suite, so that
-# cleanup shows the state of the containers.
-trap 'exit 143' TERM
 
 # A suite makes hundreds of calls into its containers and checks as many answers, so each
 # call takes the quickest way (tests/e2e/README.md#how-the-suite-stays-quick):
@@ -272,7 +295,8 @@ mock_state() {
 # that works with any Docker and leaves no files of root on the runner. With E2E_COVERAGE=1,
 # each check records the coverage of the scripts of the app in its pages, and coverage.mjs
 # then reports the share of their lines and branches that the checks run and fails below the
-# floor; after a check that failed it only reports, as a check that stopped early runs less.
+# floor; after a check that failed it only reports, as a check that stopped early runs less, and
+# so it does when E2E_BROWSER or E2E_ONLY leave out a check.
 # The sh of the container expands these variables, not this script.
 # shellcheck disable=SC2016
 BROWSER_CHECKS='
@@ -301,11 +325,11 @@ BROWSER_CHECKS='
 		exit 1
 	fi
 	if [ "${E2E_COVERAGE}" = 1 ]; then
-		node coverage.mjs /tmp/artifacts/coverage coverage-floor.json
+		node coverage.mjs /tmp/artifacts/coverage ${E2E_COVERAGE_FLOOR}
 	fi
 '
 browser_checks() {
-	local checks="$1" coverage="$2" status=0
+	local checks="$1" coverage="$2" floor="${3:-}" status=0
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
@@ -325,6 +349,7 @@ browser_checks() {
 			--env "E2E_KEEP_BROWSER=${E2E_ARTIFACTS:+1}" \
 			--env "E2E_BROWSER_SNAPSHOTS=${E2E_BROWSER_SNAPSHOTS}" \
 			--env "E2E_COVERAGE=${coverage}" \
+			--env "E2E_COVERAGE_FLOOR=${floor}" \
 			--env "E2E_CHECKS=${checks}" \
 			--env E2E_CATALOG=/tmp/browser/l10n/fr.json \
 			"${PLAYWRIGHT_IMAGE}" \
@@ -337,9 +362,6 @@ browser_checks() {
 		mv "${BROWSER_ARTIFACTS}/coverage" "${E2E_ARTIFACTS}/coverage"
 	fi
 	return "${status}"
-}
-accessibility() {
-	browser_checks 'accessibility keyboard settings files flow' "${E2E_COVERAGE}"
 }
 
 # Saves settings as the administration settings do, such as conflict_mode=skip; the
@@ -755,11 +777,1485 @@ version_count() {
 		| grep -oE '<d:response>' | wc -l
 }
 
+# The scenarios of a run, each the function scenario_<name>, with _ for the - of its name. They
+# share one installation of Nextcloud and run in the order of this list, so each finds what those
+# before it left. An entry names the scenarios that leave what it needs, after a colon, all of
+# them before it in the list; E2E_ONLY runs a scenario with what it needs and what those need. A
+# scenario that fails alone but passes in a full run lacks a name here. Each start of this script
+# and scripts/check-project.sh compare the list with the functions.
+SCENARIOS=(
+	'pages:'
+	'connection:'
+	'dry-run: connection'
+	'export: dry-run'
+	'moves: export'
+	'webhook: moves'
+	'new-content: moves'
+	'schedule: new-content'
+	'excluded-tags: moves'
+	'included-tags: excluded-tags'
+	'quota: included-tags'
+	'nextcloud-tags: moves'
+	'metadata: moves'
+	'deletion: metadata'
+	'inbox: connection'
+	'status: schedule quota deletion inbox'
+	'restore: deletion'
+	'conflicts: moves'
+	'left-out: conflicts'
+	'vanished: conflicts'
+	'names: connection'
+	'files: connection'
+	'flow: connection'
+	'delegation: connection'
+	'browser:'
+	'account: export'
+	'clean-log: connection'
+	'old-paperless: connection'
+	'unknown-tag: connection'
+	'unreachable: connection'
+	'repointed-url: connection'
+	'failing-mirror: unreachable'
+	'per-user: conflicts'
+	'shared: per-user'
+	'french: connection'
+)
+# The checks in the browser of the scenario browser, in the order of a full run, with the
+# scenarios that leave what each needs. french.mjs is the scenario french of its own, as it takes
+# away what the others read.
+BROWSER_SCRIPTS=(
+	'accessibility: export files flow'
+	'keyboard: export'
+	'settings: webhook delegation'
+	'files: export files'
+	'flow: flow'
+)
+
 INITIAL_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20%5BP123%5D.pdf'
 RENAMED_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 TRASH_PATH='Documents/Paperless/Archive/_Deleted/2026-08-27/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 ERROR_PATH='Documents/Paperless/Errors/broken.pdf'
 STATEMENT_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Annual%20statement%20%5BP124%5D.pdf'
+COPY_NAME='2026-08-26 - Monthly invoice corrected [P123].pdf'
+SIDECAR_PATH='Documents/Paperless/Archive/.paperless/P123.json'
+INDEX_PATH='Documents/Paperless/Archive/.paperless/index.csv'
+
+# What a new installation shows before anything is saved: the form of the settings with all of
+# its routes, the getting-started checklist and the section of the app in the navigation.
+scenario_pages() {
+	# The administration settings render the form with all of its routes.
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--output "${TMP_DIR}/admin-settings.html" \
+		"${BASE_URL}/index.php/settings/admin/paperless_sync"
+	for attribute in \
+		'data-save-url="/apps/paperless_sync/settings"' \
+		'data-test-url="/apps/paperless_sync/settings/test"' \
+		'data-reset-url="/apps/paperless_sync/settings"' \
+		'data-run-url="/apps/paperless_sync/sync/run"' \
+		'data-status-url="/apps/paperless_sync/sync/status"' \
+		'data-preview-url="/apps/paperless_sync/settings/preview"' \
+		'data-variable="created_month_name"' \
+		'id="initial-state-paperless_sync-status"' \
+		'id="initial-state-paperless_sync-config"' \
+		'data-setting="paperless_local_network"' \
+		'data-step="connect" data-state="next" aria-current="step"'; do
+		if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
+			echo "The administration settings render no ${attribute}." >&2
+			exit 1
+		fi
+	done
+	# A new installation walks through the getting-started checklist, as the settings page reads
+	# it with every status: the connection first, while Administration → Overview says that the app
+	# is not set up yet. The steps after it follow the save, the first dry-run, the first run and
+	# the schedule below.
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-new.json" 'next todo todo todo todo'
+	occ setupchecks >"${TMP_DIR}/setupchecks-new.txt" 2>&1 || true
+	if ! grep --fixed-strings 'Paperless Sync is installed but not set up yet.' "${TMP_DIR}/setupchecks-new.txt" >/dev/null; then
+		echo "occ setupchecks does not say that Paperless Sync is not set up yet:" >&2
+		cat "${TMP_DIR}/setupchecks-new.txt" >&2
+		exit 1
+	fi
+
+	# The navigation of the administration settings lists the app's own section on
+	# every page (Dennis-Otto/paperless-unified-search#25): Nextcloud 33 as links,
+	# Nextcloud 34 in the initial state settings-sections.
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--output "${TMP_DIR}/admin-overview.html" \
+		"${BASE_URL}/index.php/settings/admin/overview"
+	SECTIONS="$(grep --only-matching 'id="initial-state-settings-sections" value="[^"]*"' \
+		"${TMP_DIR}/admin-overview.html" | sed 's/.*value="//; s/"$//' | base64 --decode || true)"
+	if ! grep --fixed-strings '/settings/admin/paperless_sync"' "${TMP_DIR}/admin-overview.html" >/dev/null &&
+		! grep --fixed-strings '"id":"paperless_sync"' <<<"${SECTIONS}" >/dev/null; then
+		echo "The navigation of the administration settings lists no Paperless Sync section." >&2
+		exit 1
+	fi
+
+	# Nextcloud loads the routes of appinfo/routes.php only for apps that are already
+	# loaded. The app's attribute routes exist without that, as in a PHP script
+	# (Dennis-Otto/paperless-unified-search#25). Scripts link through index.php.
+	# shellcheck disable=SC2016
+	ROUTES="$("${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" "${PHP_CLI[@]}" -r '
+		require "/var/www/html/lib/base.php";
+		$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
+		foreach (["settings.save", "settings.test", "settings.reset", "settings.preview", "sync.run", "sync.status"] as $route) {
+			echo "route=", $urls->linkToRoute("paperless_sync." . $route), "\n";
+		}
+	' 2>/dev/null | grep '^route=' | sed 's#^route=/index.php/#route=/#' | tr '\n' ' ')"
+	EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/test route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/preview route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
+	if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
+		echo "The routes are missing before the app is loaded: ${ROUTES}" >&2
+		exit 1
+	fi
+}
+
+# Test connection, or the save, with the settings of the checklist and an account of the mock.
+checklist() {
+	endpoint="$1"
+	output="$2"
+	token="${3:-e2e-view-only-token}"
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+		--data-urlencode 'settings[paperless_local_network]=1' \
+		--data-urlencode 'settings[target_user]=sync-target' \
+		--data-urlencode 'settings[base_path]=Documents/Paperless' \
+		--data-urlencode 'settings[export_enabled]=1' \
+		--data-urlencode 'settings[inbox_enabled]=1' \
+		--data-urlencode "token=${token}" \
+		--output "${output}" \
+		"${BASE_URL}/apps/paperless_sync/${endpoint}"
+}
+
+# The connection: a Paperless in the local network needs its setting, the checklist names what
+# an account may not do, and the settings are saved with the token of the full account, with
+# which the scenarios after it run.
+scenario_connection() {
+	# Without the setting, Nextcloud refuses the address of the mock, and the answer says how to
+	# allow it instead of Nextcloud's own "Host "paperless-mock" violates local access rules".
+	REFUSED_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+		--data-urlencode 'settings[target_user]=sync-target' \
+		--data-urlencode 'token=e2e-only-token' \
+		--output "${TMP_DIR}/local-network-refused.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/settings")"
+	if [[ "${REFUSED_STATUS}" != "400" ]]; then
+		echo "Saving a Paperless in the local network without its setting answered HTTP ${REFUSED_STATUS} instead of 400: $(cat "${TMP_DIR}/local-network-refused.json")" >&2
+		exit 1
+	fi
+	assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
+
+	# The connection checklist of an account that may view the documents but neither the tags
+	# nor add documents, which the test of the documents alone would have passed: Test
+	# connection names each permission to grant, and saves nothing.
+	checklist settings/test "${TMP_DIR}/checklist-view-only.json"
+	assert_json checklist-view-only "${TMP_DIR}/checklist-view-only.json"
+	if occ config:app:get paperless_sync paperless_url >/dev/null 2>&1; then
+		echo "Test connection saved the settings." >&2
+		exit 1
+	fi
+	# Saving goes on with a permission that one module lacks, so that it can be granted in
+	# Paperless afterwards, and the answer lists the same checklist. The connection of the
+	# getting-started checklist stays next, as a line of its checklist failed, while the owner is
+	# done. The save below replaces the token with the one of the full account.
+	checklist settings "${TMP_DIR}/saved-with-failures.json"
+	assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'next done todo todo todo'
+	# Without the permission View for UI Settings, Paperless doesn't tell the checklist the
+	# permissions of the account: the lines of the trash and the inbox name that permission.
+	checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
+	assert_json checklist-no-ui-settings "${TMP_DIR}/checklist-no-ui-settings.json"
+
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+		--data-urlencode 'settings[paperless_local_network]=1' \
+		--data-urlencode 'settings[target_user]=sync-target' \
+		--data-urlencode 'settings[base_path]=Documents/Paperless' \
+		--data-urlencode 'settings[archive_folder]=Archive' \
+		--data-urlencode 'settings[inbox_folder]=Inbox' \
+		--data-urlencode 'settings[error_folder]=Errors' \
+		--data-urlencode 'settings[deleted_folder]=_Deleted' \
+		--data-urlencode 'settings[export_enabled]=1' \
+		--data-urlencode 'settings[inbox_enabled]=1' \
+		--data-urlencode 'settings[skip_inbox]=1' \
+		--data-urlencode 'settings[trash_mode]=move' \
+		--data-urlencode 'settings[permanent_delete]=1' \
+		--data-urlencode 'settings[allow_direct_delete]=0' \
+		--data-urlencode 'settings[missing_grace_runs]=2' \
+		--data-urlencode 'settings[prune_empty_folders]=1' \
+		--data-urlencode 'settings[delete_inbox_after_success]=1' \
+		--data-urlencode 'settings[recursive_inbox]=1' \
+		--data-urlencode 'settings[conflict_mode]=replace' \
+		--data-urlencode 'token=e2e-only-token' \
+		--output "${TMP_DIR}/config.json" \
+		"${BASE_URL}/apps/paperless_sync/settings"
+	assert_json config "${TMP_DIR}/config.json"
+	# The token of the full account passes every line, which completes the connection.
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-connected.json" 'done done next todo todo'
+}
+
+# A dry-run changes nothing: on the settings page and with occ, with the saved settings and
+# with settings that are not saved, as the preview of the path template.
+scenario_dry_run() {
+	sync_run true "${TMP_DIR}/dry-run.json"
+	assert_json dry-run "${TMP_DIR}/dry-run.json"
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-dry-run.json" 'done done done next todo'
+	occ paperless_sync:run --dry-run --output=json > "${TMP_DIR}/dry-run-occ.json"
+	assert_json dry-run "${TMP_DIR}/dry-run-occ.json"
+	assert_dav_missing sync-target "${INITIAL_PATH}"
+	# A dry-run changes nothing, so the Activity stream of the target user stays empty.
+	activities "${TMP_DIR}/activity-dry-run.json"
+	assert_json activity-none "${TMP_DIR}/activity-dry-run.json"
+
+	# The preview of the path template: where the newest documents go with the template of the
+	# page, with the variables of Paperless's own file names, before anything is saved.
+	settings_preview "${TMP_DIR}/preview.json" \
+		'path_template={{ owner_username }}/{{ created_month_name }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }} ({{ page_count }} pages) [P{{ id }}]'
+	assert_json preview "${TMP_DIR}/preview.json"
+	# A dry-run tries unsaved settings without saving them; the export below still takes the
+	# saved template. It keeps the saved target user, which only a save may change.
+	DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-unsaved.json" 'path_template={{ created_year }}/{{ title }} [P{{ id }}]' 'inbox_enabled=0')"
+	if [[ "${DRY_RUN_STATUS}" != "200" ]]; then
+		echo "The dry-run of unsaved settings answered HTTP ${DRY_RUN_STATUS}: $(cat "${TMP_DIR}/dry-run-unsaved.json")" >&2
+		exit 1
+	fi
+	assert_json dry-run-unsaved "${TMP_DIR}/dry-run-unsaved.json"
+	DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-other-user.json" 'target_user=e2e-other')"
+	if [[ "${DRY_RUN_STATUS}" != "400" ]]; then
+		echo "A dry-run for another target user answered HTTP ${DRY_RUN_STATUS} instead of 400: $(cat "${TMP_DIR}/dry-run-other-user.json")" >&2
+		exit 1
+	fi
+	assert_json dry-run-other-user "${TMP_DIR}/dry-run-other-user.json"
+	assert_dav_missing sync-target "${INITIAL_PATH}"
+}
+
+# "Synchronize now" queues the run as a background job and answers at once, with the status that
+# the page follows; the worker of Nextcloud runs the job here, as cron does on a server.
+scenario_export() {
+	QUEUED_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=false' \
+		--output "${TMP_DIR}/queued.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	if [[ "${QUEUED_STATUS}" != "202" ]]; then
+		echo "\"Synchronize now\" answered HTTP ${QUEUED_STATUS} instead of 202: $(cat "${TMP_DIR}/queued.json")" >&2
+		exit 1
+	fi
+	assert_json queued "${TMP_DIR}/queued.json"
+	assert_dav_missing sync-target "${INITIAL_PATH}"
+	occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
+	assert_status_soon status-export "${TMP_DIR}/export.json"
+	# The first run succeeded while the schedule is off, which a step still asks for.
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-first-run.json" 'done done done next done'
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+	# One entry for the run, with the link of the file that it wrote.
+	activities "${TMP_DIR}/activity-export.json"
+	assert_json activity-export "${TMP_DIR}/activity-export.json"
+	FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
+}
+
+# A change of the metadata alone moves the file, which keeps its ID, without a download.
+scenario_moves() {
+	control /control/scenario/renamed >/dev/null
+	sync_run false "${TMP_DIR}/move.json"
+	assert_json move "${TMP_DIR}/move.json"
+	assert_dav_missing sync-target "${INITIAL_PATH}"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${RENAMED_PATH}"
+	# Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0: with either, a change
+	# of the metadata alone moves the file, here back and forth, without a download.
+	control /control/checksum/md5 >/dev/null
+	control /control/scenario/active >/dev/null
+	sync_run false "${TMP_DIR}/move-md5.json"
+	assert_json move "${TMP_DIR}/move-md5.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+	control /control/scenario/renamed >/dev/null
+	sync_run false "${TMP_DIR}/move-md5-back.json"
+	assert_json move "${TMP_DIR}/move-md5-back.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${RENAMED_PATH}"
+	control /control/checksum/sha256 >/dev/null
+	mock_state > "${TMP_DIR}/mock-after-move.json"
+	assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
+}
+
+# The webhook of a workflow of Paperless: a call names a document that Paperless added or
+# changed, and its copy changes during the call, with no background job in between. Calls
+# without the secret are refused and counted by Nextcloud's brute-force protection, and a call
+# is no run of the status, from which the schedule counts.
+scenario_webhook() {
+	RUN_BEFORE_WEBHOOK="$(last_run)"
+	assert_webhook 401 '' 'Bearer no-secret-yet' '{"document": 123}'
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--output "${TMP_DIR}/webhook-secret.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/webhook"
+	assert_json webhook-secret "${TMP_DIR}/webhook-secret.json"
+	WEBHOOK_SECRET="$(json_value secret < "${TMP_DIR}/webhook-secret.json")"
+	assert_webhook 401 '' '' '{"document": 123}'
+	assert_webhook 401 '' 'Bearer wrong-secret' '{"document": 123}'
+	if [[ "$(webhook_attempts)" -lt 3 ]]; then
+		echo "Nextcloud's brute-force protection did not count the calls without the secret." >&2
+		exit 1
+	fi
+	# Scheduled synchronization is still off, as before the first dry-run was reviewed: a call
+	# changes nothing, until it is on.
+	control /control/scenario/active >/dev/null
+	assert_webhook 409 off "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	save_settings "${TMP_DIR}/webhook-enabled-settings.json" enabled=1
+	assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${INITIAL_PATH}"
+	if [[ "$(webhook_attempts)" != "0" ]]; then
+		echo "A call with the secret did not end the delay of the address of Paperless." >&2
+		exit 1
+	fi
+	# Paperless-ngx 2.x has no {{ doc_id }}: its {{ doc_url }} names the document by its address, and
+	# the parameters of a workflow send the number as text.
+	control /control/scenario/renamed >/dev/null
+	assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": "http://paperless.example.test/documents/123/"}'
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_webhook 200 unchanged "Bearer ${WEBHOOK_SECRET}" '{"document": "123"}'
+	assert_webhook 404 missing "Bearer ${WEBHOOK_SECRET}" '{"document": 999}'
+	assert_webhook 400 '' "Bearer ${WEBHOOK_SECRET}" '{"title": "Monthly invoice"}'
+	# With "Mirror the document during the call" off, the document waits for the background job.
+	save_settings "${TMP_DIR}/webhook-queued-settings.json" webhook_immediate=0
+	control /control/scenario/active >/dev/null
+	assert_webhook 202 queued "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	occ background-job:worker --once 'OCA\PaperlessSync\Cron\DocumentSyncJob' >/dev/null
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
+	save_settings "${TMP_DIR}/webhook-immediate-settings.json" webhook_immediate=1
+	control /control/scenario/renamed >/dev/null
+	assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
+	assert_file_id "${RENAMED_PATH}"
+	save_settings "${TMP_DIR}/webhook-done-settings.json" enabled=0
+	if [[ "$(last_run)" != "${RUN_BEFORE_WEBHOOK}" ]]; then
+		echo "A call of the webhook changed the status of the last run: ${RUN_BEFORE_WEBHOOK} became $(last_run)." >&2
+		exit 1
+	fi
+	# The settings page shows the last call, and never the secret again.
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "${TMP_DIR}/webhook-state.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/webhook"
+	assert_json webhook-state "${TMP_DIR}/webhook-state.json" "${WEBHOOK_SECRET}"
+	mock_state > "${TMP_DIR}/mock-after-webhook.json"
+	assert_json mock-after-webhook "${TMP_DIR}/mock-after-webhook.json"
+}
+
+# A new content of the document updates its file in place, in a run by hand: the file keeps its
+# ID, and a share of it shows the new content.
+scenario_new_content() {
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'path=/Documents/Paperless/Archive/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf' \
+		--data-urlencode 'shareType=0' \
+		--data-urlencode 'shareWith=e2e-other' \
+		--output /dev/null \
+		"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+	assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123.'
+	control /control/content/revised >/dev/null
+	sync_run false "${TMP_DIR}/revised.json"
+	assert_json export "${TMP_DIR}/revised.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+	assert_file_id "${RENAMED_PATH}"
+	assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
+}
+
+# The background job, as system cron starts it. Until synchronization is enabled, it does
+# nothing. Then it runs when the interval since the last run has passed, here as if that run was
+# an hour ago, also right after a dry-run: a dry-run changes nothing, so it doesn't push the
+# schedule back. Started again at once, the job waits for the interval. In the job, the versions
+# app of Nextcloud also keeps the previous content as a version.
+scenario_schedule() {
+	VERSIONS_BEFORE="$(version_count)"
+	control /control/content/original >/dev/null
+	HOUR_AGO="$(($(date +%s) - 3600))"
+	for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
+		occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
+	done
+	JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
+	occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+	if [[ "$(last_run)" != "${HOUR_AGO} ${HOUR_AGO} ${HOUR_AGO} " ]]; then
+		echo 'The background job synchronized while synchronization was disabled.' >&2
+		exit 1
+	fi
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
+	# With the schedule on, saving tests the connection first.
+	save_settings "${TMP_DIR}/enabled.json" enabled=1
+	assert_json enabled "${TMP_DIR}/enabled.json"
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-done.json" 'done done done done done'
+	sync_run true "${TMP_DIR}/dry-run-before-job.json"
+	occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+	assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
+	# A scheduled run, without a user session, has its entry as well, without an author.
+	activities "${TMP_DIR}/activity-job.json"
+	assert_json activity-job "${TMP_DIR}/activity-job.json"
+	LAST_RUN="$(last_run)"
+	occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
+	if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
+		echo 'The background job ran again before its interval had passed.' >&2
+		exit 1
+	fi
+	# The schedule goes off again, as the steps after this one and settings.mjs expect it.
+	save_settings "${TMP_DIR}/disabled.json" enabled=0
+	assert_json disabled "${TMP_DIR}/disabled.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${RENAMED_PATH}"
+	VERSIONS_AFTER="$(version_count)"
+	if ((VERSIONS_AFTER != VERSIONS_BEFORE + 1)); then
+		echo "The versions app has ${VERSIONS_AFTER} entries for the file after the update in the background job instead of $((VERSIONS_BEFORE + 1))." >&2
+		exit 1
+	fi
+}
+
+# A tag that excludes a document removes its copy from the archive, with the folders that this
+# emptied.
+scenario_excluded_tags() {
+	control /control/scenario/excluded >/dev/null
+	trash_names sync-target > "${TMP_DIR}/trash-before-excluded.txt"
+	sync_run false "${TMP_DIR}/excluded.json"
+	assert_json excluded "${TMP_DIR}/excluded.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/Example%20GmbH')" != "404" ]]; then
+		echo 'Empty archive hierarchy was not pruned after exclusion.' >&2
+		exit 1
+	fi
+	# The removed copy and the folders that its removal emptied are in the trash bin of the target
+	# user, to restore.
+	assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-excluded.txt"
+	assert_trashed sync-target 'Example GmbH' "${TMP_DIR}/trash-before-excluded.txt"
+}
+
+# With tags to mirror, the archive holds only the documents with one of them: the document of
+# the scenario lacks Private, a tag of the mock, so it stays out, whatever the case of the name.
+# Without the list, the next steps export the document again.
+scenario_included_tags() {
+	control /control/scenario/renamed >/dev/null
+	save_settings "${TMP_DIR}/included.json" included_tags=private
+	assert_json included "${TMP_DIR}/included.json"
+	sync_run false "${TMP_DIR}/not-included.json"
+	assert_json not-included "${TMP_DIR}/not-included.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	save_settings "${TMP_DIR}/included.json" included_tags=
+}
+
+# Nextcloud applies no quota to the temporary file of a write, so the app checks the free space
+# itself: with the quota of the target user used up, the export stops at its first document, and
+# the document follows once there is space again.
+scenario_quota() {
+	control /control/scenario/renamed >/dev/null
+	occ user:setting sync-target files quota '1 B' >/dev/null
+	sync_run false "${TMP_DIR}/export-stopped.json"
+	occ user:setting --delete sync-target files quota >/dev/null
+	assert_json export-stopped "${TMP_DIR}/export-stopped.json"
+	# The status keeps the error of the document for the settings page, which reads it in the
+	# language of its administrator, while the run keeps it in English, as the log does.
+	assert_status_soon status-errors "${TMP_DIR}/status-errors.json"
+	occ user:setting e2e-admin core lang de >/dev/null
+	assert_status_soon status-errors-german "${TMP_DIR}/status-errors-german.json"
+	occ user:setting --delete e2e-admin core lang >/dev/null
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+
+	sync_run false "${TMP_DIR}/re-export.json"
+	assert_json export "${TMP_DIR}/re-export.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+}
+
+# The tags of Paperless as tags of Nextcloud: with the setting on, the copy of P123 gets the tag
+# insurance of its document, which every user sees and only administrators assign, and keeps the
+# tag Holiday that its user put on it. A user made the tag TAX, 2026 already, which Nextcloud
+# holds once whatever the case, so the copy goes without the other tag of its document, and the
+# dry-run says so. Without the tags in Paperless, the copy loses insurance and keeps Holiday.
+scenario_nextcloud_tags() {
+	HOLIDAY_TAG="$(create_tag sync-target Holiday)"
+	create_tag sync-target 'TAX, 2026' >/dev/null
+	curl --fail-with-body --silent --show-error --user "sync-target:${PASSWORD}" --request PUT \
+		"${BASE_URL}/remote.php/dav/systemtags-relations/files/$(file_id sync-target "${RENAMED_PATH}")/${HOLIDAY_TAG}" >/dev/null
+	save_settings "${TMP_DIR}/tags-settings.json" nextcloud_tags=1
+	control /control/scenario/tagged >/dev/null
+	sync_run true "${TMP_DIR}/tags-dry-run.json"
+	assert_json tags-dry-run "${TMP_DIR}/tags-dry-run.json"
+	assert_file_tags 'Holiday:true'
+	sync_run false "${TMP_DIR}/tags-run.json"
+	assert_json tags-run "${TMP_DIR}/tags-run.json"
+	assert_file_tags $'Holiday:true\ninsurance:false'
+	control /control/scenario/renamed >/dev/null
+	sync_run false "${TMP_DIR}/tags-removed.json"
+	assert_json tags-removed "${TMP_DIR}/tags-removed.json"
+	assert_file_tags 'Holiday:true'
+	save_settings "${TMP_DIR}/tags-off-settings.json" nextcloud_tags=0
+}
+
+# The metadata next to the archive: with the setting on, a run writes the sidecar of P123, with
+# the names of its correspondent and document type, its note and its custom field, and the index
+# of the archive, both in the hidden folder .paperless. The copy in the deleted folder keeps its
+# sidecar in the steps below, and the deletion of the document takes it along.
+scenario_metadata() {
+	save_settings "${TMP_DIR}/metadata-settings.json" write_metadata=1
+	sync_run false "${TMP_DIR}/metadata.json"
+	assert_json metadata-run "${TMP_DIR}/metadata.json"
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--output "${TMP_DIR}/sidecar.json" \
+		"${DAV_BASE}/sync-target/${SIDECAR_PATH}"
+	assert_json sidecar "${TMP_DIR}/sidecar.json"
+	assert_dav_file sync-target "${INDEX_PATH}" '123,Monthly invoice corrected,Example GmbH,Invoice,'
+	assert_dav_file sync-target "${INDEX_PATH}" ',Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,active,'
+}
+
+# The trash of Paperless and guarded deletion: a document in its trash moves to the deleted
+# folder, and one that Paperless purged from it goes only with permanent deletion on.
+scenario_deletion() {
+	control /control/scenario/trash >/dev/null
+	sync_run false "${TMP_DIR}/trash.json"
+	assert_json trash "${TMP_DIR}/trash.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_dav_file sync-target "${SIDECAR_PATH}" '"title": "Monthly invoice corrected"'
+	assert_dav_file sync-target "${INDEX_PATH}" ',_Deleted/2026-08-27/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,trash,'
+
+	# A page that comes back empty while its count still lists the document counts nothing as missing,
+	# so the document waits for its first missing run in the next step.
+	control /control/scenario/incomplete >/dev/null
+	sync_run false "${TMP_DIR}/scan-incomplete.json"
+	assert_json scan-incomplete "${TMP_DIR}/scan-incomplete.json"
+	assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+
+	control /control/scenario/empty >/dev/null
+	sync_run false "${TMP_DIR}/missing-wait.json"
+	assert_json missing-wait "${TMP_DIR}/missing-wait.json"
+	assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+	# Deletion off: the document that Paperless purged from its trash would be deleted in this run,
+	# but with permanent deletion off it keeps its copy. A dry-run shows it without changing the
+	# state, so that the next run deletes the copy with permanent deletion on again. The setting
+	# changes through the settings page, as an administrator changes it: after a change through occ,
+	# the runs of the web server still saw the old value.
+	save_settings "${TMP_DIR}/deletion-off-settings.json" permanent_delete=0
+	sync_run true "${TMP_DIR}/deletion-off.json"
+	save_settings "${TMP_DIR}/deletion-on-settings.json" permanent_delete=1
+	assert_json deletion-off "${TMP_DIR}/deletion-off.json"
+	assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+	trash_names sync-target > "${TMP_DIR}/trash-before-deleted.txt"
+	sync_run false "${TMP_DIR}/deleted.json"
+	assert_json deleted "${TMP_DIR}/deleted.json"
+	assert_dav_missing sync-target "${TRASH_PATH}"
+	assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-deleted.txt"
+	# The sidecar went with the copy, and the index has no row for the document any more.
+	assert_dav_missing sync-target "${SIDECAR_PATH}"
+	assert_dav_file sync-target "${INDEX_PATH}" 'id,title,correspondent'
+	if assert_dav_file sync-target "${INDEX_PATH}" 'Monthly invoice corrected'; then
+		echo 'The index of the metadata still lists the deleted document P123.' >&2
+		exit 1
+	fi
+	save_settings "${TMP_DIR}/metadata-off-settings.json" write_metadata=0
+}
+
+# The inbox: imports that succeed, fail, end as a duplicate or revoked, are refused or set aside.
+# Paperless has no document that a run would export here, as after the deletion before it.
+scenario_inbox() {
+	control /control/scenario/empty >/dev/null
+	# The subfolders of a file of the inbox become its tags, with a tag for every import: the
+	# mock has a tag insurance, in lower case, and none named Scanned or 2026, which the run
+	# creates. Test connection checks the permissions of the tags first.
+	for folder in Documents Documents/Paperless Documents/Paperless/Inbox 'Documents/Paperless/Inbox/Insurance' 'Documents/Paperless/Inbox/Insurance/2026'; do
+		MKCOL_STATUS="$(dav_status sync-target MKCOL "${folder}")"
+		if [[ "${MKCOL_STATUS}" != "201" && "${MKCOL_STATUS}" != "405" ]]; then
+			echo "Unexpected WebDAV MKCOL status: ${MKCOL_STATUS}" >&2
+			exit 1
+		fi
+	done
+	settings_data inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		"${settings[@]}" \
+		--data-urlencode 'token=e2e-only-token' \
+		--output "${TMP_DIR}/inbox-tags-checklist.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/test"
+	assert_json inbox-tags-checklist "${TMP_DIR}/inbox-tags-checklist.json"
+	save_settings "${TMP_DIR}/inbox-tags-settings.json" inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
+	assert_json inbox-tags-settings "${TMP_DIR}/inbox-tags-settings.json"
+	dav_upload sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf' '%PDF-1.4 Synthetic inbox PDF policy.'
+	sync_run false "${TMP_DIR}/import-submitted.json"
+	assert_json import-submitted "${TMP_DIR}/import-submitted.json"
+	assert_json import-tags "${TMP_DIR}/import-submitted.json"
+	mock_state > "${TMP_DIR}/mock-tags.json"
+	assert_json mock-tags "${TMP_DIR}/mock-tags.json"
+	save_settings "${TMP_DIR}/inbox-tags-off-settings.json" inbox_folder_tags=0 inbox_create_tags=0 'inbox_tags='
+	control /control/tasks/success >/dev/null
+	sync_run false "${TMP_DIR}/import-success.json"
+	assert_json import-success "${TMP_DIR}/import-success.json"
+	assert_dav_missing sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf'
+
+	dav_upload sync-target 'Documents/Paperless/Inbox/broken.pdf' '%PDF-1.4 Synthetic inbox PDF broken.'
+	sync_run false "${TMP_DIR}/failed-submitted.json"
+	assert_json import-submitted "${TMP_DIR}/failed-submitted.json"
+	control /control/tasks/failure >/dev/null
+	sync_run false "${TMP_DIR}/import-failed.json"
+	assert_json import-failed "${TMP_DIR}/import-failed.json"
+	assert_dav_missing sync-target 'Documents/Paperless/Inbox/broken.pdf'
+	assert_dav_file sync-target "${ERROR_PATH}" 'Synthetic inbox PDF broken.'
+	assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'broken.pdf: Synthetic unsupported mime type'
+	assert_dav_missing e2e-other "${ERROR_PATH}"
+
+	# A duplicate and a task that Paperless revoked end their imports too, with what Paperless
+	# said, here in the shapes of Paperless-ngx 2.20, whose status then names its version.
+	dav_upload sync-target 'Documents/Paperless/Inbox/copy.pdf' '%PDF-1.4 Synthetic inbox PDF copy.'
+	dav_upload sync-target 'Documents/Paperless/Inbox/cancelled.pdf' '%PDF-1.4 Synthetic inbox PDF cancelled.'
+	sync_run false "${TMP_DIR}/ended-submitted.json"
+	assert_json import-submitted "${TMP_DIR}/ended-submitted.json" 2
+	control /control/task-of/copy.pdf/duplicate >/dev/null
+	control /control/task-of/cancelled.pdf/revoked >/dev/null
+	control /control/paperless/2.20.15 >/dev/null
+	sync_run false "${TMP_DIR}/import-ended.json"
+	assert_json import-failed "${TMP_DIR}/import-ended.json" 2
+	assert_dav_file sync-target 'Documents/Paperless/Errors/copy.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
+	assert_dav_file sync-target 'Documents/Paperless/Errors/cancelled.pdf.error.txt' 'Paperless cancelled the task before it finished (REVOKED)'
+	assert_status_soon paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
+	control /control/paperless/3.3.0 >/dev/null
+
+	# Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
+	# the runs after it don't upload it again until it changes.
+	dav_upload sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
+	sync_run false "${TMP_DIR}/import-rejected.json"
+	assert_json import-rejected "${TMP_DIR}/import-rejected.json"
+	sync_run false "${TMP_DIR}/import-waiting.json"
+	assert_json import-waiting "${TMP_DIR}/import-waiting.json"
+	assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
+	# Every import that Paperless finished, failed or refused has an entry of its own.
+	activities "${TMP_DIR}/activity-imports.json"
+	assert_json activity-imports "${TMP_DIR}/activity-imports.json"
+	# The target user hears of every import that failed or was refused in a notification as well.
+	notifications sync-target "${TMP_DIR}/notifications-imports.json"
+	assert_json notifications-imports "${TMP_DIR}/notifications-imports.json"
+	# A video, a program and an archive never go to Paperless: a run and a dry-run name them,
+	# they stay where they are, and they are no failure.
+	dav_upload sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
+	dav_upload sync-target 'Documents/Paperless/Inbox/setup.EXE' 'Synthetic program.'
+	dav_upload sync-target 'Documents/Paperless/Inbox/backup.zip' 'Synthetic archive.'
+	sync_run true "${TMP_DIR}/import-set-aside-dry-run.json"
+	assert_json import-set-aside "${TMP_DIR}/import-set-aside-dry-run.json"
+	sync_run false "${TMP_DIR}/import-set-aside.json"
+	assert_json import-set-aside "${TMP_DIR}/import-set-aside.json"
+	assert_dav_file sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
+	for file in holiday.mp4 setup.EXE backup.zip; do
+		dav_status sync-target DELETE "Documents/Paperless/Inbox/${file}" >/dev/null
+	done
+}
+
+# The status after the runs before it, on the settings page and with occ, and what the mock saw
+# of all of them: the downloads of the archive and the uploads of the inbox.
+scenario_status() {
+	assert_status_soon status "${TMP_DIR}/status.json"
+	occ paperless_sync:status --output=json --exit-code > "${TMP_DIR}/status-occ.json"
+	assert_json status "${TMP_DIR}/status-occ.json"
+
+	mock_state > "${TMP_DIR}/mock-final.json"
+	assert_json mock-final "${TMP_DIR}/mock-final.json"
+}
+
+# A document that comes back, after its deletion and from the trash of Paperless.
+scenario_restore() {
+	# The deleted document is back in Paperless, and the next run exports it again.
+	control /control/scenario/renamed >/dev/null
+	sync_run false "${TMP_DIR}/export-again.json"
+	assert_json export "${TMP_DIR}/export-again.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+
+	# Restored from the trash of Paperless, a document gets its copy back from the deleted
+	# folder, without a download, and the deleted folder goes when it is empty.
+	control /control/scenario/trash >/dev/null
+	sync_run false "${TMP_DIR}/trash-again.json"
+	assert_json trash "${TMP_DIR}/trash-again.json"
+	assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
+	DOWNLOADS="$(mock_state | json_value downloads)"
+	control /control/scenario/restored >/dev/null
+	sync_run false "${TMP_DIR}/restored.json"
+	assert_json restored "${TMP_DIR}/restored.json"
+	assert_dav_missing sync-target "${TRASH_PATH}"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/_Deleted')" != "404" ]]; then
+		echo 'The empty deleted folder was not pruned after the restore.' >&2
+		exit 1
+	fi
+	mock_state > "${TMP_DIR}/mock-restored.json"
+	assert_json mock-no-download "${TMP_DIR}/mock-restored.json" "${DOWNLOADS}"
+}
+
+# With conflict_mode=skip, a file of the user at the path of a new document stays as
+# it is, and the run reports the conflict without downloading the document in vain;
+# with replace, the document takes its place.
+scenario_conflicts() {
+	dav_upload sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
+	save_settings "${TMP_DIR}/conflict-skip.json" conflict_mode=skip
+	assert_json conflict-skip "${TMP_DIR}/conflict-skip.json"
+	control /control/scenario/conflict >/dev/null
+	DOWNLOADS="$(mock_state | json_value downloads)"
+	sync_run false "${TMP_DIR}/conflict.json"
+	assert_json conflict "${TMP_DIR}/conflict.json"
+	assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
+	mock_state > "${TMP_DIR}/mock-conflict.json"
+	assert_json mock-no-download "${TMP_DIR}/mock-conflict.json" "${DOWNLOADS}"
+	save_settings "${TMP_DIR}/conflict-replace.json" conflict_mode=replace
+	assert_json conflict-replace "${TMP_DIR}/conflict-replace.json"
+	sync_run false "${TMP_DIR}/conflict-replaced.json"
+	assert_json conflict-replaced "${TMP_DIR}/conflict-replaced.json"
+	assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic Paperless archive document P124.'
+}
+
+# Pages that shift while a run reads them, one document deleted and another one added, keep
+# the count of Paperless, so a scan looks complete without a document that Paperless still
+# has. The run asks Paperless for it before it counts a missing scan, and the copy stays
+# without one.
+scenario_left_out() {
+	control /control/left-out/123 >/dev/null
+	sync_run false "${TMP_DIR}/left-out.json"
+	control /control/left-out/none >/dev/null
+	assert_json left-out "${TMP_DIR}/left-out.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	mock_state > "${TMP_DIR}/mock-left-out.json"
+	assert_json mock-left-out "${TMP_DIR}/mock-left-out.json"
+}
+
+# A document that vanishes from Paperless without passing through its trash keeps its
+# copy for the grace runs, then the copy moves to the deleted folder of that day. As
+# direct deletion is not allowed, the runs after it leave the copy there.
+scenario_vanished() {
+	control /control/scenario/vanished >/dev/null
+	sync_run false "${TMP_DIR}/vanished-wait.json"
+	assert_json vanished-wait "${TMP_DIR}/vanished-wait.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	DAY_BEFORE="$(date -u +%F)"
+	sync_run false "${TMP_DIR}/vanished.json"
+	DAY_AFTER="$(date -u +%F)"
+	assert_json vanished "${TMP_DIR}/vanished.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	for day in "${DAY_BEFORE}" "${DAY_AFTER}"; do
+		VANISHED_PATH="Documents/Paperless/Archive/_Deleted/${day}/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf"
+		if [[ "$(dav_status sync-target GET "${VANISHED_PATH}")" == "200" ]]; then
+			break
+		fi
+	done
+	assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
+	sync_run false "${TMP_DIR}/vanished-kept.json"
+	assert_json vanished-kept "${TMP_DIR}/vanished-kept.json"
+	assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
+}
+
+# Titles and names that the path template must take as they are: "$1" and "{{ … }}"
+# stay text, and names in Chinese, emoji and Cyrillic shrink to the bytes that Nextcloud
+# accepts, also for the temporary name of each write.
+scenario_names() {
+	control /control/scenario/names >/dev/null
+	sync_run false "${TMP_DIR}/names.json"
+	mapfile -t NAMED_PATHS < <(assert_json names "${TMP_DIR}/names.json")
+	if ((${#NAMED_PATHS[@]} != 4)); then
+		echo "The run wrote ${#NAMED_PATHS[@]} of the 4 documents with long or unusual names." >&2
+		exit 1
+	fi
+	for path in "${NAMED_PATHS[@]}"; do
+		assert_dav_file sync-target "${path}" 'Synthetic Paperless archive document P123.'
+	done
+
+	echo "The scenarios pass after ${SECONDS} s."
+}
+
+# A call of Send to Paperless, as the menu of Files makes it; prints the HTTP status.
+send_files() {
+	curl --silent --show-error \
+		--user "$1:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'Content-Type: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data "{\"fileIds\": [$3]}" \
+		--output "$2" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/api/v1/send"
+}
+
+# "Send to Paperless" in the menu of Files: e2e-admin, a member of the group admin of the
+# setting, sends a file of their own, which stays where it is. The background job uploads it
+# with the next run of cron, follows its task and tells the sender in a notification that
+# Paperless has it, with a link to the document; e2e-other may not send. files.mjs then clicks
+# the actions in the browser.
+scenario_files() {
+	dav_upload e2e-admin 'receipt.pdf' '%PDF-1.4 Synthetic inbox PDF receipt.'
+	dav_upload e2e-admin 'Invoice%20%5BP123%5D.pdf' '%PDF-1.4 Synthetic copy of P123.'
+	dav_upload e2e-other 'letter.pdf' '%PDF-1.4 Synthetic letter.'
+	RECEIPT_ID="$(file_id e2e-admin 'receipt.pdf')"
+	SEND_STATUS="$(send_files e2e-other "${TMP_DIR}/send-other.json" "${RECEIPT_ID}")"
+	if [[ "${SEND_STATUS}" != "403" ]]; then
+		echo "A user outside the group of the setting could send a file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send-other.json")" >&2
+		exit 1
+	fi
+	SEND_STATUS="$(send_files e2e-admin "${TMP_DIR}/send.json" "${RECEIPT_ID}")"
+	if [[ "${SEND_STATUS}" != "200" ]] || ! grep --fixed-strings 'Paperless Sync sends 1 file to Paperless.' "${TMP_DIR}/send.json" >/dev/null; then
+		echo "Send to Paperless did not queue the file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send.json")" >&2
+		exit 1
+	fi
+	SEND_JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SendJob' --output=json | json_value 0 id)"
+	occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+	mock_state > "${TMP_DIR}/mock-sent.json"
+	assert_json mock-sent "${TMP_DIR}/mock-sent.json"
+	control /control/task-of/receipt.pdf/success >/dev/null
+	occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+	notifications e2e-admin "${TMP_DIR}/notifications-sent.json"
+	assert_json notifications-sent "${TMP_DIR}/notifications-sent.json"
+	assert_dav_file e2e-admin 'receipt.pdf' 'Synthetic inbox PDF receipt.'
+	echo "Send to Paperless passes after ${SECONDS} s."
+}
+
+flow_rule() {
+	# The rule as the settings of Flow save it, with the operation of the argument, a JSON string.
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'Content-Type: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data '{"class": "OCA\\PaperlessSync\\Operation\\SendToPaperless", "name": "Scans", "checks": [{"class": "OCA\\WorkflowEngine\\Check\\FileName", "operator": "matches", "value": "/^scan-/i"}], "operation": '"$2"', "entity": "OCA\\WorkflowEngine\\Entity\\File", "events": ["\\OCP\\Files::postCreate"]}' \
+		--output "$1" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/ocs/v2.php/apps/workflowengine/api/v1/workflows/global"
+}
+
+# "Send to Paperless" in Flow: e2e-admin saves a rule through the API of Flow that sends every
+# file whose name starts with scan- when it is created, with the tags Private and insurance of
+# the rule; a rule with a tag that Paperless Sync can't send is refused. e2e-other, who may not
+# send from Files, uploads a file that the rule matches and one that it doesn't. The background
+# job uploads the first with the tags of the rule, the file stays where it is, and its owner
+# hears nothing of an import that worked. flow.mjs then edits the rule in the settings of Flow.
+scenario_flow() {
+	SEND_JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SendJob' --output=json | json_value 0 id)"
+	FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow-comma.json" '"{\"tags\": [\"Tax, 2026\"]}"')"
+	if [[ "${FLOW_STATUS}" != "400" ]] || ! grep --fixed-strings 'hold a comma or a line break: Tax, 2026' "${TMP_DIR}/flow-comma.json" >/dev/null; then
+		echo "Flow saved a rule with a tag that Paperless Sync can't send: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow-comma.json")" >&2
+		exit 1
+	fi
+	FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow.json" '"{\"tags\": [\"Private\", \"insurance\"]}"')"
+	if [[ "${FLOW_STATUS}" != "200" ]]; then
+		echo "Flow did not save the rule of Send to Paperless: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow.json")" >&2
+		exit 1
+	fi
+	dav_upload e2e-other 'scan-insurance.pdf' '%PDF-1.4 Synthetic inbox PDF scan of an insurance letter.'
+	dav_upload e2e-other 'holiday.pdf' '%PDF-1.4 Synthetic holiday plan.'
+	occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+	mock_state > "${TMP_DIR}/mock-flow.json"
+	assert_json mock-flow "${TMP_DIR}/mock-flow.json"
+	control /control/task-of/scan-insurance.pdf/success >/dev/null
+	occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
+	notifications e2e-other "${TMP_DIR}/notifications-flow.json"
+	assert_json notifications-flow "${TMP_DIR}/notifications-flow.json"
+	assert_dav_file e2e-other 'scan-insurance.pdf' 'Synthetic inbox PDF scan'
+	echo "Send to Paperless in Flow passes after ${SECONDS} s."
+}
+
+# The settings delegated to a group, as an administrator does it under Administration privileges.
+# Its member reaches the routes that the page reads, and settings.mjs then uses the page as that
+# member. Nextcloud refuses them the status API and a key of the app past the checks of the app,
+# and another user every route of the page.
+scenario_delegation() {
+	occ group:add e2e-delegates >/dev/null
+	add_user e2e-delegate
+	occ group:adduser e2e-delegates e2e-delegate >/dev/null
+	occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' e2e-delegates >/dev/null
+	for route in 'GET /settings/users' 'GET /settings/users/sync-target' 'GET /settings/groups' \
+		'GET /settings/paperless/tags' 'GET /settings/webhook' 'POST /settings/webhook' 'DELETE /settings/webhook' \
+		'POST /settings' 'DELETE /settings' 'POST /settings/test' 'POST /settings/preview' 'POST /settings/account' \
+		'POST /sync/run' 'GET /sync/status'; do
+		expect_route 403 e2e-other "${route% *}" "${route#* }"
+	done
+	expect_route 200 e2e-delegate GET '/settings/users?search=sync'
+	if ! grep --quiet --fixed-strings '"id":"sync-target"' "${TMP_DIR}/route.json" || grep --quiet '"email"' "${TMP_DIR}/route.json"; then
+		echo "The users to pick must name sync-target, without an e-mail address: $(cat "${TMP_DIR}/route.json")" >&2
+		exit 1
+	fi
+	expect_route 200 e2e-delegate GET /settings/users/e2e-other
+	expect_route 404 e2e-delegate GET /settings/users/nobody-here
+	expect_route 200 e2e-delegate GET '/settings/groups?search=e2e-del'
+	if ! grep --quiet --fixed-strings '"id":"e2e-delegates"' "${TMP_DIR}/route.json"; then
+		echo "The groups to pick must name e2e-delegates: $(cat "${TMP_DIR}/route.json")" >&2
+		exit 1
+	fi
+	expect_route 200 e2e-delegate GET /settings/paperless/tags
+	expect_route 200 e2e-delegate GET /settings/webhook
+	expect_route 200 e2e-delegate GET /sync/status
+	USER_API_STATUS="$(status_api e2e-delegate "${TMP_DIR}/status-api-delegate.json")"
+	if [[ "${USER_API_STATUS}" != "403" ]]; then
+		echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a delegate: $(cat "${TMP_DIR}/status-api-delegate.json")" >&2
+		exit 1
+	fi
+	DIRECT_WRITE_STATUS="$(curl --silent --show-error \
+		--user "e2e-delegate:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--data-urlencode 'value=9' \
+		--output "${TMP_DIR}/direct-write.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/batch_size")"
+	if [[ "${DIRECT_WRITE_STATUS}" != "403" ]]; then
+		echo "A delegate wrote a key of the app past its checks, HTTP ${DIRECT_WRITE_STATUS}: $(cat "${TMP_DIR}/direct-write.json")" >&2
+		exit 1
+	fi
+	echo "The delegated settings pass after ${SECONDS} s."
+}
+
+# The administration settings and the report of a dry-run over a larger archive, the actions
+# of the app in Files and the form of its rule in Flow meet WCAG 2.1 AA, also at 320 px, and
+# the settings work by keyboard alone.
+scenario_browser() {
+	BROWSER_STARTED="${SECONDS}"
+	control /control/scenario/archive >/dev/null
+	if [[ "${BROWSER_PLAN}" == "${BROWSER_NAMES[*]}" ]]; then
+		browser_checks "${BROWSER_PLAN}" "${E2E_COVERAGE}" coverage-floor.json
+		echo "The accessibility check passes after ${SECONDS} s."
+	else
+		# The floor of each script counts on all of the checks.
+		browser_checks "${BROWSER_PLAN}" "${E2E_COVERAGE}"
+		echo "The checks in the browser ${BROWSER_PLAN} pass after ${SECONDS} s."
+	fi
+	echo "The checks in the browser took $((SECONDS - BROWSER_STARTED)) s."
+}
+
+# The setup of the account of the app, with more settings as arguments of curl; prints the HTTP status.
+account_setup() {
+	output="$1"
+	shift
+	curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'superuserToken=e2e-superuser-only-token' \
+		--data-urlencode 'username=e2e-app' \
+		"$@" \
+		--output "${output}" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/settings/account"
+}
+
+# The setup of the account of the app with the token of a superuser of Paperless: the app
+# creates the account with the permissions of the saved modules, saves the settings with its
+# token and answers the checklist, in which nothing fails. A second setup changes the user
+# only with update. The token of the superuser reaches no answer, which assert_json.py
+# checks, not the configuration of the app, and no line of the log, which assert_log.py
+# checks below. Then the runs go on with the token of the account of the README.
+scenario_account() {
+	# The setup completes the connection of the getting-started checklist, as a save does: here
+	# after a checklist that failed, as the mark of the app says.
+	occ config:app:set paperless_sync status_connection_passed --value=false --type=boolean --lazy >/dev/null
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-account-before.json" 'next done done todo done'
+	ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-created.json")"
+	if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+		echo "The setup of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-created.json")" >&2
+		exit 1
+	fi
+	assert_json account-created "${TMP_DIR}/account-created.json"
+	assert_status_soon getting-started "${TMP_DIR}/getting-started-account.json" 'done done done next done'
+	ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-exists.json")"
+	if [[ "${ACCOUNT_STATUS}" != "409" ]]; then
+		echo "A second setup of the account changed the user without update: HTTP ${ACCOUNT_STATUS}, $(cat "${TMP_DIR}/account-exists.json")" >&2
+		exit 1
+	fi
+	assert_json account-exists "${TMP_DIR}/account-exists.json"
+	ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-updated.json" --data-urlencode 'update=1')"
+	if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
+		echo "The update of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-updated.json")" >&2
+		exit 1
+	fi
+	assert_json account-updated "${TMP_DIR}/account-updated.json"
+	if occ config:list paperless_sync --private | grep --fixed-strings e2e-superuser-only-token >/dev/null; then
+		echo "The configuration of the app holds the token of the superuser of Paperless." >&2
+		exit 1
+	fi
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'token=e2e-only-token' \
+		--output "${TMP_DIR}/account-restored.json" \
+		"${BASE_URL}/apps/paperless_sync/settings"
+	echo "The setup of the account in Paperless passes after ${SECONDS} s."
+}
+
+# The log of Nextcloud holds no error of the app and no token. The scenarios that log an error
+# on purpose come after this one.
+scenario_clean_log() {
+	"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
+		| host_python "${SCRIPT_DIR}/assert_log.py"
+}
+
+# A Paperless-ngx before 2.16 doesn't serve version 9 of its API, which every request of the app
+# asks for, so a run says which Paperless it needs instead of reading answers of another shape.
+scenario_old_paperless() {
+	control /control/paperless/2.15.3 >/dev/null
+	OLD_PAPERLESS_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=true' \
+		--output "${TMP_DIR}/old-paperless.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	control /control/paperless/3.3.0 >/dev/null
+	if [[ "${OLD_PAPERLESS_STATUS}" != "500" ]] || ! grep --fixed-strings 'Paperless Sync needs Paperless-ngx 2.16 or newer' "${TMP_DIR}/old-paperless.json" >/dev/null; then
+		echo "A run against Paperless-ngx 2.15 did not name the Paperless it needs: HTTP ${OLD_PAPERLESS_STATUS}, $(cat "${TMP_DIR}/old-paperless.json")" >&2
+		exit 1
+	fi
+}
+
+# A tag to mirror that Paperless doesn't have, a typo here, stops the export before a file
+# changes, as the run would otherwise remove the copies of the documents that should stay. It
+# comes after assert_log.py as well, because the failed run logs its error.
+scenario_unknown_tag() {
+	save_settings "${TMP_DIR}/included.json" included_tags=Nextclod
+	INCLUDED_CODE=0
+	occ paperless_sync:run --dry-run > "${TMP_DIR}/included-missing.txt" 2>&1 || INCLUDED_CODE=$?
+	save_settings "${TMP_DIR}/included.json" included_tags=
+	if [[ "${INCLUDED_CODE}" != "2" ]] || ! grep --fixed-strings 'Paperless has no tag named "Nextclod"' "${TMP_DIR}/included-missing.txt" >/dev/null; then
+		echo "A tag to mirror that Paperless doesn't have must stop the run, but it ended with exit code ${INCLUDED_CODE}: $(cat "${TMP_DIR}/included-missing.txt")" >&2
+		exit 1
+	fi
+}
+
+# How many lines of the log of Nextcloud hold a text.
+log_count() {
+	# The text to count reaches the shell of the container as its argument $1.
+	# shellcheck disable=SC2016
+	"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'grep -c -F -e "$1" /var/www/html/data/nextcloud.log || true' sh "$1"
+}
+
+# A run that can't reach Paperless, the most common failure, logs its error without the token,
+# although Nextcloud writes the arguments of every frame of the trace of an exception. It comes
+# last, because assert_log.py above fails on the error that it logs.
+scenario_unreachable() {
+	"${COMPOSE[@]}" stop paperless-mock >/dev/null
+	UNREACHABLE_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=true' \
+		--output "${TMP_DIR}/unreachable.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	# On the command line, the run says on standard error why it failed, and its exit code and the
+	# status tell a script and a monitoring check that it failed.
+	UNREACHABLE_CODE=0
+	occ paperless_sync:run > "${TMP_DIR}/unreachable-occ.txt" 2>&1 || UNREACHABLE_CODE=$?
+	UNREACHABLE_STATE_CODE=0
+	occ paperless_sync:status --exit-code >/dev/null || UNREACHABLE_STATE_CODE=$?
+	"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+	# A start of the mock may give it another port.
+	containers
+	if [[ "${UNREACHABLE_STATUS}" != "500" ]]; then
+		echo "A dry-run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
+		exit 1
+	fi
+	if [[ "${UNREACHABLE_CODE}" != "2" || "${UNREACHABLE_STATE_CODE}" != "2" ]] \
+		|| ! grep --fixed-strings 'The synchronization failed: ' "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
+		echo "occ paperless_sync:run without Paperless ended with exit code ${UNREACHABLE_CODE} and the status with ${UNREACHABLE_STATE_CODE} instead of 2: $(cat "${TMP_DIR}/unreachable-occ.txt")" >&2
+		exit 1
+	fi
+	if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
+		echo 'The log of Nextcloud holds no failed run, so the check of the token below would prove nothing.' >&2
+		exit 1
+	fi
+	# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter],
+	# which Nextcloud 35 and before writes into the log as it is, and Nextcloud 36 as the text
+	# "*** sensitive parameters replaced ***", taking the value out of every other frame as well.
+	# Without either in the log, PHP left out the arguments of every frame
+	# (zend.exception_ignore_args=On, as in php.ini-production), and the count of the token below
+	# would pass without the fix. Nextcloud writes that text alone in place of all the arguments of
+	# some functions of its own as well, also when PHP left them out, so only the text after another
+	# argument of its frame counts.
+	if [[ "$(log_count SensitiveParameterValue)" == "0" \
+		&& "$(log_count ',"*** sensitive parameters replaced ***"')" == "0" ]]; then
+		echo 'The log of Nextcloud holds no argument replaced by PHP, so the check of the token below would prove nothing.' >&2
+		exit 1
+	fi
+	TOKEN_IN_LOG="$(log_count e2e-only-token)"
+	if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
+		echo "A run without Paperless put the token into its answer, its output or ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
+		exit 1
+	fi
+}
+
+# Changes the Paperless URL through the provisioning API of Nextcloud.
+set_paperless_url() {
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode "value=$1" \
+		--output /dev/null \
+		"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/paperless_url"
+}
+
+# The provisioning API of Nextcloud may change any value of the app, the URL too, without the
+# settings page, which asks for the token again. The next run must not send the stored token to
+# the new URL; the URL that the token was saved with gets it again.
+scenario_repointed_url() {
+	set_paperless_url 'http://paperless-mock:8080/elsewhere'
+	REPOINTED_STATUS="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=true' \
+		--output "${TMP_DIR}/repointed.json" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	if [[ "${REPOINTED_STATUS}" != "500" ]] || ! grep --fixed-strings 'not completely configured' "${TMP_DIR}/repointed.json" >/dev/null; then
+		echo "A run after the URL was changed through the provisioning API used the stored token: HTTP ${REPOINTED_STATUS}, $(cat "${TMP_DIR}/repointed.json")" >&2
+		exit 1
+	fi
+	set_paperless_url 'http://paperless-mock:8080'
+	sync_run true "${TMP_DIR}/back.json"
+}
+
+# A mirror that keeps failing tells the administrators. The run above without Paperless was the
+# first of a row of runs that failed; after the third, every administrator has one notification,
+# the setup check of the app names the error, and the status API reports it to a monitor, but
+# not to a user who is no administrator. The next run that succeeds removes the notification.
+scenario_failing_mirror() {
+	"${COMPOSE[@]}" stop paperless-mock >/dev/null
+	for attempt in 2 3; do
+		FAILING_CODE=0
+		occ paperless_sync:run > "${TMP_DIR}/failing-${attempt}.txt" 2>&1 || FAILING_CODE=$?
+		if [[ "${FAILING_CODE}" != "2" ]]; then
+			echo "Run ${attempt} without Paperless ended with exit code ${FAILING_CODE} instead of 2: $(cat "${TMP_DIR}/failing-${attempt}.txt")" >&2
+			exit 1
+		fi
+	done
+	"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
+	# A start of the mock may give it another port.
+	containers
+	notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
+	assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
+	assert_status_api_soon status-api-failing "${TMP_DIR}/status-api-failing.json"
+	USER_API_STATUS="$(status_api sync-target "${TMP_DIR}/status-api-user.json")"
+	if [[ "${USER_API_STATUS}" != "403" ]]; then
+		echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a user who is no administrator: $(cat "${TMP_DIR}/status-api-user.json")" >&2
+		exit 1
+	fi
+	# occ setupchecks fails while a check fails, which is the point here.
+	occ setupchecks >"${TMP_DIR}/setupchecks.txt" 2>&1 || true
+	if ! grep --fixed-strings 'runs of Paperless Sync failed, the last one with:' "${TMP_DIR}/setupchecks.txt" >/dev/null; then
+		echo "occ setupchecks does not name the failing mirror:" >&2
+		cat "${TMP_DIR}/setupchecks.txt" >&2
+		exit 1
+	fi
+	sync_run false "${TMP_DIR}/recovered.json"
+	assert_json recovered "${TMP_DIR}/recovered.json"
+	notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
+	assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
+	assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
+}
+
+# The user and the path, for WebDAV, of each change of a type in a report.
+per_user_files() {
+	type="$1"
+	host_python -c '
+import json, sys
+from urllib.parse import quote
+for entry in json.load(sys.stdin)["entries"]:
+    if entry["type"] == sys.argv[1]:
+        print(entry["user"], quote(entry["path"]))' "${type}" < "$2"
+}
+
+# Per-user ownership (#84): each user of Nextcloud gets the documents that their user of
+# Paperless owns, in their own files below the same base folder, and the copies that the target
+# user had of them leave its archive. The Paperless user E2E-Other gets e2e-other, whatever the
+# case, and e2e-owner a user of its own. The file that e2e-owner puts into their inbox becomes
+# theirs in Paperless, and comes back into their archive. The other users see none of it.
+scenario_per_user() {
+	add_user e2e-owner
+	control /control/scenario/per-user
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[ownership]=per-user' \
+		--output "${TMP_DIR}/checklist-per-user.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/test"
+	assert_json checklist-per-user "${TMP_DIR}/checklist-per-user.json"
+	save_settings "${TMP_DIR}/per-user-settings.json" ownership=per-user
+	# The copies leave the archive of the target user alone (assert_json per-user).
+	# The trash bin of each user who can lose a copy, from before the run.
+	for trash_user in sync-target e2e-other e2e-owner; do
+		trash_names "${trash_user}" > "${TMP_DIR}/trash-before-per-user-${trash_user}.txt"
+	done
+	sync_run false "${TMP_DIR}/per-user.json"
+	assert_json per-user "${TMP_DIR}/per-user.json"
+	# Each copy is in the files of its user alone, and the copies that left are gone.
+	# The helpers set user and path themselves, so the loops name theirs otherwise.
+	while read -r copy_user copy_path; do
+		assert_dav_file "${copy_user}" "${copy_path}" 'Synthetic Paperless archive document'
+		for other_user in sync-target e2e-other e2e-owner; do
+			if [[ "${other_user}" != "${copy_user}" ]]; then
+				assert_dav_missing "${other_user}" "${copy_path}"
+			fi
+		done
+	done < <(per_user_files export "${TMP_DIR}/per-user.json")
+	while read -r copy_user copy_path; do
+		assert_dav_missing "${copy_user}" "${copy_path}"
+		# The copy that left the archive of the target user is in its trash bin.
+		assert_trashed "${copy_user}" "$(basename -- "$(printf '%b' "${copy_path//%/\\x}")")" "${TMP_DIR}/trash-before-per-user-${copy_user}.txt"
+	done < <(per_user_files remove-reassigned "${TMP_DIR}/per-user.json")
+	dav_upload e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf' '%PDF-1.4 Synthetic letter of e2e-owner'
+	sync_run false "${TMP_DIR}/per-user-upload.json"
+	control /control/task-of/owner-letter.pdf/success
+	# The run gives the new document its owner, and its export brings it into the archive of e2e-owner.
+	trash_names e2e-owner > "${TMP_DIR}/trash-before-per-user-sent.txt"
+	sync_run false "${TMP_DIR}/per-user-sent.json"
+	mock_state > "${TMP_DIR}/mock-owner-changes.json"
+	assert_json mock-owner-changes "${TMP_DIR}/mock-owner-changes.json"
+	assert_dav_missing e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf'
+	# The file of the inbox of e2e-owner is in the trash bin of e2e-owner after its import, although
+	# the run set up the files of the target user first.
+	assert_trashed e2e-owner 'owner-letter.pdf' "${TMP_DIR}/trash-before-per-user-sent.txt"
+	SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
+	assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
+}
+
+# The documents that Paperless shares: a document of e2e-owner that the group of the household may
+# view gets a copy in the files of e2e-other, who is in the group, at the same path, and the copy
+# leaves their files, into their trash bin, once the permission is gone. The copy of e2e-owner
+# stays where it is all along.
+scenario_shared() {
+	save_settings "${TMP_DIR}/shared-settings.json" ownership=per-user-shared
+	control /control/permissions/123/groups/8
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'settings[ownership]=per-user-shared' \
+		--output "${TMP_DIR}/checklist-shared.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/test"
+	assert_json checklist-shared "${TMP_DIR}/checklist-shared.json"
+	sync_run false "${TMP_DIR}/shared-added.json"
+	assert_json shared-added "${TMP_DIR}/shared-added.json"
+	SHARED_PATH="$(host_python -c '
+import json, sys
+from urllib.parse import quote
+print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if entry["type"] == "export"))' < "${TMP_DIR}/shared-added.json")"
+	assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
+	assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
+	control /control/permissions/123/none
+	sync_run true "${TMP_DIR}/shared-dry-run.json"
+	assert_json shared-dry-run "${TMP_DIR}/shared-dry-run.json"
+	assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
+	trash_names e2e-other > "${TMP_DIR}/trash-before-unshared.txt"
+	sync_run false "${TMP_DIR}/shared-removed.json"
+	assert_json shared-removed "${TMP_DIR}/shared-removed.json"
+	assert_dav_missing e2e-other "${SHARED_PATH}"
+	assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
+	assert_trashed e2e-other "$(basename -- "$(printf '%b' "${SHARED_PATH//%/\\x}")")" "${TMP_DIR}/trash-before-unshared.txt"
+	mock_state > "${TMP_DIR}/mock-shared-scans.json"
+	assert_json mock-shared-scans "${TMP_DIR}/mock-shared-scans.json"
+	save_settings "${TMP_DIR}/single-settings.json" ownership=single
+}
+
+# Nextcloud in French, as a new installation sees it: its default language, an administrator
+# without a language of their own, and none of the names that the steps above stored. Last,
+# because it takes these names away and leaves the installation in French.
+scenario_french() {
+	occ config:system:set default_language --value=fr >/dev/null
+	occ user:setting --delete e2e-admin core lang >/dev/null
+	for name in base_path archive_folder inbox_folder error_folder deleted_folder empty_correspondent empty_document_type empty_date untitled; do
+		occ config:app:delete paperless_sync "${name}" >/dev/null
+	done
+	browser_checks french 0
+	echo "The settings in French pass after ${SECONDS} s."
+}
+
+declare -A NEEDS=() BROWSER_NEEDS=()
+SCENARIO_NAMES=()
+BROWSER_NAMES=()
+for entry in "${SCENARIOS[@]}"; do
+	SCENARIO_NAMES+=("${entry%%:*}")
+	NEEDS["${entry%%:*}"]="${entry#*:}"
+done
+for entry in "${BROWSER_SCRIPTS[@]}"; do
+	BROWSER_NAMES+=("${entry%%:*}")
+	BROWSER_NEEDS["${entry%%:*}"]="${entry#*:}"
+done
+
+# The list and the functions agree, so that no scenario drops out of the runs unnoticed: each
+# entry has its function and comes after what it needs, and each function has its entry.
+check_scenario_list() {
+	local name need script function earlier=" " problems=()
+	for name in "${SCENARIO_NAMES[@]}"; do
+		if ! declare -F "scenario_${name//-/_}" >/dev/null; then
+			problems+=("The scenario ${name} of the list SCENARIOS has no function scenario_${name//-/_}.")
+		fi
+		for need in ${NEEDS["${name}"]}; do
+			if [[ "${earlier}" != *" ${need} "* ]]; then
+				problems+=("The scenario ${name} needs ${need}, which doesn't come before it in the list SCENARIOS.")
+			fi
+		done
+		earlier+="${name} "
+		if [[ "${name}" == browser ]]; then
+			for script in "${BROWSER_NAMES[@]}"; do
+				for need in ${BROWSER_NEEDS["${script}"]}; do
+					if [[ "${earlier}" != *" ${need} "* ]]; then
+						problems+=("The check in the browser ${script} needs ${need}, which doesn't come before the scenario browser in the list SCENARIOS.")
+					fi
+				done
+			done
+		fi
+	done
+	while read -r _ _ function; do
+		name="${function#scenario_}"
+		name="${name//_/-}"
+		if [[ -z "${NEEDS["${name}"]+set}" ]]; then
+			problems+=("The function ${function} has no entry ${name} in the list SCENARIOS, so no run starts it.")
+		fi
+	done < <(declare -F | grep ' scenario_')
+	if ((${#problems[@]} > 0)); then
+		printf '%s\n' "${problems[@]}" >&2
+		exit 1
+	fi
+}
+
+# What this run runs, from E2E_ONLY and E2E_BROWSER, into PLAN and BROWSER_PLAN.
+PLAN=()
+BROWSER_PLAN=""
+plan_scenarios() {
+	local name need index
+	local -A wanted=() checks=()
+	for name in ${E2E_ONLY}; do
+		if [[ -z "${NEEDS["${name}"]+set}" ]]; then
+			echo "E2E_ONLY names ${name}, which is no scenario: ${SCENARIO_NAMES[*]}. E2E_BROWSER names the checks in the browser: ${BROWSER_NAMES[*]}." >&2
+			exit 1
+		fi
+		wanted["${name}"]=1
+	done
+	# The checks in the browser: those that E2E_BROWSER names, or else those with the name of a
+	# scenario of E2E_ONLY, all of them for the scenario browser or without E2E_ONLY.
+	if [[ "${E2E_BROWSER}" != none ]]; then
+		for name in ${E2E_BROWSER}; do
+			if [[ -z "${BROWSER_NEEDS["${name}"]+set}" ]]; then
+				echo "E2E_BROWSER names ${name}, which is no check in the browser: ${BROWSER_NAMES[*]}, or none." >&2
+				exit 1
+			fi
+			checks["${name}"]=1
+		done
+		for name in "${BROWSER_NAMES[@]}"; do
+			if [[ -z "${E2E_BROWSER}" && (-z "${E2E_ONLY}" || -n "${wanted[browser]:-}" || -n "${wanted["${name}"]:-}") ]]; then
+				checks["${name}"]=1
+			fi
+		done
+	fi
+	if [[ "${E2E_ACCESSIBILITY}" != 1 ]]; then
+		checks=()
+	fi
+	unset 'wanted[browser]'
+	for name in "${BROWSER_NAMES[@]}"; do
+		if [[ -n "${checks["${name}"]:-}" ]]; then
+			BROWSER_PLAN+="${BROWSER_PLAN:+ }${name}"
+			wanted[browser]=1
+			for need in ${BROWSER_NEEDS["${name}"]}; do
+				wanted["${need}"]=1
+			done
+		fi
+	done
+	# Without a choice of scenarios, all of them.
+	if [[ -z "${E2E_ONLY}" && (-z "${E2E_BROWSER}" || "${E2E_BROWSER}" == none) ]]; then
+		for name in "${SCENARIO_NAMES[@]}"; do
+			if [[ "${name}" != browser ]]; then
+				wanted["${name}"]=1
+			fi
+		done
+	fi
+	if [[ "${E2E_LANGUAGES}" != 1 ]]; then
+		unset 'wanted[french]'
+	fi
+	# What a scenario needs comes before it in the list, so one pass from the end of the list also
+	# finds what those need.
+	for ((index = ${#SCENARIO_NAMES[@]} - 1; index >= 0; index--)); do
+		name="${SCENARIO_NAMES[index]}"
+		if [[ -n "${wanted["${name}"]:-}" ]]; then
+			for need in ${NEEDS["${name}"]}; do
+				wanted["${need}"]=1
+			done
+		fi
+	done
+	for name in "${SCENARIO_NAMES[@]}"; do
+		if [[ -n "${wanted["${name}"]:-}" ]]; then
+			PLAN+=("${name}")
+		fi
+	done
+}
+
+check_scenario_list
+plan_scenarios
+if [[ -n "${E2E_ONLY}${E2E_BROWSER}" && ${#PLAN[@]} -eq 0 ]]; then
+	echo "E2E_ONLY and E2E_BROWSER leave nothing to run with E2E_ACCESSIBILITY=${E2E_ACCESSIBILITY} and E2E_LANGUAGES=${E2E_LANGUAGES}." >&2
+	exit 1
+fi
+if [[ "${E2E_PLAN}" == "1" && "${E2E_UPGRADE}" == "1" ]]; then
+	echo upgrade
+	exit 0
+fi
+if [[ "${E2E_PLAN}" == "1" ]]; then
+	for name in "${PLAN[@]}"; do
+		if [[ "${name}" == browser ]]; then
+			echo "browser (${BROWSER_PLAN})"
+		else
+			echo "${name}"
+		fi
+	done
+	exit 0
+fi
+
+TMP_DIR="$(mktemp -d)"
+# What the checks in the browser keep of a failure, which keep_evidence takes along.
+BROWSER_ARTIFACTS="${TMP_DIR}/browser"
+trap cleanup EXIT
+# A signal to stop, such as the time limit of run-all.sh, fails the suite, so that
+# cleanup shows the state of the containers.
+trap 'exit 143' TERM
 
 cd "${REPOSITORY_ROOT}"
 if [[ "${E2E_UPGRADE}" == "1" ]]; then
@@ -768,7 +2264,7 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 empty_data_folder
-if [[ "${E2E_ACCESSIBILITY}" == "1" ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+if [[ " ${PLAN[*]} " == *" browser "* || " ${PLAN[*]} " == *" french "* ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!
 fi
@@ -861,1172 +2357,16 @@ occ app:disable firstrunwizard >/dev/null 2>&1 || true
 containers
 echo "Nextcloud and the app are set up after ${SECONDS} s."
 
-# The administration settings render the form with all of its routes.
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--output "${TMP_DIR}/admin-settings.html" \
-	"${BASE_URL}/index.php/settings/admin/paperless_sync"
-for attribute in \
-	'data-save-url="/apps/paperless_sync/settings"' \
-	'data-test-url="/apps/paperless_sync/settings/test"' \
-	'data-reset-url="/apps/paperless_sync/settings"' \
-	'data-run-url="/apps/paperless_sync/sync/run"' \
-	'data-status-url="/apps/paperless_sync/sync/status"' \
-	'data-preview-url="/apps/paperless_sync/settings/preview"' \
-	'data-variable="created_month_name"' \
-	'id="initial-state-paperless_sync-status"' \
-	'id="initial-state-paperless_sync-config"' \
-	'data-setting="paperless_local_network"' \
-	'data-step="connect" data-state="next" aria-current="step"'; do
-	if ! grep --fixed-strings "${attribute}" "${TMP_DIR}/admin-settings.html" >/dev/null; then
-		echo "The administration settings render no ${attribute}." >&2
-		exit 1
-	fi
+for CURRENT_SCENARIO in "${PLAN[@]}"; do
+	echo "The scenario ${CURRENT_SCENARIO} starts after ${SECONDS} s."
+	"scenario_${CURRENT_SCENARIO//-/_}"
 done
-# A new installation walks through the getting-started checklist, as the settings page reads
-# it with every status: the connection first, while Administration → Overview says that the app
-# is not set up yet. The steps after it follow the save, the first dry-run, the first run and
-# the schedule below.
-assert_status_soon getting-started "${TMP_DIR}/getting-started-new.json" 'next todo todo todo todo'
-occ setupchecks >"${TMP_DIR}/setupchecks-new.txt" 2>&1 || true
-if ! grep --fixed-strings 'Paperless Sync is installed but not set up yet.' "${TMP_DIR}/setupchecks-new.txt" >/dev/null; then
-	echo "occ setupchecks does not say that Paperless Sync is not set up yet:" >&2
-	cat "${TMP_DIR}/setupchecks-new.txt" >&2
-	exit 1
+CURRENT_SCENARIO=""
+
+if [[ -n "${E2E_ONLY}${E2E_BROWSER}" ]]; then
+	echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}, with only the scenarios ${PLAN[*]}${BROWSER_PLAN:+, and the checks in the browser ${BROWSER_PLAN}}."
+	exit 0
 fi
-
-# The navigation of the administration settings lists the app's own section on
-# every page (Dennis-Otto/paperless-unified-search#25): Nextcloud 33 as links,
-# Nextcloud 34 in the initial state settings-sections.
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--output "${TMP_DIR}/admin-overview.html" \
-	"${BASE_URL}/index.php/settings/admin/overview"
-SECTIONS="$(grep --only-matching 'id="initial-state-settings-sections" value="[^"]*"' \
-	"${TMP_DIR}/admin-overview.html" | sed 's/.*value="//; s/"$//' | base64 --decode || true)"
-if ! grep --fixed-strings '/settings/admin/paperless_sync"' "${TMP_DIR}/admin-overview.html" >/dev/null &&
-	! grep --fixed-strings '"id":"paperless_sync"' <<<"${SECTIONS}" >/dev/null; then
-	echo "The navigation of the administration settings lists no Paperless Sync section." >&2
-	exit 1
-fi
-
-# Nextcloud loads the routes of appinfo/routes.php only for apps that are already
-# loaded. The app's attribute routes exist without that, as in a PHP script
-# (Dennis-Otto/paperless-unified-search#25). Scripts link through index.php.
-# shellcheck disable=SC2016
-ROUTES="$("${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" "${PHP_CLI[@]}" -r '
-	require "/var/www/html/lib/base.php";
-	$urls = \OCP\Server::get(\OCP\IURLGenerator::class);
-	foreach (["settings.save", "settings.test", "settings.reset", "settings.preview", "sync.run", "sync.status"] as $route) {
-		echo "route=", $urls->linkToRoute("paperless_sync." . $route), "\n";
-	}
-' 2>/dev/null | grep '^route=' | sed 's#^route=/index.php/#route=/#' | tr '\n' ' ')"
-EXPECTED='route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/test route=/apps/paperless_sync/settings route=/apps/paperless_sync/settings/preview route=/apps/paperless_sync/sync/run route=/apps/paperless_sync/sync/status '
-if [[ "${ROUTES}" != "${EXPECTED}" ]]; then
-	echo "The routes are missing before the app is loaded: ${ROUTES}" >&2
-	exit 1
-fi
-
-# Without the setting, Nextcloud refuses the address of the mock, and the answer says how to
-# allow it instead of Nextcloud's own "Host "paperless-mock" violates local access rules".
-REFUSED_STATUS="$(curl --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
-	--data-urlencode 'settings[target_user]=sync-target' \
-	--data-urlencode 'token=e2e-only-token' \
-	--output "${TMP_DIR}/local-network-refused.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/apps/paperless_sync/settings")"
-if [[ "${REFUSED_STATUS}" != "400" ]]; then
-	echo "Saving a Paperless in the local network without its setting answered HTTP ${REFUSED_STATUS} instead of 400: $(cat "${TMP_DIR}/local-network-refused.json")" >&2
-	exit 1
-fi
-assert_json local-network-refused "${TMP_DIR}/local-network-refused.json"
-
-# The connection checklist of an account that may view the documents but neither the tags
-# nor add documents, which the test of the documents alone would have passed: Test
-# connection names each permission to grant, and saves nothing.
-checklist() {
-	endpoint="$1"
-	output="$2"
-	token="${3:-e2e-view-only-token}"
-	curl --fail-with-body --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
-		--data-urlencode 'settings[paperless_local_network]=1' \
-		--data-urlencode 'settings[target_user]=sync-target' \
-		--data-urlencode 'settings[base_path]=Documents/Paperless' \
-		--data-urlencode 'settings[export_enabled]=1' \
-		--data-urlencode 'settings[inbox_enabled]=1' \
-		--data-urlencode "token=${token}" \
-		--output "${output}" \
-		"${BASE_URL}/apps/paperless_sync/${endpoint}"
-}
-checklist settings/test "${TMP_DIR}/checklist-view-only.json"
-assert_json checklist-view-only "${TMP_DIR}/checklist-view-only.json"
-if occ config:app:get paperless_sync paperless_url >/dev/null 2>&1; then
-	echo "Test connection saved the settings." >&2
-	exit 1
-fi
-# Saving goes on with a permission that one module lacks, so that it can be granted in
-# Paperless afterwards, and the answer lists the same checklist. The connection of the
-# getting-started checklist stays next, as a line of its checklist failed, while the owner is
-# done. The save below replaces the token with the one of the full account.
-checklist settings "${TMP_DIR}/saved-with-failures.json"
-assert_json saved-with-failures "${TMP_DIR}/saved-with-failures.json"
-assert_status_soon getting-started "${TMP_DIR}/getting-started-saved.json" 'next done todo todo todo'
-# Without the permission View for UI Settings, Paperless doesn't tell the checklist the
-# permissions of the account: the lines of the trash and the inbox name that permission.
-checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
-assert_json checklist-no-ui-settings "${TMP_DIR}/checklist-no-ui-settings.json"
-
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
-	--data-urlencode 'settings[paperless_local_network]=1' \
-	--data-urlencode 'settings[target_user]=sync-target' \
-	--data-urlencode 'settings[base_path]=Documents/Paperless' \
-	--data-urlencode 'settings[archive_folder]=Archive' \
-	--data-urlencode 'settings[inbox_folder]=Inbox' \
-	--data-urlencode 'settings[error_folder]=Errors' \
-	--data-urlencode 'settings[deleted_folder]=_Deleted' \
-	--data-urlencode 'settings[export_enabled]=1' \
-	--data-urlencode 'settings[inbox_enabled]=1' \
-	--data-urlencode 'settings[skip_inbox]=1' \
-	--data-urlencode 'settings[trash_mode]=move' \
-	--data-urlencode 'settings[permanent_delete]=1' \
-	--data-urlencode 'settings[allow_direct_delete]=0' \
-	--data-urlencode 'settings[missing_grace_runs]=2' \
-	--data-urlencode 'settings[prune_empty_folders]=1' \
-	--data-urlencode 'settings[delete_inbox_after_success]=1' \
-	--data-urlencode 'settings[recursive_inbox]=1' \
-	--data-urlencode 'settings[conflict_mode]=replace' \
-	--data-urlencode 'token=e2e-only-token' \
-	--output "${TMP_DIR}/config.json" \
-	"${BASE_URL}/apps/paperless_sync/settings"
-assert_json config "${TMP_DIR}/config.json"
-# The token of the full account passes every line, which completes the connection.
-assert_status_soon getting-started "${TMP_DIR}/getting-started-connected.json" 'done done next todo todo'
-
-sync_run true "${TMP_DIR}/dry-run.json"
-assert_json dry-run "${TMP_DIR}/dry-run.json"
-assert_status_soon getting-started "${TMP_DIR}/getting-started-dry-run.json" 'done done done next todo'
-occ paperless_sync:run --dry-run --output=json > "${TMP_DIR}/dry-run-occ.json"
-assert_json dry-run "${TMP_DIR}/dry-run-occ.json"
-assert_dav_missing sync-target "${INITIAL_PATH}"
-# A dry-run changes nothing, so the Activity stream of the target user stays empty.
-activities "${TMP_DIR}/activity-dry-run.json"
-assert_json activity-none "${TMP_DIR}/activity-dry-run.json"
-
-# The preview of the path template: where the newest documents go with the template of the
-# page, with the variables of Paperless's own file names, before anything is saved.
-settings_preview "${TMP_DIR}/preview.json" \
-	'path_template={{ owner_username }}/{{ created_month_name }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }} ({{ page_count }} pages) [P{{ id }}]'
-assert_json preview "${TMP_DIR}/preview.json"
-# A dry-run tries unsaved settings without saving them; the export below still takes the
-# saved template. It keeps the saved target user, which only a save may change.
-DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-unsaved.json" 'path_template={{ created_year }}/{{ title }} [P{{ id }}]' 'inbox_enabled=0')"
-if [[ "${DRY_RUN_STATUS}" != "200" ]]; then
-	echo "The dry-run of unsaved settings answered HTTP ${DRY_RUN_STATUS}: $(cat "${TMP_DIR}/dry-run-unsaved.json")" >&2
-	exit 1
-fi
-assert_json dry-run-unsaved "${TMP_DIR}/dry-run-unsaved.json"
-DRY_RUN_STATUS="$(dry_run_unsaved "${TMP_DIR}/dry-run-other-user.json" 'target_user=e2e-other')"
-if [[ "${DRY_RUN_STATUS}" != "400" ]]; then
-	echo "A dry-run for another target user answered HTTP ${DRY_RUN_STATUS} instead of 400: $(cat "${TMP_DIR}/dry-run-other-user.json")" >&2
-	exit 1
-fi
-assert_json dry-run-other-user "${TMP_DIR}/dry-run-other-user.json"
-assert_dav_missing sync-target "${INITIAL_PATH}"
-
-# "Synchronize now" queues the run as a background job and answers at once, with the status that
-# the page follows; the worker of Nextcloud runs the job here, as cron does on a server.
-QUEUED_STATUS="$(curl --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'dryRun=false' \
-	--output "${TMP_DIR}/queued.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/apps/paperless_sync/sync/run")"
-if [[ "${QUEUED_STATUS}" != "202" ]]; then
-	echo "\"Synchronize now\" answered HTTP ${QUEUED_STATUS} instead of 202: $(cat "${TMP_DIR}/queued.json")" >&2
-	exit 1
-fi
-assert_json queued "${TMP_DIR}/queued.json"
-assert_dav_missing sync-target "${INITIAL_PATH}"
-occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
-assert_status_soon status-export "${TMP_DIR}/export.json"
-# The first run succeeded while the schedule is off, which a step still asks for.
-assert_status_soon getting-started "${TMP_DIR}/getting-started-first-run.json" 'done done done next done'
-assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
-# One entry for the run, with the link of the file that it wrote.
-activities "${TMP_DIR}/activity-export.json"
-assert_json activity-export "${TMP_DIR}/activity-export.json"
-FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
-
-control /control/scenario/renamed >/dev/null
-sync_run false "${TMP_DIR}/move.json"
-assert_json move "${TMP_DIR}/move.json"
-assert_dav_missing sync-target "${INITIAL_PATH}"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-assert_file_id "${RENAMED_PATH}"
-# Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0: with either, a change
-# of the metadata alone moves the file, here back and forth, without a download.
-control /control/checksum/md5 >/dev/null
-control /control/scenario/active >/dev/null
-sync_run false "${TMP_DIR}/move-md5.json"
-assert_json move "${TMP_DIR}/move-md5.json"
-assert_dav_missing sync-target "${RENAMED_PATH}"
-assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
-control /control/scenario/renamed >/dev/null
-sync_run false "${TMP_DIR}/move-md5-back.json"
-assert_json move "${TMP_DIR}/move-md5-back.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-assert_file_id "${RENAMED_PATH}"
-control /control/checksum/sha256 >/dev/null
-mock_state > "${TMP_DIR}/mock-after-move.json"
-assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
-
-# The webhook of a workflow of Paperless: a call names a document that Paperless added or
-# changed, and its copy changes during the call, with no background job in between. Calls
-# without the secret are refused and counted by Nextcloud's brute-force protection, and a call
-# is no run of the status, from which the schedule counts.
-RUN_BEFORE_WEBHOOK="$(last_run)"
-assert_webhook 401 '' 'Bearer no-secret-yet' '{"document": 123}'
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--output "${TMP_DIR}/webhook-secret.json" \
-	"${BASE_URL}/apps/paperless_sync/settings/webhook"
-assert_json webhook-secret "${TMP_DIR}/webhook-secret.json"
-WEBHOOK_SECRET="$(json_value secret < "${TMP_DIR}/webhook-secret.json")"
-assert_webhook 401 '' '' '{"document": 123}'
-assert_webhook 401 '' 'Bearer wrong-secret' '{"document": 123}'
-if [[ "$(webhook_attempts)" -lt 3 ]]; then
-	echo "Nextcloud's brute-force protection did not count the calls without the secret." >&2
-	exit 1
-fi
-# Scheduled synchronization is still off, as before the first dry-run was reviewed: a call
-# changes nothing, until it is on.
-control /control/scenario/active >/dev/null
-assert_webhook 409 off "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-save_settings "${TMP_DIR}/webhook-enabled-settings.json" enabled=1
-assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
-assert_dav_missing sync-target "${RENAMED_PATH}"
-assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
-assert_file_id "${INITIAL_PATH}"
-if [[ "$(webhook_attempts)" != "0" ]]; then
-	echo "A call with the secret did not end the delay of the address of Paperless." >&2
-	exit 1
-fi
-# Paperless-ngx 2.x has no {{ doc_id }}: its {{ doc_url }} names the document by its address, and
-# the parameters of a workflow send the number as text.
-control /control/scenario/renamed >/dev/null
-assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": "http://paperless.example.test/documents/123/"}'
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-assert_webhook 200 unchanged "Bearer ${WEBHOOK_SECRET}" '{"document": "123"}'
-assert_webhook 404 missing "Bearer ${WEBHOOK_SECRET}" '{"document": 999}'
-assert_webhook 400 '' "Bearer ${WEBHOOK_SECRET}" '{"title": "Monthly invoice"}'
-# With "Mirror the document during the call" off, the document waits for the background job.
-save_settings "${TMP_DIR}/webhook-queued-settings.json" webhook_immediate=0
-control /control/scenario/active >/dev/null
-assert_webhook 202 queued "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-occ background-job:worker --once 'OCA\PaperlessSync\Cron\DocumentSyncJob' >/dev/null
-assert_dav_missing sync-target "${RENAMED_PATH}"
-assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
-save_settings "${TMP_DIR}/webhook-immediate-settings.json" webhook_immediate=1
-control /control/scenario/renamed >/dev/null
-assert_webhook 200 moved "Bearer ${WEBHOOK_SECRET}" '{"document": 123}'
-assert_file_id "${RENAMED_PATH}"
-save_settings "${TMP_DIR}/webhook-done-settings.json" enabled=0
-if [[ "$(last_run)" != "${RUN_BEFORE_WEBHOOK}" ]]; then
-	echo "A call of the webhook changed the status of the last run: ${RUN_BEFORE_WEBHOOK} became $(last_run)." >&2
-	exit 1
-fi
-# The settings page shows the last call, and never the secret again.
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--output "${TMP_DIR}/webhook-state.json" \
-	"${BASE_URL}/apps/paperless_sync/settings/webhook"
-assert_json webhook-state "${TMP_DIR}/webhook-state.json" "${WEBHOOK_SECRET}"
-mock_state > "${TMP_DIR}/mock-after-webhook.json"
-assert_json mock-after-webhook "${TMP_DIR}/mock-after-webhook.json"
-
-# A new content of the document updates its file in place, in a run by hand: the file keeps its
-# ID, and a share of it shows the new content.
-curl --fail-with-body --silent --show-error \
-	--user "sync-target:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'path=/Documents/Paperless/Archive/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf' \
-	--data-urlencode 'shareType=0' \
-	--data-urlencode 'shareWith=e2e-other' \
-	--output /dev/null \
-	"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
-assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123.'
-control /control/content/revised >/dev/null
-sync_run false "${TMP_DIR}/revised.json"
-assert_json export "${TMP_DIR}/revised.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
-assert_file_id "${RENAMED_PATH}"
-assert_dav_file e2e-other "${RENAMED_PATH##*/}" 'Synthetic Paperless archive document P123, revised.'
-# The background job, as system cron starts it. Until synchronization is enabled, it does
-# nothing. Then it runs when the interval since the last run has passed, here as if that run was
-# an hour ago, also right after a dry-run: a dry-run changes nothing, so it doesn't push the
-# schedule back. Started again at once, the job waits for the interval. In the job, the versions
-# app of Nextcloud also keeps the previous content as a version.
-VERSIONS_BEFORE="$(version_count)"
-control /control/content/original >/dev/null
-HOUR_AGO="$(($(date +%s) - 3600))"
-for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
-	occ config:app:set paperless_sync "${key}" --type=integer --value="${HOUR_AGO}" >/dev/null
-done
-JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-if [[ "$(last_run)" != "${HOUR_AGO} ${HOUR_AGO} ${HOUR_AGO} " ]]; then
-	echo 'The background job synchronized while synchronization was disabled.' >&2
-	exit 1
-fi
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123, revised.'
-# With the schedule on, saving tests the connection first.
-save_settings "${TMP_DIR}/enabled.json" enabled=1
-assert_json enabled "${TMP_DIR}/enabled.json"
-assert_status_soon getting-started "${TMP_DIR}/getting-started-done.json" 'done done done done done'
-sync_run true "${TMP_DIR}/dry-run-before-job.json"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-assert_status_soon job "${TMP_DIR}/job.json" "${HOUR_AGO}"
-# A scheduled run, without a user session, has its entry as well, without an author.
-activities "${TMP_DIR}/activity-job.json"
-assert_json activity-job "${TMP_DIR}/activity-job.json"
-LAST_RUN="$(last_run)"
-occ background-job:execute --force-execute "${JOB_ID}" >/dev/null
-if [[ "$(last_run)" != "${LAST_RUN}" ]]; then
-	echo 'The background job ran again before its interval had passed.' >&2
-	exit 1
-fi
-# The schedule goes off again, as the steps after this one and settings.mjs expect it.
-save_settings "${TMP_DIR}/disabled.json" enabled=0
-assert_json disabled "${TMP_DIR}/disabled.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-assert_file_id "${RENAMED_PATH}"
-VERSIONS_AFTER="$(version_count)"
-if ((VERSIONS_AFTER != VERSIONS_BEFORE + 1)); then
-	echo "The versions app has ${VERSIONS_AFTER} entries for the file after the update in the background job instead of $((VERSIONS_BEFORE + 1))." >&2
-	exit 1
-fi
-
-control /control/scenario/excluded >/dev/null
-trash_names sync-target > "${TMP_DIR}/trash-before-excluded.txt"
-sync_run false "${TMP_DIR}/excluded.json"
-assert_json excluded "${TMP_DIR}/excluded.json"
-assert_dav_missing sync-target "${RENAMED_PATH}"
-if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/Example%20GmbH')" != "404" ]]; then
-	echo 'Empty archive hierarchy was not pruned after exclusion.' >&2
-	exit 1
-fi
-# The removed copy and the folders that its removal emptied are in the trash bin of the target
-# user, to restore.
-COPY_NAME='2026-08-26 - Monthly invoice corrected [P123].pdf'
-assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-excluded.txt"
-assert_trashed sync-target 'Example GmbH' "${TMP_DIR}/trash-before-excluded.txt"
-
-# With tags to mirror, the archive holds only the documents with one of them: the document of
-# the scenario lacks Private, a tag of the mock, so it stays out, whatever the case of the name.
-# Without the list, the next steps export the document again.
-control /control/scenario/renamed >/dev/null
-save_settings "${TMP_DIR}/included.json" included_tags=private
-assert_json included "${TMP_DIR}/included.json"
-sync_run false "${TMP_DIR}/not-included.json"
-assert_json not-included "${TMP_DIR}/not-included.json"
-assert_dav_missing sync-target "${RENAMED_PATH}"
-save_settings "${TMP_DIR}/included.json" included_tags=
-
-# Nextcloud applies no quota to the temporary file of a write, so the app checks the free space
-# itself: with the quota of the target user used up, the export stops at its first document, and
-# the document follows once there is space again.
-control /control/scenario/renamed >/dev/null
-occ user:setting sync-target files quota '1 B' >/dev/null
-sync_run false "${TMP_DIR}/export-stopped.json"
-occ user:setting --delete sync-target files quota >/dev/null
-assert_json export-stopped "${TMP_DIR}/export-stopped.json"
-# The status keeps the error of the document for the settings page, which reads it in the
-# language of its administrator, while the run keeps it in English, as the log does.
-assert_status_soon status-errors "${TMP_DIR}/status-errors.json"
-occ user:setting e2e-admin core lang de >/dev/null
-assert_status_soon status-errors-german "${TMP_DIR}/status-errors-german.json"
-occ user:setting --delete e2e-admin core lang >/dev/null
-assert_dav_missing sync-target "${RENAMED_PATH}"
-
-sync_run false "${TMP_DIR}/re-export.json"
-assert_json export "${TMP_DIR}/re-export.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-
-# The tags of Paperless as tags of Nextcloud: with the setting on, the copy of P123 gets the tag
-# insurance of its document, which every user sees and only administrators assign, and keeps the
-# tag Holiday that its user put on it. A user made the tag TAX, 2026 already, which Nextcloud
-# holds once whatever the case, so the copy goes without the other tag of its document, and the
-# dry-run says so. Without the tags in Paperless, the copy loses insurance and keeps Holiday.
-HOLIDAY_TAG="$(create_tag sync-target Holiday)"
-create_tag sync-target 'TAX, 2026' >/dev/null
-curl --fail-with-body --silent --show-error --user "sync-target:${PASSWORD}" --request PUT \
-	"${BASE_URL}/remote.php/dav/systemtags-relations/files/$(file_id sync-target "${RENAMED_PATH}")/${HOLIDAY_TAG}" >/dev/null
-save_settings "${TMP_DIR}/tags-settings.json" nextcloud_tags=1
-control /control/scenario/tagged >/dev/null
-sync_run true "${TMP_DIR}/tags-dry-run.json"
-assert_json tags-dry-run "${TMP_DIR}/tags-dry-run.json"
-assert_file_tags 'Holiday:true'
-sync_run false "${TMP_DIR}/tags-run.json"
-assert_json tags-run "${TMP_DIR}/tags-run.json"
-assert_file_tags $'Holiday:true\ninsurance:false'
-control /control/scenario/renamed >/dev/null
-sync_run false "${TMP_DIR}/tags-removed.json"
-assert_json tags-removed "${TMP_DIR}/tags-removed.json"
-assert_file_tags 'Holiday:true'
-save_settings "${TMP_DIR}/tags-off-settings.json" nextcloud_tags=0
-
-# The metadata next to the archive: with the setting on, a run writes the sidecar of P123, with
-# the names of its correspondent and document type, its note and its custom field, and the index
-# of the archive, both in the hidden folder .paperless. The copy in the deleted folder keeps its
-# sidecar in the steps below, and the deletion of the document takes it along.
-SIDECAR_PATH='Documents/Paperless/Archive/.paperless/P123.json'
-INDEX_PATH='Documents/Paperless/Archive/.paperless/index.csv'
-save_settings "${TMP_DIR}/metadata-settings.json" write_metadata=1
-sync_run false "${TMP_DIR}/metadata.json"
-assert_json metadata-run "${TMP_DIR}/metadata.json"
-curl --fail-with-body --silent --show-error \
-	--user "sync-target:${PASSWORD}" \
-	--output "${TMP_DIR}/sidecar.json" \
-	"${DAV_BASE}/sync-target/${SIDECAR_PATH}"
-assert_json sidecar "${TMP_DIR}/sidecar.json"
-assert_dav_file sync-target "${INDEX_PATH}" '123,Monthly invoice corrected,Example GmbH,Invoice,'
-assert_dav_file sync-target "${INDEX_PATH}" ',Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,active,'
-
-control /control/scenario/trash >/dev/null
-sync_run false "${TMP_DIR}/trash.json"
-assert_json trash "${TMP_DIR}/trash.json"
-assert_dav_missing sync-target "${RENAMED_PATH}"
-assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
-assert_dav_file sync-target "${SIDECAR_PATH}" '"title": "Monthly invoice corrected"'
-assert_dav_file sync-target "${INDEX_PATH}" ',_Deleted/2026-08-27/Example GmbH/Invoice/2026/2026-08-26 - Monthly invoice corrected [P123].pdf,trash,'
-
-# A page that comes back empty while its count still lists the document counts nothing as missing,
-# so the document waits for its first missing run in the next step.
-control /control/scenario/incomplete >/dev/null
-sync_run false "${TMP_DIR}/scan-incomplete.json"
-assert_json scan-incomplete "${TMP_DIR}/scan-incomplete.json"
-assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
-
-control /control/scenario/empty >/dev/null
-sync_run false "${TMP_DIR}/missing-wait.json"
-assert_json missing-wait "${TMP_DIR}/missing-wait.json"
-assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
-# Deletion off: the document that Paperless purged from its trash would be deleted in this run,
-# but with permanent deletion off it keeps its copy. A dry-run shows it without changing the
-# state, so that the next run deletes the copy with permanent deletion on again. The setting
-# changes through the settings page, as an administrator changes it: after a change through occ,
-# the runs of the web server still saw the old value.
-save_settings "${TMP_DIR}/deletion-off-settings.json" permanent_delete=0
-sync_run true "${TMP_DIR}/deletion-off.json"
-save_settings "${TMP_DIR}/deletion-on-settings.json" permanent_delete=1
-assert_json deletion-off "${TMP_DIR}/deletion-off.json"
-assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
-trash_names sync-target > "${TMP_DIR}/trash-before-deleted.txt"
-sync_run false "${TMP_DIR}/deleted.json"
-assert_json deleted "${TMP_DIR}/deleted.json"
-assert_dav_missing sync-target "${TRASH_PATH}"
-assert_trashed sync-target "${COPY_NAME}" "${TMP_DIR}/trash-before-deleted.txt"
-# The sidecar went with the copy, and the index has no row for the document any more.
-assert_dav_missing sync-target "${SIDECAR_PATH}"
-assert_dav_file sync-target "${INDEX_PATH}" 'id,title,correspondent'
-if assert_dav_file sync-target "${INDEX_PATH}" 'Monthly invoice corrected'; then
-	echo 'The index of the metadata still lists the deleted document P123.' >&2
-	exit 1
-fi
-save_settings "${TMP_DIR}/metadata-off-settings.json" write_metadata=0
-
-# The subfolders of a file of the inbox become its tags, with a tag for every import: the
-# mock has a tag insurance, in lower case, and none named Scanned or 2026, which the run
-# creates. Test connection checks the permissions of the tags first.
-for folder in 'Documents/Paperless/Inbox/Insurance' 'Documents/Paperless/Inbox/Insurance/2026'; do
-	MKCOL_STATUS="$(dav_status sync-target MKCOL "${folder}")"
-	if [[ "${MKCOL_STATUS}" != "201" && "${MKCOL_STATUS}" != "405" ]]; then
-		echo "Unexpected WebDAV MKCOL status: ${MKCOL_STATUS}" >&2
-		exit 1
-	fi
-done
-settings_data inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	"${settings[@]}" \
-	--data-urlencode 'token=e2e-only-token' \
-	--output "${TMP_DIR}/inbox-tags-checklist.json" \
-	"${BASE_URL}/apps/paperless_sync/settings/test"
-assert_json inbox-tags-checklist "${TMP_DIR}/inbox-tags-checklist.json"
-save_settings "${TMP_DIR}/inbox-tags-settings.json" inbox_folder_tags=1 inbox_create_tags=1 'inbox_tags=Scanned'
-assert_json inbox-tags-settings "${TMP_DIR}/inbox-tags-settings.json"
-dav_upload sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf' '%PDF-1.4 Synthetic inbox PDF policy.'
-sync_run false "${TMP_DIR}/import-submitted.json"
-assert_json import-submitted "${TMP_DIR}/import-submitted.json"
-assert_json import-tags "${TMP_DIR}/import-submitted.json"
-mock_state > "${TMP_DIR}/mock-tags.json"
-assert_json mock-tags "${TMP_DIR}/mock-tags.json"
-save_settings "${TMP_DIR}/inbox-tags-off-settings.json" inbox_folder_tags=0 inbox_create_tags=0 'inbox_tags='
-control /control/tasks/success >/dev/null
-sync_run false "${TMP_DIR}/import-success.json"
-assert_json import-success "${TMP_DIR}/import-success.json"
-assert_dav_missing sync-target 'Documents/Paperless/Inbox/Insurance/2026/policy.pdf'
-
-dav_upload sync-target 'Documents/Paperless/Inbox/broken.pdf' '%PDF-1.4 Synthetic inbox PDF broken.'
-sync_run false "${TMP_DIR}/failed-submitted.json"
-assert_json import-submitted "${TMP_DIR}/failed-submitted.json"
-control /control/tasks/failure >/dev/null
-sync_run false "${TMP_DIR}/import-failed.json"
-assert_json import-failed "${TMP_DIR}/import-failed.json"
-assert_dav_missing sync-target 'Documents/Paperless/Inbox/broken.pdf'
-assert_dav_file sync-target "${ERROR_PATH}" 'Synthetic inbox PDF broken.'
-assert_dav_file sync-target "${ERROR_PATH}.error.txt" 'broken.pdf: Synthetic unsupported mime type'
-assert_dav_missing e2e-other "${ERROR_PATH}"
-
-# A duplicate and a task that Paperless revoked end their imports too, with what Paperless
-# said, here in the shapes of Paperless-ngx 2.20, whose status then names its version.
-dav_upload sync-target 'Documents/Paperless/Inbox/copy.pdf' '%PDF-1.4 Synthetic inbox PDF copy.'
-dav_upload sync-target 'Documents/Paperless/Inbox/cancelled.pdf' '%PDF-1.4 Synthetic inbox PDF cancelled.'
-sync_run false "${TMP_DIR}/ended-submitted.json"
-assert_json import-submitted "${TMP_DIR}/ended-submitted.json" 2
-control /control/task-of/copy.pdf/duplicate >/dev/null
-control /control/task-of/cancelled.pdf/revoked >/dev/null
-control /control/paperless/2.20.15 >/dev/null
-sync_run false "${TMP_DIR}/import-ended.json"
-assert_json import-failed "${TMP_DIR}/import-ended.json" 2
-assert_dav_file sync-target 'Documents/Paperless/Errors/copy.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
-assert_dav_file sync-target 'Documents/Paperless/Errors/cancelled.pdf.error.txt' 'Paperless cancelled the task before it finished (REVOKED)'
-assert_status_soon paperless "${TMP_DIR}/status-paperless-2.json" 2.20.15
-control /control/paperless/3.3.0 >/dev/null
-
-# Paperless refuses a file of a type it doesn't take. The file stays in the inbox, and
-# the runs after it don't upload it again until it changes.
-dav_upload sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
-sync_run false "${TMP_DIR}/import-rejected.json"
-assert_json import-rejected "${TMP_DIR}/import-rejected.json"
-sync_run false "${TMP_DIR}/import-waiting.json"
-assert_json import-waiting "${TMP_DIR}/import-waiting.json"
-assert_dav_file sync-target 'Documents/Paperless/Inbox/notes.bin' 'Synthetic unsupported file.'
-# Every import that Paperless finished, failed or refused has an entry of its own.
-activities "${TMP_DIR}/activity-imports.json"
-assert_json activity-imports "${TMP_DIR}/activity-imports.json"
-# The target user hears of every import that failed or was refused in a notification as well.
-notifications sync-target "${TMP_DIR}/notifications-imports.json"
-assert_json notifications-imports "${TMP_DIR}/notifications-imports.json"
-# A video, a program and an archive never go to Paperless: a run and a dry-run name them,
-# they stay where they are, and they are no failure.
-dav_upload sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
-dav_upload sync-target 'Documents/Paperless/Inbox/setup.EXE' 'Synthetic program.'
-dav_upload sync-target 'Documents/Paperless/Inbox/backup.zip' 'Synthetic archive.'
-sync_run true "${TMP_DIR}/import-set-aside-dry-run.json"
-assert_json import-set-aside "${TMP_DIR}/import-set-aside-dry-run.json"
-sync_run false "${TMP_DIR}/import-set-aside.json"
-assert_json import-set-aside "${TMP_DIR}/import-set-aside.json"
-assert_dav_file sync-target 'Documents/Paperless/Inbox/holiday.mp4' 'Synthetic video.'
-for file in holiday.mp4 setup.EXE backup.zip; do
-	dav_status sync-target DELETE "Documents/Paperless/Inbox/${file}" >/dev/null
-done
-
-assert_status_soon status "${TMP_DIR}/status.json"
-occ paperless_sync:status --output=json --exit-code > "${TMP_DIR}/status-occ.json"
-assert_json status "${TMP_DIR}/status-occ.json"
-
-mock_state > "${TMP_DIR}/mock-final.json"
-assert_json mock-final "${TMP_DIR}/mock-final.json"
-
-# The deleted document is back in Paperless, and the next run exports it again.
-control /control/scenario/renamed >/dev/null
-sync_run false "${TMP_DIR}/export-again.json"
-assert_json export "${TMP_DIR}/export-again.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-
-# Restored from the trash of Paperless, a document gets its copy back from the deleted
-# folder, without a download, and the deleted folder goes when it is empty.
-control /control/scenario/trash >/dev/null
-sync_run false "${TMP_DIR}/trash-again.json"
-assert_json trash "${TMP_DIR}/trash-again.json"
-assert_dav_file sync-target "${TRASH_PATH}" 'Synthetic Paperless archive document P123.'
-DOWNLOADS="$(mock_state | json_value downloads)"
-control /control/scenario/restored >/dev/null
-sync_run false "${TMP_DIR}/restored.json"
-assert_json restored "${TMP_DIR}/restored.json"
-assert_dav_missing sync-target "${TRASH_PATH}"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-if [[ "$(dav_status sync-target PROPFIND 'Documents/Paperless/Archive/_Deleted')" != "404" ]]; then
-	echo 'The empty deleted folder was not pruned after the restore.' >&2
-	exit 1
-fi
-mock_state > "${TMP_DIR}/mock-restored.json"
-assert_json mock-no-download "${TMP_DIR}/mock-restored.json" "${DOWNLOADS}"
-
-# With conflict_mode=skip, a file of the user at the path of a new document stays as
-# it is, and the run reports the conflict without downloading the document in vain;
-# with replace, the document takes its place.
-dav_upload sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
-save_settings "${TMP_DIR}/conflict-skip.json" conflict_mode=skip
-assert_json conflict-skip "${TMP_DIR}/conflict-skip.json"
-control /control/scenario/conflict >/dev/null
-DOWNLOADS="$(mock_state | json_value downloads)"
-sync_run false "${TMP_DIR}/conflict.json"
-assert_json conflict "${TMP_DIR}/conflict.json"
-assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic file of the user.'
-mock_state > "${TMP_DIR}/mock-conflict.json"
-assert_json mock-no-download "${TMP_DIR}/mock-conflict.json" "${DOWNLOADS}"
-save_settings "${TMP_DIR}/conflict-replace.json" conflict_mode=replace
-assert_json conflict-replace "${TMP_DIR}/conflict-replace.json"
-sync_run false "${TMP_DIR}/conflict-replaced.json"
-assert_json conflict-replaced "${TMP_DIR}/conflict-replaced.json"
-assert_dav_file sync-target "${STATEMENT_PATH}" 'Synthetic Paperless archive document P124.'
-
-# Pages that shift while a run reads them, one document deleted and another one added, keep
-# the count of Paperless, so a scan looks complete without a document that Paperless still
-# has. The run asks Paperless for it before it counts a missing scan, and the copy stays
-# without one.
-control /control/left-out/123 >/dev/null
-sync_run false "${TMP_DIR}/left-out.json"
-control /control/left-out/none >/dev/null
-assert_json left-out "${TMP_DIR}/left-out.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-mock_state > "${TMP_DIR}/mock-left-out.json"
-assert_json mock-left-out "${TMP_DIR}/mock-left-out.json"
-
-# A document that vanishes from Paperless without passing through its trash keeps its
-# copy for the grace runs, then the copy moves to the deleted folder of that day. As
-# direct deletion is not allowed, the runs after it leave the copy there.
-control /control/scenario/vanished >/dev/null
-sync_run false "${TMP_DIR}/vanished-wait.json"
-assert_json vanished-wait "${TMP_DIR}/vanished-wait.json"
-assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
-DAY_BEFORE="$(date -u +%F)"
-sync_run false "${TMP_DIR}/vanished.json"
-DAY_AFTER="$(date -u +%F)"
-assert_json vanished "${TMP_DIR}/vanished.json"
-assert_dav_missing sync-target "${RENAMED_PATH}"
-for day in "${DAY_BEFORE}" "${DAY_AFTER}"; do
-	VANISHED_PATH="Documents/Paperless/Archive/_Deleted/${day}/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf"
-	if [[ "$(dav_status sync-target GET "${VANISHED_PATH}")" == "200" ]]; then
-		break
-	fi
-done
-assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
-sync_run false "${TMP_DIR}/vanished-kept.json"
-assert_json vanished-kept "${TMP_DIR}/vanished-kept.json"
-assert_dav_file sync-target "${VANISHED_PATH}" 'Synthetic Paperless archive document P123.'
-
-# Titles and names that the path template must take as they are: "$1" and "{{ … }}"
-# stay text, and names in Chinese, emoji and Cyrillic shrink to the bytes that Nextcloud
-# accepts, also for the temporary name of each write.
-control /control/scenario/names >/dev/null
-sync_run false "${TMP_DIR}/names.json"
-mapfile -t NAMED_PATHS < <(assert_json names "${TMP_DIR}/names.json")
-if ((${#NAMED_PATHS[@]} != 4)); then
-	echo "The run wrote ${#NAMED_PATHS[@]} of the 4 documents with long or unusual names." >&2
-	exit 1
-fi
-for path in "${NAMED_PATHS[@]}"; do
-	assert_dav_file sync-target "${path}" 'Synthetic Paperless archive document P123.'
-done
-
-echo "The scenarios pass after ${SECONDS} s."
-
-# "Send to Paperless" in the menu of Files: e2e-admin, a member of the group admin of the
-# setting, sends a file of their own, which stays where it is. The background job uploads it
-# with the next run of cron, follows its task and tells the sender in a notification that
-# Paperless has it, with a link to the document; e2e-other may not send. files.mjs then clicks
-# the actions in the browser.
-send_files() {
-	curl --silent --show-error \
-		--user "$1:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'Content-Type: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data "{\"fileIds\": [$3]}" \
-		--output "$2" \
-		--write-out '%{http_code}' \
-		"${BASE_URL}/apps/paperless_sync/api/v1/send"
-}
-dav_upload e2e-admin 'receipt.pdf' '%PDF-1.4 Synthetic inbox PDF receipt.'
-dav_upload e2e-admin 'Invoice%20%5BP123%5D.pdf' '%PDF-1.4 Synthetic copy of P123.'
-dav_upload e2e-other 'letter.pdf' '%PDF-1.4 Synthetic letter.'
-RECEIPT_ID="$(file_id e2e-admin 'receipt.pdf')"
-SEND_STATUS="$(send_files e2e-other "${TMP_DIR}/send-other.json" "${RECEIPT_ID}")"
-if [[ "${SEND_STATUS}" != "403" ]]; then
-	echo "A user outside the group of the setting could send a file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send-other.json")" >&2
-	exit 1
-fi
-SEND_STATUS="$(send_files e2e-admin "${TMP_DIR}/send.json" "${RECEIPT_ID}")"
-if [[ "${SEND_STATUS}" != "200" ]] || ! grep --fixed-strings 'Paperless Sync sends 1 file to Paperless.' "${TMP_DIR}/send.json" >/dev/null; then
-	echo "Send to Paperless did not queue the file: HTTP ${SEND_STATUS}, $(cat "${TMP_DIR}/send.json")" >&2
-	exit 1
-fi
-SEND_JOB_ID="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SendJob' --output=json | json_value 0 id)"
-occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
-mock_state > "${TMP_DIR}/mock-sent.json"
-assert_json mock-sent "${TMP_DIR}/mock-sent.json"
-control /control/task-of/receipt.pdf/success >/dev/null
-occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
-notifications e2e-admin "${TMP_DIR}/notifications-sent.json"
-assert_json notifications-sent "${TMP_DIR}/notifications-sent.json"
-assert_dav_file e2e-admin 'receipt.pdf' 'Synthetic inbox PDF receipt.'
-echo "Send to Paperless passes after ${SECONDS} s."
-
-# "Send to Paperless" in Flow: e2e-admin saves a rule through the API of Flow that sends every
-# file whose name starts with scan- when it is created, with the tags Private and insurance of
-# the rule; a rule with a tag that Paperless Sync can't send is refused. e2e-other, who may not
-# send from Files, uploads a file that the rule matches and one that it doesn't. The background
-# job uploads the first with the tags of the rule, the file stays where it is, and its owner
-# hears nothing of an import that worked. flow.mjs then edits the rule in the settings of Flow.
-flow_rule() {
-	# The rule as the settings of Flow save it, with the operation of the argument, a JSON string.
-	curl --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'Content-Type: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data '{"class": "OCA\\PaperlessSync\\Operation\\SendToPaperless", "name": "Scans", "checks": [{"class": "OCA\\WorkflowEngine\\Check\\FileName", "operator": "matches", "value": "/^scan-/i"}], "operation": '"$2"', "entity": "OCA\\WorkflowEngine\\Entity\\File", "events": ["\\OCP\\Files::postCreate"]}' \
-		--output "$1" \
-		--write-out '%{http_code}' \
-		"${BASE_URL}/ocs/v2.php/apps/workflowengine/api/v1/workflows/global"
-}
-FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow-comma.json" '"{\"tags\": [\"Tax, 2026\"]}"')"
-if [[ "${FLOW_STATUS}" != "400" ]] || ! grep --fixed-strings 'hold a comma or a line break: Tax, 2026' "${TMP_DIR}/flow-comma.json" >/dev/null; then
-	echo "Flow saved a rule with a tag that Paperless Sync can't send: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow-comma.json")" >&2
-	exit 1
-fi
-FLOW_STATUS="$(flow_rule "${TMP_DIR}/flow.json" '"{\"tags\": [\"Private\", \"insurance\"]}"')"
-if [[ "${FLOW_STATUS}" != "200" ]]; then
-	echo "Flow did not save the rule of Send to Paperless: HTTP ${FLOW_STATUS}, $(cat "${TMP_DIR}/flow.json")" >&2
-	exit 1
-fi
-dav_upload e2e-other 'scan-insurance.pdf' '%PDF-1.4 Synthetic inbox PDF scan of an insurance letter.'
-dav_upload e2e-other 'holiday.pdf' '%PDF-1.4 Synthetic holiday plan.'
-occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
-mock_state > "${TMP_DIR}/mock-flow.json"
-assert_json mock-flow "${TMP_DIR}/mock-flow.json"
-control /control/task-of/scan-insurance.pdf/success >/dev/null
-occ background-job:execute --force-execute "${SEND_JOB_ID}" >/dev/null
-notifications e2e-other "${TMP_DIR}/notifications-flow.json"
-assert_json notifications-flow "${TMP_DIR}/notifications-flow.json"
-assert_dav_file e2e-other 'scan-insurance.pdf' 'Synthetic inbox PDF scan'
-echo "Send to Paperless in Flow passes after ${SECONDS} s."
-
-# The settings delegated to a group, as an administrator does it under Administration privileges.
-# Its member reaches the routes that the page reads, and settings.mjs then uses the page as that
-# member. Nextcloud refuses them the status API and a key of the app past the checks of the app,
-# and another user every route of the page.
-occ group:add e2e-delegates >/dev/null
-add_user e2e-delegate
-occ group:adduser e2e-delegates e2e-delegate >/dev/null
-occ admin-delegation:add 'OCA\PaperlessSync\Settings\AdminSettings' e2e-delegates >/dev/null
-for route in 'GET /settings/users' 'GET /settings/users/sync-target' 'GET /settings/groups' \
-	'GET /settings/paperless/tags' 'GET /settings/webhook' 'POST /settings/webhook' 'DELETE /settings/webhook' \
-	'POST /settings' 'DELETE /settings' 'POST /settings/test' 'POST /settings/preview' 'POST /settings/account' \
-	'POST /sync/run' 'GET /sync/status'; do
-	expect_route 403 e2e-other "${route% *}" "${route#* }"
-done
-expect_route 200 e2e-delegate GET '/settings/users?search=sync'
-if ! grep --quiet --fixed-strings '"id":"sync-target"' "${TMP_DIR}/route.json" || grep --quiet '"email"' "${TMP_DIR}/route.json"; then
-	echo "The users to pick must name sync-target, without an e-mail address: $(cat "${TMP_DIR}/route.json")" >&2
-	exit 1
-fi
-expect_route 200 e2e-delegate GET /settings/users/e2e-other
-expect_route 404 e2e-delegate GET /settings/users/nobody-here
-expect_route 200 e2e-delegate GET '/settings/groups?search=e2e-del'
-if ! grep --quiet --fixed-strings '"id":"e2e-delegates"' "${TMP_DIR}/route.json"; then
-	echo "The groups to pick must name e2e-delegates: $(cat "${TMP_DIR}/route.json")" >&2
-	exit 1
-fi
-expect_route 200 e2e-delegate GET /settings/paperless/tags
-expect_route 200 e2e-delegate GET /settings/webhook
-expect_route 200 e2e-delegate GET /sync/status
-USER_API_STATUS="$(status_api e2e-delegate "${TMP_DIR}/status-api-delegate.json")"
-if [[ "${USER_API_STATUS}" != "403" ]]; then
-	echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a delegate: $(cat "${TMP_DIR}/status-api-delegate.json")" >&2
-	exit 1
-fi
-DIRECT_WRITE_STATUS="$(curl --silent --show-error \
-	--user "e2e-delegate:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--data-urlencode 'value=9' \
-	--output "${TMP_DIR}/direct-write.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/batch_size")"
-if [[ "${DIRECT_WRITE_STATUS}" != "403" ]]; then
-	echo "A delegate wrote a key of the app past its checks, HTTP ${DIRECT_WRITE_STATUS}: $(cat "${TMP_DIR}/direct-write.json")" >&2
-	exit 1
-fi
-echo "The delegated settings pass after ${SECONDS} s."
-
-# The administration settings and the report of a dry-run over a larger archive, the actions
-# of the app in Files and the form of its rule in Flow meet WCAG 2.1 AA, also at 320 px, and
-# the settings work by keyboard alone.
-if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
-	BROWSER_STARTED="${SECONDS}"
-	control /control/scenario/archive >/dev/null
-	accessibility
-	echo "The accessibility check passes after ${SECONDS} s."
-	echo "The checks in the browser took $((SECONDS - BROWSER_STARTED)) s."
-fi
-
-# The setup of the account of the app with the token of a superuser of Paperless: the app
-# creates the account with the permissions of the saved modules, saves the settings with its
-# token and answers the checklist, in which nothing fails. A second setup changes the user
-# only with update. The token of the superuser reaches no answer, which assert_json.py
-# checks, not the configuration of the app, and no line of the log, which assert_log.py
-# checks below. Then the runs go on with the token of the account of the README.
-account_setup() {
-	output="$1"
-	shift
-	curl --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data-urlencode 'superuserToken=e2e-superuser-only-token' \
-		--data-urlencode 'username=e2e-app' \
-		"$@" \
-		--output "${output}" \
-		--write-out '%{http_code}' \
-		"${BASE_URL}/apps/paperless_sync/settings/account"
-}
-# The setup completes the connection of the getting-started checklist, as a save does: here
-# after a checklist that failed, as the mark of the app says.
-occ config:app:set paperless_sync status_connection_passed --value=false --type=boolean --lazy >/dev/null
-assert_status_soon getting-started "${TMP_DIR}/getting-started-account-before.json" 'next done done todo done'
-ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-created.json")"
-if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
-	echo "The setup of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-created.json")" >&2
-	exit 1
-fi
-assert_json account-created "${TMP_DIR}/account-created.json"
-assert_status_soon getting-started "${TMP_DIR}/getting-started-account.json" 'done done done next done'
-ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-exists.json")"
-if [[ "${ACCOUNT_STATUS}" != "409" ]]; then
-	echo "A second setup of the account changed the user without update: HTTP ${ACCOUNT_STATUS}, $(cat "${TMP_DIR}/account-exists.json")" >&2
-	exit 1
-fi
-assert_json account-exists "${TMP_DIR}/account-exists.json"
-ACCOUNT_STATUS="$(account_setup "${TMP_DIR}/account-updated.json" --data-urlencode 'update=1')"
-if [[ "${ACCOUNT_STATUS}" != "200" ]]; then
-	echo "The update of the account answered HTTP ${ACCOUNT_STATUS}: $(cat "${TMP_DIR}/account-updated.json")" >&2
-	exit 1
-fi
-assert_json account-updated "${TMP_DIR}/account-updated.json"
-if occ config:list paperless_sync --private | grep --fixed-strings e2e-superuser-only-token >/dev/null; then
-	echo "The configuration of the app holds the token of the superuser of Paperless." >&2
-	exit 1
-fi
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'token=e2e-only-token' \
-	--output "${TMP_DIR}/account-restored.json" \
-	"${BASE_URL}/apps/paperless_sync/settings"
-echo "The setup of the account in Paperless passes after ${SECONDS} s."
-
-"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'test ! -f /var/www/html/data/nextcloud.log || cat /var/www/html/data/nextcloud.log' \
-	| host_python "${SCRIPT_DIR}/assert_log.py"
-
-# A Paperless-ngx before 2.16 doesn't serve version 9 of its API, which every request of the app
-# asks for, so a run says which Paperless it needs instead of reading answers of another shape.
-control /control/paperless/2.15.3 >/dev/null
-OLD_PAPERLESS_STATUS="$(curl --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'dryRun=true' \
-	--output "${TMP_DIR}/old-paperless.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/apps/paperless_sync/sync/run")"
-control /control/paperless/3.3.0 >/dev/null
-if [[ "${OLD_PAPERLESS_STATUS}" != "500" ]] || ! grep --fixed-strings 'Paperless Sync needs Paperless-ngx 2.16 or newer' "${TMP_DIR}/old-paperless.json" >/dev/null; then
-	echo "A run against Paperless-ngx 2.15 did not name the Paperless it needs: HTTP ${OLD_PAPERLESS_STATUS}, $(cat "${TMP_DIR}/old-paperless.json")" >&2
-	exit 1
-fi
-
-# A tag to mirror that Paperless doesn't have, a typo here, stops the export before a file
-# changes, as the run would otherwise remove the copies of the documents that should stay. It
-# comes after assert_log.py as well, because the failed run logs its error.
-save_settings "${TMP_DIR}/included.json" included_tags=Nextclod
-INCLUDED_CODE=0
-occ paperless_sync:run --dry-run > "${TMP_DIR}/included-missing.txt" 2>&1 || INCLUDED_CODE=$?
-save_settings "${TMP_DIR}/included.json" included_tags=
-if [[ "${INCLUDED_CODE}" != "2" ]] || ! grep --fixed-strings 'Paperless has no tag named "Nextclod"' "${TMP_DIR}/included-missing.txt" >/dev/null; then
-	echo "A tag to mirror that Paperless doesn't have must stop the run, but it ended with exit code ${INCLUDED_CODE}: $(cat "${TMP_DIR}/included-missing.txt")" >&2
-	exit 1
-fi
-
-# A run that can't reach Paperless, the most common failure, logs its error without the token,
-# although Nextcloud writes the arguments of every frame of the trace of an exception. It comes
-# last, because assert_log.py above fails on the error that it logs.
-log_count() {
-	# The text to count reaches the shell of the container as its argument $1.
-	# shellcheck disable=SC2016
-	"${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'grep -c -F -e "$1" /var/www/html/data/nextcloud.log || true' sh "$1"
-}
-"${COMPOSE[@]}" stop paperless-mock >/dev/null
-UNREACHABLE_STATUS="$(curl --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'dryRun=true' \
-	--output "${TMP_DIR}/unreachable.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/apps/paperless_sync/sync/run")"
-# On the command line, the run says on standard error why it failed, and its exit code and the
-# status tell a script and a monitoring check that it failed.
-UNREACHABLE_CODE=0
-occ paperless_sync:run > "${TMP_DIR}/unreachable-occ.txt" 2>&1 || UNREACHABLE_CODE=$?
-UNREACHABLE_STATE_CODE=0
-occ paperless_sync:status --exit-code >/dev/null || UNREACHABLE_STATE_CODE=$?
-"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
-# A start of the mock may give it another port.
-containers
-if [[ "${UNREACHABLE_STATUS}" != "500" ]]; then
-	echo "A dry-run without Paperless answered HTTP ${UNREACHABLE_STATUS} instead of 500: $(cat "${TMP_DIR}/unreachable.json")" >&2
-	exit 1
-fi
-if [[ "${UNREACHABLE_CODE}" != "2" || "${UNREACHABLE_STATE_CODE}" != "2" ]] \
-	|| ! grep --fixed-strings 'The synchronization failed: ' "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
-	echo "occ paperless_sync:run without Paperless ended with exit code ${UNREACHABLE_CODE} and the status with ${UNREACHABLE_STATE_CODE} instead of 2: $(cat "${TMP_DIR}/unreachable-occ.txt")" >&2
-	exit 1
-fi
-if [[ "$(log_count 'Paperless synchronization failed')" == "0" ]]; then
-	echo 'The log of Nextcloud holds no failed run, so the check of the token below would prove nothing.' >&2
-	exit 1
-fi
-# PHP puts a SensitiveParameterValue in place of each argument marked #[\SensitiveParameter],
-# which Nextcloud 35 and before writes into the log as it is, and Nextcloud 36 as the text
-# "*** sensitive parameters replaced ***", taking the value out of every other frame as well.
-# Without either in the log, PHP left out the arguments of every frame
-# (zend.exception_ignore_args=On, as in php.ini-production), and the count of the token below
-# would pass without the fix. Nextcloud writes that text alone in place of all the arguments of
-# some functions of its own as well, also when PHP left them out, so only the text after another
-# argument of its frame counts.
-if [[ "$(log_count SensitiveParameterValue)" == "0" \
-	&& "$(log_count ',"*** sensitive parameters replaced ***"')" == "0" ]]; then
-	echo 'The log of Nextcloud holds no argument replaced by PHP, so the check of the token below would prove nothing.' >&2
-	exit 1
-fi
-TOKEN_IN_LOG="$(log_count e2e-only-token)"
-if [[ "${TOKEN_IN_LOG}" != "0" ]] || grep --fixed-strings e2e-only-token "${TMP_DIR}/unreachable.json" "${TMP_DIR}/unreachable-occ.txt" >/dev/null; then
-	echo "A run without Paperless put the token into its answer, its output or ${TOKEN_IN_LOG} line(s) of the log of Nextcloud." >&2
-	exit 1
-fi
-
-# The provisioning API of Nextcloud may change any value of the app, the URL too, without the
-# settings page, which asks for the token again. The next run must not send the stored token to
-# the new URL; the URL that the token was saved with gets it again.
-set_paperless_url() {
-	curl --fail-with-body --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data-urlencode "value=$1" \
-		--output /dev/null \
-		"${BASE_URL}/ocs/v2.php/apps/provisioning_api/api/v1/config/apps/paperless_sync/paperless_url"
-}
-set_paperless_url 'http://paperless-mock:8080/elsewhere'
-REPOINTED_STATUS="$(curl --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'dryRun=true' \
-	--output "${TMP_DIR}/repointed.json" \
-	--write-out '%{http_code}' \
-	"${BASE_URL}/apps/paperless_sync/sync/run")"
-if [[ "${REPOINTED_STATUS}" != "500" ]] || ! grep --fixed-strings 'not completely configured' "${TMP_DIR}/repointed.json" >/dev/null; then
-	echo "A run after the URL was changed through the provisioning API used the stored token: HTTP ${REPOINTED_STATUS}, $(cat "${TMP_DIR}/repointed.json")" >&2
-	exit 1
-fi
-set_paperless_url 'http://paperless-mock:8080'
-sync_run true "${TMP_DIR}/back.json"
-
-# A mirror that keeps failing tells the administrators. The run above without Paperless was the
-# first of a row of runs that failed; after the third, every administrator has one notification,
-# the setup check of the app names the error, and the status API reports it to a monitor, but
-# not to a user who is no administrator. The next run that succeeds removes the notification.
-"${COMPOSE[@]}" stop paperless-mock >/dev/null
-for attempt in 2 3; do
-	FAILING_CODE=0
-	occ paperless_sync:run > "${TMP_DIR}/failing-${attempt}.txt" 2>&1 || FAILING_CODE=$?
-	if [[ "${FAILING_CODE}" != "2" ]]; then
-		echo "Run ${attempt} without Paperless ended with exit code ${FAILING_CODE} instead of 2: $(cat "${TMP_DIR}/failing-${attempt}.txt")" >&2
-		exit 1
-	fi
-done
-"${COMPOSE[@]}" up --detach --wait --wait-timeout 60 paperless-mock >/dev/null
-# A start of the mock may give it another port.
-containers
-notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
-assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
-assert_status_api_soon status-api-failing "${TMP_DIR}/status-api-failing.json"
-USER_API_STATUS="$(status_api sync-target "${TMP_DIR}/status-api-user.json")"
-if [[ "${USER_API_STATUS}" != "403" ]]; then
-	echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a user who is no administrator: $(cat "${TMP_DIR}/status-api-user.json")" >&2
-	exit 1
-fi
-# occ setupchecks fails while a check fails, which is the point here.
-occ setupchecks >"${TMP_DIR}/setupchecks.txt" 2>&1 || true
-if ! grep --fixed-strings 'runs of Paperless Sync failed, the last one with:' "${TMP_DIR}/setupchecks.txt" >/dev/null; then
-	echo "occ setupchecks does not name the failing mirror:" >&2
-	cat "${TMP_DIR}/setupchecks.txt" >&2
-	exit 1
-fi
-sync_run false "${TMP_DIR}/recovered.json"
-assert_json recovered "${TMP_DIR}/recovered.json"
-notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
-assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
-assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
-
-# Per-user ownership (#84): each user of Nextcloud gets the documents that their user of
-# Paperless owns, in their own files below the same base folder, and the copies that the target
-# user had of them leave its archive. The Paperless user E2E-Other gets e2e-other, whatever the
-# case, and e2e-owner a user of its own. The file that e2e-owner puts into their inbox becomes
-# theirs in Paperless, and comes back into their archive. The other users see none of it.
-add_user e2e-owner
-control /control/scenario/per-user
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'settings[ownership]=per-user' \
-	--output "${TMP_DIR}/checklist-per-user.json" \
-	"${BASE_URL}/apps/paperless_sync/settings/test"
-assert_json checklist-per-user "${TMP_DIR}/checklist-per-user.json"
-save_settings "${TMP_DIR}/per-user-settings.json" ownership=per-user
-# The copies leave the archive of the target user alone (assert_json per-user).
-# The trash bin of each user who can lose a copy, from before the run.
-for trash_user in sync-target e2e-other e2e-owner; do
-	trash_names "${trash_user}" > "${TMP_DIR}/trash-before-per-user-${trash_user}.txt"
-done
-sync_run false "${TMP_DIR}/per-user.json"
-assert_json per-user "${TMP_DIR}/per-user.json"
-# Each copy is in the files of its user alone, and the copies that left are gone: the user and
-# the path, for WebDAV, of each change of a type in a report.
-per_user_files() {
-	type="$1"
-	host_python -c '
-import json, sys
-from urllib.parse import quote
-for entry in json.load(sys.stdin)["entries"]:
-    if entry["type"] == sys.argv[1]:
-        print(entry["user"], quote(entry["path"]))' "${type}" < "$2"
-}
-# The helpers set user and path themselves, so the loops name theirs otherwise.
-while read -r copy_user copy_path; do
-	assert_dav_file "${copy_user}" "${copy_path}" 'Synthetic Paperless archive document'
-	for other_user in sync-target e2e-other e2e-owner; do
-		if [[ "${other_user}" != "${copy_user}" ]]; then
-			assert_dav_missing "${other_user}" "${copy_path}"
-		fi
-	done
-done < <(per_user_files export "${TMP_DIR}/per-user.json")
-while read -r copy_user copy_path; do
-	assert_dav_missing "${copy_user}" "${copy_path}"
-	# The copy that left the archive of the target user is in its trash bin.
-	assert_trashed "${copy_user}" "$(basename -- "$(printf '%b' "${copy_path//%/\\x}")")" "${TMP_DIR}/trash-before-per-user-${copy_user}.txt"
-done < <(per_user_files remove-reassigned "${TMP_DIR}/per-user.json")
-dav_upload e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf' '%PDF-1.4 Synthetic letter of e2e-owner'
-sync_run false "${TMP_DIR}/per-user-upload.json"
-control /control/task-of/owner-letter.pdf/success
-# The run gives the new document its owner, and its export brings it into the archive of e2e-owner.
-trash_names e2e-owner > "${TMP_DIR}/trash-before-per-user-sent.txt"
-sync_run false "${TMP_DIR}/per-user-sent.json"
-mock_state > "${TMP_DIR}/mock-owner-changes.json"
-assert_json mock-owner-changes "${TMP_DIR}/mock-owner-changes.json"
-assert_dav_missing e2e-owner 'Documents/Paperless/Inbox/owner-letter.pdf'
-# The file of the inbox of e2e-owner is in the trash bin of e2e-owner after its import, although
-# the run set up the files of the target user first.
-assert_trashed e2e-owner 'owner-letter.pdf' "${TMP_DIR}/trash-before-per-user-sent.txt"
-SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
-assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
-
-# The documents that Paperless shares: a document of e2e-owner that the group of the household may
-# view gets a copy in the files of e2e-other, who is in the group, at the same path, and the copy
-# leaves their files, into their trash bin, once the permission is gone. The copy of e2e-owner
-# stays where it is all along.
-save_settings "${TMP_DIR}/shared-settings.json" ownership=per-user-shared
-control /control/permissions/123/groups/8
-curl --fail-with-body --silent --show-error \
-	--user "e2e-admin:${PASSWORD}" \
-	--header 'Accept: application/json' \
-	--header 'OCS-APIRequest: true' \
-	--request POST \
-	--data-urlencode 'settings[ownership]=per-user-shared' \
-	--output "${TMP_DIR}/checklist-shared.json" \
-	"${BASE_URL}/apps/paperless_sync/settings/test"
-assert_json checklist-shared "${TMP_DIR}/checklist-shared.json"
-sync_run false "${TMP_DIR}/shared-added.json"
-assert_json shared-added "${TMP_DIR}/shared-added.json"
-SHARED_PATH="$(host_python -c '
-import json, sys
-from urllib.parse import quote
-print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if entry["type"] == "export"))' < "${TMP_DIR}/shared-added.json")"
-assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
-assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
-control /control/permissions/123/none
-sync_run true "${TMP_DIR}/shared-dry-run.json"
-assert_json shared-dry-run "${TMP_DIR}/shared-dry-run.json"
-assert_dav_file e2e-other "${SHARED_PATH}" 'Synthetic Paperless archive document'
-trash_names e2e-other > "${TMP_DIR}/trash-before-unshared.txt"
-sync_run false "${TMP_DIR}/shared-removed.json"
-assert_json shared-removed "${TMP_DIR}/shared-removed.json"
-assert_dav_missing e2e-other "${SHARED_PATH}"
-assert_dav_file e2e-owner "${SHARED_PATH}" 'Synthetic Paperless archive document'
-assert_trashed e2e-other "$(basename -- "$(printf '%b' "${SHARED_PATH//%/\\x}")")" "${TMP_DIR}/trash-before-unshared.txt"
-mock_state > "${TMP_DIR}/mock-shared-scans.json"
-assert_json mock-shared-scans "${TMP_DIR}/mock-shared-scans.json"
-save_settings "${TMP_DIR}/single-settings.json" ownership=single
-
-# Nextcloud in French, as a new installation sees it: its default language, an administrator
-# without a language of their own, and none of the names that the steps above stored. Last,
-# because it takes these names away and leaves the installation in French.
-if [[ "${E2E_LANGUAGES}" == "1" ]]; then
-	occ config:system:set default_language --value=fr >/dev/null
-	occ user:setting --delete e2e-admin core lang >/dev/null
-	for name in base_path archive_folder inbox_folder error_folder deleted_folder empty_correspondent empty_document_type empty_date untitled; do
-		occ config:app:delete paperless_sync "${name}" >/dev/null
-	done
-	browser_checks french 0
-	echo "The settings in French pass after ${SECONDS} s."
-fi
-
 checks='a Paperless in the local network without allow_local_remote_servers, the connection checklist of accounts with too few permissions, dry-run, export, metadata moves with the SHA-256 checksums of Paperless-ngx 3 and the MD5 checksums of 2.x, a file that keeps its ID, its share and a version through a new content, the background job, the webhook of a Paperless workflow with its secret and the throttling of wrong ones, exclusion, deletions into the trash bin of the user of each copy, the tags of Paperless as tags of Nextcloud beside those of a user, trash, guarded deletion, inbox subfolders as tags with tags that it creates, inbox success/failure/duplicate/revocation/refusal in the task shapes of Paperless-ngx 2.20 and 3.x, Send to Paperless from Files and by a rule of Flow with its tags, the entries of the Activity stream, "Synchronize now" as a background job, runs, the status and the exit codes of occ, API version 9 in every request and a Paperless-ngx without it, pruning, restore, conflicts, vanished documents, long and unusual names, access isolation, per-user ownership with the owners of Paperless and the inbox of each user, the documents that Paperless shares through a group, whose copy leaves with the permission'
 if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"

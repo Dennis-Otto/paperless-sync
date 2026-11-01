@@ -31,6 +31,9 @@
 # as three and an upgrade as two, to 2 when both weigh as much. Both jobs get the same
 # versions and variants, so they split them the same way. A shard without anything to run
 # passes.
+# E2E_ONLY and E2E_BROWSER select scenarios of every version, as in run.sh. Without E2E_VARIANTS,
+# a selection then runs no variant, as it is there to try a fix; E2E_VARIANTS still adds them,
+# except an upgrade, which runs none of the scenarios.
 # E2E_PLAN=1 only prints the runs that it would start.
 # KEEP_E2E=1 keeps the containers of each, as with run.sh.
 # E2E_VERSION_TIMEOUT, by default 15m from its own start, ends a run that hangs before the
@@ -99,7 +102,11 @@ done
 
 variants=()
 case "${E2E_VARIANTS:-}" in
-	"") variants=(pgsql mysql+s3 pgsql+upgrade mysql+upgrade) ;;
+	"")
+		if [[ -z "${E2E_ONLY:-}${E2E_BROWSER:-}" ]]; then
+			variants=(pgsql mysql+s3 pgsql+upgrade mysql+upgrade)
+		fi
+		;;
 	none) ;;
 	*) read -ra variants <<<"${E2E_VARIANTS}" ;;
 esac
@@ -200,6 +207,10 @@ if [[ "${E2E_PLAN:-0}" == "1" ]]; then
 	release_version="the last release"
 fi
 for variant in "${variants[@]}"; do
+	if [[ "${variant}" == *+upgrade && -n "${E2E_ONLY:-}${E2E_BROWSER:-}" ]]; then
+		echo "E2E_VARIANTS names ${variant}, and E2E_UPGRADE=1 runs the upgrade in place of the scenarios, so E2E_ONLY and E2E_BROWSER select nothing there." >&2
+		exit 1
+	fi
 	if [[ "${variant}" == *+upgrade && -z "${release_version}" ]]; then
 		E2E_RELEASE_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" release "${LOG_DIR}/packages")"
 		E2E_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" commit "${LOG_DIR}/packages")"
@@ -283,10 +294,15 @@ parallel="${E2E_PARALLEL:-$(nproc 2>/dev/null || echo 0)}"
 # seconds it took. Its process ID, of run.sh or of the timeout around it, lets stop()
 # end it.
 run() {
-	local index="$1" key="${keys[$1]}" started="${SECONDS}" status=0 coverage=0
+	local index="$1" key="${keys[$1]}" started="${SECONDS}" status=0 coverage=0 languages
 	# The run on the newest version measures the coverage of the JavaScript in the browser.
 	if [[ "${key}" == "${newest}" ]]; then
 		coverage=1
+	fi
+	# A selection that names the scenario french means it, on every version.
+	languages="${coverage}"
+	if [[ -n "${E2E_ONLY:-}" ]]; then
+		languages=1
 	fi
 	NEXTCLOUD_IMAGE="nextcloud:${run_versions[index]}-apache" \
 		E2E_PORT="${ports[index]}" \
@@ -296,7 +312,7 @@ run() {
 		E2E_OBJECTSTORE="${storages[index]}" \
 		E2E_ACCESSIBILITY="${accessibility[index]}" \
 		E2E_COVERAGE="${coverage}" \
-		E2E_LANGUAGES="${coverage}" \
+		E2E_LANGUAGES="${languages}" \
 		E2E_UPGRADE="${upgrades[index]}" \
 		E2E_ARTIFACTS="${E2E_ARTIFACTS:+${E2E_ARTIFACTS}/${key}}" \
 		"${limit[@]}" bash "${RUN_SCRIPT}" >"${LOG_DIR}/${key}.log" 2>&1 &

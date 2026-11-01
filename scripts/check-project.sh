@@ -405,6 +405,99 @@ if [[ "$started" != 5 || "$most" != 2 ]]; then
 fi
 echo "tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names."
 
+printf '\n== %s\n' "The scenarios of the end-to-end tests"
+# tests/e2e/run.sh runs the scenarios of its list, so a function that the list leaves out would
+# never run, and nothing would fail. Each start of the script compares both, and E2E_PLAN=1 ends
+# it there, before Docker. Copies of the script with a change show that the comparison finds
+# what it should, and samples that a selection runs what it needs, in the order of the list.
+plan_variables=(env -u E2E_ONLY -u E2E_BROWSER -u E2E_ACCESSIBILITY -u E2E_LANGUAGES -u E2E_UPGRADE E2E_PLAN=1)
+plan_of() {
+  "${plan_variables[@]}" "$@" bash tests/e2e/run.sh | tr -d '\r' | paste -sd ' ' -
+}
+expect_plan() {
+  local expected="$1" actual
+  shift
+  actual="$(plan_of "$@" 2>&1 || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "$* E2E_PLAN=1 bash tests/e2e/run.sh plans \"$actual\" instead of \"$expected\"."
+    problems=$((problems + 1))
+  fi
+}
+# The script must stop with a message that holds the text.
+expect_stop() {
+  local expected="$1" script="$2" output
+  shift 2
+  if output="$("${plan_variables[@]}" "$@" bash "$script" 2>&1)" || [[ "$output" != *"$expected"* ]]; then
+    echo "$* E2E_PLAN=1 bash $script should stop with \"$expected\", and it says: $output"
+    problems=$((problems + 1))
+  fi
+}
+# A copy of the script, changed by an expression of sed, must stop with a message that holds the text.
+expect_list_problem() {
+  sed -E "$2" tests/e2e/run.sh >"$scenario_folder/run.sh"
+  expect_stop "$1" "$scenario_folder/run.sh"
+}
+all_checks='accessibility keyboard settings files flow'
+whole_plan="$(plan_of)"
+scenario_functions="$(sed -nE 's/^scenario_([a-z0-9_]+)\(\) \{$/\1/p' tests/e2e/run.sh | tr '_' '-' | paste -sd ' ' -)"
+if [[ "$whole_plan" != *" browser ($all_checks) "* || "${whole_plan/ ($all_checks)/}" != "$scenario_functions" ]]; then
+  echo "A full run of tests/e2e/run.sh plans \"$whole_plan\", which should be its functions in their order, \"$scenario_functions\", with the checks in the browser $all_checks."
+  problems=$((problems + 1))
+fi
+scenario_folder="$(mktemp -d)"
+expect_list_problem 'The function scenario_unlisted has no entry' 's/^check_scenario_list$/scenario_unlisted() { :; }\n&/'
+expect_list_problem 'The function scenario_names has no entry' "/^\t'names: connection'$/d"
+expect_list_problem 'The scenario names of the list SCENARIOS has no function' 's/^scenario_names\(\) \{$/scenario_gone() {/'
+expect_list_problem 'The scenario connection needs export' "s/^\t'connection:'$/\t'connection: export'/"
+expect_list_problem 'The check in the browser flow needs account' "s/^\t'flow: flow'$/\t'flow: account'/"
+rm -rf "$scenario_folder"
+expect_stop 'E2E_ONLY names nope' tests/e2e/run.sh E2E_ONLY=nope
+expect_stop 'E2E_BROWSER names nope' tests/e2e/run.sh E2E_BROWSER=nope
+expect_stop 'E2E_UPGRADE=1 runs the upgrade' tests/e2e/run.sh E2E_UPGRADE=1 E2E_ONLY=files
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=french E2E_ACCESSIBILITY=0
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=browser E2E_ACCESSIBILITY=0
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_BROWSER=files E2E_ACCESSIBILITY=0
+expect_stop 'E2E_VARIANTS names pgsql+upgrade' tests/e2e/run-all.sh E2E_VERSIONS=33 E2E_VARIANTS=pgsql+upgrade E2E_ONLY=files
+expect_plan 'upgrade' E2E_UPGRADE=1
+# A selection through run-all.sh runs the versions, and no variant unless it names one.
+selection_runs="$(env -u E2E_BROWSER -u E2E_VARIANTS E2E_PLAN=1 E2E_VERSIONS=33 E2E_ONLY=files bash tests/e2e/run-all.sh | tr -d '\r' | paste -sd ' ' -)"
+if [[ "$selection_runs" != 'Nextcloud 33' ]]; then
+  echo "E2E_ONLY=files bash tests/e2e/run-all.sh with E2E_VERSIONS=33 plans \"$selection_runs\" instead of the version alone."
+  problems=$((problems + 1))
+fi
+# The command that repeats a failed scenario names the stack that it failed on.
+repeat_stack="$(sed -n '/^stack_of_run() {$/,/^}$/p' tests/e2e/run.sh)"
+repeat_command="$(NEXTCLOUD_IMAGE=nextcloud:35-apache E2E_DATABASE=pgsql E2E_OBJECTSTORE=s3 E2E_IGNORE_MAX_VERSION=1 bash -c "$repeat_stack; stack_of_run" | tr -d '\r')"
+if [[ "$repeat_command" != 'NEXTCLOUD_IMAGE=nextcloud:35-apache E2E_DATABASE=pgsql E2E_OBJECTSTORE=s3 E2E_IGNORE_MAX_VERSION=1 ' ]]; then
+  echo "stack_of_run of tests/e2e/run.sh says \"$repeat_command\", which should name the image, the database, the storage and E2E_IGNORE_MAX_VERSION."
+  problems=$((problems + 1))
+fi
+expect_plan 'connection dry-run export files browser (files)' E2E_ONLY=files
+expect_plan 'connection files' E2E_ONLY=files E2E_ACCESSIBILITY=0
+expect_plan 'connection files flow' E2E_ONLY='flow files' E2E_BROWSER=none
+expect_plan 'connection flow browser (flow)' E2E_BROWSER=flow
+expect_plan 'connection dry-run export files flow browser (accessibility flow)' E2E_BROWSER='flow accessibility'
+expect_plan 'connection inbox' E2E_ONLY=inbox
+expect_plan 'connection french' E2E_ONLY=french
+expect_plan 'connection' E2E_ONLY='connection french' E2E_LANGUAGES=0
+expect_plan "${whole_plan/ browser ($all_checks)/}" E2E_BROWSER=none
+expect_plan "${whole_plan/ browser ($all_checks)/}" E2E_ACCESSIBILITY=0 E2E_LANGUAGES=1
+for scenario in ${scenario_functions}; do
+  if ! grep --quiet --fixed-strings "| \`$scenario\` |" tests/e2e/README.md; then
+    echo "The table of tests/e2e/README.md names no scenario $scenario, which E2E_ONLY can select."
+    problems=$((problems + 1))
+  fi
+done
+# The CI runs everything: a selection there would leave out scenarios, and every run would pass.
+if grep --recursive --line-number --extended-regexp '\bE2E_(ONLY|BROWSER)\b' .github/workflows; then
+  echo "A workflow of the lines above selects scenarios of the end-to-end tests, but the CI runs them all."
+  problems=$((problems + 1))
+fi
+if ((problems > 0)); then
+  exit 1
+fi
+echo "Every scenario of tests/e2e/run.sh is in its list and in the table of tests/e2e/README.md, the list names no other, a selection runs what it needs, and no workflow selects."
+
 printf '\n== %s\n' "The folder in memory of the end-to-end tests"
 # down doesn't touch the folder of E2E_DATA_FOLDER, so a second run on a machine would find
 # the files of the first and fail to install. The function of run.sh runs here with a script

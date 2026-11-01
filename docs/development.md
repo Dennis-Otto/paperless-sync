@@ -32,6 +32,7 @@ bash tests/e2e/run-all.sh
 bash tests/e2e/run.sh
 E2E_DATABASE=mysql E2E_OBJECTSTORE=s3 bash tests/e2e/run.sh
 E2E_DATABASE=pgsql E2E_UPGRADE=1 bash tests/e2e/run.sh
+E2E_ONLY=files bash tests/e2e/run.sh  # one scenario alone, with what it needs
 ```
 
 The upgrade installs the signed package of the last release, uses it until its tables hold rows, replaces it with the package of the commit and runs `occ upgrade`: the only run in which the migrations meet the rows of an installation in use. It takes the commit, not the working tree, so commit a change of a migration before you run it ([the end-to-end tests](https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md), *The upgrade from the last release*, and [decision 0028](decisions/0028-test-the-upgrade-users-run.md)).
