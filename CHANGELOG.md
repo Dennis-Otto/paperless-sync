@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.5.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.4.0...v1.5.0) (2026-11-03)
+
+
+### Features
+
+* **i18n:** speak Simplified Chinese ([#348](https://github.com/Dennis-Otto/paperless-sync/issues/348)) ([bd85f77](https://github.com/Dennis-Otto/paperless-sync/commit/bd85f77f7bc36dfc67ca3c28c512347459d36a52))
+
 ## [1.4.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.1...v1.4.0) (2026-11-01)
 
 ### Features
