@@ -6,10 +6,9 @@ All notable changes to this project are documented in this file.
 
 ## [1.5.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.4.0...v1.5.0) (2026-11-03)
 
-
 ### Features
 
-* **i18n:** speak Simplified Chinese ([#348](https://github.com/Dennis-Otto/paperless-sync/issues/348)) ([bd85f77](https://github.com/Dennis-Otto/paperless-sync/commit/bd85f77f7bc36dfc67ca3c28c512347459d36a52))
+- **Paperless Sync speaks Simplified Chinese:** on a Nextcloud set to 简体中文 (`zh_CN`), the settings, their messages, the connection checklist, the notes in Files, *Send to Paperless*, the Activity stream and the notifications are in Chinese, in the words that Nextcloud and Paperless-ngx use in Chinese, such as 文件, 动态 and 往来方. A new installation on such a Nextcloud proposes Chinese folders, such as `文档/Paperless`, `归档` and `收件箱`; an installation in use keeps the folders that it has. The App Store shows the summary and the description in Chinese. The texts were drafted with the help of an AI and checked against the English ones; native speakers are welcome to improve them. Traditional Chinese (`zh_TW`, `zh_HK`) stays English for now.
 
 ## [1.4.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.3.1...v1.4.0) (2026-11-01)
 
