@@ -1244,14 +1244,38 @@ if ! grep -qF '"_%n minute_::_%n minutes_": [' "$l10n_copy/it.json" \
   echo 'scripts/check-l10n.mjs --new it should write three forms for a plural, as Italian has.'
   exit 1
 fi
+# A language with one form for every count, such as Japanese, starts without --plural-form too, and
+# --new zh_CN writes the rule and the texts of the catalog of Simplified Chinese.
+node scripts/check-l10n.mjs --new ja "$l10n_copy" >/dev/null
+if [[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).translations["_%n minute_::_%n minutes_"].length' "$l10n_copy/ja.json")" != 1 ]]; then
+  echo 'scripts/check-l10n.mjs --new ja should write one form for a plural, as Japanese has.'
+  exit 1
+fi
+mkdir "$l10n_copy/zh"
+node scripts/check-l10n.mjs --new zh_CN "$l10n_copy/zh" >/dev/null
+if ! node -e 'const read = (file) => JSON.parse(require("fs").readFileSync(file, "utf8"));
+  const [made, shipped] = process.argv.slice(1).map(read);
+  process.exit(made.pluralForm === shipped.pluralForm
+    && JSON.stringify(Object.keys(made.translations)) === JSON.stringify(Object.keys(shipped.translations)) ? 0 : 1)' \
+  "$l10n_copy/zh/zh_CN.json" l10n/zh_CN.json; then
+  echo 'scripts/check-l10n.mjs --new zh_CN should write the "pluralForm" and the texts of l10n/zh_CN.json, the one form of Nextcloud for Chinese.'
+  exit 1
+fi
+rm -r "$l10n_copy/zh"
 node scripts/check-l10n.mjs --new sv --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
 # The codes of Nextcloud also have digits, as Spanish of Latin America has, and a script. The
-# App Store knows only the language itself.
-for language in es_419 sr@latin; do
+# App Store has a code of its own for a few variants, such as sr-latn for sr@latin and zh-hant for
+# Traditional Chinese, and the language itself for the others, such as es for es_419.
+for language in es_419 sr@latin zh_TW; do
   node scripts/check-l10n.mjs --new "$language" --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
   broken_catalog "l10n/$language.json has no words for \"Paperless Sync\""
 done
-broken_catalog 'appinfo/info.xml has no <summary lang="sr">'
+broken_catalog 'appinfo/info.xml has no <summary lang="sr-latn">, so the App Store shows its English one to whoever reads the app in sr@latin.'
+broken_catalog 'appinfo/info.xml has no <description lang="zh-hant">, so the App Store shows its English one to whoever reads the app in zh_TW.'
+if [[ "$(node scripts/check-l10n.mjs "$l10n_copy" 2>&1)" == *'lang="es"'* ]]; then
+  echo 'scripts/check-l10n.mjs should take the summary and the description of es for es_419, which the App Store knows only as es.'
+  exit 1
+fi
 for refused in 'it|exists already' 'sv|exists already' 'tlh|need their rule' 'Not a code|is no code of a language'; do
   if output="$(node scripts/check-l10n.mjs --new "${refused%%|*}" "$l10n_copy" 2>&1)" || [[ "$output" != *"${refused##*|}"* ]]; then
     echo "scripts/check-l10n.mjs --new ${refused%%|*} should say \"${refused##*|}\", but says: $output"
@@ -1278,6 +1302,12 @@ rm "$l10n_copy/app/lib/Model/Unreadable.php"
 sed -i '/<summary lang="fr">/d' "$l10n_copy/app/appinfo/info.xml"
 if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <summary lang="fr">'* ]]; then
   echo "scripts/check-l10n.mjs should report a language without its summary in appinfo/info.xml, but says: $output"
+  exit 1
+fi
+# Simplified Chinese has the code zh-hans in the App Store, which its schema knows, not zh_CN or zh.
+sed -i '/<description lang="zh-hans">/,/]]><\/description>/d' "$l10n_copy/app/appinfo/info.xml"
+if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <description lang="zh-hans">, so the App Store shows its English one to whoever reads the app in zh_CN.'* ]]; then
+  echo "scripts/check-l10n.mjs should ask for the description of zh_CN as zh-hans in appinfo/info.xml, but says: $output"
   exit 1
 fi
 echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."

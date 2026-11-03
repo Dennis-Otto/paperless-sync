@@ -51,13 +51,42 @@ const { values: options, positionals } = parseArgs({
 const fix = options.fix
 const folder = positionals[0] ?? join(root, 'l10n')
 
-/** The rules of the plurals of the largest languages that the app doesn't speak yet, from core/l10n/ of Nextcloud. */
+/**
+ * The rules of the plurals of the largest languages of Nextcloud, from core/l10n/ of Nextcloud, so
+ * that --new starts one without --plural-form. Chinese, Japanese and Korean have one form for
+ * every count.
+ */
+const oneForm = 'nplurals=1; plural=0;'
 const pluralRules = {
 	it: 'nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;',
+	ja: oneForm,
+	ko: oneForm,
 	nl: 'nplurals=2; plural=(n != 1);',
 	pl: 'nplurals=4; plural=(n==1 ? 0 : (n%10>=2 && n%10<=4) && (n%100<12 || n%100>14) ? 1 : n!=1 && (n%10>=0 && n%10<=1) || (n%10>=5 && n%10<=9) || (n%100>=12 && n%100<=14) ? 2 : 3);',
 	pt_BR: 'nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;',
 	ru: 'nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n%100>=11 && n%100<=14)? 2 : 3);',
+	zh_CN: oneForm,
+	zh_HK: oneForm,
+	zh_TW: oneForm,
+}
+
+/**
+ * The code of the App Store for a language of Nextcloud, in the lang of <summary> and <description>
+ * of appinfo/info.xml: its own for the variants that apps.nextcloud.com/schema/apps/info.xsd lists,
+ * such as zh-hans for Simplified Chinese, and the language itself for every other one, as the schema
+ * knows no other variant.
+ */
+const storeVariants = {
+	es_AR: 'es-ar',
+	es_CO: 'es-co',
+	es_MX: 'es-mx',
+	es_NI: 'es-ni',
+	es_VE: 'es-ve',
+	pt_BR: 'pt-br',
+	'sr@latin': 'sr-latn',
+	zh_CN: 'zh-hans',
+	zh_HK: 'zh-hant',
+	zh_TW: 'zh-hant',
 }
 
 /** The calls of PHP whose arguments are texts, by their position and by their name. */
@@ -444,7 +473,7 @@ for (const language of languages) {
 	}
 	for (const element of ['summary', 'description']) {
 		const store = storeLanguages(element)
-		const storeLanguage = language.split(/[_@]/)[0]
+		const storeLanguage = storeVariants[language] ?? language.split(/[_@]/)[0]
 		if (store !== null && !store.includes(storeLanguage)) {
 			problems.push(`appinfo/info.xml has no <${element} lang="${storeLanguage}">, so the App Store shows its English one to whoever reads the app in ${language}.`)
 		}

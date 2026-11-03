@@ -6,6 +6,7 @@
 	<summary lang="de">Paperless-ngx-Dokumente nach Nextcloud spiegeln und Dateien aus Nextcloud an Paperless senden</summary>
 	<summary lang="es">Refleja documentos de Paperless-ngx en Archivos de Nextcloud y envía ficheros de Nextcloud a Paperless</summary>
 	<summary lang="fr">Refléter les documents de Paperless-ngx dans Fichiers de Nextcloud et envoyer des fichiers de Nextcloud vers Paperless</summary>
+	<summary lang="zh-hans">将 Paperless-ngx 文档镜像到 Nextcloud 的“文件”中，并将文件从 Nextcloud 发送到 Paperless</summary>
 	<description><![CDATA[
 ### A native bridge between Paperless-ngx and Nextcloud
 
@@ -153,6 +154,44 @@ Le jeton d’API de Paperless est stocké côté serveur dans le gestionnaire d�
 Paperless Sync est indépendant de [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Les deux applications comprennent des marqueurs de document stables comme `[P123]` et peuvent être installées séparément.
 
 La documentation est en [anglais](https://dennis-otto.github.io/paperless-sync/) et en [allemand](https://dennis-otto.github.io/paperless-sync/de/).
+]]></description>
+	<description lang="zh-hans"><![CDATA[
+### Paperless-ngx 与 Nextcloud 之间的原生桥梁
+
+Paperless Sync 将 Paperless-ngx 中已定稿的文档镜像到 Nextcloud 中清晰易读的文件夹结构里。Paperless 仍是权威的文档归档，而 Nextcloud 通过“文件”、桌面同步、移动应用、共享及其内置查看器提供熟悉的访问方式。
+
+### 结构化、自动化、可还原
+
+- 通过 Paperless API 导出归档 PDF 或原始文件
+- 根据往来方、文档类型、日期、标题和文档 ID 构建可配置的目录层级
+- 通过管理员的同一个连接，为每个 Nextcloud 用户提供其在 Paperless 中拥有的文档，并可选择同时提供 Paperless 与其共享的文档（可选的按用户分配所有权）
+- Paperless 元数据发生变化时移动或重命名文件
+- 跳过 Paperless 收件箱中的文档，直到其定稿；添加排除标签后移除之前已镜像的副本
+- 将可配置的 Nextcloud 收件箱中的文件导入 Paperless
+- 为您选择的群组提供“文件”中文件或文件夹菜单里的“发送到 Paperless”，并可在 Paperless 中打开已镜像副本所对应的文档
+- 按 Flow 规则将文件发送到 Paperless，例如某个群组成员上传的每个 PDF，并带上其专属标签
+- 将 Paperless 的回收站镜像到专用的 Nextcloud 文件夹
+- 可选：在文件从 Paperless 中永久删除后将其移除
+- 移动和删除后移除空的归档文件夹
+- 通过 Nextcloud 原生后台任务运行，状态可断点续传
+- 当 Paperless 的工作流调用受密钥保护的 Webhook 时，在几秒内镜像新建或更改的文档
+- 镜像持续失败时通知管理员，在“管理”下提供设置检查，并为 Uptime Kuma 或 Home Assistant 等监控工具提供状态 API
+
+### 默认安全
+
+在管理员完成并验证配置之前，同步一直处于禁用状态。永久删除需要明确开启，并可通过多次确认文档缺失来加以保护。试运行可以预览更改，而不会修改任何文件。
+
+Paperless API 令牌存储在服务器端 Nextcloud 的凭据管理器中，绝不会返回给浏览器。本应用直接通过 Nextcloud 的文件系统 API 工作，因此不需要 Nextcloud 密码或 WebDAV 凭据。
+
+### 要求
+
+- Nextcloud 33 至 35，并配有可靠的 cron 后台任务
+- 可访问的 Paperless-ngx 实例，版本 2.16 或更高（包括 3.x），并可使用其 API
+- 一个专用的 Paperless 服务账号，只拥有已启用功能所需的权限
+
+Paperless Sync 独立于 [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search)。两个应用都能识别 `[P123]` 这类稳定的文档标记，可以分别安装。
+
+文档提供[英文版](https://dennis-otto.github.io/paperless-sync/)和[德文版](https://dennis-otto.github.io/paperless-sync/de/)。
 ]]></description>
 	<version>1.4.0</version>
 	<licence>AGPL-3.0-or-later</licence>
