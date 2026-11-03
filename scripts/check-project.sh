@@ -1245,7 +1245,7 @@ if ! grep -qF '"_%n minute_::_%n minutes_": [' "$l10n_copy/it.json" \
   exit 1
 fi
 # A language with one form for every count, such as Japanese, starts without --plural-form too, and
-# --new zh_CN writes the rule and the texts of the catalog of Simplified Chinese.
+# --new zh_CN writes the rule and the texts of the catalog of Simplified Chinese, in any order.
 node scripts/check-l10n.mjs --new ja "$l10n_copy" >/dev/null
 if [[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).translations["_%n minute_::_%n minutes_"].length' "$l10n_copy/ja.json")" != 1 ]]; then
   echo 'scripts/check-l10n.mjs --new ja should write one form for a plural, as Japanese has.'
@@ -1256,7 +1256,7 @@ node scripts/check-l10n.mjs --new zh_CN "$l10n_copy/zh" >/dev/null
 if ! node -e 'const read = (file) => JSON.parse(require("fs").readFileSync(file, "utf8"));
   const [made, shipped] = process.argv.slice(1).map(read);
   process.exit(made.pluralForm === shipped.pluralForm
-    && JSON.stringify(Object.keys(made.translations)) === JSON.stringify(Object.keys(shipped.translations)) ? 0 : 1)' \
+    && JSON.stringify(Object.keys(made.translations).sort()) === JSON.stringify(Object.keys(shipped.translations).sort()) ? 0 : 1)' \
   "$l10n_copy/zh/zh_CN.json" l10n/zh_CN.json; then
   echo 'scripts/check-l10n.mjs --new zh_CN should write the "pluralForm" and the texts of l10n/zh_CN.json, the one form of Nextcloud for Chinese.'
   exit 1

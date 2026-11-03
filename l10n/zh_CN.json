@@ -671,10 +671,10 @@
 		"The last successful run of Paperless Sync was %s. Check that the background jobs of Nextcloud run.": "Paperless Sync 上次成功运行是在 %s。请检查 Nextcloud 的后台任务是否在运行。",
 		"The last run of Paperless Sync succeeded %s.": "Paperless Sync 上次运行成功（%s）。",
 		"_The last run of Paperless Sync failed: %s_::_The last %n runs of Paperless Sync failed, the last one with: %s_": [
-			"Paperless Sync 最近 %n 次运行均失败，最后一次的错误为：%s"
+			"Paperless Sync 已连续 %n 次运行失败，最近一次的错误为：%s"
 		],
 		"_The last run of Paperless Sync completed with errors: %s_::_The last %n runs of Paperless Sync completed with errors, the last one with: %s_": [
-			"Paperless Sync 最近 %n 次运行均已完成但有错误，最后一次的错误为：%s"
+			"Paperless Sync 已连续 %n 次运行完成但有错误，最近一次的错误为：%s"
 		]
 	},
 	"pluralForm": "nplurals=1; plural=0;"
