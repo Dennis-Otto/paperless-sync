@@ -71,7 +71,7 @@ openssl x509 -in paperless_sync.crt -pubkey -noout > paperless_sync.pub
 openssl dgst -sha512 -verify paperless_sync.pub -signature paperless_sync.tar.gz.sig paperless_sync.tar.gz
 ```
 
-The private key of the certificate is a secret of the environment `release`, which only the release workflow on `main` can use; it never reaches the App Store.
+The private key of the certificate is the one secret of the environment `signing`. Only the build of a release and the job of *Register the app* that signs the app id enter that environment, and only on `main`. The key never reaches the App Store, and no job that holds the token of the App Store or the private key of the release app can reach it.
 
 Every release describes what it ships in an SBOM, as SPDX in `paperless-sync.spdx.json` and as CycloneDX in `paperless-sync.cdx.json`: the package that you install, with every component inside it, under the name `paperless-sync` and the version of the release. A scanner such as [Grype](https://github.com/anchore/grype) checks it against the advisories it knows. When the project accepts an advisory in `osv-scanner.toml`, with its reason, the release carries the OpenVEX document `paperless-sync.openvex.json` too, which tells the scanner that the advisory doesn't affect the release; without that document, leave out `--vex`:
 
