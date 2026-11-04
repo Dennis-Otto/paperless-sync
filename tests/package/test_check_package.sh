@@ -6,10 +6,11 @@
 # The tests of scripts/check-package.sh, in a few seconds and without krankerl, which
 # scripts/check-project.sh runs: in a throwaway Git repository with a small app, whose
 # package they pack as krankerl does, files alone, and as the release workflow packs
-# it again after signing, with its folders. The package of that app passes; a package
-# that lacks a runtime file, or holds a stray one, a changed one, a link, an unsafe
-# entry or the wrong signature, fails and names the difference, and so does a runtime
-# path of the check that HEAD doesn't hold.
+# it again after signing, with its folders. The package of that app passes, and so does
+# a signed beta with the version that the checkout has; a package that lacks a runtime
+# file, or holds a stray one, a changed one, a link, an unsafe entry, the wrong
+# signature or an info.xml other than that of the checkout after signing, fails and
+# names the difference, and so does a runtime path of the check that HEAD doesn't hold.
 #
 #   bash tests/package/test_check_package.sh
 #
@@ -113,6 +114,12 @@ pack() {
 	fi
 }
 
+# Signs the stage as occ integrity:sign-app does, with the signature in appinfo/.
+sign() {
+	printf '{"hashes": {}, "signature": "c2lnbmF0dXJl", "certificate": "certificate"}\n' > \
+		"${STAGE}/${APP_ID}/appinfo/signature.json"
+}
+
 # Checks the package $2.tar.gz in mode $3, from the working folder and not from the
 # repository, and expects the exit status $4 and, in the output, the text $5.
 check() {
@@ -151,11 +158,10 @@ rm "${REPO}/lib/Untracked.php"
 
 # A signed package holds its signature besides.
 stage
-printf '{"hashes": {}, "signature": "c2lnbmF0dXJl", "certificate": "certificate"}\n' > \
-	"${STAGE}/${APP_ID}/appinfo/signature.json"
+sign
 pack folders signed
 check_parsed "a signed package" signed signed 0 \
-	"Validated signed production package with exactly the 13 runtime files of HEAD and their signature"
+	"Validated signed production package with exactly the 13 runtime files of HEAD, appinfo/info.xml as in the checkout, and their signature"
 check "a signed package checked as unsigned" signed unsigned 1 	"Unsigned package already holds a signature: ${APP_ID}/appinfo/signature.json"
 stage
 pack folders unsigned
@@ -167,6 +173,37 @@ check "an empty signature" empty-signature signed 1 "Signed package lacks its si
 printf '{"hashes": \n' > "${STAGE}/${APP_ID}/appinfo/signature.json"
 pack folders broken-signature
 check_parsed "a signature that is no JSON" broken-signature signed 1 "is no valid JSON: ${APP_ID}/appinfo/signature.json"
+
+# A beta, such as 1.1.0-beta.1, tags a commit whose appinfo/info.xml still holds the
+# version of the last release. Before signing, the release build writes the version of
+# the beta into the info.xml of the package and into that of the checkout, so a signed
+# package is compared with the info.xml of the checkout, not with that of HEAD. krankerl
+# builds the unsigned package from HEAD before that, which is compared with HEAD.
+write appinfo/info.xml '<?xml version="1.0"?>' '<info><id>paperless_sync</id><version>1.1.0-beta.1</version></info>'
+stage
+pack files head-in-beta
+check_parsed "an unsigned package of HEAD while the checkout has the version of a beta" head-in-beta unsigned 0 \
+	"exactly the 13 runtime files of HEAD"
+cp "${REPO}/appinfo/info.xml" "${STAGE}/${APP_ID}/appinfo/info.xml"
+pack files beta-unsigned
+check "an unsigned package with the version of a beta" beta-unsigned unsigned 1 "changed: ${APP_ID}/appinfo/info.xml"
+sign
+pack folders beta
+check_parsed "a signed beta with the version of the checkout" beta signed 0 \
+	"Validated signed production package with exactly the 13 runtime files of HEAD, appinfo/info.xml as in the checkout, and their signature"
+stage
+sign
+pack folders beta-unwritten
+check "a signed package without the version of the beta in the checkout" beta-unwritten signed 1 \
+	"changed: ${APP_ID}/appinfo/info.xml"
+git -C "${REPO}" checkout --quiet -- appinfo/info.xml
+check "a signed beta whose version the checkout doesn't have" beta signed 1 "changed: ${APP_ID}/appinfo/info.xml"
+check "why a signed beta whose version the checkout doesn't have fails" beta signed 1 \
+	"A signed package is compared with appinfo/info.xml of the checkout"
+mv "${REPO}/appinfo/info.xml" "${WORK}/info.xml"
+check "a signed package and a checkout without appinfo/info.xml" signed signed 1 \
+	"The checkout lacks appinfo/info.xml, with which a signed package is compared."
+mv "${WORK}/info.xml" "${REPO}/appinfo/info.xml"
 
 # A runtime file that the package lacks.
 for missing in templates/settings.php css/settings.css l10n/de.json \

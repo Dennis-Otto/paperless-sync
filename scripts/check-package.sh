@@ -9,7 +9,9 @@
 #
 # The package holds exactly the runtime files that Git tracks in HEAD, the commit that
 # krankerl clones, each with its content there, and a signed package its signature
-# besides. A missing file, a stray one, a changed one or a link fails with the list of
+# besides, with the appinfo/info.xml of the checkout, into which the release build
+# writes the version of a beta before signing, while HEAD still holds that of the last
+# release. A missing file, a stray one, a changed one or a link fails with the list of
 # the differences. The runtime paths are those of this script and not of
 # .nextcloudignore, so that a change of .nextcloudignore or of krankerl that drops a
 # template, a translation or a migration fails here instead of on the servers of the
@@ -28,6 +30,8 @@ APP_ID="paperless_sync"
 RUNTIME_PATHS=(appinfo css img js l10n lib templates CHANGELOG.md LICENSE README.md README.de.md)
 # The file that signing adds, which a signed package needs and an unsigned one lacks.
 SIGNATURE="appinfo/signature.json"
+# The file with the version of the app, which the release build writes before signing.
+INFO="appinfo/info.xml"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARCHIVE="${1:-${ROOT}/build/artifacts/${APP_ID}.tar.gz}"
@@ -143,12 +147,34 @@ done
 # is a difference.
 git archive --format=tar --prefix="${APP_ID}/" HEAD -- "${RUNTIME_PATHS[@]}" |
 	tar --extract --file - --directory "${WORK}/expected"
+# After signing, appinfo/info.xml as the checkout has it. A beta, such as 1.3.0-beta.2,
+# tags main, whose info.xml still holds the version of the last release, as
+# release-please writes the next one only in its pull request. So that the App Store
+# doesn't take the package of the beta for the last release, the release build writes
+# the version of the beta into the info.xml of the package before it signs it, and into
+# the checkout; a signed package whose info.xml differs from the checkout still fails.
+# The unsigned package, which krankerl builds from HEAD before that, is compared with
+# HEAD, also when the working tree holds a change of the info.xml.
+if [[ "${MODE}" == "signed" ]]; then
+	if [[ ! -f "${INFO}" ]]; then
+		echo "The checkout lacks ${INFO}, with which a signed package is compared." >&2
+		echo "Check the signed package in the checkout of the commit of the release, after the release build wrote its version there." >&2
+		exit 1
+	fi
+	cp "${INFO}" "${WORK}/expected/${APP_ID}/${INFO}"
+fi
 if ! differences="$(cd "${WORK}" && LC_ALL=C diff -r -q expected package)"; then
 	{
 		echo "The ${MODE} package differs from the runtime files that Git tracks in HEAD (${RUNTIME_PATHS[*]}):"
 		describe <<<"${differences}"
 		echo "missing: in HEAD, but not in the package; stray: in the package, but no runtime file of HEAD;"
 		echo "changed: in the package with other content than in HEAD."
+		if [[ "${MODE}" == "signed" ]]; then
+			echo "A signed package is compared with ${INFO} of the checkout instead of that of HEAD: the release"
+			echo "build writes the version of the release into both before signing, that of a beta such as"
+			echo "1.3.0-beta.2 too, which HEAD doesn't hold yet. A changed ${INFO} means that it wrote the version"
+			echo "into only one of them, or that the check doesn't run in the checkout of the release."
+		fi
 		echo "krankerl leaves out what .nextcloudignore lists: it must keep every runtime file and leave out every"
 		echo "other one. A new folder or file that the app needs at runtime belongs in RUNTIME_PATHS of"
 		echo "scripts/check-package.sh as well."
@@ -175,7 +201,7 @@ fi
 
 FILE_COUNT="$(find "${APP_ROOT}" -type f | wc -l | tr -d ' ')"
 if [[ "${MODE}" == "signed" ]]; then
-	echo "Validated signed production package with exactly the ${FILE_COUNT} runtime files of HEAD and their signature: ${ARCHIVE}"
+	echo "Validated signed production package with exactly the ${FILE_COUNT} runtime files of HEAD, ${INFO} as in the checkout, and their signature: ${ARCHIVE}"
 else
 	echo "Validated unsigned production package with exactly the ${FILE_COUNT} runtime files of HEAD: ${ARCHIVE}"
 fi
