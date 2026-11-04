@@ -1,3 +1,0 @@
-### Features
-
-- **Paperless Sync speaks Simplified Chinese:** on a Nextcloud set to 简体中文 (`zh_CN`), the settings, their messages, the connection checklist, the notes in Files, *Send to Paperless*, the Activity stream and the notifications are in Chinese, in the words that Nextcloud and Paperless-ngx use in Chinese, such as 文件, 动态 and 往来方. A new installation on such a Nextcloud proposes Chinese folders, such as `文档/Paperless`, `归档` and `收件箱`; an installation in use keeps the folders that it has. The App Store shows the summary and the description in Chinese. The texts were drafted with the help of an AI and checked against the English ones; native speakers are welcome to improve them. Traditional Chinese (`zh_TW`, `zh_HK`) stays English for now.
