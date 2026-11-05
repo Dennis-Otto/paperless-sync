@@ -447,6 +447,26 @@ sync_run() {
 		"${BASE_URL}/apps/paperless_sync/sync/run"
 }
 
+# "Synchronize now" as the settings page sends it: it queues the run as a background job and
+# answers at once, with HTTP 202 and the status that the page follows, which goes into $1.
+synchronize_now() {
+	output="$1"
+	queued_status="$(curl --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'dryRun=false' \
+		--output "${output}" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/sync/run")"
+	if [[ "${queued_status}" != "202" ]]; then
+		echo "\"Synchronize now\" answered HTTP ${queued_status} instead of 202: $(cat "${output}")" >&2
+		exit 1
+	fi
+	assert_json queued "${output}"
+}
+
 # The settings of the page as curl sends them, from setting=value, such as
 # path_template=…, into the array settings.
 settings_data() {
@@ -788,6 +808,7 @@ SCENARIOS=(
 	'connection:'
 	'dry-run: connection'
 	'export: dry-run'
+	'worker: export'
 	'moves: export'
 	'webhook: moves'
 	'new-content: moves'
@@ -1045,20 +1066,7 @@ scenario_dry_run() {
 # "Synchronize now" queues the run as a background job and answers at once, with the status that
 # the page follows; the worker of Nextcloud runs the job here, as cron does on a server.
 scenario_export() {
-	QUEUED_STATUS="$(curl --silent --show-error \
-		--user "e2e-admin:${PASSWORD}" \
-		--header 'Accept: application/json' \
-		--header 'OCS-APIRequest: true' \
-		--request POST \
-		--data-urlencode 'dryRun=false' \
-		--output "${TMP_DIR}/queued.json" \
-		--write-out '%{http_code}' \
-		"${BASE_URL}/apps/paperless_sync/sync/run")"
-	if [[ "${QUEUED_STATUS}" != "202" ]]; then
-		echo "\"Synchronize now\" answered HTTP ${QUEUED_STATUS} instead of 202: $(cat "${TMP_DIR}/queued.json")" >&2
-		exit 1
-	fi
-	assert_json queued "${TMP_DIR}/queued.json"
+	synchronize_now "${TMP_DIR}/queued.json"
 	assert_dav_missing sync-target "${INITIAL_PATH}"
 	occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
 	assert_status_soon status-export "${TMP_DIR}/export.json"
@@ -1069,6 +1077,59 @@ scenario_export() {
 	activities "${TMP_DIR}/activity-export.json"
 	assert_json activity-export "${TMP_DIR}/activity-export.json"
 	FILE_ID="$(file_id sync-target "${INITIAL_PATH}")"
+}
+
+# Waits until the worker of the scenario worker has finished $1 jobs, as its log says.
+worker_finished() {
+	# The shell of the container counts the jobs in the log of the worker.
+	# shellcheck disable=SC2016
+	if ! "${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c '
+		for _ in $(seq 1 150); do
+			finished="$(grep -c "has finished" /tmp/paperless-sync-worker.log 2>/dev/null || true)"
+			if [ "${finished:-0}" -ge "$1" ]; then
+				exit 0
+			fi
+			sleep 0.2
+		done
+		exit 1' sh "$1"; then
+		echo "The worker of Nextcloud didn't finish job $1 within 30 seconds: $("${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" cat /tmp/paperless-sync-worker.log)" >&2
+		exit 1
+	fi
+}
+
+# A worker of Nextcloud that keeps running, as the README recommends one for "Synchronize now",
+# runs each job with the settings saved since its last one (#323): Nextcloud keeps the settings
+# that a process loaded, and its worker doesn't forget them between two jobs, so each job of the
+# app loads them anew. Here, the settings page turns the archive export off between two jobs of
+# one worker: the second run reads no document of Paperless, and neither run changes a file, as
+# the export ran before. occ reads the status that the worker kept, which the web server may show
+# up to 3 seconds later (assert_status_soon).
+scenario_worker() {
+	"${DOCKER_BIN}" exec --detach --user www-data "${NEXTCLOUD_CONTAINER}" \
+		sh -c 'echo "$$" > /tmp/paperless-sync-worker.pid && exec "$@" > /tmp/paperless-sync-worker.log 2>&1' worker \
+		"${PHP_CLI[@]}" occ background-job:worker --verbose --stop_after=2m 'OCA\PaperlessSync\Cron\ManualSyncJob'
+	synchronize_now "${TMP_DIR}/worker-queued-on.json"
+	worker_finished 1
+	save_settings "${TMP_DIR}/worker-export-off.json" export_enabled=0
+	synchronize_now "${TMP_DIR}/worker-queued-off.json"
+	worker_finished 2
+	occ paperless_sync:status --output=json > "${TMP_DIR}/worker-off.json"
+	assert_json worker "${TMP_DIR}/worker-off.json"
+	save_settings "${TMP_DIR}/worker-export-on.json" export_enabled=1
+	# The worker ends here, so that no later step finds its run of "Synchronize now" done at once.
+	# The shell of the container reads its process ID from the file that it wrote.
+	# shellcheck disable=SC2016
+	"${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" sh -c '
+		pid="$(cat /tmp/paperless-sync-worker.pid)"
+		kill "${pid}"
+		for _ in $(seq 1 50); do
+			if [ ! -e "/proc/${pid}" ] || grep -q "^State:[[:space:]]*Z" "/proc/${pid}/status" 2>/dev/null; then
+				exit 0
+			fi
+			sleep 0.1
+		done
+		echo "The worker of Nextcloud, process ${pid}, still runs five seconds after it was told to end." >&2
+		exit 1'
 }
 
 # A change of the metadata alone moves the file, which keeps its ID, without a download.

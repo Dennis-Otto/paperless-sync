@@ -73,6 +73,25 @@ final class SendJobTest extends TestCase {
 		self::assertSame(['receipt.pdf'], array_keys($this->paperless->uploads));
 	}
 
+	/** A worker that keeps running sends the files once the app is configured, without a restart (#323). */
+	public function testAWorkerThatKeepsRunningSendsOnceTheAppIsConfiguredSinceItsLastJob(): void {
+		$this->storage->filesOfOthers['alice']['Scans/receipt.pdf'] = 'Synthetic receipt';
+		$id = $this->storage->fileId('Scans/receipt.pdf', 'alice');
+		$this->state->saveSend('alice', $id, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
+		$this->keepsLoadedSettings = true;
+		$url = $this->settings['paperless_url'];
+		$this->settings['paperless_url'] = '';
+		$job = $this->job();
+		$job->start($this->createStub(IJobList::class));
+		self::assertSame([], $this->paperless->uploads, 'The worker started before the app was configured.');
+
+		// The settings page saves the URL, in the web server.
+		$this->settings['paperless_url'] = $url;
+		$job->start($this->createStub(IJobList::class));
+
+		self::assertSame(['receipt.pdf'], array_keys($this->paperless->uploads));
+	}
+
 	/** A failure of the whole round is logged, and the files wait for the next one. */
 	public function testAFailedRoundIsLogged(): void {
 		$failure = new RuntimeException('The database is gone.');
@@ -89,6 +108,6 @@ final class SendJobTest extends TestCase {
 		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
 		$service = new SendService($this->configService(), $this->paperless, $state ?? $this->state, $this->storage, $publisher, $this->clock, $this->createStub(LoggerInterface::class), $this->ownerMapping());
 
-		return new SendJob($this->clock, $service, $this->logger);
+		return new SendJob($this->clock, $this->savedSettings(), $service, $this->logger);
 	}
 }

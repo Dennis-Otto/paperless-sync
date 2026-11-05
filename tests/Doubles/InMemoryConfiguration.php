@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use OCA\PaperlessSync\Cron\SavedSettings;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\OwnerMapping;
@@ -16,6 +17,7 @@ use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\SystemTagService;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Config\IUserConfig;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
@@ -38,6 +40,15 @@ trait InMemoryConfiguration {
 	private array $lazyKeys = [];
 	/** @var array<string, true> the keys read as lazy, which makes Nextcloud load every lazy value */
 	private array $lazyReads = [];
+	/**
+	 * Whether the process keeps the settings that it loaded, as Nextcloud keeps them in the memory
+	 * of a process until clearCache(), and so does a worker that runs job after job (#323). A test
+	 * then changes $settings directly for a value that another process, such as the web server,
+	 * saves; what this process writes goes into both.
+	 */
+	private bool $keepsLoadedSettings = false;
+	/** @var array<string, bool|int|string>|null the settings as the process loaded them; null until it reads one */
+	private ?array $loadedSettings = null;
 	/** What the credentials store holds, as it gives it back: decoded from JSON. */
 	private mixed $credential = null;
 	/** How often the credentials store was read, for code that must not read the token. */
@@ -52,6 +63,11 @@ trait InMemoryConfiguration {
 	private array $membersOfGroups = [];
 	/** @var list<string> the IDs of the users of Nextcloud, as Nextcloud spells them */
 	private array $usersOfNextcloud = ['paperless', 'admin'];
+
+	/** The settings that a background job of the app loads anew as it starts, from the app configuration of the test. */
+	private function savedSettings(): SavedSettings {
+		return new SavedSettings($this->appConfig(), $this->createStub(IUserConfig::class));
+	}
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
 		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud(), $this->usersOfNextcloud());
@@ -137,10 +153,15 @@ trait InMemoryConfiguration {
 				$this->lazyReads[$key] = true;
 			}
 
-			return isset($this->lazyKeys[$key]) && !$lazy ? $default : ($this->settings[$key] ?? $default);
+			$settings = $this->keepsLoadedSettings ? ($this->loadedSettings ??= $this->settings) : $this->settings;
+
+			return isset($this->lazyKeys[$key]) && !$lazy ? $default : ($settings[$key] ?? $default);
 		};
 		$write = function (string $key, bool|int|string $value, bool $lazy): bool {
 			$this->settings[$key] = $value;
+			if ($this->loadedSettings !== null) {
+				$this->loadedSettings[$key] = $value;
+			}
 			if ($lazy) {
 				$this->lazyKeys[$key] = true;
 			} else {
@@ -171,7 +192,10 @@ trait InMemoryConfiguration {
 		$mock->method('hasKey')->willReturnCallback(fn (string $app, string $key, ?bool $lazy = false): bool => array_key_exists($key, $this->settings)
 			&& ($lazy === null || isset($this->lazyKeys[$key]) === $lazy));
 		$mock->method('deleteKey')->willReturnCallback(function (string $app, string $key): void {
-			unset($this->settings[$key]);
+			unset($this->settings[$key], $this->loadedSettings[$key]);
+		});
+		$mock->method('clearCache')->willReturnCallback(function (): void {
+			$this->loadedSettings = null;
 		});
 
 		return $mock;

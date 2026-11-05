@@ -111,6 +111,7 @@ A run without either variable runs everything, which is what the CI does: `scrip
 | `connection` | the setting for a Paperless in the local network, the connection checklist of accounts with too few permissions, and the save |
 | `dry-run` | dry-runs on the settings page and with `occ`, the preview of the path template and settings that are not saved |
 | `export` | *Synchronize now* as a background job, the first export and its entry in the Activity stream |
+| `worker` | a worker of Nextcloud that keeps running, whose next run of *Synchronize now* takes the settings saved since its last one |
 | `moves` | moves of the metadata alone, with the SHA-256 and the MD5 checksums of Paperless, and a file that keeps its ID |
 | `webhook` | the webhook of a workflow of Paperless, its secret and the throttling of wrong ones |
 | `new-content` | a new content of a document, in place, also for a share of the file |

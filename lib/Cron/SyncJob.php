@@ -21,6 +21,7 @@ final class SyncJob extends TimedJob {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		ITimeFactory $time,
+		private SavedSettings $savedSettings,
 		private ConfigService $configService,
 		private StatusService $statusService,
 		private SyncService $syncService,
@@ -33,6 +34,8 @@ final class SyncJob extends TimedJob {
 	}
 
 	protected function run(mixed $argument): void {
+		// First, as a worker that keeps running would otherwise run it with the settings of its start.
+		$this->savedSettings->reload();
 		// The settings page shows the same time as the next scheduled run. It counts from the last
 		// real run, so that a dry-run doesn't push the schedule back.
 		$nextRun = $this->statusService->nextRun($this->configService->get());
