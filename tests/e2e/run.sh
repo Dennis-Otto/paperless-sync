@@ -1092,7 +1092,7 @@ worker_finished() {
 			sleep 0.2
 		done
 		exit 1' sh "$1"; then
-		echo "The worker of Nextcloud didn't finish job $1 within 30 seconds: $("${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" cat /tmp/paperless-sync-worker.log)" >&2
+		echo "The worker of Nextcloud didn't finish job $1 within 30 seconds: $("${DOCKER_BIN}" exec "${NEXTCLOUD_CONTAINER}" sh -c 'cat /tmp/paperless-sync-worker.log')" >&2
 		exit 1
 	fi
 }
