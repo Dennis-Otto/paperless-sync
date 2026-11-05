@@ -26,6 +26,7 @@ final class ManualSyncJob extends QueuedJob {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		ITimeFactory $time,
+		private SavedSettings $savedSettings,
 		private SyncService $syncService,
 		private IJobList $jobList,
 		private LoggerInterface $logger,
@@ -36,6 +37,8 @@ final class ManualSyncJob extends QueuedJob {
 
 	/** @param mixed $argument the administrator who pressed the button, as {"author": user ID} */
 	protected function run(mixed $argument): void {
+		// First, as a worker that keeps running would otherwise run it with the settings of its start.
+		$this->savedSettings->reload();
 		/** @psalm-suppress MixedAssignment the argument is the JSON that the job list stored, checked below */
 		$author = is_array($argument) ? ($argument['author'] ?? '') : '';
 		$author = is_string($author) ? $author : '';

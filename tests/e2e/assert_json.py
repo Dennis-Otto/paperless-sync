@@ -205,6 +205,15 @@ elif mode == "queued":
     expect("queued", True)
     if payload.get("status", {}).get("state") != "queued":
         raise AssertionError(f"The answer of a queued run brings no queued status: {payload!r}")
+elif mode == "worker":
+    # The second run of "Synchronize now" in a worker that keeps running, after the settings page
+    # turned the archive export off: a run that reads no document of Paperless, which the worker
+    # makes only when it reads the settings anew, and not one with the export of its first run.
+    expect("state", "completed")
+    expect("error", "")
+    summary = payload.get("summary", {})
+    if summary.get("dryRun") is not False or summary.get("activeDocuments") != 0:
+        raise AssertionError(f"worker: the run read the documents of Paperless, as with the export of the worker's first run: {summary!r}")
 elif mode == "getting-started":
     # The getting-started checklist of a status of the settings page: its five steps in their
     # order, each in the state of the argument, complete once the first run succeeded, and the

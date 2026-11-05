@@ -77,7 +77,7 @@ final class ManualSyncJobTest extends TestCase {
 			$this->ownerMapping(),
 		);
 		$this->jobList = $this->createMock(IJobList::class);
-		$this->job = new ManualSyncJob($this->createStub(ITimeFactory::class), $sync, $this->jobList, $this->logger);
+		$this->job = new ManualSyncJob($this->createStub(ITimeFactory::class), $this->savedSettings(), $sync, $this->jobList, $this->logger);
 		$this->job->setId('42');
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
 	}
@@ -135,6 +135,25 @@ final class ManualSyncJobTest extends TestCase {
 		$this->job->start($this->createStub(IJobList::class));
 
 		self::assertSame([], $this->paperless->connections);
+	}
+
+	/**
+	 * A worker that keeps running, as the README recommends one, ran each job with the settings of
+	 * its start: one started before the app was configured failed every run by hand until it was
+	 * restarted (#323). Each job reads the settings saved since the last one.
+	 */
+	public function testAWorkerThatKeepsRunningRunsWithTheSettingsSavedSinceItsLastJob(): void {
+		$this->keepsLoadedSettings = true;
+		$url = $this->settings['paperless_url'];
+		$this->settings['paperless_url'] = '';
+		$this->job->start($this->createStub(IJobList::class));
+		self::assertSame('failed', $this->settings['status_last_state'], 'The worker started before the app was configured.');
+
+		// The settings page saves the URL, in the web server.
+		$this->settings['paperless_url'] = $url;
+		$this->job->start($this->createStub(IJobList::class));
+
+		self::assertSame('completed', $this->settings['status_last_state']);
 	}
 
 	public function testCompletedRunIsNotQueuedAgain(): void {

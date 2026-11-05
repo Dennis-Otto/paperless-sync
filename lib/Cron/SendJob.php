@@ -23,6 +23,7 @@ final class SendJob extends TimedJob {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		ITimeFactory $time,
+		private SavedSettings $savedSettings,
 		private SendService $sendService,
 		private LoggerInterface $logger,
 	) {
@@ -34,6 +35,8 @@ final class SendJob extends TimedJob {
 	}
 
 	protected function run(mixed $argument): void {
+		// First, as a worker that keeps running would otherwise run it with the settings of its start.
+		$this->savedSettings->reload();
 		try {
 			$this->sendService->process();
 		} catch (\Throwable $exception) {

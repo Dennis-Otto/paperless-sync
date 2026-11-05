@@ -31,6 +31,7 @@ final class DocumentSyncJob extends QueuedJob {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		ITimeFactory $time,
+		private SavedSettings $savedSettings,
 		private SyncService $syncService,
 		private WebhookService $webhook,
 		private IJobList $jobList,
@@ -42,6 +43,8 @@ final class DocumentSyncJob extends QueuedJob {
 
 	/** @param mixed $argument the document, as {"document": ID} */
 	protected function run(mixed $argument): void {
+		// First, as a worker that keeps running would otherwise run it with the settings of its start.
+		$this->savedSettings->reload();
 		/** @psalm-suppress MixedAssignment the argument is the JSON that the job list stored, checked below */
 		$document = is_array($argument) ? ($argument['document'] ?? null) : null;
 		if (!is_int($document) || $document < 1) {

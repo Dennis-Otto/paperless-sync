@@ -93,7 +93,7 @@ final class DocumentSyncJobTest extends TestCase {
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->webhook = $this->webhookService($this->clock);
 		$this->webhook->create();
-		$this->job = new DocumentSyncJob($this->clock, $sync, $this->webhook, $this->jobList, $this->logger);
+		$this->job = new DocumentSyncJob($this->clock, $this->savedSettings(), $sync, $this->webhook, $this->jobList, $this->logger);
 		$this->job->setId('42');
 		$this->job->setArgument(['document' => 123]);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
@@ -144,6 +144,21 @@ final class DocumentSyncJobTest extends TestCase {
 
 		self::assertSame([], $this->storage->files);
 		self::assertSame('off', $this->webhook->state()['lastCall']['result'] ?? null);
+	}
+
+	/** A worker that keeps running runs the next call of the webhook with synchronization turned on since its start (#323). */
+	public function testAWorkerThatKeepsRunningSeesSynchronizationTurnedOnSinceItsLastJob(): void {
+		$this->keepsLoadedSettings = true;
+		$this->settings['sync_enabled'] = false;
+		$this->job->start($this->createStub(IJobList::class));
+		self::assertSame('off', $this->webhook->state()['lastCall']['result'] ?? null);
+
+		// The settings page turns synchronization on, in the web server, and Paperless calls again.
+		$this->settings['sync_enabled'] = true;
+		$this->job->start($this->createStub(IJobList::class));
+
+		self::assertSame('%PDF-123', $this->storage->files[self::PATH]);
+		self::assertSame('exported', $this->webhook->state()['lastCall']['result'] ?? null);
 	}
 
 	/** A tag to mirror that Paperless lacks makes the run fail, logged as an error, not skipped as if it were off. */

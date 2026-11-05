@@ -79,7 +79,7 @@ final class SyncJobTest extends TestCase {
 			$this->systemTagService(new TestStorage()),
 			$this->ownerMapping(),
 		);
-		$this->job = new SyncJob($this->clock, $this->configService, $status, $this->sync, $this->logger);
+		$this->job = new SyncJob($this->clock, $this->savedSettings(), $this->configService, $status, $this->sync, $this->logger);
 		OC::$server = new TestServer([LoggerInterface::class => new NullLogger()]);
 	}
 
@@ -104,6 +104,20 @@ final class SyncJobTest extends TestCase {
 		$this->start();
 
 		self::assertArrayNotHasKey('status_last_state', $this->settings);
+	}
+
+	/** A worker without a class of jobs runs this one as well: it sees the schedule turned on since its start (#323). */
+	public function testAWorkerThatKeepsRunningSeesTheScheduleTurnedOnSinceItsLastJob(): void {
+		$this->keepsLoadedSettings = true;
+		$this->settings['sync_enabled'] = false;
+		$this->start();
+		self::assertArrayNotHasKey('status_last_state', $this->settings);
+
+		// The settings page turns the schedule on, in the web server.
+		$this->settings['sync_enabled'] = true;
+		$this->start();
+
+		self::assertSame('completed', $this->settings['status_last_state']);
 	}
 
 	public function testRunWaitsForTheConfiguredInterval(): void {
