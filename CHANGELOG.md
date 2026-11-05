@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.5.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.0...v1.5.1) (2026-11-05)
+
+### Bug fixes
+
+- **A worker that keeps running takes the settings saved since it started:** a worker of Nextcloud for *Synchronize now*, such as `occ background-job:worker 'OCA\PaperlessSync\Cron\ManualSyncJob'` in a service of systemd or a container of its own, ran every job with the settings of its start. One started before the app was configured failed every *Synchronize now* with `Paperless Sync is not completely configured.` until it was restarted, and one started earlier ran with an old token, URL or target user. Each job of the app now reads the settings as they are saved when it starts, the scheduled run, the run of a document for the webhook and the sending of files from Files as well. After the update, restart such a worker one time, so that it loads the new version; a worker started with `--once` needs nothing.
+
 ## [1.5.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.4.0...v1.5.0) (2026-11-03)
 
 ### Features
