@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.5.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.0...v1.5.1) (2026-11-05)
+
+
+### Bug fixes
+
+* a worker that keeps running reads the settings saved since it started ([#362](https://github.com/Dennis-Otto/paperless-sync/issues/362)) ([c35414f](https://github.com/Dennis-Otto/paperless-sync/commit/c35414f2457e395bcf8e02960aec4f5b50a82791))
+
 ## [1.5.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.4.0...v1.5.0) (2026-11-03)
 
 ### Features
