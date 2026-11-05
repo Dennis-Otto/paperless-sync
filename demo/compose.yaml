@@ -149,17 +149,19 @@ services:
       - nextcloud:/var/www/html
 
   # Runs "Synchronize now" of the settings within seconds, instead of within five minutes of the
-  # cron. Each turn reads the settings anew, which a worker that keeps running doesn't (#323).
+  # cron. It keeps running and reads the settings anew for each job, since 1.5.1 (#323).
   worker:
     image: nextcloud:35.0.2-apache@sha256:e0b1a2af52c82c07b7a0e8e59878bd8769e704447734d5d238a836982f51b9c8
     attach: false
     init: true
     network_mode: service:paperless
     user: www-data
+    restart: unless-stopped
     command:
-      - sh
-      - -c
-      - while true; do php /var/www/html/occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob'; sleep 5; done
+      - php
+      - /var/www/html/occ
+      - background-job:worker
+      - OCA\PaperlessSync\Cron\ManualSyncJob
     depends_on:
       nextcloud:
         condition: service_healthy
