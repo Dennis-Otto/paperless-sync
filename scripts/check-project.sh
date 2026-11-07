@@ -1265,15 +1265,15 @@ rm -r "$l10n_copy/zh"
 node scripts/check-l10n.mjs --new sv --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
 # The codes of Nextcloud also have digits, as Spanish of Latin America has, and a script. The
 # App Store has a code of its own for a few variants, such as sr-latn for sr@latin and zh-hant for
-# Traditional Chinese, and the language itself for the others, such as es for es_419.
-for language in es_419 sr@latin zh_TW; do
+# Traditional Chinese, and the language itself for the others, such as es for es_419. Hong Kong
+# shares zh-hant with Taiwan, whose texts appinfo/info.xml has.
+for language in es_419 sr@latin zh_HK; do
   node scripts/check-l10n.mjs --new "$language" --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
   broken_catalog "l10n/$language.json has no words for \"Paperless Sync\""
 done
 broken_catalog 'appinfo/info.xml has no <summary lang="sr-latn">, so the App Store shows its English one to whoever reads the app in sr@latin.'
-broken_catalog 'appinfo/info.xml has no <description lang="zh-hant">, so the App Store shows its English one to whoever reads the app in zh_TW.'
-if [[ "$(node scripts/check-l10n.mjs "$l10n_copy" 2>&1)" == *'lang="es"'* ]]; then
-  echo 'scripts/check-l10n.mjs should take the summary and the description of es for es_419, which the App Store knows only as es.'
+if [[ "$(node scripts/check-l10n.mjs "$l10n_copy" 2>&1)" == *'lang="es"'* || "$(node scripts/check-l10n.mjs "$l10n_copy" 2>&1)" == *'lang="zh-hant"'* ]]; then
+  echo 'scripts/check-l10n.mjs should take the summary and the description of es for es_419 and those of zh-hant for zh_HK, which the App Store knows only as es and zh-hant.'
   exit 1
 fi
 for refused in 'it|exists already' 'sv|exists already' 'tlh|need their rule' 'Not a code|is no code of a language'; do
@@ -1308,6 +1308,12 @@ fi
 sed -i '/<description lang="zh-hans">/,/]]><\/description>/d' "$l10n_copy/app/appinfo/info.xml"
 if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <description lang="zh-hans">, so the App Store shows its English one to whoever reads the app in zh_CN.'* ]]; then
   echo "scripts/check-l10n.mjs should ask for the description of zh_CN as zh-hans in appinfo/info.xml, but says: $output"
+  exit 1
+fi
+# Traditional Chinese has the code zh-hant, not zh_TW or zh.
+sed -i '/<description lang="zh-hant">/,/]]><\/description>/d' "$l10n_copy/app/appinfo/info.xml"
+if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <description lang="zh-hant">, so the App Store shows its English one to whoever reads the app in zh_TW.'* ]]; then
+  echo "scripts/check-l10n.mjs should ask for the description of zh_TW as zh-hant in appinfo/info.xml, but says: $output"
   exit 1
 fi
 echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."

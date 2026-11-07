@@ -7,6 +7,7 @@
 	<summary lang="es">Refleja documentos de Paperless-ngx en Archivos de Nextcloud y envía ficheros de Nextcloud a Paperless</summary>
 	<summary lang="fr">Refléter les documents de Paperless-ngx dans Fichiers de Nextcloud et envoyer des fichiers de Nextcloud vers Paperless</summary>
 	<summary lang="zh-hans">将 Paperless-ngx 文档镜像到 Nextcloud 的“文件”中，并将文件从 Nextcloud 发送到 Paperless</summary>
+	<summary lang="zh-hant">將 Paperless-ngx 文件鏡像到 Nextcloud 的「檔案」中，並將檔案從 Nextcloud 傳送到 Paperless</summary>
 	<description><![CDATA[
 ### A native bridge between Paperless-ngx and Nextcloud
 
@@ -192,6 +193,44 @@ Paperless API 令牌存储在服务器端 Nextcloud 的凭据管理器中，绝�
 Paperless Sync 独立于 [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search)。两个应用都能识别 `[P123]` 这类稳定的文档标记，可以分别安装。
 
 文档提供[英文版](https://dennis-otto.github.io/paperless-sync/)和[德文版](https://dennis-otto.github.io/paperless-sync/de/)。
+]]></description>
+	<description lang="zh-hant"><![CDATA[
+### Paperless-ngx 與 Nextcloud 之間的原生橋樑
+
+Paperless Sync 將 Paperless-ngx 中已定稿的文件鏡像到 Nextcloud 中清晰易讀的資料夾結構裡。Paperless 仍是權威的文件封存，而 Nextcloud 透過「檔案」、桌面同步、行動應用程式、分享及其內建的檢視器提供熟悉的存取方式。
+
+### 結構化、自動化、可還原
+
+- 透過 Paperless API 匯出封存 PDF 或原始檔
+- 依關聯方、文件類型、日期、標題和文件 ID 建立可設定的目錄階層
+- 透過管理員的同一個連線，為每個 Nextcloud 使用者提供其在 Paperless 中擁有的文件，並可選擇同時提供 Paperless 與其分享的文件（選用的按使用者分配所有權）
+- Paperless 中繼資料變更時移動或重新命名檔案
+- 跳過 Paperless 收件匣中的文件，直到其定稿；加上排除標籤後移除先前已鏡像的副本
+- 將可設定的 Nextcloud 收件匣中的檔案匯入 Paperless
+- 為您選擇的群組提供「檔案」中檔案或資料夾選單裡的「傳送到 Paperless」，並可在 Paperless 中開啟已鏡像副本所對應的文件
+- 依「流程」規則將檔案傳送到 Paperless，例如某個群組成員上傳的每個 PDF，並加上其專屬標籤
+- 將 Paperless 的垃圾桶鏡像到專用的 Nextcloud 資料夾
+- 選用：在文件從 Paperless 中永久刪除後將其移除
+- 移動和刪除後移除空的封存資料夾
+- 透過 Nextcloud 原生的背景作業執行，中斷後可從中斷處繼續
+- 當 Paperless 的工作流程呼叫受金鑰保護的 Webhook 時，在幾秒內鏡像新增或變更的文件
+- 鏡像持續失敗時通知管理員，在「管理」下提供設定檢查，並為 Uptime Kuma 或 Home Assistant 等監控工具提供狀態 API
+
+### 預設安全
+
+在管理員完成並驗證設定之前，同步一直處於停用狀態。永久刪除需要明確開啟，並可透過多次確認文件遺失來加以保護。試執行可以預覽變更，而不會修改任何檔案。
+
+Paperless API Token 儲存在伺服器端 Nextcloud 的憑證管理器中，絕不會傳回給瀏覽器。本應用程式直接透過 Nextcloud 的檔案系統 API 運作，因此不需要 Nextcloud 密碼或 WebDAV 帳號密碼。
+
+### 需求
+
+- Nextcloud 33 至 35，並設定可靠的 cron 背景作業
+- 可連線的 Paperless-ngx 執行個體，版本 2.16 或更新（包括 3.x），並可使用其 API
+- 一個專用的 Paperless 服務帳號，只擁有已啟用功能所需的權限
+
+Paperless Sync 獨立於 [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search)。兩個應用程式都能辨識 `[P123]` 這類穩定的文件標記，可以分別安裝。
+
+說明文件提供[英文版](https://dennis-otto.github.io/paperless-sync/)和[德文版](https://dennis-otto.github.io/paperless-sync/de/)。
 ]]></description>
 	<version>1.5.1</version>
 	<licence>AGPL-3.0-or-later</licence>
