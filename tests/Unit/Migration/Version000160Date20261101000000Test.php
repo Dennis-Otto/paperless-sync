@@ -27,9 +27,17 @@ final class Version000160Date20261101000000Test extends TestCase {
 	/** @var array<string, int> the rows of each table of the state of the runs */
 	private array $rows = ['paperless_sync_export' => 0, 'paperless_sync_import' => 0];
 
-	/** @return array<string, array{string}> the languages whose catalogs this version brings, also a regional variant */
+	/**
+	 * The languages whose catalogs this version or a later one brings, also a regional variant: an
+	 * update from an earlier version straight to a later one runs this step with the later catalogs.
+	 *
+	 * @return array<string, array{string}>
+	 */
 	public static function newCatalogs(): array {
-		return ['French' => ['fr'], 'Spanish' => ['es'], 'Spanish of Mexico' => ['es_MX'], 'French of France' => ['fr_FR']];
+		return [
+			'French' => ['fr'], 'Spanish' => ['es'], 'Spanish of Mexico' => ['es_MX'], 'French of France' => ['fr_FR'],
+			'Simplified Chinese, of a later version' => ['zh_CN'], 'Traditional Chinese, of a later version' => ['zh_TW'],
+		];
 	}
 
 	/** An instance in a new language that was set up with occ goes on in the English names of its archive. */
@@ -87,9 +95,19 @@ final class Version000160Date20261101000000Test extends TestCase {
 		self::assertSame('Archiv', $this->configService()->get()->archiveFolder);
 	}
 
+	/**
+	 * German, also a regional variant, whose catalog a later version may bring.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function germanLanguages(): array {
+		return ['German' => ['de'], 'German of Germany' => ['de_DE'], 'German of Switzerland' => ['de_CH']];
+	}
+
 	/** A German instance keeps its German names, which are not those of the new languages. */
-	public function testAnotherLanguageStoresTheNamesThatItHas(): void {
-		$this->defaultLanguage = 'de';
+	#[DataProvider('germanLanguages')]
+	public function testAnotherLanguageStoresTheNamesThatItHas(string $language): void {
+		$this->defaultLanguage = $language;
 		$this->settings = ['target_user' => 'paperless'];
 
 		$this->migrate('Kept 9 names of folders of Paperless Sync, so that the languages of this version move no archive.');

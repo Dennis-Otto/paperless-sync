@@ -126,7 +126,7 @@ bash scripts/eslint.sh js/flow.js # one file
 
 ## Translations
 
-Paperless Sync speaks English, German, French, Spanish and Simplified Chinese. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The texts of each language are in `l10n/<language>.json`, which PHP reads, and in its copy `l10n/<language>.js` for the browser.
+Paperless Sync speaks English, German, French, Spanish, Simplified Chinese and Traditional Chinese. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The texts of each language are in `l10n/<language>.json`, which PHP reads, and in its copy `l10n/<language>.js` for the browser.
 
 `node scripts/check-l10n.mjs`, which `scripts/check-project.sh` runs, compares every catalog with the code, so that no message stays English on a page in another language:
 
@@ -137,9 +137,9 @@ Paperless Sync speaks English, German, French, Spanish and Simplified Chinese. T
 
 - **A text that the code translates** is the first argument of `translate()` and `translatePlural()` in `js/`, of `$l->t()` and `$l->n()` in `templates/` and `lib/`, and a text that `lib/` translates later, when it knows the language of the reader: the message and the hint of a `ConnectionCheck`, the text of an `InvalidSettingException`, and the text of an error that a run keeps, a `RunError`, a `RunException` or a `FullStorageException`. Write it as a string at that place, or as a class constant that the call names, such as `self::STATUS_HINT`, never as a variable: the check can't read it, so it fails with the file and the line, and `--fix` then changes nothing, instead of dropping the words of a text that looks unused.
 - **A missing text** fails with its file and line, and **a translation whose placeholders differ** from those of its English one, `{name}` in JavaScript, `%s` or `%1$s` in PHP, `%n` in a plural, fails with both texts: PHP stops at a placeholder without its value, and one that is missing loses it. So does a lone `%`, such as in *100 %*, as PHP reads the text as a format.
-- **A plural** has as many forms as the `pluralForm` of its catalog names. Nextcloud picks a form in PHP by that rule, but in the browser by a table of its own: for French and Spanish, the rule has a form for millions in the middle, and the browser shows that one for every count but one, so the check asks for it to repeat the third form, as Nextcloud's own catalogs do. Chinese, Japanese and Korean have one form for every count, so a plural of `l10n/zh_CN.json` has one.
+- **A plural** has as many forms as the `pluralForm` of its catalog names. Nextcloud picks a form in PHP by that rule, but in the browser by a table of its own: for French and Spanish, the rule has a form for millions in the middle, and the browser shows that one for every count but one, so the check asks for it to repeat the third form, as Nextcloud's own catalogs do. Chinese, Japanese and Korean have one form for every count, so a plural of `l10n/zh_CN.json` and `l10n/zh_TW.json` has one.
 - **A label in quotes:** a message that names a setting by its label, such as *"Create missing tags"*, must hold the translation of that label.
-- **A language without its texts for the App Store** fails: `appinfo/info.xml` needs a `<summary lang="…">` and a `<description lang="…">` for each catalog, with the code that the App Store has for the language: the language itself, such as `fr` for `fr` and `es` for `es_419`, or one of the few variants of [its schema](https://apps.nextcloud.com/schema/apps/info.xsd), such as `zh-hans` for `zh_CN`, `pt-br` for `pt_BR` and `sr-latn` for `sr@latin`. The check names the code that it misses.
+- **A language without its texts for the App Store** fails: `appinfo/info.xml` needs a `<summary lang="…">` and a `<description lang="…">` for each catalog, with the code that the App Store has for the language: the language itself, such as `fr` for `fr` and `es` for `es_419`, or one of the few variants of [its schema](https://apps.nextcloud.com/schema/apps/info.xsd), such as `zh-hans` for `zh_CN`, `zh-hant` for `zh_TW`, `pt-br` for `pt_BR` and `sr-latn` for `sr@latin`. The check names the code that it misses.
 - **A text that no code translates any more, a text twice and an `l10n/<language>.js` that differs** fail as well; `node scripts/check-l10n.mjs --fix` removes them and writes each `l10n/<language>.js` from its `l10n/<language>.json`.
 
 A new text is English in the code; add it with its words to every `l10n/<language>.json`, in the terms of the settings page, such as *Basisordner* for *Base folder* in German, and run `node scripts/check-l10n.mjs --fix`. If you don't speak a language, write the text as well as you can, with a translator if you need one: a native speaker can correct it later, and a missing one shows in English. A message about a setting names it by its label in quotes, and an `InvalidSettingException` names the setting as well, so that the page moves the focus there.
@@ -148,7 +148,7 @@ A run, also a scheduled one, has no reader when it writes its errors, so it keep
 
 ## Translate Paperless Sync
 
-The app speaks English, German, French, Spanish and Simplified Chinese. The French, Spanish and Chinese texts were drafted with the help of an AI and wait for native speakers to read them: a word that sounds wrong is worth a note in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general) or a pull request, and so is a language that the app doesn't speak yet. You need a text editor or the editor of GitHub, no PHP and no build.
+The app speaks English, German, French, Spanish, Simplified Chinese and Traditional Chinese. The French, Spanish and Chinese texts were drafted with the help of an AI and wait for native speakers to read them: a word that sounds wrong is worth a note in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general) or a pull request, and so is a language that the app doesn't speak yet. You need a text editor or the editor of GitHub, no PHP and no build.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/how-a-translation-reaches-its-readers.dark.svg">
@@ -162,28 +162,29 @@ The app speaks English, German, French, Spanish and Simplified Chinese. The Fren
 | French | `l10n/fr.json` | *vous* | an AI, waiting for review |
 | Spanish | `l10n/es.json` | *tú* | an AI, waiting for review |
 | Simplified Chinese | `l10n/zh_CN.json` | *您* | an AI, waiting for review |
+| Traditional Chinese, as written in Taiwan | `l10n/zh_TW.json` | *您* | an AI, waiting for review |
 
 Each line of a catalog pairs a text of the code, in English, with its translation. Change only the right side: the code looks a translation up by the English text, character for character. Placeholders stay, such as `%s`, `%1$s`, `%n` and `{document}`, and the words around them may move; `%1$s` and `%2$s` may swap places.
 
-- **The words of Nextcloud and of Paperless:** a word that one of them shows as well takes its translation, such as the permission *View* of *Documents* in Paperless, which is *Afficher* in French, *Ver* in Spanish and *查看* in Chinese, or *Files* of Nextcloud, which is *Fichiers*, *Archivos* and *文件*. Chinese takes *往来方* for the correspondent of Paperless and *动态* for the Activity of Nextcloud. The [catalogs of Nextcloud](https://github.com/nextcloud/server/tree/master/core/l10n) and those of [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx/tree/dev/src-ui/src/locale) have them.
+- **The words of Nextcloud and of Paperless:** a word that one of them shows as well takes its translation, such as the permission *View* of *Documents* in Paperless, which is *Afficher* in French, *Ver* in Spanish, *查看* in Simplified and *檢視* in Traditional Chinese, or *Files* of Nextcloud, which is *Fichiers*, *Archivos*, *文件* and *檔案*. Simplified Chinese takes *往来方* for the correspondent of Paperless and *动态* for the Activity of Nextcloud, and Traditional Chinese the words of Taiwan, *關聯方* and *活動*: write it in the words that Nextcloud and Paperless-ngx use there, not as Simplified Chinese in other characters, such as *檔案* for a file and *文件* for a document of Paperless. The [catalogs of Nextcloud](https://github.com/nextcloud/server/tree/master/core/l10n) and those of [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx/tree/dev/src-ui/src/locale) have them.
 - **The words of this app** stay the same throughout:
 
-    | English | French | Spanish | Simplified Chinese |
-    | --- | --- | --- | --- |
-    | archive | archive | archivo | 归档 |
-    | file | fichier | fichero, as *archivo* is the archive | 文件 |
-    | inbox | boîte de réception | bandeja de entrada | 收件箱 |
-    | to mirror | refléter | reflejar | 镜像 |
-    | run | exécution | ejecución | 运行 |
-    | dry-run | simulation | simulación | 试运行 |
-    | scan | analyse | análisis | 扫描 |
-    | target user | utilisateur cible | usuario de destino | 目标用户 |
-    | background job | tâche de fond | tarea en segundo plano | 后台任务 |
+    | English | French | Spanish | Simplified Chinese | Traditional Chinese |
+    | --- | --- | --- | --- | --- |
+    | archive | archive | archivo | 归档 | 封存 |
+    | file | fichier | fichero, as *archivo* is the archive | 文件 | 檔案 |
+    | inbox | boîte de réception | bandeja de entrada | 收件箱 | 收件匣 |
+    | to mirror | refléter | reflejar | 镜像 | 鏡像 |
+    | run | exécution | ejecución | 运行 | 執行 |
+    | dry-run | simulation | simulación | 试运行 | 試執行 |
+    | scan | analyse | análisis | 扫描 | 掃描 |
+    | target user | utilisateur cible | usuario de destino | 目标用户 | 目標使用者 |
+    | background job | tâche de fond | tarea en segundo plano | 后台任务 | 背景作業 |
 
 - **French typography:** a no-break space before `:`, `;`, `?` and `!` and inside `«` and `»`, and the apostrophe `’`.
-- **Chinese typography:** the full-width punctuation of Chinese, such as `，`, `。`, `：`, `（）` and `“”`, and a space between a Chinese word and a word in Latin letters, a number or a placeholder, such as `发送到 Paperless` and `%n 个文档`. Names, such as Paperless, Nextcloud, Webhook and cron, stay as they are.
+- **Chinese typography:** the full-width punctuation of Chinese, such as `，`, `。`, `：` and `（）`, with the quotes `“”` in Simplified and `「」` in Traditional Chinese, as Nextcloud has them, and a space between a Chinese word and a word in Latin letters, a number or a placeholder, such as `发送到 Paperless` and `%n 个文档`. Names, such as Paperless, Nextcloud, Webhook and cron, stay as they are.
 - **What stays in English:** the log, the command line and the lines of *Copy report*, for bug reports. The website and the pictures stay in English and German, so the *Help* links of the other languages open the English guide.
-- **A regional variant:** Nextcloud takes the catalog of the exact language of an account, so an account set to *Español (México)*, `es_MX`, reads the app in English until it has a catalog of its own. The names of the folders fall back to those of `es`. Traditional Chinese, `zh_TW` and `zh_HK`, reads the app in English as well, also its folders, as `zh_CN` is Simplified Chinese and no catalog of `zh` exists.
+- **A regional variant:** Nextcloud takes the catalog of the exact language of an account, so an account set to *Español (México)*, `es_MX`, reads the app in English until it has a catalog of its own. The names of the folders fall back to those of `es`. Traditional Chinese of Hong Kong, `zh_HK`, reads the app in English as well, also its folders, as the catalog of Traditional Chinese is that of Taiwan, `zh_TW`, and no catalog of `zh` exists.
 
 ### Correct a translation
 
@@ -207,7 +208,7 @@ Each line of a catalog pairs a text of the code, in English, with its translatio
     ```
 
 2. Translate every text of `l10n/<language>.json`; the check lists those that are still empty. A plural has one entry for each form of its rule, and where the rule has a form for millions, the second repeats the third. The names of the folders, such as *Archive* and *_Deleted*, become the folders of new installations in this language: keep them short, without a `/` and different from each other.
-3. Add `<summary lang="it">` and `<description lang="it">` to `appinfo/info.xml`, after those of the other languages, with the same versions of Nextcloud as the English one. A few variants have a code of their own in the App Store, such as `zh-hans` for `zh_CN`: the check names the code that it misses.
+3. Add `<summary lang="it">` and `<description lang="it">` to `appinfo/info.xml`, after those of the other languages, with the same versions of Nextcloud as the English one. A few variants have a code of their own in the App Store, such as `zh-hans` for `zh_CN` and `zh-hant` for `zh_TW`: the check names the code that it misses.
 4. Run `node scripts/check-l10n.mjs --fix` and `node scripts/check-l10n.mjs`, and name the language in *Translations*, in the table above and in the table of *Folder names* in `README.md` and `README.de.md`.
 5. Open a pull request with a title such as `feat(i18n): speak Italian`. An installation in use keeps the folders that it has: a run stores the names that it uses ([decision 0036](decisions/0036-more-languages-without-moving-an-archive.md)), so a new language needs no step of the update.
 

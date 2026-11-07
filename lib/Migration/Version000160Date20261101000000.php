@@ -18,14 +18,18 @@ use OCP\Migration\IOutput;
  * names of the earlier versions: it stores each one that it never saved, such as one set up with
  * occ. Without that, the archive of a French instance would start again in Archives.
  *
- * Every other installation in use stores the names that it has too. From here on a run does that
- * itself, so that the catalog of a further language moves no archive and needs no such step.
+ * The earlier versions proposed English names in every language but German, so the same holds
+ * for a language whose catalog a later version brings, such as Chinese: an update from an earlier
+ * version straight to that one runs this step with the later catalogs.
+ *
+ * A German installation in use stores the German names that it has. From here on a run stores
+ * its names itself, so that the catalog of a further language needs no such step of its own.
  */
 final class Version000160Date20261101000000 extends KeepNamesStep {
-	/** The languages whose catalogs this version brings. */
-	private const NEW_CATALOGS = ['es', 'fr'];
+	/** The one language besides English whose catalog the earlier versions had. */
+	private const EARLIER_CATALOG = 'de';
 
-	/** The names that every earlier version proposed in these languages. */
+	/** The names that every earlier version proposed in every language but German. */
 	private const ENGLISH_NAMES = [
 		'base_path' => 'Documents/Paperless',
 		'archive_folder' => 'Archive',
@@ -42,9 +46,11 @@ final class Version000160Date20261101000000 extends KeepNamesStep {
 		if (!$this->inUse()) {
 			return;
 		}
-		$kept = in_array($this->configService->defaultLanguage(), self::NEW_CATALOGS, true)
-			? $this->configService->keepNames(self::ENGLISH_NAMES)
-			: $this->configService->keepDefaultNames();
+		// The generic language, so that a regional German, such as de_DE, stays German also when a
+		// later version brings a catalog of its own for it.
+		$kept = explode('_', $this->configService->defaultLanguage())[0] === self::EARLIER_CATALOG
+			? $this->configService->keepDefaultNames()
+			: $this->configService->keepNames(self::ENGLISH_NAMES);
 		if ($kept > 0) {
 			$output->info("Kept {$kept} names of folders of Paperless Sync, so that the languages of this version move no archive.");
 		}
