@@ -95,9 +95,19 @@ final class Version000160Date20261101000000Test extends TestCase {
 		self::assertSame('Archiv', $this->configService()->get()->archiveFolder);
 	}
 
+	/**
+	 * German, also a regional variant, whose catalog a later version may bring.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function germanLanguages(): array {
+		return ['German' => ['de'], 'German of Germany' => ['de_DE'], 'German of Switzerland' => ['de_CH']];
+	}
+
 	/** A German instance keeps its German names, which are not those of the new languages. */
-	public function testAnotherLanguageStoresTheNamesThatItHas(): void {
-		$this->defaultLanguage = 'de';
+	#[DataProvider('germanLanguages')]
+	public function testAnotherLanguageStoresTheNamesThatItHas(string $language): void {
+		$this->defaultLanguage = $language;
 		$this->settings = ['target_user' => 'paperless'];
 
 		$this->migrate('Kept 9 names of folders of Paperless Sync, so that the languages of this version move no archive.');

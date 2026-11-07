@@ -46,7 +46,9 @@ final class Version000160Date20261101000000 extends KeepNamesStep {
 		if (!$this->inUse()) {
 			return;
 		}
-		$kept = $this->configService->defaultLanguage() === self::EARLIER_CATALOG
+		// The generic language, so that a regional German, such as de_DE, stays German also when a
+		// later version brings a catalog of its own for it.
+		$kept = explode('_', $this->configService->defaultLanguage())[0] === self::EARLIER_CATALOG
 			? $this->configService->keepDefaultNames()
 			: $this->configService->keepNames(self::ENGLISH_NAMES);
 		if ($kept > 0) {
