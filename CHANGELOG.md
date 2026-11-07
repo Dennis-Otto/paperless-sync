@@ -6,10 +6,13 @@ All notable changes to this project are documented in this file.
 
 ## [1.6.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.1...v1.6.0) (2026-11-07)
 
-
 ### Features
 
-* **i18n:** speak Traditional Chinese ([#371](https://github.com/Dennis-Otto/paperless-sync/issues/371)) ([7fcf97b](https://github.com/Dennis-Otto/paperless-sync/commit/7fcf97b1c7f2dbcad550a020b3b804a00e18592b))
+- **Paperless Sync speaks Traditional Chinese:** on a Nextcloud set to 正體中文（臺灣） (`zh_TW`), the settings, their messages, the connection checklist, the notes in Files, *Send to Paperless*, the Activity stream and the notifications are in Traditional Chinese, in the words that Nextcloud and Paperless-ngx use in Taiwan, such as 檔案, 封存 and 關聯方. A new installation on such a Nextcloud proposes Traditional Chinese folders, such as `文件/Paperless`, `封存` and `收件匣`; an installation in use keeps the folders that it has. The App Store shows the summary and the description in Traditional Chinese. The texts were drafted with the help of an AI and checked against the English ones; native speakers are welcome to improve them. Hong Kong (`zh_HK`) stays English for now.
+
+### Bug fixes
+
+- An installation in use on a Chinese Nextcloud that updates straight from a version before 1.4.0 keeps its English folders. Before, the update gave it the Chinese names of the new catalog, so that the next run would have started the archive again in other folders.
 
 ## [1.5.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.0...v1.5.1) (2026-11-05)
 
