@@ -320,6 +320,8 @@
 		"Insert %s": "插入 %s",
 		"Name": "名称",
 		"Insert a custom field, then type its name": "插入自定义字段，然后输入其名称",
+		"none": "无",
+		"Insert a custom field as Paperless writes it, with the text for a document without a value, then type its name": "按 Paperless 的写法插入自定义字段，并附上文档没有值时使用的文本，然后输入其名称",
 		"Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.": "变量写作 {{ name }}，Paperless 的自定义字段写作 {{ custom_fields.Name }}；{{ id }} 为必填项。文档缺少的值（例如所有者、标签或自定义字段）将留空。",
 		"Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.": "每个文件名都会保留标记 [P{{ id }}] 并以 {{ extension }} 结尾，模板中省略时会自动添加。过长的标题和名称会被缩短到 Nextcloud 允许的长度。",
 		"The paths of the newest documents of Paperless appear here.": "Paperless 最新文档的路径会显示在这里。",
@@ -645,6 +647,7 @@
 		"The archive path template must contain {{ id }}.": "归档路径模板必须包含 {{ id }}。",
 		"Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.": "请在归档路径模板中写出自定义字段的名称，例如 {{ custom_fields.发票号码 }}。",
 		"Unknown archive path variable: %s.": "未知的归档路径变量：%s。",
+		"Unknown archive path filter: %s. Only a custom field takes one, get_cf_value, as in {{ custom_fields|get_cf_value(\"Invoice number\", \"none\") }}.": "未知的归档路径过滤器：%s。只有自定义字段可以使用过滤器 get_cf_value，例如 {{ custom_fields|get_cf_value(\"发票号码\", \"无\") }}。",
 		"The archive path template contains an invalid placeholder.": "归档路径模板包含无效的占位符。",
 		"Paperless has no custom field named %s, which the archive path template uses.": "Paperless 中没有名为 %s 的自定义字段，但归档路径模板使用了它。",
 		"A relative folder path is required.": "需要相对的文件夹路径。",
@@ -675,7 +678,16 @@
 		],
 		"_The last run of Paperless Sync completed with errors: %s_::_The last %n runs of Paperless Sync completed with errors, the last one with: %s_": [
 			"Paperless Sync 已连续 %n 次运行完成但有错误，最近一次的错误为：%s"
-		]
+		],
+		"Use the storage path of a document in Paperless": "使用文档在 Paperless 中的保存路径",
+		"A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.": "有保存路径的文档会按其模板的路径放在归档文件夹下，与 Paperless 的存放方式相同，并带有标记 [P{{ id }}] 和扩展名；其他文档遵循归档路径模板。",
+		"A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.": "如果保存路径的模板使用了 Jinja 逻辑、过滤器或路径模板不认识的变量，它也遵循归档路径模板，报告会列出该保存路径。打开或关闭此开关会移动副本，就像新模板一样。",
+		"Storage paths of Paperless": "Paperless 的保存路径",
+		"_The archive can't follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them._::_The archive can't follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them._": [
+			"归档无法遵循 Paperless 的保存路径 {names}：其模板使用了 Jinja 逻辑、过滤器或路径模板不认识的变量，或 Paperless 中没有的自定义字段，或应用的账户看不到它，因此其文档会放到归档路径模板指定的位置。"
+		],
+		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless 未列出其用户，而归档所遵循的保存路径中的 {{ owner_username }} 需要用户列表；API 令牌所属的用户需要查看用户的权限：%s",
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自定义字段，而归档所遵循的保存路径使用了自定义字段；API 令牌所属的用户需要查看自定义字段的权限：%s"
 	},
 	"pluralForm": "nplurals=1; plural=0;"
 }

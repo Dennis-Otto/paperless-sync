@@ -39,7 +39,7 @@ final class SettingsController extends Controller {
 
 	/** The settings of the page that decide the path of a document or whether a run skips it; the preview takes the others as saved. */
 	private const PREVIEW_SETTINGS = [
-		'path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags',
+		'path_template', 'follow_storage_paths', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags',
 		'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled',
 	];
 
@@ -65,8 +65,9 @@ final class SettingsController extends Controller {
 	 * page and its fallback names, before they are saved, for the preview under the template. It
 	 * reads Paperless with the saved connection and changes nothing, so it needs no password.
 	 *
-	 * The answer is the template as a save would store it, whether Paperless is connected, and the
-	 * paths, relative to the archive folder; an invalid template is a message, as on save.
+	 * The answer is the template as a save would store it, whether Paperless is connected, the
+	 * paths, relative to the archive folder, and the storage paths of those documents whose
+	 * templates the archive can't follow; an invalid template is a message, as on save.
 	 *
 	 * @param array<string, mixed> $settings
 	 */
@@ -80,14 +81,16 @@ final class SettingsController extends Controller {
 			$normalized = $this->pathTemplate->validateTemplate(is_string($template) ? $template : '');
 			// Without a saved connection, the template is checked, and there is nothing to show.
 			if (!$saved->tokenConfigured) {
-				return new JSONResponse(['template' => $normalized, 'connected' => false, 'paths' => []]);
+				return new JSONResponse(['template' => $normalized, 'connected' => false, 'paths' => [], 'unsupportedStoragePaths' => []]);
 			}
 			$config = $this->configService->validate(array_intersect_key($settings, array_flip(self::PREVIEW_SETTINGS)));
+			$preview = $this->syncService->previewPaths($config, self::PREVIEW_DOCUMENTS);
 
 			return new JSONResponse([
 				'template' => $config->pathTemplate,
 				'connected' => true,
-				'paths' => $this->syncService->previewPaths($config, self::PREVIEW_DOCUMENTS),
+				'paths' => $preview['paths'],
+				'unsupportedStoragePaths' => $preview['unsupportedStoragePaths'],
 			]);
 		} catch (InvalidArgumentException $exception) {
 			return $this->invalid($exception);

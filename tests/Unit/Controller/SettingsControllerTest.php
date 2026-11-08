@@ -78,6 +78,8 @@ final class SettingsControllerTest extends TestCase {
 
 	/** @var PaperlessClientInterface&MockObject */
 	private PaperlessClientInterface $paperless;
+	/** @var array{names: array<string, string>, templates: array<string, string>} the storage paths of Paperless */
+	private array $storagePaths = ['names' => [], 'templates' => []];
 	/** @var PaperlessClientFactoryInterface&MockObject the factory that makes $paperless the client of every connection */
 	private PaperlessClientFactoryInterface $clients;
 	/** @var list<PaperlessConnection> every connection that the controller made a client for, in their order */
@@ -99,6 +101,7 @@ final class SettingsControllerTest extends TestCase {
 		];
 		$this->paperless = $this->createMock(PaperlessClientInterface::class);
 		$this->paperless->expects(self::never())->method('testConnection');
+		$this->paperless->method('storagePaths')->willReturnCallback(fn (): array => $this->storagePaths);
 		$this->paperless->method('preflight')->willReturnCallback(function (SyncConfig $config): array {
 			$connection = $this->connects[array_key_last($this->connects)];
 			self::assertSame([$config->paperlessUrl, $config->paperlessLocalNetwork], [$connection->url, $connection->localNetwork], 'The checklist checks the connection of the settings that it checks.');
@@ -908,6 +911,7 @@ final class SettingsControllerTest extends TestCase {
 				['id' => 12, 'title' => 'Strom', 'path' => 'Energie GmbH/March/Strom [P12].pdf', 'skipped' => false],
 				['id' => 11, 'title' => '', 'path' => '_No correspondent/February/Ohne Namen [P11].pdf', 'skipped' => false],
 			],
+			'unsupportedStoragePaths' => [],
 		], self::answer($response));
 		self::assertSame(PathTemplateService::DEFAULT_TEMPLATE, $this->configService()->get()->pathTemplate, 'The preview saves nothing.');
 		self::assertSame('paperless', $this->configService()->get()->targetUser);
@@ -941,8 +945,35 @@ final class SettingsControllerTest extends TestCase {
 		$response = $this->controller->preview(['path_template' => '{{title}} [P{{id}}]']);
 
 		self::assertSame(Http::STATUS_OK, $response->getStatus());
-		self::assertSame(['template' => '{{ title }} [P{{ id }}]', 'connected' => false, 'paths' => []], self::answer($response));
-		self::assertSame(['template' => PathTemplateService::DEFAULT_TEMPLATE, 'connected' => false, 'paths' => []], self::answer($this->controller->preview()), 'Without a template on the page, the preview shows the saved one.');
+		self::assertSame(['template' => '{{ title }} [P{{ id }}]', 'connected' => false, 'paths' => [], 'unsupportedStoragePaths' => []], self::answer($response));
+		self::assertSame(['template' => PathTemplateService::DEFAULT_TEMPLATE, 'connected' => false, 'paths' => [], 'unsupportedStoragePaths' => []], self::answer($this->controller->preview()), 'Without a template on the page, the preview shows the saved one.');
+	}
+
+	/**
+	 * The switch of the page decides whether the preview follows the storage paths of Paperless,
+	 * before a save, and the answer names a storage path that the archive can't follow.
+	 */
+	public function testThePreviewFollowsTheStoragePathsWithTheSwitchOfThePage(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->paperless->method('newestDocuments')->willReturn([
+			['id' => 12, 'title' => 'Strom', 'storage_path' => 3, 'created' => '2026-03-02', 'original_file_name' => 'scan.pdf'],
+			['id' => 11, 'title' => 'Miete', 'storage_path' => 4, 'created' => '2026-02-01', 'original_file_name' => 'scan.pdf'],
+		]);
+		$this->paperless->method('tags')->willReturn(['names' => [], 'inbox' => []]);
+		$this->storagePaths = [
+			'names' => ['3' => 'Haushalt', '4' => 'Wohnung'],
+			'templates' => ['3' => 'Haushalt/{{ created_year }}/{{ title }}', '4' => '{% if correspondent %}{{ correspondent }}{% endif %}/{{ title }}'],
+		];
+		$template = ['path_template' => '{{ title }} [P{{ id }}]'];
+
+		$followed = self::answer($this->controller->preview($template + ['follow_storage_paths' => true]));
+		$saved = self::answer($this->controller->preview($template));
+
+		self::assertSame(['Haushalt/2026/Strom [P12].pdf', 'Miete [P11].pdf'], array_column($followed['paths'], 'path'));
+		self::assertSame(['Wohnung'], $followed['unsupportedStoragePaths'], 'The storage path with logic of Jinja is named, and its document follows the path template.');
+		self::assertSame(['Strom [P12].pdf', 'Miete [P11].pdf'], array_column($saved['paths'], 'path'), 'Without the switch on the page, the saved setting decides.');
+		self::assertSame([], $saved['unsupportedStoragePaths']);
+		self::assertFalse($this->configService()->get()->followStoragePaths, 'The preview saves nothing.');
 	}
 
 	/** @return array<string, array{mixed, string}> a template and what the page says about it, in German */

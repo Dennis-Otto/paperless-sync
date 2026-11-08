@@ -229,6 +229,8 @@
 		"Insert %s": "%s einfügen",
 		"Name": "Name",
 		"Insert a custom field, then type its name": "Benutzerdefiniertes Feld einfügen, dann seinen Namen eingeben",
+		"none": "keine",
+		"Insert a custom field as Paperless writes it, with the text for a document without a value, then type its name": "Benutzerdefiniertes Feld in der Schreibweise von Paperless einfügen, mit dem Text für ein Dokument ohne Wert, dann seinen Namen eingeben",
 		"Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.": "Schreibe Variablen als {{ name }} und ein benutzerdefiniertes Feld von Paperless als {{ custom_fields.Name }}; {{ id }} ist Pflicht. Ein Wert, den ein Dokument nicht hat, etwa ein Eigentümer, Tags oder ein benutzerdefiniertes Feld, bleibt leer.",
 		"Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.": "Jeder Dateiname behält die Markierung [P{{ id }}] und endet mit {{ extension }}; fehlen sie in der Vorlage, werden sie ergänzt. Lange Titel und Namen werden auf die Länge gekürzt, die Nextcloud erlaubt.",
 		"The paths of the newest documents of Paperless appear here.": "Hier erscheinen die Pfade der neuesten Dokumente von Paperless.",
@@ -271,6 +273,7 @@
 		"The archive path template must contain {{ id }}.": "Die Archiv-Pfadvorlage muss {{ id }} enthalten.",
 		"Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.": "Nenne das benutzerdefinierte Feld in der Archiv-Pfadvorlage, etwa {{ custom_fields.Rechnungsnummer }}.",
 		"Unknown archive path variable: %s.": "Unbekannte Variable in der Archiv-Pfadvorlage: %s.",
+		"Unknown archive path filter: %s. Only a custom field takes one, get_cf_value, as in {{ custom_fields|get_cf_value(\"Invoice number\", \"none\") }}.": "Unbekannter Filter in der Archiv-Pfadvorlage: %s. Nur ein benutzerdefiniertes Feld nimmt einen, get_cf_value, etwa {{ custom_fields|get_cf_value(\"Rechnungsnummer\", \"keine\") }}.",
 		"The archive path template contains an invalid placeholder.": "Die Archiv-Pfadvorlage enthält einen ungültigen Platzhalter.",
 		"Paperless has no custom field named %s, which the archive path template uses.": "Paperless hat kein benutzerdefiniertes Feld namens %s, das die Archiv-Pfadvorlage verwendet.",
 		"Paperless has no tag named %s, which \"Only mirror documents with these tags\" names; a run would remove the copies of the documents that should stay.": "Paperless hat keinen Tag namens %s, den „Nur Dokumente mit diesen Tags spiegeln“ nennt; ein Lauf würde die Kopien der Dokumente entfernen, die bleiben sollen.",
@@ -709,7 +712,17 @@
 		"Paperless Sync updated the account {username} in Paperless and saved the settings with its token.": "Paperless Sync hat das Konto {username} in Paperless aktualisiert und die Einstellungen mit seinem Token gespeichert.",
 		"Read the notes of the connection checklist.": "Lies die Hinweise der Verbindungs-Checkliste.",
 		"The user exists in Paperless already and stays as it is. Choose another username, or update it.": "Den Benutzer gibt es in Paperless schon, und er bleibt, wie er ist. Wähle einen anderen Benutzernamen, oder aktualisiere ihn.",
-		"Could not set up the account in Paperless.": "Das Konto konnte in Paperless nicht eingerichtet werden."
+		"Could not set up the account in Paperless.": "Das Konto konnte in Paperless nicht eingerichtet werden.",
+		"Use the storage path of a document in Paperless": "Speicherpfad eines Dokuments in Paperless verwenden",
+		"A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.": "Ein Dokument mit einem Speicherpfad kommt unterhalb des Archivordners an den Pfad seiner Vorlage, so wie Paperless es ablegt, mit der Markierung [P{{ id }}] und seiner Endung; die anderen Dokumente folgen der Archiv-Pfadvorlage.",
+		"A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.": "Ein Speicherpfad, dessen Vorlage Logik von Jinja, einen Filter oder eine Variable verwendet, die die Pfadvorlage nicht kennt, folgt ebenfalls der Archiv-Pfadvorlage, und der Bericht nennt ihn. Das Ein- oder Ausschalten verschiebt die Kopien, wie eine neue Vorlage.",
+		"Storage paths of Paperless": "Speicherpfade von Paperless",
+		"_The archive can't follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them._::_The archive can't follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them._": [
+			"Das Archiv kann dem Speicherpfad {names} von Paperless nicht folgen, der Logik von Jinja, einen Filter oder eine Variable verwendet, die die Pfadvorlage nicht kennt, oder ein benutzerdefiniertes Feld, das Paperless nicht hat, oder den das Konto der App nicht sieht; seine Dokumente kommen deshalb dorthin, wo die Archiv-Pfadvorlage sie ablegt.",
+			"Das Archiv kann den Speicherpfaden {names} von Paperless nicht folgen, die Logik von Jinja, einen Filter oder eine Variable verwenden, die die Pfadvorlage nicht kennt, oder ein benutzerdefiniertes Feld, das Paperless nicht hat, oder die das Konto der App nicht sieht; ihre Dokumente kommen deshalb dorthin, wo die Archiv-Pfadvorlage sie ablegt."
+		],
+		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless hat seine Benutzer nicht aufgelistet, die ein Speicherpfad, dem das Archiv folgt, für {{ owner_username }} braucht; der Benutzer des API-Tokens braucht die Berechtigung, Benutzer anzuzeigen: %s",
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless hat seine benutzerdefinierten Felder nicht aufgelistet, die ein Speicherpfad verwendet, dem das Archiv folgt; der Benutzer des API-Tokens braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen: %s"
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

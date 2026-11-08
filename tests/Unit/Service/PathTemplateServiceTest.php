@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Tests\Doubles\TestConfig;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -406,6 +407,109 @@ final class PathTemplateServiceTest extends TestCase {
 		);
 	}
 
+	/**
+	 * The names of PAPERLESS_FILENAME_FORMAT that Paperless Sync has since #385: a template of a
+	 * storage path or of the file names of Paperless gives the names that Paperless gives.
+	 */
+	public function testRendersTheNamesOfTheFileNamesOfPaperlessAsPaperlessDoes(): void {
+		$template = '{{ added_year_short }}-{{ added_month_name }}/{{ created_month_name_short }} {{ added_month_name_short }}/{{ doc_pk }} {{ original_name }} [P{{ id }}]{{ extension }}';
+
+		self::assertSame(
+			'26-September/Aug Sep/0000123 scan [P123].pdf',
+			$this->service->render($this->config($template), $this->document(['id' => 123, 'added' => '2026-09-01T12:30:00+02:00']), [], [], []),
+			'doc_pk has the seven digits of Paperless, original_name is the original file name without its extension.',
+		);
+		self::assertSame(
+			'12345678 [P12345678].pdf',
+			$this->service->render($this->config('{{ doc_pk }} [P{{ id }}]'), $this->document(['id' => '12345678']), [], [], []),
+			'An ID of more than seven digits stays whole.',
+		);
+		self::assertSame(
+			$this->service->render($this->config('{{ original_filename }} [P{{ id }}]'), $this->document(['original_file_name' => 'Kontoauszug: 08.2026.pdf']), [], [], []),
+			$this->service->render($this->config('{{ original_name }} [P{{ id }}]'), $this->document(['original_file_name' => 'Kontoauszug: 08.2026.pdf']), [], [], []),
+			'original_name is another name of original_filename.',
+		);
+	}
+
+	public function testShortensALongOriginalNameLikeTheTitle(): void {
+		$path = $this->service->render($this->config('{{ original_name }} [P{{ id }}]{{ extension }}'), $this->document(['original_file_name' => str_repeat('Ж', 150) . '.pdf']), [], [], []);
+
+		self::assertLessThanOrEqual(217, strlen($path));
+		self::assertStringStartsWith('ЖЖЖ', $path);
+		self::assertStringEndsWith(' [P1].pdf', $path);
+	}
+
+	public function testTheDatesOfTheNamesOfPaperlessFallBackLikeTheOthers(): void {
+		self::assertSame(
+			'_Ohne Datum/_Ohne Datum-_Ohne Datum/_Ohne Datum [P1].pdf',
+			$this->service->render(
+				$this->config('{{ created_month_name_short }}/{{ added_year_short }}-{{ added_month_name }}/{{ added_month_name_short }} [P{{ id }}]'),
+				$this->document(['created' => null, 'added' => 'yesterday']),
+				[],
+				[],
+				[],
+			),
+		);
+	}
+
+	/** @return array<string, array{mixed, string, string, string}> */
+	public static function shortMonthNames(): array {
+		return [
+			'German' => [false, 'de', 'Mär', 'Dez'],
+			'French, without the dot of its abbreviation at the end of a name' => [false, 'fr', 'mars', 'déc'],
+			'the forced language' => ['ru', 'de', 'март', 'дек'],
+			'English' => [false, '', 'Mar', 'Dec'],
+		];
+	}
+
+	/** The short name of a month, as the long one, in the language of Nextcloud for everyone. */
+	#[RequiresPhpExtension('intl')]
+	#[DataProvider('shortMonthNames')]
+	public function testShortensTheNameOfTheMonthInTheLanguageOfNextcloud(mixed $forced, string $default, string $march, string $december): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValue')->with('force_language', false)->willReturn($forced);
+		$config->method('getSystemValueString')->with('default_language', '')->willReturn($default);
+		$service = new PathTemplateService($config);
+
+		self::assertSame(
+			"{$march}/{$december} [P1].pdf",
+			$service->render($this->config('{{ created_month_name_short }}/{{ added_month_name_short }} [P{{ id }}]'), $this->document(['created' => '2026-03-02', 'added' => '2026-12-31']), [], [], []),
+		);
+	}
+
+	/** @return array<string, array{mixed, string}> */
+	public static function variantsOfEnglish(): array {
+		return [
+			'British English, where ICU writes Sept' => [false, 'en_GB'],
+			'Australian English, forced, where ICU writes June' => ['en-AU', 'de'],
+			'American English' => [false, 'en_US'],
+		];
+	}
+
+	/** Every English writes the short name with three letters, as Paperless does, whatever ICU writes. */
+	#[RequiresPhpExtension('intl')]
+	#[DataProvider('variantsOfEnglish')]
+	public function testShortensTheNameOfTheMonthWithThreeLettersInEveryEnglish(mixed $forced, string $default): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValue')->with('force_language', false)->willReturn($forced);
+		$config->method('getSystemValueString')->with('default_language', '')->willReturn($default);
+		$service = new PathTemplateService($config);
+
+		self::assertSame(
+			'Jun Sep/September [P1].pdf',
+			$service->render($this->config('{{ created_month_name_short }} {{ added_month_name_short }}/{{ added_month_name }} [P{{ id }}]'), $this->document(['created' => '2026-06-02', 'added' => '2026-09-01']), [], [], []),
+		);
+	}
+
+	public function testShortensTheNameOfTheMonthInEnglishWithoutTheLanguageOfNextcloud(): void {
+		self::assertSame(
+			'Mar/September Sep [P1].pdf',
+			$this->service->render($this->config('{{ created_month_name_short }}/{{ added_month_name }} {{ added_month_name_short }} [P{{ id }}]'), $this->document(['created' => '2026-03-26', 'added' => '2026-09-01']), [], [], []),
+			'In English, the short name is the first three letters of the long one, as Paperless writes it.',
+		);
+		self::assertSame('13 [P1].pdf', $this->service->render($this->config('{{ added_month_name_short }} [P{{ id }}]'), $this->document(['added' => '2026-13-01']), [], [], []), 'A month that no calendar has keeps its number.');
+	}
+
 	public function testValuesThatADocumentLacksStayEmpty(): void {
 		$template = '{{ owner_username }}/{{ asn }} {{ title }} {{ custom_fields.Invoice number }}{{ tag_list }}{{ page_count }} [P{{ id }}]';
 
@@ -518,6 +622,10 @@ final class PathTemplateServiceTest extends TestCase {
 			'without spaces' => ['{{custom_fields.Invoice number}} [P{{id}}]', '{{ custom_fields.Invoice number }} [P{{ id }}]'],
 			'with spaces around the name' => ['{{ custom_fields. Rechnungsnummer  }} [P{{ id }}]', '{{ custom_fields.Rechnungsnummer }} [P{{ id }}]'],
 			'with any character but braces and slashes' => ['{{ custom_fields.Größe (m²) & Co.: #1 }}/[P{{ id }}]', '{{ custom_fields.Größe (m²) & Co.: #1 }}/[P{{ id }}]'],
+			'in the spelling of Paperless' => ['{{custom_fields|get_cf_value("Invoice number")}} [P{{id}}]', '{{ custom_fields|get_cf_value("Invoice number") }} [P{{ id }}]'],
+			'in the spelling of Paperless with spaces and a default' => ["{{ custom_fields | get_cf_value( 'Invoice number' ,\t\"none\" ) }}/[P{{ id }}]", "{{ custom_fields|get_cf_value('Invoice number', \"none\") }}/[P{{ id }}]"],
+			'in the spelling of Paperless with the other quote inside' => ['{{ custom_fields|get_cf_value("Kunde\'s Nr", \'Kein "Wert"\') }}/[P{{ id }}]', '{{ custom_fields|get_cf_value("Kunde\'s Nr", \'Kein "Wert"\') }}/[P{{ id }}]'],
+			'in the spelling of Paperless with an empty default' => ['{{ custom_fields|get_cf_value(" Nr ", "") }} [P{{ id }}]', '{{ custom_fields|get_cf_value(" Nr ", "") }} [P{{ id }}]'],
 		];
 	}
 
@@ -533,6 +641,9 @@ final class PathTemplateServiceTest extends TestCase {
 			'with an empty name' => ['{{ custom_fields. }}/[P{{ id }}]', 'Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.'],
 			'another variable with a name' => ['{{ title.short }}/[P{{ id }}]', 'Unknown archive path variable: {{ title.short }}.'],
 			'a name with a slash' => ['{{ custom_fields.Net/Gross }}/[P{{ id }}]', 'The archive path template contains an invalid placeholder.'],
+			'get_cf_value without a name' => ['{{ custom_fields|get_cf_value("") }}/[P{{ id }}]', 'Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.'],
+			'get_cf_value with a name of spaces' => ['{{ custom_fields|get_cf_value("  ", "none") }}/[P{{ id }}]', 'Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.'],
+			'get_cf_value with a slash in the name' => ['{{ custom_fields|get_cf_value("Net/Gross") }}/[P{{ id }}]', 'The archive path template contains an invalid placeholder.'],
 		];
 	}
 
@@ -541,6 +652,65 @@ final class PathTemplateServiceTest extends TestCase {
 		$this->expectException(InvalidArgumentException::class);
 		$this->expectExceptionMessage($message);
 		$this->service->validateTemplate($template);
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function unknownFilters(): array {
+		return [
+			'a filter of Jinja' => ['{{ title|upper }}/[P{{ id }}]', '{{ title|upper }}'],
+			'a filter with spaces and an argument' => ['{{ created | default("none") }} [P{{ id }}]', '{{ created | default("none") }}'],
+			'another filter of a custom field' => ['{{ custom_fields|first }} [P{{ id }}]', '{{ custom_fields|first }}'],
+			'get_cf_value of another variable' => ['{{ title|get_cf_value( "Nr" ) }} [P{{ id }}]', '{{ title|get_cf_value("Nr") }}'],
+			'get_cf_value without quotes' => ['{{ custom_fields|get_cf_value(Nr) }} [P{{ id }}]', '{{ custom_fields|get_cf_value(Nr) }}'],
+			'get_cf_value with quotes that differ' => ['{{ custom_fields|get_cf_value("Nr\') }} [P{{ id }}]', '{{ custom_fields|get_cf_value("Nr\') }}'],
+			'get_cf_value with three arguments' => ['{{ custom_fields|get_cf_value("Nr", "a", "b") }} [P{{ id }}]', '{{ custom_fields|get_cf_value("Nr", "a", "b") }}'],
+			'get_cf_value with named arguments' => ['{{ custom_fields|get_cf_value("Nr", default="none") }} [P{{ id }}]', '{{ custom_fields|get_cf_value("Nr", default="none") }}'],
+		];
+	}
+
+	/** A filter of Jinja other than get_cf_value of the custom fields fails with its spelling and the one that works. */
+	#[DataProvider('unknownFilters')]
+	public function testRefusesTheFiltersThatTheTemplateDoesNotKnow(string $template, string $placeholder): void {
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage("Unknown archive path filter: {$placeholder}. Only a custom field takes one, get_cf_value, as in {{ custom_fields|get_cf_value(\"Invoice number\", \"none\") }}.");
+		$this->service->validateTemplate($template);
+	}
+
+	public function testRendersACustomFieldInTheSpellingOfPaperlessWithItsDefault(): void {
+		$template = $this->service->validateTemplate('{{ custom_fields|get_cf_value("Customer") }}/{{ custom_fields|get_cf_value("Customer", "none") }}/{{ custom_fields|get_cf_value(\'Priority\', "Normal: low") }} {{ custom_fields.Priority }} [P{{ id }}]');
+		$fields = [
+			'1' => ['name' => 'Customer', 'type' => 'string', 'options' => []],
+			'2' => ['name' => 'Priority', 'type' => 'select', 'options' => ['aB3' => 'High']],
+		];
+		$render = fn (array $values): string => $this->service->render($this->config($template), $this->document(['custom_fields' => $values]), [], [], [], [], [], $fields);
+
+		self::assertSame(['Customer', 'Priority'], $this->service->customFieldNames($template));
+		self::assertSame('ACME/ACME/High High [P1].pdf', $render([['field' => 1, 'value' => 'ACME'], ['field' => 2, 'value' => 'aB3']]), 'A value is the same in both spellings.');
+		self::assertSame('Folder/none/Normal_ low [P1].pdf', $render([['field' => 1, 'value' => null]]), 'A document without a value takes the default, cleaned like a value, and is empty without one.');
+		self::assertSame('Folder/Folder/Normal_ low [P1].pdf', $render([['field' => 1, 'value' => ''], ['field' => 2, 'value' => null]]), 'An empty text is a value, as for Paperless.');
+	}
+
+	public function testShortensALongDefaultLikeTheTitle(): void {
+		$path = $this->service->render(
+			$this->config('{{ custom_fields|get_cf_value("Note", "' . str_repeat('Ж', 150) . '") }} [P{{ id }}]{{ extension }}'),
+			$this->document(),
+			[],
+			[],
+			[],
+			[],
+			[],
+			['1' => ['name' => 'Note', 'type' => 'string', 'options' => []]],
+		);
+
+		self::assertLessThanOrEqual(217, strlen($path));
+		self::assertStringStartsWith('ЖЖЖ', $path);
+		self::assertStringEndsWith(' [P1].pdf', $path);
+	}
+
+	public function testATemplateWithADefaultForACustomFieldThatPaperlessDoesNotHaveIsRefused(): void {
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('Paperless has no custom field named "Customer", which the archive path template uses.');
+		$this->service->render($this->config('{{ custom_fields|get_cf_value("Customer", "none") }} [P{{ id }}]'), $this->document(), [], [], [], [], [], []);
 	}
 
 	public function testNamesTheMonthInEnglishWithoutTheLanguageOfNextcloud(): void {
@@ -580,6 +750,142 @@ final class PathTemplateServiceTest extends TestCase {
 
 	public function testAMonthThatNoCalendarHasKeepsItsNumber(): void {
 		self::assertSame('13/[P1].pdf', $this->service->render($this->config('{{ created_month_name }}/[P{{ id }}]'), $this->document(['created' => '2026-13-01']), [], [], []));
+	}
+
+	/** @return array<string, array{string, string}> the template of a storage path of Paperless, and the one that the archive follows */
+	public static function storagePathTemplates(): array {
+		return [
+			'the example of Paperless' => ['{{ created_year }}/{{ correspondent }}/{{ title }}', '{{ created_year }}/{{ correspondent }}/{{ title }}'],
+			'without spaces' => ['{{owner_username}}/{{document_type}}/{{title}}', '{{ owner_username }}/{{ document_type }}/{{ title }}'],
+			'a custom field as Paperless writes it' => ['{{ custom_fields|get_cf_value("Account", "none") }}/{{ title }}', '{{ custom_fields|get_cf_value("Account", "none") }}/{{ title }}'],
+			'with the marker and the extension' => ['Steuern/{{ title }} [P{{ id }}]{{ extension }}', 'Steuern/{{ title }} [P{{ id }}]{{ extension }}'],
+			'slashes at its ends, between its parts and backslashes' => ['/Steuern//{{ created_year }}\\{{ title }}/', 'Steuern/{{ created_year }}/{{ title }}'],
+			'one part of blanks' => ['Steuern/ /{{ title }}', 'Steuern/{{ title }}'],
+		];
+	}
+
+	#[DataProvider('storagePathTemplates')]
+	public function testTakesTheTemplateOfAStoragePathThatItCanRender(string $path, string $template): void {
+		self::assertSame($template, $this->service->storagePathTemplate($path));
+	}
+
+	/** @return array<string, array{string}> */
+	public static function unsupportedStoragePathTemplates(): array {
+		return [
+			'empty' => [''],
+			'only slashes' => [' / /'],
+			'logic of Jinja' => ['{% if correspondent %}{{ correspondent }}{% else %}Other{% endif %}/{{ title }}'],
+			'a comment of Jinja' => ['{# year #}{{ created_year }}/{{ title }}'],
+			'a variable that the template does not know' => ['{{ created_year }}/{{ created_time }}/{{ title }}'],
+			'the tags as a list' => ['{{ tags }}/{{ title }}'],
+			'a filter of Jinja' => ['{{ correspondent|lower }}/{{ title }}'],
+			'get_cf_value on another variable' => ['{{ title|get_cf_value("Account") }}'],
+			'a custom field without a name' => ['{{ custom_fields. }}/{{ title }}'],
+			'the placeholders of older versions of Paperless' => ['{created_year}/{correspondent}/{title}'],
+			'a brace alone' => ['{{ created_year }}/{{ title }}}'],
+		];
+	}
+
+	/** A storage path that the archive can't render as Paperless does is not followed, so its documents keep the path template. */
+	#[DataProvider('unsupportedStoragePathTemplates')]
+	public function testRefusesTheTemplateOfAStoragePathThatItCannotRender(string $path): void {
+		self::assertNull($this->service->storagePathTemplate($path));
+	}
+
+	/**
+	 * With the setting on, a document whose storage path has a template that the archive can
+	 * render goes to its path, with the marker and the extension added; one without a storage
+	 * path, and one of a storage path that it can't follow, keep the path template, and the latter
+	 * is named. A custom field that Paperless doesn't have makes a storage path one that the
+	 * archive can't follow, as the path template would fail the run with it.
+	 */
+	public function testADocumentFollowsTheTemplateOfItsStoragePath(): void {
+		$config = TestConfig::of(['pathTemplate' => '{{ correspondent }}/{{ title }} [P{{ id }}]', 'followStoragePaths' => true]);
+		$names = ['3' => 'Haushalt', '4' => 'Wohnung', '5' => 'Konto', '6' => 'Steuern'];
+		$templates = [
+			'3' => '{{ created_year }}/{{ correspondent }}/{{ title }}',
+			'4' => '{% if correspondent %}{{ correspondent }}{% endif %}/{{ title }}',
+			'5' => '{{ custom_fields.Konto }}/{{ title }}',
+			'6' => 'Steuern/{{ custom_fields|get_cf_value("Jahr", "ohne") }}/{{ title }}',
+		];
+		$customFields = ['1' => ['name' => 'Jahr', 'type' => 'string', 'options' => []]];
+
+		$storagePaths = $this->service->storagePaths($config, $names, $templates, $customFields);
+		$pathOf = fn (array $document): string => $this->service->render($storagePaths->configOf($config, $document), $document, ['4' => 'Energie GmbH'], [], $storagePaths->names, [], [], $customFields);
+
+		self::assertSame('2026/Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 3])));
+		self::assertSame('2026/Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => '3'])), 'Paperless may give the ID as a string of digits.');
+		self::assertSame('Steuern/ohne/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 6])));
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document()), 'A document without a storage path follows the path template.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => null])));
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 4])), 'Logic of Jinja leaves the document with the path template.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 5])), 'So does a custom field that Paperless does not have.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 9])), 'So does a storage path that Paperless does not list.');
+		self::assertSame(
+			['#9', 'Konto', 'Wohnung'],
+			$storagePaths->unsupported([
+				$this->document(['storage_path' => 4]),
+				$this->document(['id' => 6, 'storage_path' => 9]),
+				$this->document(['id' => 2, 'storage_path' => 5]),
+				$this->document(['id' => 3, 'storage_path' => 4]),
+				$this->document(['id' => 4, 'storage_path' => 3]),
+				$this->document(['id' => 5]),
+			]),
+			'Each storage path that the archive cannot follow is named once, sorted, and only those of the documents; one that Paperless does not list to the account is named by its ID.',
+		);
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 3])]));
+		self::assertSame(['{{ created_year }}/{{ correspondent }}/{{ title }}', 'Steuern/{{ custom_fields|get_cf_value("Jahr", "ohne") }}/{{ title }}', '{{ custom_fields.Konto }}/{{ title }}'], array_values(array_unique([
+			...$this->service->storagePathTemplates($config, ['3' => $templates['3'], '6' => $templates['6']]),
+			...$this->service->storagePathTemplates($config, $templates),
+		])), 'The lists that a run reads follow the templates that the archive may follow.');
+	}
+
+	/**
+	 * Without the setting, no storage path is named, also none that Paperless does not list, as
+	 * every document follows the path template then.
+	 */
+	public function testWithoutTheSettingNoStoragePathIsNamed(): void {
+		$storagePaths = $this->service->storagePaths(TestConfig::of(['followStoragePaths' => false]), ['4' => 'Wohnung'], ['4' => '{% if a %}x{% endif %}'], []);
+
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 4]), $this->document(['storage_path' => 9])]));
+	}
+
+	/** A storage path without a name in Paperless is named by its ID. */
+	public function testAStoragePathWithoutANameIsNamedByItsId(): void {
+		$config = TestConfig::of(['followStoragePaths' => true]);
+
+		$storagePaths = $this->service->storagePaths($config, [], ['8' => '{{ tags }}'], []);
+
+		self::assertSame(['8'], $storagePaths->unsupported([$this->document(['storage_path' => 8])]));
+		self::assertSame(['Ablage'], $this->service->storagePaths($config, ['7' => 'Ablage'], [], [])->unsupported([$this->document(['storage_path' => 7])]), 'One that Paperless lists without a template keeps its name.');
+	}
+
+	/** Without the setting, every document follows the path template, and no storage path is named or needs a list. */
+	public function testWithoutTheSettingNoDocumentFollowsItsStoragePath(): void {
+		$config = TestConfig::of(['pathTemplate' => '{{ title }} [P{{ id }}]']);
+		$templates = ['3' => '{{ owner_username }}/{{ title }}', '4' => '{% if x %}{% endif %}'];
+
+		$storagePaths = $this->service->storagePaths($config, ['3' => 'Haushalt', '4' => 'Wohnung'], $templates, []);
+
+		self::assertSame($config, $storagePaths->configOf($config, $this->document(['storage_path' => 3])));
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 4])]));
+		self::assertSame(['3' => 'Haushalt', '4' => 'Wohnung'], $storagePaths->names);
+		self::assertSame([], $this->service->storagePathTemplates($config, $templates));
+	}
+
+	/** A storage path follows the same rules as the path template: plain values, cleaned names and the byte limits. */
+	public function testTheTemplateOfAStoragePathKeepsTheRulesOfThePaths(): void {
+		$config = TestConfig::of(['followStoragePaths' => true]);
+		$storagePaths = $this->service->storagePaths($config, ['3' => 'Lang'], ['3' => '../{{ correspondent }}/{{ title }}'], []);
+		$document = $this->document(['storage_path' => 3, 'title' => str_repeat('Ä', 200) . ' $1 {{ id }}']);
+
+		$path = $this->service->render($storagePaths->configOf($config, $document), $document, ['4' => 'CON'], [], $storagePaths->names);
+
+		[$folder, $correspondent, $file] = explode('/', $path);
+		self::assertSame('Folder', $folder, 'A part that is no name, such as .., never leaves the archive.');
+		self::assertSame('_CON', $correspondent, 'The name of a device of Windows gets its _.');
+		self::assertStringEndsWith(' [P1].pdf', $file);
+		self::assertLessThanOrEqual(217, strlen($file));
 	}
 
 	/** @param array<string, mixed> $overrides @return array<string, mixed> */

@@ -71,7 +71,12 @@ interface PaperlessClientInterface {
 	/** @return array<string, string> */
 	public function documentTypes(): array;
 
-	/** @return array<string, string> */
+	/**
+	 * The storage paths of Paperless by their IDs: the name of each, and the template of its path,
+	 * its field path, which Paperless files their documents by.
+	 *
+	 * @return array{names: array<string, string>, templates: array<string, string>}
+	 */
 	public function storagePaths(): array;
 
 	/** @return array{names: array<string, string>, inbox: list<string>} */

@@ -810,6 +810,7 @@ SCENARIOS=(
 	'export: dry-run'
 	'worker: export'
 	'moves: export'
+	'storage-paths: moves'
 	'webhook: moves'
 	'new-content: moves'
 	'schedule: new-content'
@@ -858,6 +859,7 @@ RENAMED_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26
 TRASH_PATH='Documents/Paperless/Archive/_Deleted/2026-08-27/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 ERROR_PATH='Documents/Paperless/Errors/broken.pdf'
 STATEMENT_PATH='Documents/Paperless/Archive/Example%20GmbH/Invoice/2026/2026-08-26%20-%20Annual%20statement%20%5BP124%5D.pdf'
+STORAGE_PATH='Documents/Paperless/Archive/Household/2026/Monthly%20invoice%20corrected%20%5BP123%5D.pdf'
 COPY_NAME='2026-08-26 - Monthly invoice corrected [P123].pdf'
 SIDECAR_PATH='Documents/Paperless/Archive/.paperless/P123.json'
 INDEX_PATH='Documents/Paperless/Archive/.paperless/index.csv'
@@ -1157,6 +1159,31 @@ scenario_moves() {
 	control /control/checksum/sha256 >/dev/null
 	mock_state > "${TMP_DIR}/mock-after-move.json"
 	assert_json mock-after-move "${TMP_DIR}/mock-after-move.json"
+}
+
+# The storage paths of Paperless: with the setting on, a dry-run shows the move of P123 to the
+# path of the template of its storage path, and a run moves it there, the same file with its ID;
+# a storage path with logic of Jinja leaves the document with the path template, and the report
+# names it once. The setting goes off again, and the copy is where the scenario moves left it.
+scenario_storage_paths() {
+	save_settings "${TMP_DIR}/storage-paths-settings.json" follow_storage_paths=1
+	control /control/scenario/storage-path >/dev/null
+	sync_run true "${TMP_DIR}/storage-paths-dry-run.json"
+	assert_json storage-paths-dry-run "${TMP_DIR}/storage-paths-dry-run.json"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	sync_run false "${TMP_DIR}/storage-paths-run.json"
+	assert_json move "${TMP_DIR}/storage-paths-run.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${STORAGE_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${STORAGE_PATH}"
+	control /control/scenario/storage-path-logic >/dev/null
+	sync_run false "${TMP_DIR}/storage-paths-logic.json"
+	assert_json storage-paths-logic "${TMP_DIR}/storage-paths-logic.json"
+	assert_dav_missing sync-target "${STORAGE_PATH}"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${RENAMED_PATH}"
+	save_settings "${TMP_DIR}/storage-paths-off-settings.json" follow_storage_paths=0
+	control /control/scenario/renamed >/dev/null
 }
 
 # The webhook of a workflow of Paperless: a call names a document that Paperless added or

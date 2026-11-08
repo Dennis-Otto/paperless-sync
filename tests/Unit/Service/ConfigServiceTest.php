@@ -288,6 +288,19 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame([false, 'half a line', 'nobody'], [$config->perUser(), $config->userMap, $config->userGroup]);
 	}
 
+	/** The documents follow their storage paths of Paperless only once an administrator turns it on. */
+	public function testTheStoragePathsOfPaperlessAreFollowedOnlyOnceTurnedOn(): void {
+		self::assertFalse($this->service->get()->followStoragePaths);
+
+		$config = $this->service->save(['follow_storage_paths' => true] + self::validSettings(), 'secret-token');
+
+		self::assertTrue($config->followStoragePaths);
+		self::assertTrue($this->settings['follow_storage_paths']);
+		self::assertTrue($this->service->get()->followStoragePaths);
+		self::assertTrue($this->service->validateForDryRun([])->followStoragePaths, 'A dry-run takes the saved setting.');
+		self::assertFalse($this->service->validateForDryRun(['follow_storage_paths' => false])->followStoragePaths, 'A dry-run of the page takes its switch, as the path template.');
+	}
+
 	/** The tags of Paperless reach Nextcloud only once an administrator turns them on. */
 	public function testTheTagsInNextcloudAreOffUntilTurnedOn(): void {
 		self::assertFalse($this->service->get()->nextcloudTags);
@@ -309,7 +322,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(40, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(41, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 

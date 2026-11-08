@@ -244,6 +244,8 @@ OC.L10N.register(
 		"Insert %s": "Insertar %s",
 		"Name": "Nombre",
 		"Insert a custom field, then type its name": "Inserta un campo personalizado y escribe su nombre",
+		"none": "ninguno",
+		"Insert a custom field as Paperless writes it, with the text for a document without a value, then type its name": "Inserta un campo personalizado como lo escribe Paperless, con el texto para un documento sin valor, y escribe su nombre",
 		"Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.": "Escribe las variables como {{ name }}, y un campo personalizado de Paperless como {{ custom_fields.Name }}; {{ id }} es obligatorio. Un valor que le falta a un documento, como un propietario, etiquetas o un campo personalizado, queda vacío.",
 		"Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.": "Cada nombre de fichero conserva el marcador [P{{ id }}] y termina en {{ extension }}, que se añaden cuando la plantilla los omite. Los títulos y nombres largos se acortan a la longitud que permite Nextcloud.",
 		"The paths of the newest documents of Paperless appear here.": "Las rutas de los documentos más recientes de Paperless aparecen aquí.",
@@ -287,6 +289,7 @@ OC.L10N.register(
 		"The archive path template must contain {{ id }}.": "La plantilla de ruta del archivo debe contener {{ id }}.",
 		"Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.": "Nombra el campo personalizado en la plantilla de ruta del archivo, como {{ custom_fields.Número de factura }}.",
 		"Unknown archive path variable: %s.": "Variable de ruta del archivo desconocida: %s.",
+		"Unknown archive path filter: %s. Only a custom field takes one, get_cf_value, as in {{ custom_fields|get_cf_value(\"Invoice number\", \"none\") }}.": "Filtro de ruta del archivo desconocido: %s. Solo un campo personalizado admite uno, get_cf_value, como {{ custom_fields|get_cf_value(\"Número de factura\", \"ninguno\") }}.",
 		"The archive path template contains an invalid placeholder.": "La plantilla de ruta del archivo contiene un marcador no válido.",
 		"Paperless has no custom field named %s, which the archive path template uses.": "Paperless no tiene ningún campo personalizado llamado %s, que usa la plantilla de ruta del archivo.",
 		"Paperless has no tag named %s, which \"Only mirror documents with these tags\" names; a run would remove the copies of the documents that should stay.": "Paperless no tiene ninguna etiqueta llamada %s, que nombra “Reflejar solo los documentos con estas etiquetas”; una ejecución quitaría las copias de los documentos que deben quedarse.",
@@ -744,7 +747,18 @@ OC.L10N.register(
 		"Paperless Sync updated the account {username} in Paperless and saved the settings with its token.": "Paperless Sync actualizó la cuenta {username} en Paperless y guardó los ajustes con su token.",
 		"Read the notes of the connection checklist.": "Lee las notas de la lista de comprobación de la conexión.",
 		"The user exists in Paperless already and stays as it is. Choose another username, or update it.": "El usuario ya existe en Paperless y se queda como está. Elige otro nombre de usuario, o actualízalo.",
-		"Could not set up the account in Paperless.": "No se pudo configurar la cuenta en Paperless."
+		"Could not set up the account in Paperless.": "No se pudo configurar la cuenta en Paperless.",
+		"Use the storage path of a document in Paperless": "Usar la ruta de almacenamiento de un documento en Paperless",
+		"A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.": "Un documento con una ruta de almacenamiento va, bajo la carpeta del archivo, a la ruta de su plantilla, como Paperless lo guarda, con el marcador [P{{ id }}] y su extensión; los demás documentos siguen la plantilla de ruta del archivo.",
+		"A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.": "Una ruta de almacenamiento cuya plantilla usa lógica de Jinja, un filtro o una variable que la plantilla de ruta no conoce también sigue la plantilla de ruta del archivo, y el informe la nombra. Activar o desactivar la opción mueve las copias, como una plantilla nueva.",
+		"Storage paths of Paperless": "Rutas de almacenamiento de Paperless",
+		"_The archive can't follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them._::_The archive can't follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them._": [
+			"El archivo no puede seguir la ruta de almacenamiento {names} de Paperless, que usa lógica de Jinja, un filtro o una variable que la plantilla de ruta no conoce, o un campo personalizado que Paperless no tiene, o que la cuenta de la aplicación no ve; por eso sus documentos van adonde los pone la plantilla de ruta del archivo.",
+			"El archivo no puede seguir las rutas de almacenamiento {names} de Paperless, que usan lógica de Jinja, un filtro o una variable que la plantilla de ruta no conoce, o un campo personalizado que Paperless no tiene, o que la cuenta de la aplicación no ve; por eso sus documentos van adonde los pone la plantilla de ruta del archivo.",
+			"El archivo no puede seguir las rutas de almacenamiento {names} de Paperless, que usan lógica de Jinja, un filtro o una variable que la plantilla de ruta no conoce, o un campo personalizado que Paperless no tiene, o que la cuenta de la aplicación no ve; por eso sus documentos van adonde los pone la plantilla de ruta del archivo."
+		],
+		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless no enumeró sus usuarios, que una ruta de almacenamiento que sigue el archivo necesita para {{ owner_username }}; el usuario del token de API necesita el permiso de ver usuarios: %s",
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless no enumeró sus campos personalizados, que usa una ruta de almacenamiento que sigue el archivo; el usuario del token de API necesita el permiso de ver campos personalizados: %s"
 	},
 	"nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

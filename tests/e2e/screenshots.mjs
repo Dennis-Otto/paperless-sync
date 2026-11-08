@@ -87,9 +87,10 @@ function save(path, data) {
 }
 
 // A screenshot of the App Store, screenshots/<name>.png, and its small thumbnail next to it,
-// screenshots/<name>-small.png, which appinfo/info.xml names as its small-thumbnail. A
-// screenshot of the page is opaque, so the thumbnail keeps no alpha channel, which would
-// only make the file larger.
+// screenshots/<name>-small.png, which appinfo/info.xml names as its small-thumbnail. The
+// number in front of a name is its place in appinfo/info.xml, whose first screenshot the App
+// Store shows largest: 01 is the archive in Files. A screenshot of the page is opaque, so the
+// thumbnail keeps no alpha channel, which would only make the file larger.
 function saveScreenshot(name, data) {
 	if (!L.appStore) {
 		return
@@ -680,7 +681,7 @@ try {
 		const overview = await picture(page)
 		save(`${IMAGES}/settings-${theme}.png`, overview)
 		if (theme === 'light') {
-			saveScreenshot('01-admin-settings', overview)
+			saveScreenshot('02-admin-settings', overview)
 		}
 		// The bar of the buttons sticks to the bottom of the window and would cover a section.
 		await page.addStyleTag({ content: '.paperless-sync-actions { visibility: hidden; }' })
@@ -826,7 +827,7 @@ try {
 		const archive = await picture(page)
 		save(`${IMAGES}/archive-${theme}.png`, archive)
 		if (theme === 'light') {
-			saveScreenshot('02-structured-archive', archive)
+			saveScreenshot('01-structured-archive', archive)
 		}
 		await context.close()
 	}

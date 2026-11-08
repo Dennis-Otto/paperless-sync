@@ -345,14 +345,22 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 							<button type="button" class="paperless-sync-code" data-variable="<?php p($variable); ?>" aria-label="<?php p($l->t('Insert %s', ['{{ ' . $variable . ' }}'])); ?>"><?php p($variable); ?></button>
 						<?php } ?>
 						<button type="button" class="paperless-sync-code" data-variable="custom_fields.<?php p($l->t('Name')); ?>" data-select="<?php p($l->t('Name')); ?>" title="<?php p($l->t('Insert a custom field, then type its name')); ?>">custom_fields.…</button>
+						<button type="button" class="paperless-sync-code" data-variable="<?php p('custom_fields|get_cf_value("' . $l->t('Name') . '", "' . $l->t('none') . '")'); ?>" data-select="<?php p($l->t('Name')); ?>" title="<?php p($l->t('Insert a custom field as Paperless writes it, with the text for a document without a value, then type its name')); ?>">custom_fields|get_cf_value(…)</button>
 					</div>
 					<p id="paperless-sync-path-template-hint" class="settings-hint"><?php p($l->t('Write variables as {{ name }}, and a custom field of Paperless as {{ custom_fields.Name }}; {{ id }} is required. A value that a document lacks, such as an owner, tags or a custom field, stays empty.')); ?> <?php p($l->t('Every file name keeps the marker [P{{ id }}] and ends with {{ extension }}, which are added when the template leaves them out. Long titles and names are shortened to the length that Nextcloud allows.')); ?></p>
 					<div id="paperless-sync-path-preview" class="paperless-sync-path-preview">
 						<p id="paperless-sync-path-preview-status" class="paperless-sync-path-preview-status" aria-live="polite"><?php p($config->tokenConfigured ? $l->t('The paths of the newest documents of Paperless appear here.') : $l->t('Save the connection to Paperless, and the paths of its newest documents appear here.')); ?></p>
 						<ul id="paperless-sync-path-preview-list" class="paperless-sync-code" aria-label="<?php p($l->t('Paths of the newest documents in the archive folder')); ?>" hidden></ul>
+						<p id="paperless-sync-path-preview-storage-paths" class="paperless-sync-path-preview-storage-paths" hidden></p>
 					</div>
 				</div>
 			</div>
+			<div class="paperless-sync-switches">
+				<label><input data-setting="follow_storage_paths" type="checkbox" aria-describedby="paperless-sync-follow-storage-paths-hint" <?php if ($config->followStoragePaths) {
+					print_unescaped('checked');
+				} ?>> <span><?php p($l->t('Use the storage path of a document in Paperless')); ?></span></label>
+			</div>
+			<p id="paperless-sync-follow-storage-paths-hint" class="settings-hint"><?php p($l->t('A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.')); ?> <?php p($l->t('A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.')); ?> <?php $help('storage-paths-of-paperless', $l->t('Storage paths of Paperless')); ?></p>
 			<div class="paperless-sync-switches paperless-sync-switches--inline">
 				<label><input data-setting="prefer_archive" type="checkbox" <?php if ($config->preferArchive) {
 					print_unescaped('checked');

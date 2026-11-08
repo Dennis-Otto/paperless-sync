@@ -122,6 +122,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 
 - Ein Ordnerbaum in den Dateien des eingestellten Nextcloud-Benutzers, oder [jedes Benutzers, mit den Dokumenten, die ihm in Paperless gehören](#eigentum-je-benutzer) und, wenn du es wählst, [denen, die Paperless mit ihm teilt](#dokumente-die-paperless-teilt), nach Korrespondent, Dokumenttyp und Jahr, aus einer [Pfadvorlage](#variablen-der-pfadvorlage), die du ändern kannst, mit Basis-, Archiv-, Eingangs-, Fehler- und Gelöscht-Ordnern deiner Wahl
 - Variablen mit den Namen, die Paperless-ngx für seine eigenen Dateinamen verwendet, etwa die Archivseriennummer, der Eigentümer, die Tags, der Name des Monats und benutzerdefinierte Felder, und eine Vorschau unter der Vorlage, die schon beim Tippen zeigt, wohin die neuesten Dokumente kommen, bevor du speicherst
+- Auf Wunsch kommt jedes Dokument [dorthin, wo sein Speicherpfad es in Paperless ablegt](#speicherpfade-von-paperless), also sind die Ordner deiner Speicherpfade auch die des Archivs
 - Das Archiv-PDF jedes Dokuments oder seine Originaldatei
 - Umbenennen und Verschieben, wenn sich die Metadaten in Paperless ändern, ohne leere Ordner zurückzulassen
 - Jede Kopie bleibt in Nextcloud dieselbe Datei: Ein neuer Inhalt ihres Dokuments, etwa eine neue Archivversion, aktualisiert sie an Ort und Stelle, sodass ihre Freigaben, öffentlichen Links, Kommentare, Tags, Favoriten und Versionen bei ihr bleiben
@@ -281,6 +282,7 @@ Verwende ein eigenes Dienstkonto in Paperless, das kein Superuser ist, mit nur d
 | Gelöscht-Ordner | Eigentum an den Dokumenten, wie unten beschrieben | sieht sie sofort im Papierkorb von Paperless |
 | [`{{ owner_username }}`](#variablen-der-pfadvorlage) in der Pfadvorlage | **Anzeigen** für Benutzer | findet den Benutzernamen des Eigentümers jedes Dokuments |
 | Benutzerdefinierte Felder in der Pfadvorlage, oder [Metadaten neben dem Archiv](#metadaten-neben-dem-archiv) | **Anzeigen** für benutzerdefinierte Felder | liest die Namen und die Auswahlwerte der benutzerdefinierten Felder |
+| [Speicherpfade von Paperless](#speicherpfade-von-paperless) | **Anzeigen** für Benutzer und für benutzerdefinierte Felder | findet den Eigentümer und die benutzerdefinierten Felder, die die Vorlage eines Speicherpfads verwenden kann |
 | Nextcloud-Eingang, oder [*An Paperless senden*](#aus-dateien-senden), standardmäßig für die Administratoren an | **Hinzufügen** für Dokumente und **Anzeigen** für Paperless-Aufgaben | lädt die Dateien hoch und erfährt, ob Paperless sie importiert hat |
 | [Tags des Eingangs](#tags-des-eingangs) | **Anzeigen** für Tags, und **Hinzufügen** für Tags mit *Fehlende Tags anlegen* | findet die Tags der Dateien des Eingangs und legt die an, die Paperless fehlen |
 | Verbindungs-Checkliste | **Anzeigen** für UI-Einstellungen | liest die Berechtigungen des Kontos, damit **Verbindung testen** die des Eingangs und das Eigentum an den Dokumenten prüfen kann |
@@ -536,11 +538,12 @@ Die *Dateikonflikt-Regel* entscheidet, was ein Lauf tut, wenn am Pfad eines Doku
 
 ### Variablen der Pfadvorlage
 
-Die meisten Variablen haben die Namen, die Paperless-ngx für seine eigenen Dateinamen verwendet, also funktionieren viele Vorlagen eines Speicherpfads von Paperless hier, sobald `{{ id }}` hinzukommt. Vorlagen mit Logik von Jinja, mit `custom_fields|get_cf_value(...)` oder mit einer Variablen, die die Tabelle unten nicht nennt, funktionieren nicht. Für ein Dokument, das am 26. August 2026 erstellt und am 1. September hinzugefügt wurde:
+Die Variablen haben die Namen, die Paperless-ngx für seine eigenen Dateinamen, `PAPERLESS_FILENAME_FORMAT`, und für seine Speicherpfade verwendet, also funktioniert eine solche Vorlage hier, sobald `{{ id }}` hinzukommt, außer sie verwendet Logik von Jinja, einen anderen Filter als `get_cf_value` der benutzerdefinierten Felder oder eine Variable, die die Tabelle unten nicht nennt; ein Dokument kann auch selbst [seinem Speicherpfad folgen](#speicherpfade-von-paperless). Für ein Dokument, das am 26. August 2026 erstellt und am 1. September hinzugefügt wurde:
 
 | Variable | Wert | Beispiel |
 | --- | --- | --- |
 | `{{ id }}` | Die ID des Dokuments in Paperless | `123` |
+| `{{ doc_pk }}` | Seine ID mit sieben Ziffern, wie Paperless sie schreibt | `0000123` |
 | `{{ title }}` | Sein Titel | `Stromrechnung` |
 | `{{ correspondent }}` | Der Name seines Korrespondenten | `Stadtwerke` |
 | `{{ document_type }}` | Der Name seines Dokumenttyps | `Rechnung` |
@@ -551,16 +554,19 @@ Die meisten Variablen haben die Namen, die Paperless-ngx für seine eigenen Date
 | `{{ page_count }}` | Die Zahl seiner Seiten | `2` |
 | `{{ created }}` | Das Datum des Dokuments | `2026-08-26` |
 | `{{ created_year }}`, `{{ created_year_short }}` | Sein Jahr, vier- oder zweistellig | `2026`, `26` |
-| `{{ created_month }}`, `{{ created_month_name }}` | Sein Monat, als Zahl oder mit seinem Namen in der Sprache von Nextcloud | `08`, `August` |
+| `{{ created_month }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}` | Sein Monat, als Zahl, mit seinem Namen oder mit seinem kurzen Namen in der Sprache von Nextcloud | `08`, `August`, `Aug` |
 | `{{ created_day }}` | Sein Tag | `26` |
-| `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | Wann es zu Paperless hinzugefügt wurde | `2026-09-01`, `2026`, `09`, `01` |
-| `{{ original_filename }}` | Der Name der hochgeladenen Datei, ohne ihre Endung; bei Paperless-ngx 3.x der ihrer neuesten Version | `scan` |
+| `{{ added }}` | Das Datum, an dem es zu Paperless hinzugefügt wurde | `2026-09-01` |
+| `{{ added_year }}`, `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | Jahr, Monat und Tag dieses Datums, wie die von `{{ created }}` | `2026`, `26`, `09`, `September`, `Sep`, `01` |
+| `{{ original_filename }}`, `{{ original_name }}` | Der Name der hochgeladenen Datei, ohne ihre Endung; bei Paperless-ngx 3.x der ihrer neuesten Version | `scan` |
 | `{{ extension }}` | Die Endung der exportierten Fassung, mit ihrem Punkt | `.pdf` |
 | `{{ custom_fields.<name> }}` | Der Wert des benutzerdefinierten Felds dieses Namens | `{{ custom_fields.Rechnungsnummer }}`: `RE-2026-08` |
 
 Die Vorlage muss `{{ id }}` enthalten. Eine Variable kann mit oder ohne Leerzeichen geschrieben werden, etwa `{{id}}`, und wird als `{{ id }}` gespeichert. Jeder Wert kommt als reiner Text in den Pfad, also bleibt ein `$1` oder ein `{{ title }}` in einem Titel, wie es ist.
 
-Ein Wert, der einem Dokument fehlt, ist leer, etwa ein Eigentümer, Tags, eine Archivseriennummer oder ein benutzerdefiniertes Feld, und ein Ordner, den nur ein solcher Wert benennen würde, heißt `Folder`; ein fehlender Korrespondent, Dokumenttyp, ein fehlendes Datum oder ein fehlender Titel nimmt seinen Ersatznamen aus *Erweiterte Ersatznamen*. Der Name eines benutzerdefinierten Felds wird wie in Paperless geschrieben, mit seinen Leerzeichen und Großbuchstaben, und darf jedes Zeichen außer `{`, `}` und `/` enthalten. Ein Auswahlfeld gibt die Bezeichnung seiner Wahl, ein Dokumentlink die IDs der Dokumente, ein Ja-Nein-Feld `true` oder `false` und ein Geldfeld seinen Betrag so, wie Paperless ihn schreibt, etwa `EUR12.30`. `{{ created_month_name }}` nennt den Monat in der Sprache, die Nextcloud erzwingt oder als Standard hat, `force_language` oder `default_language` in seiner `config.php`, und ohne beide auf Englisch: nie in der Sprache des Administrators, der einen Lauf startet, damit die Pfade in jedem Lauf gleich sind. Eine Änderung dieser Sprache verschiebt die Dateien wie eine Änderung der Vorlage. Die Namen in der Sprache von Nextcloud brauchen die PHP-Erweiterung `intl`; ohne sie sind sie englisch, also verschiebt auch das Installieren oder Entfernen von `intl` die Dateien einer solchen Vorlage.
+Ein benutzerdefiniertes Feld kann auch so geschrieben werden, wie Paperless es schreibt, `{{ custom_fields|get_cf_value("Rechnungsnummer") }}`, mit dem Wert von `{{ custom_fields.Rechnungsnummer }}`. Ein zweiter Text ist der Standard für ein Dokument ohne Wert: `{{ custom_fields|get_cf_value("Rechnungsnummer", "keine") }}` gibt `keine` für ein Dokument, das das Feld nicht hat oder keinen Wert darin; ein leerer Text bleibt leer, wie in Paperless. Der Name und der Standard stehen in doppelten oder einfachen Anführungszeichen und dürfen jedes Zeichen außer `{`, `}`, `/` und ihrem Anführungszeichen enthalten. Eine Vorlage mit einem anderen Filter von Jinja, etwa `{{ title|upper }}`, wird nicht gespeichert, und die Einstellungen nennen den Filter.
+
+Ein Wert, der einem Dokument fehlt, ist leer, etwa ein Eigentümer, Tags, eine Archivseriennummer oder ein benutzerdefiniertes Feld, und ein Ordner, den nur ein solcher Wert benennen würde, heißt `Folder`; ein fehlender Korrespondent, Dokumenttyp, ein fehlendes Datum oder ein fehlender Titel nimmt seinen Ersatznamen aus *Erweiterte Ersatznamen*. Der Name eines benutzerdefinierten Felds wird wie in Paperless geschrieben, mit seinen Leerzeichen und Großbuchstaben, und darf jedes Zeichen außer `{`, `}` und `/` enthalten. Ein Auswahlfeld gibt die Bezeichnung seiner Wahl, ein Dokumentlink die IDs der Dokumente, ein Ja-Nein-Feld `true` oder `false` und ein Geldfeld seinen Betrag so, wie Paperless ihn schreibt, etwa `EUR12.30`. `{{ created_month_name }}` und die anderen Namen eines Monats nennen ihn in der Sprache, die Nextcloud erzwingt oder als Standard hat, `force_language` oder `default_language` in seiner `config.php`, und ohne beide auf Englisch: nie in der Sprache des Administrators, der einen Lauf startet, damit die Pfade in jedem Lauf gleich sind. Die kurzen Namen sind die dieser Sprache, etwa `Mär` auf Deutsch, ohne einen Punkt an ihrem Ende, und in jedem Englisch, etwa britischem Englisch, die ersten drei Buchstaben, wie Paperless sie schreibt. Eine Änderung dieser Sprache verschiebt die Dateien wie eine Änderung der Vorlage. Die Namen in der Sprache von Nextcloud brauchen die PHP-Erweiterung `intl`; ohne sie sind sie englisch, also verschiebt auch das Installieren oder Entfernen von `intl` die Dateien einer solchen Vorlage.
 
 Die Benutzer und die benutzerdefinierten Felder von Paperless werden nur für eine Vorlage gelesen, die sie verwendet, und die Benutzer in jedem Lauf mit [Eigentum je Benutzer](#eigentum-je-benutzer). Für `{{ owner_username }}` braucht das Konto der App in Paperless die Berechtigung, Benutzer anzuzeigen, und für ein benutzerdefiniertes Feld die Berechtigung, benutzerdefinierte Felder anzuzeigen; ohne sie scheitert der Lauf, bevor eine Datei wandert, und nennt die Berechtigung. Ein benutzerdefiniertes Feld, das Paperless nicht hat, etwa eines mit einem Tippfehler oder eines, das umbenannt wurde, stoppt den Lauf ebenfalls, weil sein Wert im Pfad jedes Dokuments leer wäre.
 
@@ -581,6 +587,25 @@ Nextcloud nimmt Namen mit bis zu 250 Bytes an, und ein kyrillisches Zeichen brau
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.de.dark.svg">
   <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.de.svg" alt="Wie ein Teil des Pfads entsteht: Die Werte kommen als reiner Text in den Teil der Vorlage, und der Teil wird bereinigt. Solange er mehr Bytes hat, als Nextcloud erlaubt, wird der längste der Freitextwerte gekürzt, sodass der Text der Vorlage, die Daten, die Markierung und die Endung ganz bleiben. Der Dateiname endet dann mit der Endung.">
 </picture>
+
+<a id="storage-paths-of-paperless"></a>
+
+### Speicherpfade von Paperless
+
+Mit *Speicherpfad eines Dokuments in Paperless verwenden* in *3 · Strukturiertes Archiv* kommt ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths) in Paperless dorthin, wo Paperless es ablegt: unterhalb des Archivordners an den Pfad der Vorlage seines Speicherpfads. Jedes andere Dokument folgt der Pfadvorlage. So ist die Ordnung deiner Speicherpfade, etwa einer für jede Art von Dokument, oder `{{ owner_username }}` vorne für einen Baum je Benutzer, auch die Ordnung des Archivs, ohne eine Pfadvorlage, die sie wiederholt. Der Schalter ist anfangs aus.
+
+Die Vorlage eines Speicherpfads folgt den Regeln der Pfadvorlage, mit [denselben Variablen](#variablen-der-pfadvorlage), und ihr letzter Teil ist der Name der Datei: Die App fügt dort die Markierung `[P{{ id }}]` und die Endung an, so wie Paperless die Endung anfügt, also muss die Vorlage `{{ id }}` nicht nennen. Der Speicherpfad `{{ created_year }}/{{ correspondent }}/{{ title }}` legt eine Stromrechnung im Archivordner unter `2026/Stadtwerke/Stromrechnung [P123].pdf` ab. Leere Teile, etwa der in `Steuern//{{ title }}`, fallen weg.
+
+Ein Speicherpfad, dessen Vorlage die App nicht so darstellen kann wie Paperless, lässt seine Dokumente bei der Pfadvorlage: einer mit Logik von Jinja, etwa `{% if %}`, einem anderen Filter als `get_cf_value`, einer Variable, die die Tabelle der Pfadvorlage nicht nennt, etwa `{{ tags }}`, einem Platzhalter älterer Versionen von Paperless, etwa `{created_year}`, oder einem benutzerdefinierten Feld, das Paperless nicht hat. Der Bericht jedes Laufs und jedes Testlaufs nennt solche Speicherpfade einmal, auf der Kommandozeile als `STORAGE PATHS NOT FOLLOWED`, und die Vorschau unter der Pfadvorlage nennt die der neuesten Dokumente:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-a-document-with-a-storage-path-goes.de.dark.svg">
+  <img src="docs/images/diagrams/where-a-document-with-a-storage-path-goes.de.svg" alt="Wohin ein Dokument mit einem Speicherpfad kommt: Mit Speicherpfad eines Dokuments in Paperless verwenden fragt ein Lauf bei jedem Dokument, ob es in Paperless einen Speicherpfad hat. Ein Dokument ohne einen folgt der Archiv-Pfadvorlage. Bei einem mit Speicherpfad fragt der Lauf, ob die App seine Vorlage darstellen kann: nur die Variablen der Pfadvorlage, ein benutzerdefiniertes Feld, das Paperless hat, und get_cf_value als einziger Filter. Kann sie es, kommt das Dokument unterhalb des Archivordners an den Pfad dieser Vorlage, und sein Dateiname bekommt die Markierung [P123] und seine Endung. Kann sie es nicht, wegen Logik von Jinja, eines anderen Filters, einer unbekannten Variable oder eines benutzerdefinierten Felds, das Paperless fehlt, folgt das Dokument der Archiv-Pfadvorlage, und der Bericht des Laufs, der Testlauf und die Vorschau nennen den Speicherpfad einmal. Das Ein- oder Ausschalten verschiebt die Kopien wie eine neue Vorlage: Jede bleibt dieselbe Datei, mit ihren Freigaben.">
+</picture>
+
+Das Konto der App sieht nur die Speicherpfade ohne Eigentümer, seine eigenen und die, die mit ihm geteilt sind. Paperless macht die Person, die einen Speicherpfad anlegt, zu seinem Eigentümer, also teile jeden Speicherpfad mit dem Konto (oder entferne seinen Eigentümer), bevor du den Schalter einschaltest: Die Dokumente eines Speicherpfads, den das Konto nicht sieht, folgen der Pfadvorlage, und der Bericht und die Vorschau nennen ihn mit seiner ID, etwa `#9`.
+
+Die Vorschau und ein Testlauf nehmen den Schalter der Seite schon vor dem Speichern. Das Ein- oder Ausschalten verschiebt die Kopien wie eine neue Pfadvorlage, in den folgenden Läufen und im Rahmen der Batchgröße: Jede Kopie bleibt dieselbe Datei, mit ihren Freigaben, Kommentaren und Tags. Ein Speicherpfad, der `{{ owner_username }}` oder ein benutzerdefiniertes Feld verwendet, lässt einen Lauf die Benutzer oder die benutzerdefinierten Felder von Paperless lesen, für die das Konto der App die Berechtigung zum Anzeigen braucht; ohne sie scheitert der Lauf, bevor eine Datei wandert, und nennt die Berechtigung.
 
 <a id="which-documents-the-archive-mirrors"></a>
 

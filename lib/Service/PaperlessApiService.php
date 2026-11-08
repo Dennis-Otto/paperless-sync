@@ -263,8 +263,23 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		return $this->namedMap('/api/document_types/');
 	}
 
+	/** @psalm-suppress MixedAssignment */
 	public function storagePaths(): array {
-		return $this->namedMap('/api/storage_paths/');
+		$names = [];
+		$templates = [];
+		foreach ($this->getAll('/api/storage_paths/') as $key => $storagePath) {
+			$id = (string)$key;
+			$name = $storagePath['name'] ?? null;
+			$path = $storagePath['path'] ?? null;
+			if (is_string($name)) {
+				$names[$id] = $name;
+			}
+			if (is_string($path)) {
+				$templates[$id] = $path;
+			}
+		}
+
+		return ['names' => $names, 'templates' => $templates];
 	}
 
 	/** @psalm-suppress MixedAssignment */

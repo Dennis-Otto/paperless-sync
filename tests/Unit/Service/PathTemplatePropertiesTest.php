@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Random\Engine\Mt19937;
 use Random\Randomizer;
@@ -29,10 +30,32 @@ use Random\Randomizer;
 #[Group('property')]
 final class PathTemplatePropertiesTest extends TestCase {
 	private const VARIABLES = [
-		'id', 'title', 'correspondent', 'document_type', 'storage_path',
-		'created', 'created_year', 'created_month', 'added', 'added_year',
-		'original_filename', 'extension',
+		'id', 'doc_pk', 'title', 'correspondent', 'document_type', 'storage_path',
+		'created', 'created_year', 'created_month', 'created_month_name_short',
+		'added', 'added_year', 'added_year_short', 'added_month_name', 'added_month_name_short',
+		'original_filename', 'original_name', 'extension',
 	];
+
+	/** Custom fields in both spellings, with spaces, quotes and a default, for the templates that are only validated. */
+	private const CUSTOM_FIELD_SPELLINGS = [
+		'custom_fields.Invoice number', 'custom_fields. Größe (m²) ', "custom_fields|get_cf_value('Kunde')",
+		'custom_fields | get_cf_value( "Nr" , "none" )', 'custom_fields|get_cf_value("Kunde\'s Nr",\'Kein "Wert"\')',
+	];
+
+	/**
+	 * The variables of the templates that people saved before the variables of the file names of
+	 * Paperless came (#385), with two custom fields in the spelling of a dot. Like the generator of
+	 * the cases, this list belongs to PathTemplatePathsBefore.json: change neither.
+	 */
+	private const VARIABLES_BEFORE = [
+		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'owner_username', 'tag_list', 'asn', 'page_count',
+		'created', 'created_year', 'created_year_short', 'created_month', 'created_month_name', 'created_day',
+		'added', 'added_year', 'added_month', 'added_day',
+		'original_filename', 'extension', 'custom_fields.Invoice number', 'custom_fields. Priority ',
+	];
+
+	/** The paths of the templates of before, by the seeds of their cases. */
+	private const PATHS_BEFORE = __DIR__ . '/PathTemplatePathsBefore.json';
 
 	private PathTemplateService $service;
 
@@ -91,6 +114,36 @@ final class PathTemplatePropertiesTest extends TestCase {
 		}
 	}
 
+	/**
+	 * A template that people saved before keeps every path byte for byte, so that a new variable
+	 * or spelling moves no file of an archive. PathTemplatePathsBefore.json holds the SHA-256 of
+	 * the saved template and the path of 500 random templates of the variables of before, with
+	 * documents that have a value for each or none, as the code before #385 rendered them. A
+	 * change that moves paths on purpose writes the file anew, says so in its changelog and
+	 * moves the files:
+	 *
+	 *     PATHS_BEFORE=write vendor/bin/phpunit --filter testTemplatesOfBeforeKeepTheirPaths
+	 */
+	#[RequiresPhpExtension('intl')]
+	public function testTemplatesOfBeforeKeepTheirPaths(): void {
+		if (getenv('PATHS_BEFORE') === 'write') {
+			$hashes = [];
+			for ($seed = 1; $seed <= 500; ++$seed) {
+				$hashes[(string)$seed] = $this->pathOfBefore($seed)['hash'];
+			}
+			file_put_contents(self::PATHS_BEFORE, json_encode($hashes, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n");
+		}
+		/** @var array<string, string> $before */
+		$before = json_decode((string)file_get_contents(self::PATHS_BEFORE), true, 2, JSON_THROW_ON_ERROR);
+		self::assertCount(500, $before);
+		foreach ($before as $seed => $hash) {
+			$case = $this->pathOfBefore((int)$seed);
+			$problems = $case['hash'] === $hash ? [] : ["The saved template or the path of the case of seed {$seed} differs from the one of before."];
+			unset($case['hash']);
+			$this->assertNoProblems($problems, (int)$seed, $case, 'vendor/bin/phpunit --filter testTemplatesOfBeforeKeepTheirPaths');
+		}
+	}
+
 	public function testCleaningAgainChangesNothing(): void {
 		foreach ($this->cases() as $seed => $random) {
 			$value = $this->text($random, 12);
@@ -108,7 +161,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 	public function testAValidatedTemplateIsValidAndStaysTheSame(): void {
 		$accepted = 0;
 		foreach ($this->cases() as $seed => $random) {
-			$template = $this->template($random, true);
+			$template = $this->template($random, true, [...self::VARIABLES, ...self::CUSTOM_FIELD_SPELLINGS]);
 			try {
 				$validated = $this->service->validateTemplate($template);
 			} catch (InvalidArgumentException) {
@@ -120,8 +173,8 @@ final class PathTemplatePropertiesTest extends TestCase {
 			if ($this->service->validateTemplate($validated) !== $validated) {
 				$problems[] = 'Validating the template again changes it.';
 			}
-			if (preg_match('/{{(?! [a-z_]+ }})/', $validated) === 1) {
-				$problems[] = "A placeholder of {$validated} has another spelling than {{ name }}.";
+			if (preg_match('/{{(?! [a-z_]+ }}| custom_fields\.[^{}\/]+ }}| custom_fields\|get_cf_value\(([\'"])[^{}\/]*?\1(?:, ([\'"])[^{}\/]*?\2)?\) }})/', $validated) === 1) {
+				$problems[] = "A placeholder of {$validated} has another spelling than {{ name }}, {{ custom_fields.Name }} or {{ custom_fields|get_cf_value(\"Name\", \"default\") }}.";
 			}
 			$this->assertNoProblems($problems, $seed, ['template' => $template]);
 		}
@@ -158,14 +211,16 @@ final class PathTemplatePropertiesTest extends TestCase {
 	 *
 	 * @param list<string> $problems
 	 * @param array<string, mixed> $case
+	 * @param ?string $replay the command that replays the case, when PROPERTY_SEED doesn't choose it
 	 */
-	private function assertNoProblems(array $problems, int $seed, array $case): void {
+	private function assertNoProblems(array $problems, int $seed, array $case, ?string $replay = null): void {
 		if ($problems === []) {
 			$this->addToAssertionCount(1);
 			return;
 		}
 		$json = json_encode($case, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
-		self::fail(implode("\n", $problems) . "\nReplay: PROPERTY_SEED={$seed} PROPERTY_RUNS=1 vendor/bin/phpunit --group property\nCase: {$json}");
+		$replay ??= "PROPERTY_SEED={$seed} PROPERTY_RUNS=1 vendor/bin/phpunit --group property";
+		self::fail(implode("\n", $problems) . "\nReplay: {$replay}\nCase: {$json}");
 	}
 
 	/**
@@ -193,9 +248,42 @@ final class PathTemplatePropertiesTest extends TestCase {
 		return (int)$value;
 	}
 
-	/** @return array{SyncConfig, array<string, mixed>, array<string, string>, array<string, string>, array<string, string>} */
-	private function scenario(Randomizer $random): array {
-		$template = $this->service->validateTemplate($this->template($random, false));
+	/**
+	 * The path of a case of the templates of before, with its saved template, its document and
+	 * the SHA-256 of both.
+	 *
+	 * @return array{template: string, document: array<string, mixed>, path: string, hash: string}
+	 */
+	private function pathOfBefore(int $seed): array {
+		$random = new Randomizer(new Mt19937($seed));
+		[$config, $document, $correspondents, $documentTypes, $storagePaths] = $this->scenario($random, self::VARIABLES_BEFORE);
+		$document += [
+			'owner' => $this->pick($random, [3, '3', null, 8]),
+			'tags' => $this->pick($random, [[], [10, 12], [['id' => 12], 99], null]),
+			'archive_serial_number' => $this->pick($random, [1042, '17', null, '2 pages']),
+			'page_count' => $this->pick($random, [2, '0', null]),
+			'custom_fields' => [
+				['field' => 1, 'value' => $this->pick($random, [null, $this->text($random, 6), 42, true, [12, 13]])],
+				['field' => 2, 'value' => $this->pick($random, ['aB3', 'gone', null])],
+			],
+		];
+		$tags = ['10' => $this->text($random, 6), '12' => $this->text($random, 6)];
+		$users = ['3' => $this->text($random, 6)];
+		$customFields = [
+			'1' => ['name' => 'Invoice number', 'type' => 'string', 'options' => []],
+			'2' => ['name' => 'Priority', 'type' => 'select', 'options' => ['aB3' => $this->text($random, 4)]],
+		];
+		$path = $this->service->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags, $users, $customFields);
+
+		return ['template' => $config->pathTemplate, 'document' => $document, 'path' => $path, 'hash' => hash('sha256', $config->pathTemplate . "\0" . $path)];
+	}
+
+	/**
+	 * @param list<string> $variables
+	 * @return array{SyncConfig, array<string, mixed>, array<string, string>, array<string, string>, array<string, string>}
+	 */
+	private function scenario(Randomizer $random, array $variables = self::VARIABLES): array {
+		$template = $this->service->validateTemplate($this->template($random, false, $variables));
 		$id = $random->getInt(1, PHP_INT_MAX);
 		$document = [
 			'id' => $random->getInt(0, 1) === 1 ? $id : (string)$id,
@@ -220,13 +308,17 @@ final class PathTemplatePropertiesTest extends TestCase {
 		];
 	}
 
-	/** A template of one to six parts with variables in every spelling, {{ id }} among them unless $loose. */
-	private function template(Randomizer $random, bool $loose): string {
+	/**
+	 * A template of one to six parts with variables in every spelling, {{ id }} among them unless $loose.
+	 *
+	 * @param list<string> $variables
+	 */
+	private function template(Randomizer $random, bool $loose, array $variables = self::VARIABLES): string {
 		$parts = [];
 		for ($count = $random->getInt(1, 6); $count > 0; --$count) {
 			$part = '';
 			for ($pieces = $random->getInt(0, 4); $pieces > 0; --$pieces) {
-				$part .= $random->getInt(0, 1) === 1 ? $this->placeholder($random, $this->pick($random, self::VARIABLES)) : $this->literal($random, $loose);
+				$part .= $random->getInt(0, 1) === 1 ? $this->placeholder($random, $this->pick($random, $variables)) : $this->literal($random, $loose);
 			}
 			$parts[] = $part;
 		}

@@ -117,6 +117,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 
 - A folder tree in the files of the configured Nextcloud user, or [of each user, with the documents that they own in Paperless](#per-user-ownership) and, if you choose, [those that it shares with them](#documents-that-paperless-shares), by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
 - Variables with the names that Paperless-ngx uses for its own file names, such as the archive serial number, the owner, the tags, the name of the month and custom fields, and a preview under the template that shows where the newest documents go while you type, before you save
+- Optionally, each document [goes where its storage path files it in Paperless](#storage-paths-of-paperless), so the folders of your storage paths are those of the archive too
 - The archive PDF of each document, or its original file
 - Renames and moves when the metadata changes in Paperless, and no empty folders left behind
 - Each copy stays the same file in Nextcloud: a new content of its document, such as a new archive version, updates it in place, so its shares, public links, comments, tags, favorites and versions stay with it
@@ -274,6 +275,7 @@ Use a dedicated Paperless service account that isn't a superuser, with only the 
 | Deleted folder | ownership of the documents, as below | sees them in the trash of Paperless right away |
 | [`{{ owner_username }}`](#path-template-variables) in the path template | **View** for Users | finds the user name of the owner of each document |
 | Custom fields in the path template, or [metadata next to the archive](#metadata-next-to-the-archive) | **View** for Custom Fields | reads the names and the choices of the custom fields |
+| [Storage paths of Paperless](#storage-paths-of-paperless) | **View** for Users and for Custom Fields | finds the owner and the custom fields that the template of a storage path may use |
 | Nextcloud inbox, or [*Send to Paperless*](#send-from-files), which is on for the administrators by default | **Add** for Documents, and **View** for Paperless Tasks | uploads the files, and learns whether Paperless imported them |
 | [Tags of the inbox](#tags-of-the-inbox) | **View** for Tags, and **Add** for Tags with *Create missing tags* | finds the tags of the files of the inbox, and creates those that Paperless lacks |
 | Connection checklist | **View** for UI Settings | reads the permissions of the account, so that **Test connection** can check those of the inbox and the ownership of the documents |
@@ -517,11 +519,12 @@ The *File conflict policy* decides what a run does when a file other than its ow
 
 ### Path template variables
 
-Most variables have the names that Paperless-ngx uses for its own file names, so many templates of a storage path of Paperless work here once `{{ id }}` is added. Templates with logic of Jinja, with `custom_fields|get_cf_value(...)` or with a variable that the table below doesn't list don't. For a document created on 26 August 2026 and added on 1 September:
+The variables have the names that Paperless-ngx uses for its own file names, `PAPERLESS_FILENAME_FORMAT`, and for its storage paths, so such a template works here once `{{ id }}` is added, unless it uses logic of Jinja, a filter other than `get_cf_value` of the custom fields, or a variable that the table below doesn't list; a document can also [follow its storage path](#storage-paths-of-paperless) itself. For a document created on 26 August 2026 and added on 1 September:
 
 | Variable | Value | Example |
 | --- | --- | --- |
 | `{{ id }}` | The ID of the document in Paperless | `123` |
+| `{{ doc_pk }}` | Its ID in seven digits, as Paperless writes it | `0000123` |
 | `{{ title }}` | Its title | `Electricity bill` |
 | `{{ correspondent }}` | The name of its correspondent | `City Utilities` |
 | `{{ document_type }}` | The name of its document type | `Invoice` |
@@ -532,16 +535,19 @@ Most variables have the names that Paperless-ngx uses for its own file names, so
 | `{{ page_count }}` | The number of its pages | `2` |
 | `{{ created }}` | The date of the document | `2026-08-26` |
 | `{{ created_year }}`, `{{ created_year_short }}` | Its year, in four or two digits | `2026`, `26` |
-| `{{ created_month }}`, `{{ created_month_name }}` | Its month, as a number or by its name in the language of Nextcloud | `08`, `August` |
+| `{{ created_month }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}` | Its month, as a number, by its name or by its short name in the language of Nextcloud | `08`, `August`, `Aug` |
 | `{{ created_day }}` | Its day | `26` |
-| `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | When it was added to Paperless | `2026-09-01`, `2026`, `09`, `01` |
-| `{{ original_filename }}` | The name of the uploaded file, without its extension; on Paperless-ngx 3.x, that of its newest version | `scan` |
+| `{{ added }}` | The date when it was added to Paperless | `2026-09-01` |
+| `{{ added_year }}`, `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | The year, month and day of that date, as those of `{{ created }}` | `2026`, `26`, `09`, `September`, `Sep`, `01` |
+| `{{ original_filename }}`, `{{ original_name }}` | The name of the uploaded file, without its extension; on Paperless-ngx 3.x, that of its newest version | `scan` |
 | `{{ extension }}` | The extension of the exported version, with its dot | `.pdf` |
 | `{{ custom_fields.<name> }}` | The value of the custom field of that name | `{{ custom_fields.Invoice number }}`: `INV-2026-08` |
 
 The template must contain `{{ id }}`. A variable may be written with or without spaces, such as `{{id}}`, and is saved as `{{ id }}`. Every value goes into the path as plain text, so a `$1` or a `{{ title }}` in a title stays as it is.
 
-A value that a document lacks is empty, such as an owner, tags, an archive serial number or a custom field, and a folder that only such a value would name is called `Folder`; a missing correspondent, document type, date or title takes its fallback name from *Advanced fallback names*. The name of a custom field is written as in Paperless, with its spaces and capitals, and may hold any character but `{`, `}` and `/`. A select field gives the label of its choice, a document link the IDs of the documents, a yes or no field `true` or `false`, and a monetary field its amount as Paperless writes it, such as `EUR12.30`. `{{ created_month_name }}` names the month in the language that Nextcloud forces or has as its default, `force_language` or `default_language` in its `config.php`, and in English without either: never in the language of the administrator who starts a run, so the paths are the same in every run. A change of that language moves the files, like a change of the template. The names in the language of Nextcloud need PHP's `intl` extension; without it they are English, so installing or removing `intl` also moves the files of such a template.
+A custom field may also be written as Paperless writes it, `{{ custom_fields|get_cf_value("Invoice number") }}`, with the value of `{{ custom_fields.Invoice number }}`. A second text is the default for a document without a value: `{{ custom_fields|get_cf_value("Invoice number", "none") }}` gives `none` for a document that doesn't have the field or has no value in it; an empty text stays empty, as in Paperless. The name and the default are in double or single quotes and may hold any character but `{`, `}`, `/` and their quote. A template with another filter of Jinja, such as `{{ title|upper }}`, isn't saved, and the settings name the filter.
+
+A value that a document lacks is empty, such as an owner, tags, an archive serial number or a custom field, and a folder that only such a value would name is called `Folder`; a missing correspondent, document type, date or title takes its fallback name from *Advanced fallback names*. The name of a custom field is written as in Paperless, with its spaces and capitals, and may hold any character but `{`, `}` and `/`. A select field gives the label of its choice, a document link the IDs of the documents, a yes or no field `true` or `false`, and a monetary field its amount as Paperless writes it, such as `EUR12.30`. `{{ created_month_name }}` and the other names of a month name it in the language that Nextcloud forces or has as its default, `force_language` or `default_language` in its `config.php`, and in English without either: never in the language of the administrator who starts a run, so the paths are the same in every run. The short names are those of that language, such as `Mär` in German, without a dot at their end, and in every English, such as British English, the first three letters, as Paperless writes them. A change of that language moves the files, like a change of the template. The names in the language of Nextcloud need PHP's `intl` extension; without it they are English, so installing or removing `intl` also moves the files of such a template.
 
 The users and the custom fields of Paperless are read only for a template that uses them, and the users in every run of [per-user ownership](#per-user-ownership). For `{{ owner_username }}`, the account of the app needs the permission to view users in Paperless, and for a custom field the permission to view custom fields; without it, the run fails before a file moves and names the permission. A custom field that Paperless doesn't have, such as one with a typo or one that was renamed, stops the run too, because its value would be empty in the path of every document.
 
@@ -562,6 +568,23 @@ Nextcloud accepts names of up to 250 bytes, and a character of Cyrillic takes tw
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/how-a-part-of-the-path-is-built.dark.svg">
   <img src="docs/images/diagrams/how-a-part-of-the-path-is-built.svg" alt="How a part of the path is built: The values go into the part of the template as plain text and the part is cleaned. While it has more bytes than Nextcloud allows, the longest of the free-text values is shortened, so that the text of the template, the dates, the marker and the extension stay whole. The file name then ends with the extension.">
 </picture>
+
+### Storage paths of Paperless
+
+With *Use the storage path of a document in Paperless* in *3 · Structured archive*, a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths) in Paperless goes where Paperless files it: below the archive folder, to the path of the template of its storage path. Every other document follows the path template. So the layout of your storage paths, such as one for each kind of document, or `{{ owner_username }}` first for a tree of each user, is the layout of the archive too, without a path template that repeats it. The switch is off by default.
+
+The template of a storage path follows the rules of the path template, with the [same variables](#path-template-variables), and its last part is the name of the file: the app adds the marker `[P{{ id }}]` and the extension there, as Paperless adds the extension, so the template needn't name `{{ id }}`. The storage path `{{ created_year }}/{{ correspondent }}/{{ title }}` puts an electricity bill at `2026/City Utilities/Electricity bill [P123].pdf` in the archive folder. Empty parts, such as the one in `Taxes//{{ title }}`, are left out.
+
+A storage path whose template the app can't render as Paperless does leaves its documents with the path template: one with logic of Jinja, such as `{% if %}`, a filter other than `get_cf_value`, a variable that the table of the path template doesn't list, such as `{{ tags }}`, a placeholder of older versions of Paperless, such as `{created_year}`, or a custom field that Paperless doesn't have. The report of each run and of each dry-run names such storage paths once, as `STORAGE PATHS NOT FOLLOWED` on the command line, and the preview under the path template names those of the newest documents:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/where-a-document-with-a-storage-path-goes.dark.svg">
+  <img src="docs/images/diagrams/where-a-document-with-a-storage-path-goes.svg" alt="Where a document with a storage path goes: With Use the storage path of a document in Paperless on, a run asks of every document whether it has a storage path in Paperless. A document without one follows the archive path template. For one with a storage path, the run asks whether the app can render its template: only the variables of the path template, a custom field that Paperless has, and get_cf_value as the one filter. If it can, the document goes below the archive folder to the path of that template, and its file name gets the marker [P123] and its extension. If it can't, because of logic of Jinja, another filter, an unknown variable or a custom field that Paperless lacks, the document follows the archive path template, and the report of the run, the dry-run and the preview name the storage path once. Turning the setting on or off moves the copies as a new template does: each stays the same file, with its shares.">
+</picture>
+
+The account of the app sees only the storage paths without an owner, its own, and those shared with it. Paperless makes the person who creates a storage path its owner, so share each storage path with the account (or remove its owner) before you turn the switch on: the documents of a storage path that the account doesn't see follow the path template, and the report and the preview name it by its ID, such as `#9`.
+
+The preview and a dry-run take the switch of the page before you save. Turning it on or off moves the copies as a new path template does, in the runs that follow and within the batch size: each copy stays the same file, with its shares, comments and tags. A storage path that uses `{{ owner_username }}` or a custom field makes a run read the users or the custom fields of Paperless, which the account of the app needs the permission to view; without it, the run fails before a file moves and names the permission.
 
 ### Which documents the archive mirrors
 

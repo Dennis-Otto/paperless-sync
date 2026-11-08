@@ -41,6 +41,8 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public array $correspondents = [];
 	/** @var array<string, string> */
 	public array $documentTypes = [];
+	/** @var array{names: array<string, string>, templates: array<string, string>} */
+	public array $storagePaths = ['names' => [], 'templates' => []];
 	/** @var array<int, string> the archived version of each document, which Paperless serves by default */
 	public array $contents = [];
 	/** @var array<int, string> the original of each document whose original differs from $contents */
@@ -228,7 +230,7 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	}
 
 	public function storagePaths(): array {
-		return [];
+		return $this->storagePaths;
 	}
 
 	public function tags(): array {
