@@ -38,10 +38,9 @@ final class ProviderTest extends TestCase {
 	protected function setUp(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');
 		$factory = $this->createStub(IFactory::class);
-		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => match ($language) {
-			'de' => $this->germanL10n(),
-			default => $this->englishL10n(),
-		});
+		// The language of the reader, as Nextcloud hands it over: English, the texts in the code, or a
+		// catalog of the app, such as de or de_DE, the formal German.
+		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => $language === null || $language === 'en' ? $this->englishL10n() : $this->catalogL10n($language));
 		$urls = $this->createStub(IURLGenerator::class);
 		$urls->method('linkToRouteAbsolute')->willReturnCallback(static function (string $route, array $parameters): string {
 			self::assertSame('files.viewcontroller.showFile', $route);
@@ -98,6 +97,34 @@ final class ProviderTest extends TestCase {
 			'Paperless Sync hat 3 Dokumente hinzugefügt oder aktualisiert, 1 Dokument verschoben und 2 Dokumente nach _Gelöscht verschoben: Strom August [P123].pdf, Police [P124].pdf und 4 weitere',
 			$event->getParsedSubject(),
 		);
+	}
+
+	/**
+	 * Formal German and Dutch, each with a catalog of its own: Nextcloud takes the exact language of
+	 * the reader, and the e-mails of the Activity app have no browser whose language it could take
+	 * instead, so without the catalog a reader of de_DE gets English.
+	 *
+	 * @return array<string, array{string, string, string}> the language, the entry of a run and that of an import
+	 */
+	public static function languagesWithACatalog(): array {
+		return [
+			'formal German' => [
+				'de_DE',
+				'Paperless Sync hat 3 Dokumente hinzugefügt oder aktualisiert, 1 Dokument verschoben und 2 Dokumente nach _Gelöscht verschoben: Strom August [P123].pdf, Police [P124].pdf und 4 weitere',
+				'scan.pdf wurde in Paperless importiert',
+			],
+			'Dutch' => [
+				'nl',
+				'Paperless Sync heeft 3 documenten toegevoegd of bijgewerkt, 1 document verplaatst en 2 documenten naar _Gelöscht verplaatst: Strom August [P123].pdf, Police [P124].pdf en nog 4',
+				'scan.pdf is in Paperless geïmporteerd',
+			],
+		];
+	}
+
+	#[DataProvider('languagesWithACatalog')]
+	public function testTheStreamSpeaksTheLanguageOfItsReader(string $language, string $run, string $import): void {
+		self::assertSame($run, $this->parse($language, ActivityPublisher::SUBJECT_RUN, $this->runEntry())->getParsedSubject());
+		self::assertSame($import, $this->parse($language, ActivityPublisher::SUBJECT_IMPORTED, ['file' => ['id' => 31, 'path' => 'Eingang/scan.pdf']])->getParsedSubject());
 	}
 
 	/** @return array<string, array{array<string, int>, string, string}> */

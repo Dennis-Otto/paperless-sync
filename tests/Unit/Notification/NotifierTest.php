@@ -40,7 +40,9 @@ final class NotifierTest extends TestCase {
 	protected function setUp(): void {
 		$this->status = $this->statusService(new TestClock());
 		$factory = $this->createStub(IFactory::class);
-		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => $language === 'de' ? $this->germanL10n() : $this->englishL10n());
+		// The language of the reader, as Nextcloud hands it over: English, the texts in the code, or a
+		// catalog of the app, such as de or de_DE, the formal German.
+		$factory->method('get')->willReturnCallback(fn (string $app, ?string $language = null): IL10N => $language === null || $language === 'en' ? $this->englishL10n() : $this->catalogL10n($language));
 		$urls = $this->createStub(IURLGenerator::class);
 		$urls->method('imagePath')->willReturnCallback(static fn (string $app, string $image): string => "/apps/{$app}/img/{$image}");
 		$urls->method('getAbsoluteURL')->willReturnCallback(static fn (string $url): string => 'https://cloud.example.test' . $url);
@@ -129,6 +131,33 @@ final class NotifierTest extends TestCase {
 		self::assertSame(['file' => ['type' => 'highlight', 'id' => 'Documents/Paperless/Inbox/notes.bin', 'name' => 'notes.bin']], $notification->getRichSubjectParameters());
 		self::assertSame('', $notification->getLink());
 		self::assertSame('', $notification->getParsedMessage());
+	}
+
+	/**
+	 * Formal German and Dutch, each with a catalog of its own: Nextcloud takes the exact language of
+	 * the reader, and a cron job or a push notification has no browser whose language it could take
+	 * instead, so without the catalog a reader of de_DE gets English.
+	 *
+	 * @return array<string, array{string, string, string}> the language, the subject of a failing mirror and that of a sent file that is gone
+	 */
+	public static function languagesWithACatalog(): array {
+		return [
+			'formal German' => ['de_DE', 'Paperless Sync ist 4 Mal in Folge fehlgeschlagen', 'Paperless Sync konnte receipt.pdf nicht senden: Die Datei wurde gelöscht, oder Sie dürfen sie nicht mehr lesen'],
+			'Dutch' => ['nl', 'Paperless Sync is 4 keer achter elkaar mislukt', 'Paperless Sync kon receipt.pdf niet versturen: het bestand is verwijderd, of je mag het niet meer lezen'],
+		];
+	}
+
+	#[DataProvider('languagesWithACatalog')]
+	public function testANotificationSpeaksTheLanguageOfItsReader(string $language, string $failing, string $gone): void {
+		for ($run = 0; $run < 4; ++$run) {
+			$this->status->failed(new RuntimeException('Paperless answered 500'));
+		}
+
+		self::assertSame($failing, $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_FAILING), $language)->getParsedSubject());
+		self::assertSame($gone, $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_SEND_GONE, [
+			'file' => ['id' => 42, 'path' => 'Scans/receipt.pdf'],
+			'reason' => '',
+		]), $language)->getParsedSubject());
 	}
 
 	/** @return array<string, array{string, string, string}> the subject, its rich text and the link */

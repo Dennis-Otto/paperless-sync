@@ -126,7 +126,7 @@ bash scripts/eslint.sh js/flow.js # one file
 
 ## Translations
 
-Paperless Sync speaks English, German, French, Spanish, Simplified Chinese and Traditional Chinese. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The texts of each language are in `l10n/<language>.json`, which PHP reads, and in its copy `l10n/<language>.js` for the browser.
+Paperless Sync speaks English, German, with *du* and with *Sie*, French, Spanish, Dutch, Simplified Chinese and Traditional Chinese. The settings page, its messages and the connection checklist follow the language that Nextcloud has for the administrator, the Activity stream that of the target user, and the times on the page the locale of the personal settings. The texts of each language are in `l10n/<language>.json`, which PHP reads, and in its copy `l10n/<language>.js` for the browser.
 
 `node scripts/check-l10n.mjs`, which `scripts/check-project.sh` runs, compares every catalog with the code, so that no message stays English on a page in another language:
 
@@ -140,6 +140,7 @@ Paperless Sync speaks English, German, French, Spanish, Simplified Chinese and T
 - **A plural** has as many forms as the `pluralForm` of its catalog names. Nextcloud picks a form in PHP by that rule, but in the browser by a table of its own: for French and Spanish, the rule has a form for millions in the middle, and the browser shows that one for every count but one, so the check asks for it to repeat the third form, as Nextcloud's own catalogs do. Chinese, Japanese and Korean have one form for every count, so a plural of `l10n/zh_CN.json` and `l10n/zh_TW.json` has one.
 - **A label in quotes:** a message that names a setting by its label, such as *"Create missing tags"*, must hold the translation of that label.
 - **Chinese** writes a dash as two, `——`, without spaces, never as one `—`, and Traditional Chinese takes the words of Taiwan: a word of Simplified Chinese in Traditional characters, such as *日誌* for a log or *用戶* for a user, fails with the word that the catalogs of Nextcloud for Taiwan write instead, *記錄檔* or *使用者*. The check reads the catalogs and the Chinese texts of `appinfo/info.xml`; `taiwanWords` in `scripts/check-l10n.mjs` lists the words.
+- **A variant of a language**, such as `l10n/de_DE.json`, the formal German, names the folders and the fallbacks for metadata as its language does, here `l10n/de.json`: a Nextcloud in the variant proposed the names of its language before the variant had a catalog, so names of its own would move an archive that never stored them. The check takes the names from `NAMES` of `lib/Service/ConfigService.php`, fails with each name that differs, and `--fix` writes that of the language.
 - **A language without its texts for the App Store** fails: `appinfo/info.xml` needs a `<summary lang="…">` and a `<description lang="…">` for each catalog, with the code that the App Store has for the language: the language itself, such as `fr` for `fr` and `es` for `es_419`, or one of the few variants of [its schema](https://apps.nextcloud.com/schema/apps/info.xsd), such as `zh-hans` for `zh_CN`, `zh-hant` for `zh_TW`, `pt-br` for `pt_BR` and `sr-latn` for `sr@latin`. The check names the code that it misses.
 - **A description with other sections or bullets than the English one** fails in `tests/Unit/AppInfo/DescriptionTest.php`: each `<description lang="…">` of `appinfo/info.xml` has the headings `###` of the English `<description>`, in the same order, with as many bullets `-` below each, so that a new feature reaches the App Store in every language at once. The test names the language and the bullets of each section; translate a new bullet into every description, at its place.
 - **A text that no code translates any more, a text twice and an `l10n/<language>.js` that differs** fail as well; `node scripts/check-l10n.mjs --fix` removes them and writes each `l10n/<language>.js` from its `l10n/<language>.json`.
@@ -150,7 +151,7 @@ A run, also a scheduled one, has no reader when it writes its errors, so it keep
 
 ## Translate Paperless Sync
 
-The app speaks English, German, French, Spanish, Simplified Chinese and Traditional Chinese. The French, Spanish and Chinese texts were drafted with the help of an AI and wait for native speakers to read them: a word that sounds wrong is worth a note in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general) or a pull request, and so is a language that the app doesn't speak yet. You need a text editor or the editor of GitHub, no PHP and no build.
+The app speaks English, German, with *du* and with *Sie*, French, Spanish, Dutch, Simplified Chinese and Traditional Chinese. The French, Spanish, Dutch and Chinese texts were drafted with the help of an AI, and so was the formal German, from the German of the maintainer; they wait for native speakers to read them: a word that sounds wrong is worth a note in the [discussions](https://github.com/Dennis-Otto/paperless-sync/discussions/categories/general) or a pull request, and so is a language that the app doesn't speak yet. You need a text editor or the editor of GitHub, no PHP and no build.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/diagrams/how-a-translation-reaches-its-readers.dark.svg">
@@ -161,32 +162,34 @@ The app speaks English, German, French, Spanish, Simplified Chinese and Traditio
 | --- | --- | --- | --- |
 | English | the texts in the code | *you* | the maintainer |
 | German | `l10n/de.json` | *du* | the maintainer |
+| German, formal | `l10n/de_DE.json` | *Sie* | an AI, from the German of the maintainer, waiting for review |
 | French | `l10n/fr.json` | *vous* | an AI, waiting for review |
 | Spanish | `l10n/es.json` | *tú* | an AI, waiting for review |
+| Dutch | `l10n/nl.json` | *je* | an AI, waiting for review |
 | Simplified Chinese | `l10n/zh_CN.json` | *您* | an AI, waiting for review |
 | Traditional Chinese, as written in Taiwan | `l10n/zh_TW.json` | *您* | an AI, waiting for review |
 
 Each line of a catalog pairs a text of the code, in English, with its translation. Change only the right side: the code looks a translation up by the English text, character for character. Placeholders stay, such as `%s`, `%1$s`, `%n` and `{document}`, and the words around them may move; `%1$s` and `%2$s` may swap places.
 
-- **The words of Nextcloud and of Paperless:** a word that one of them shows as well takes its translation, such as the permission *View* of *Documents* in Paperless, which is *Afficher* in French, *Ver* in Spanish, *查看* in Simplified and *檢視* in Traditional Chinese, or *Files* of Nextcloud, which is *Fichiers*, *Archivos*, *文件* and *檔案*. Simplified Chinese takes *往来方* for the correspondent of Paperless and *动态* for the Activity of Nextcloud, and Traditional Chinese the words of Taiwan, *關聯方* and *活動*: write it in the words that Nextcloud and Paperless-ngx use there, not as Simplified Chinese in other characters, such as *檔案* for a file and *文件* for a document of Paperless. Each names its log and its administrator in its own words there: *記錄檔* for the log of Nextcloud or of a server, *事件記錄* for the logs of Paperless, *管理員* for an administrator of Nextcloud and *管理者* for an Admin of Paperless, never *日誌*. The Traditional Chinese of [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) takes the same words, so that both apps read as one. The [catalogs of Nextcloud](https://github.com/nextcloud/server/tree/master/core/l10n) and those of [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx/tree/dev/src-ui/src/locale) have them.
+- **The words of Nextcloud and of Paperless:** a word that one of them shows as well takes its translation, such as the permission *View* of *Documents* in Paperless, which is *Afficher* in French, *Ver* in Spanish, *查看* in Simplified and *檢視* in Traditional Chinese, or *Files* of Nextcloud, which is *Fichiers*, *Archivos*, *文件* and *檔案*. Simplified Chinese takes *往来方* for the correspondent of Paperless and *动态* for the Activity of Nextcloud, and Traditional Chinese the words of Taiwan, *關聯方* and *活動*: write it in the words that Nextcloud and Paperless-ngx use there, not as Simplified Chinese in other characters, such as *檔案* for a file and *文件* for a document of Paperless. Each names its log and its administrator in its own words there: *記錄檔* for the log of Nextcloud or of a server, *事件記錄* for the logs of Paperless, *管理員* for an administrator of Nextcloud and *管理者* for an Admin of Paperless, never *日誌*. The Traditional Chinese of [Paperless Unified Search](https://github.com/Dennis-Otto/paperless-unified-search) takes the same words, so that both apps read as one. Dutch writes *labels* for the tags, as Nextcloud and Paperless-ngx do in Dutch, *Bekijken* for the permission *View* and *Bestanden* for *Files*, and addresses the reader with *je*, as the catalogs of Nextcloud do. The [catalogs of Nextcloud](https://github.com/nextcloud/server/tree/master/core/l10n) and those of [Paperless-ngx](https://github.com/paperless-ngx/paperless-ngx/tree/dev/src-ui/src/locale) have them.
 - **The words of this app** stay the same throughout:
 
-    | English | French | Spanish | Simplified Chinese | Traditional Chinese |
-    | --- | --- | --- | --- | --- |
-    | archive | archive | archivo | 归档 | 封存 |
-    | file | fichier | fichero, as *archivo* is the archive | 文件 | 檔案 |
-    | inbox | boîte de réception | bandeja de entrada | 收件箱 | 收件匣 |
-    | to mirror | refléter | reflejar | 镜像 | 鏡像 |
-    | run | exécution | ejecución | 运行 | 執行 |
-    | dry-run | simulation | simulación | 试运行 | 試執行 |
-    | scan | analyse | análisis | 扫描 | 掃描 |
-    | target user | utilisateur cible | usuario de destino | 目标用户 | 目標使用者 |
-    | background job | tâche de fond | tarea en segundo plano | 后台任务 | 背景作業 |
+    | English | French | Spanish | Dutch | Simplified Chinese | Traditional Chinese |
+    | --- | --- | --- | --- | --- | --- |
+    | archive | archive | archivo | archief | 归档 | 封存 |
+    | file | fichier | fichero, as *archivo* is the archive | bestand | 文件 | 檔案 |
+    | inbox | boîte de réception | bandeja de entrada | inbox | 收件箱 | 收件匣 |
+    | to mirror | refléter | reflejar | spiegelen | 镜像 | 鏡像 |
+    | run | exécution | ejecución | run | 运行 | 執行 |
+    | dry-run | simulation | simulación | proefrun | 试运行 | 試執行 |
+    | scan | analyse | análisis | scan | 扫描 | 掃描 |
+    | target user | utilisateur cible | usuario de destino | doelgebruiker | 目标用户 | 目標使用者 |
+    | background job | tâche de fond | tarea en segundo plano | achtergrondtaak | 后台任务 | 背景作業 |
 
 - **French typography:** a no-break space before `:`, `;`, `?` and `!` and inside `«` and `»`, and the apostrophe `’`.
 - **Chinese typography:** the full-width punctuation of Chinese, such as `，`, `。`, `：` and `（）`, with the quotes `“”` in Simplified and `「」` in Traditional Chinese, as Nextcloud has them, the dash as two, `——`, without spaces, such as `试运行——未做任何更改`, and a space between a Chinese word and a word in Latin letters, a number or a placeholder, such as `发送到 Paperless` and `%n 个文档`. Names, such as Paperless, Nextcloud, Webhook and cron, stay as they are.
 - **What stays in English:** the log, the command line and the lines of *Copy report*, for bug reports. The website and the pictures stay in English and German, so the *Help* links of the other languages open the English guide.
-- **A regional variant:** Nextcloud takes the catalog of the exact language of an account, so an account set to *Español (México)*, `es_MX`, reads the app in English until it has a catalog of its own. The names of the folders fall back to those of `es`. Traditional Chinese of Hong Kong, `zh_HK`, reads the app in English as well, also its folders, as the catalog of Traditional Chinese is that of Taiwan, `zh_TW`, and no catalog of `zh` exists.
+- **A regional variant:** Nextcloud takes the catalog of the exact language of an account, so an account set to *Español (México)*, `es_MX`, reads the app in English until it has a catalog of its own. The names of the folders fall back to those of `es`. The formal German of *Deutsch (Förmlich: Sie)*, `de_DE`, which many organizations set as the default language, has a catalog of its own: the German of `l10n/de.json` with *Sie* in place of *du*, and with the same names of the folders. Change a German text in both catalogs. Traditional Chinese of Hong Kong, `zh_HK`, reads the app in English as well, also its folders, as the catalog of Traditional Chinese is that of Taiwan, `zh_TW`, and no catalog of `zh` exists.
 
 ### Correct a translation
 
@@ -209,7 +212,7 @@ Each line of a catalog pairs a text of the code, in English, with its translatio
     node scripts/check-l10n.mjs --new sv --plural-form "nplurals=2; plural=(n != 1);"
     ```
 
-2. Translate every text of `l10n/<language>.json`; the check lists those that are still empty. A plural has one entry for each form of its rule, and where the rule has a form for millions, the second repeats the third. The names of the folders, such as *Archive* and *_Deleted*, become the folders of new installations in this language: keep them short, without a `/` and different from each other.
+2. Translate every text of `l10n/<language>.json`; the check lists those that are still empty. A plural has one entry for each form of its rule, and where the rule has a form for millions, the second repeats the third. The names of the folders, such as *Archive* and *_Deleted*, become the folders of new installations in this language: keep them short, without a `/` and different from each other. A variant of a language with a catalog, such as `de_DE` beside `de`, takes the names of that catalog, which `--new` leaves empty and `--fix` writes.
 3. Add `<summary lang="it">` and `<description lang="it">` to `appinfo/info.xml`, after those of the other languages, with the same versions of Nextcloud as the English one and its sections and bullets, each translated at its place. A few variants have a code of their own in the App Store, such as `zh-hans` for `zh_CN` and `zh-hant` for `zh_TW`: the check names the code that it misses.
 4. Run `node scripts/check-l10n.mjs --fix` and `node scripts/check-l10n.mjs`, and name the language in *Translations*, in the table above and in the table of *Folder names* in `README.md` and `README.de.md`.
 5. Open a pull request with a title such as `feat(i18n): speak Italian`. An installation in use keeps the folders that it has: a run stores the names that it uses ([decision 0036](decisions/0036-more-languages-without-moving-an-archive.md)), so a new language needs no step of the update.

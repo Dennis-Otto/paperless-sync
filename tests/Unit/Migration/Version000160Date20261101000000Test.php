@@ -37,6 +37,7 @@ final class Version000160Date20261101000000Test extends TestCase {
 		return [
 			'French' => ['fr'], 'Spanish' => ['es'], 'Spanish of Mexico' => ['es_MX'], 'French of France' => ['fr_FR'],
 			'Simplified Chinese, of a later version' => ['zh_CN'], 'Traditional Chinese, of a later version' => ['zh_TW'],
+			'Dutch, of a later version' => ['nl'], 'Dutch of Belgium, of a later version' => ['nl_BE'],
 		];
 	}
 

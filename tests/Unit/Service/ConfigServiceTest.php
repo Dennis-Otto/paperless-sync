@@ -52,12 +52,16 @@ final class ConfigServiceTest extends TestCase {
 		$spanish = ['Documentos/Paperless', 'Archivo', 'Bandeja de entrada', 'Importaciones fallidas', '_Eliminados', '_Sin interlocutor', '_Sin tipo de documento', '_Sin fecha', 'Sin título'];
 		$chinese = ['文档/Paperless', '归档', '收件箱', '导入失败', '_已删除', '_无往来方', '_无文档类型', '_无日期', '无标题'];
 		$traditionalChinese = ['文件/Paperless', '封存', '收件匣', '匯入失敗', '_已刪除', '_無關聯方', '_無文件類型', '_無日期', '無標題'];
+		$dutch = ['Documenten/Paperless', 'Archief', 'Inbox', 'Mislukte imports', '_Verwijderd', '_Geen correspondent', '_Geen documenttype', '_Geen datum', 'Zonder titel'];
 
 		return [
 			'English' => ['en', $english],
 			'British English, without a catalog of its own' => ['en_GB', $english],
 			'German' => ['de', $german],
-			'formal German, with the catalog of German' => ['de_DE', $german],
+			'formal German, with a catalog of its own and the names of German' => ['de_DE', $german],
+			'German of Switzerland, with the catalog of German' => ['de_CH', $german],
+			'Dutch' => ['nl', $dutch],
+			'Dutch of Belgium, with the catalog of Dutch' => ['nl_BE', $dutch],
 			'French' => ['fr', $french],
 			'French of Canada, with the catalog of French' => ['fr_CA', $french],
 			'Spanish' => ['es', $spanish],
@@ -87,6 +91,22 @@ final class ConfigServiceTest extends TestCase {
 			$config->emptyCorrespondent, $config->emptyDocumentType, $config->emptyDate, $config->untitled,
 		]);
 		self::assertSame($names[1], $this->service->validate(self::validSettings(), 'secret-token')->archiveFolder, 'A dry-run and a save take the same names.');
+	}
+
+	/**
+	 * Formal German, de_DE, proposed the names of German before it had a catalog of its own, and
+	 * proposes the same names with it, so that the catalog moves no archive that never stored them.
+	 */
+	public function testFormalGermanProposesTheNamesOfGermanWithAndWithoutItsCatalog(): void {
+		$this->defaultLanguage = 'de_DE';
+		$this->withoutCatalogs = ['de_DE'];
+		$before = $this->configService();
+		$this->withoutCatalogs = [];
+		$now = $this->configService();
+
+		self::assertSame(['de', 'de_DE'], [$before->defaultLanguage(), $now->defaultLanguage()]);
+		self::assertEquals($before->get(), $now->get());
+		self::assertSame(['Dokumente/Paperless', 'Archiv', 'Ohne Titel'], [$now->get()->basePath, $now->get()->archiveFolder, $now->get()->untitled]);
 	}
 
 	/** @return array<string, array{bool|string, string, string}> force_language, default_language and the proposed archive folder */
