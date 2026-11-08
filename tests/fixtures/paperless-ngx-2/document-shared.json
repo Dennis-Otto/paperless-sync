@@ -39,6 +39,6 @@
     "X-Api-Version": "9",
     "X-Version": "2.20.15"
   },
-  "request": "GET /api/documents/5/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,permissions&truncate_content=true&full_perms=true",
+  "request": "GET /api/documents/5/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions,permissions&truncate_content=true&full_perms=true",
   "status": 200
 }

@@ -814,6 +814,7 @@ SCENARIOS=(
 	'webhook: moves'
 	'new-content: moves'
 	'schedule: new-content'
+	'file-versions: schedule'
 	'excluded-tags: moves'
 	'included-tags: excluded-tags'
 	'quota: included-tags'
@@ -821,7 +822,7 @@ SCENARIOS=(
 	'metadata: moves'
 	'deletion: metadata'
 	'inbox: connection'
-	'status: schedule quota deletion inbox'
+	'status: file-versions quota deletion inbox'
 	'restore: deletion'
 	'conflicts: moves'
 	'left-out: conflicts'
@@ -1325,6 +1326,69 @@ scenario_schedule() {
 		echo "The versions app has ${VERSIONS_AFTER} entries for the file after the update in the background job instead of $((VERSIONS_BEFORE + 1))." >&2
 		exit 1
 	fi
+}
+
+# Paperless-ngx 3.x keeps versions of a document and serves the newest one: a text as the newest
+# version of P123, a file of another type without an archived version, gives its copy the content
+# and the extension of the text. In the background job, the copy moves to its new name and takes
+# the text in place: it keeps its ID and its share, and the versions app keeps the previous content
+# as a version of the file. Without the version, the copy is the PDF again, for the scenarios after it.
+scenario_file_versions() {
+	local versioned="${RENAMED_PATH%.pdf}.txt" job hour_ago key target newest version
+	control /control/version/text
+	hour_ago="$(($(date +%s) - 3600))"
+	for key in status_last_started status_last_completed status_last_ended status_last_sync_started status_last_sync_ended; do
+		occ config:app:set paperless_sync "${key}" --type=integer --value="${hour_ago}" >/dev/null
+	done
+	save_settings "${TMP_DIR}/versions-enabled.json" enabled=1
+	assert_json enabled "${TMP_DIR}/versions-enabled.json"
+	job="$(occ background-job:list --class='OCA\PaperlessSync\Cron\SyncJob' --output=json | json_value 0 id)"
+	occ background-job:execute --force-execute "${job}" >/dev/null
+	assert_status_soon job "${TMP_DIR}/versions-job.json" "${hour_ago}"
+	save_settings "${TMP_DIR}/versions-disabled.json" enabled=0
+	assert_json disabled "${TMP_DIR}/versions-disabled.json"
+	assert_dav_missing sync-target "${RENAMED_PATH}"
+	assert_dav_file sync-target "${versioned}" 'Synthetic text, the newest version of P123.'
+	assert_file_id "${versioned}"
+	# The newest earlier version of the file is the PDF that the text replaced. The versions app
+	# thins out versions that are seconds apart, as those of the scenarios before, so their count
+	# may drop, and it may list the current file, which it serves no content of, as the newest.
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		--output "${TMP_DIR}/versions-list.xml" \
+		"${BASE_URL}/remote.php/dav/versions/sync-target/versions/${FILE_ID}"
+	newest=''
+	while read -r version; do
+		if curl --fail --silent --user "sync-target:${PASSWORD}" --output "${TMP_DIR}/versions-newest" "${BASE_URL}${version}"; then
+			newest="${version}"
+			break
+		fi
+	done < <(grep -oE "/remote.php/dav/versions/sync-target/versions/${FILE_ID}/[0-9]+" "${TMP_DIR}/versions-list.xml" | sort -t / -k 8 -n -r)
+	if [[ -z "${newest}" ]] || ! grep --fixed-strings 'Synthetic Paperless archive document P123.' "${TMP_DIR}/versions-newest" >/dev/null; then
+		echo "The versions app kept no version of the PDF that the new version in Paperless replaced: ${newest:-none}." >&2
+		exit 1
+	fi
+	# The share of the scenario new-content, under the name that e2e-other sees.
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-other:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--output "${TMP_DIR}/versions-shared.json" \
+		"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares?shared_with_me=true"
+	target="$(host_python -c '
+import json, sys
+from urllib.parse import quote
+shares = [share for share in json.load(sys.stdin)["ocs"]["data"] if "[P123]" in share["file_target"]]
+print(quote(shares[0]["file_target"].lstrip("/")))' < "${TMP_DIR}/versions-shared.json")"
+	assert_dav_file e2e-other "${target}" 'Synthetic text, the newest version of P123.'
+	control /control/version/none
+	sync_run false "${TMP_DIR}/version-gone.json"
+	assert_json export "${TMP_DIR}/version-gone.json"
+	assert_dav_missing sync-target "${versioned}"
+	assert_dav_file sync-target "${RENAMED_PATH}" 'Synthetic Paperless archive document P123.'
+	assert_file_id "${RENAMED_PATH}"
 }
 
 # A tag that excludes a document removes its copy from the archive, with the folders that this

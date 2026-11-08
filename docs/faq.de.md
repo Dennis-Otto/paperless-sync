@@ -29,6 +29,10 @@ Die Dateien des Archivs sind ein Spiegel von Paperless und mit Absicht nur zum L
 
 Eine Kopie, die du umbenennst oder verschiebst, bleibt, wo du sie hingelegt hast, als eigene Datei, und der nächste Lauf schreibt das Dokument neu an seinen Pfad; eine, die du löschst, kommt auf dieselbe Weise zurück. Um eine eigene Fassung zu behalten, kopiere die Datei aus dem Archiv heraus, und bearbeite Dokumente in Paperless. Ein Hinweis über der Liste des Archivs in Dateien sagt das ebenfalls, auch denen, die es über eine Freigabe erreichen.
 
+### Was passiert, wenn ein Dokument in Paperless eine neue Version bekommt?
+
+Paperless-ngx 3.x hält Versionen eines Dokuments, und seine Kopie folgt der neuesten. Eine neue Datei für ein Dokument, etwa ein digital erzeugtes PDF zu einem Scan, ersetzt im nächsten Lauf den Inhalt seiner Kopie, in derselben Datei, sodass die Kopie ihre Freigaben behält, und in einem geplanten Lauf bewahrt Nextcloud den vorherigen Inhalt als Version auf. Eine Version eines anderen Typs gibt der Kopie ihre Dateiendung, etwa `.txt` für einen Text, und eine Version ohne Archivversion ihr Original. Führst du Dokumente als Versionen eines anderen zusammen, was Paperless-ngx 3.1 anbietet, sind die zusammengeführten Dokumente keine eigenen Dokumente mehr: Ihre Kopien zählen als fehlend und wandern nach den erforderlichen Läufen ohne das Dokument in den Gelöscht-Ordner, wie die von Dokumenten, die ohne den Papierkorb gelöscht wurden ([Löscheinstellungen](#welche-löscheinstellungen-brauche-ich)), während die Kopie des Dokuments, das sie aufgenommen hat, ihren Inhalt erhält.
+
 ### Wohin gehen gelöschte Dateien?
 
 Das hängt davon ab, was sie löscht:

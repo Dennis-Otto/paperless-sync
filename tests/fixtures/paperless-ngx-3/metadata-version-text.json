@@ -1,0 +1,24 @@
+{
+  "body": {
+    "archive_checksum": null,
+    "archive_media_filename": null,
+    "archive_metadata": null,
+    "archive_size": null,
+    "barcodes": [],
+    "has_archive_version": false,
+    "lang": "en",
+    "media_filename": "0000007_v2.txt",
+    "original_checksum": "2a2b53f4fd261f636dab54df853aba29466d6b3e7193c51bfc26c57a0237280a",
+    "original_filename": "notes.txt",
+    "original_metadata": [],
+    "original_mime_type": "text/plain",
+    "original_size": 58
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "X-Api-Version": "10",
+    "X-Version": "3.3.1"
+  },
+  "request": "GET /api/documents/7/metadata/",
+  "status": 200
+}

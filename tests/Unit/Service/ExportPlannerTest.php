@@ -23,6 +23,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ExportFilter;
 use OCA\PaperlessSync\Service\ExportPlanner;
 use OCA\PaperlessSync\Service\ExportStates;
+use OCA\PaperlessSync\Service\FileVersions;
 use OCA\PaperlessSync\Service\SyncBatch;
 use OCA\PaperlessSync\Service\TargetFiles;
 use OCA\PaperlessSync\Service\UserTimeZones;
@@ -453,6 +454,43 @@ final class ExportPlannerTest extends TestCase {
 		self::assertSame(0, $this->paperless->checksumRequests);
 	}
 
+	/**
+	 * Paperless-ngx 3.x serves the newest version of a document, which may have no archived version,
+	 * though the fields of the document describe an archived first file. The copy takes the
+	 * original of the version, with the checksum that its metadata names, and the revision names
+	 * the version, so the state learns of a new one whatever the time of the change says.
+	 */
+	public function testTheNewestVersionWithoutAnArchivedVersionIsExportedFromItsOriginal(): void {
+		$documents = $this->arrange(['exported' => [[1, 'A']], 'documents' => [[1, 'A', 'm2']], 'contents' => [1 => '%PDF-version']]);
+		$documents[0]['versions'] = [['id' => 7, 'is_root' => false], ['id' => 1, 'is_root' => true]];
+		$this->paperless->newestFiles[1] = ['name' => 'digital.pdf', 'type' => 'application/pdf', 'archive' => false];
+
+		$actions = iterator_to_array($this->planner(TestConfig::of([]), new SyncBatch(10))->plan($documents, [], false), false);
+
+		self::assertCount(1, $actions);
+		$copy = $actions[0];
+		self::assertInstanceOf(ExportCopy::class, $copy);
+		self::assertSame('export P1: ' . self::path('A', 1), self::describe($copy));
+		self::assertTrue($copy->useOriginal);
+		self::assertSame('original:m2@version:7', $copy->sourceRevision);
+		self::assertSame(['remote_checksum' => hash('sha256', '%PDF-version'), 'remote_revision' => 'original:m2@version:7'], array_intersect_key($copy->checksum, ['remote_checksum' => 0, 'remote_revision' => 0]));
+		self::assertNull($copy->document['archived_file_name']);
+		self::assertSame(['digital.pdf', 'application/pdf'], [$copy->document['original_file_name'], $copy->document['mime_type']]);
+		self::assertSame([1], $this->paperless->fileRequests);
+		self::assertSame(0, $this->paperless->checksumRequests);
+	}
+
+	/** A newest version whose file Paperless can't name fails its document alone. */
+	public function testANewestVersionThatPaperlessCannotNameFailsItsDocumentAlone(): void {
+		$documents = [self::document(2, 'B'), self::document(1, 'A')];
+		$documents[0]['versions'] = [['id' => 7, 'is_root' => false], ['id' => 2, 'is_root' => true]];
+
+		self::assertSame([
+			'failed P2: Paperless did not return has_archive_version.',
+			'export P1: ' . self::path('A', 1),
+		], $this->plan($documents, [], false));
+	}
+
 	/** A path that the template can't render fails the document before it takes a place in the batch. */
 	public function testAPathThatFailsLeavesThePlaceOfItsDocumentToTheNext(): void {
 		$documents = [self::document(2, 'fails'), self::document(1, 'A')];
@@ -622,6 +660,7 @@ final class ExportPlannerTest extends TestCase {
 			$batch,
 			new TargetFiles($this->storage, TestStorage::USER),
 			$this->paperless,
+			new FileVersions($this->paperless),
 			static function (array $document): string {
 				$title = (string)($document['title'] ?? '');
 				if ($title === 'fails') {

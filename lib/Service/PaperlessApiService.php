@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Service;
 use JsonException;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
@@ -49,14 +50,15 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const MATCH_NONE = 0;
 	/**
 	 * The fields of a document that a run reads: those of the path template, the tags of the
-	 * exclusion, the revision and the files of the document. A run asks Paperless for these alone,
-	 * because the whole document holds its text, which Paperless would send of every document in
-	 * every run.
+	 * exclusion, the revision and the files of the document, with its versions since Paperless-ngx
+	 * 3.0 (FileVersions), which Paperless-ngx 2.x leaves out as a field it doesn't know. A run asks
+	 * Paperless for these alone, because the whole document holds its text, which Paperless would
+	 * send of every document in every run.
 	 */
 	public const DOCUMENT_FIELDS = [
 		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'created', 'added', 'modified',
 		'tags', 'original_file_name', 'archived_file_name', 'mime_type', 'owner', 'archive_serial_number',
-		'page_count', 'custom_fields',
+		'page_count', 'custom_fields', 'versions',
 	];
 	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
 	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
@@ -507,6 +509,41 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	public function documentChecksum(int $documentId, bool $original): string {
+		$data = $this->metadata($documentId);
+		$key = $original ? 'original_checksum' : 'archive_checksum';
+		$checksum = $data[$key] ?? null;
+		if (!is_string($checksum) || $checksum === '') {
+			throw new UnexpectedValueException("Paperless did not return {$key}.");
+		}
+
+		return $checksum;
+	}
+
+	public function documentFile(int $documentId): DocumentFile {
+		$data = $this->metadata($documentId);
+		$hasArchive = $data['has_archive_version'] ?? null;
+		if (!is_bool($hasArchive)) {
+			throw new UnexpectedValueException('Paperless did not return has_archive_version.');
+		}
+		// The name of the archived file in the media folder of Paperless, without its folders, such
+		// as those of a storage path. A version without one is served as its original.
+		$archive = $hasArchive ? self::filled(basename(self::text($data['archive_media_filename'] ?? null))) : null;
+
+		return new DocumentFile(
+			self::filled(self::text($data['original_filename'] ?? null)),
+			$archive,
+			self::filled(self::text($data['original_mime_type'] ?? null)),
+			self::filled(self::text($data['original_checksum'] ?? null)),
+			$archive !== null ? self::filled(self::text($data['archive_checksum'] ?? null)) : null,
+		);
+	}
+
+	/**
+	 * The metadata of a document, which since Paperless-ngx 3.0 describes its newest version.
+	 *
+	 * @return array<array-key, mixed>
+	 */
+	private function metadata(int $documentId): array {
 		$response = $this->send(
 			'GET',
 			'/api/documents/' . $documentId . '/metadata/',
@@ -520,13 +557,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if (!is_array($data)) {
 			throw new UnexpectedValueException('Paperless returned invalid document metadata.');
 		}
-		$key = $original ? 'original_checksum' : 'archive_checksum';
-		$checksum = $data[$key] ?? null;
-		if (!is_string($checksum) || $checksum === '') {
-			throw new UnexpectedValueException("Paperless did not return {$key}.");
-		}
 
-		return $checksum;
+		return $data;
 	}
 
 	public function createTag(string $name): int {
@@ -730,6 +762,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** A text of an answer of Paperless, or '' for anything else, such as null or a list. */
 	private static function text(mixed $value): string {
 		return is_string($value) || is_int($value) || is_float($value) ? trim((string)$value) : '';
+	}
+
+	/** A text, or null for an empty one. */
+	private static function filled(string $text): ?string {
+		return $text !== '' ? $text : null;
 	}
 
 	/** The ID of a document or a tag, as a number or as the text of one, or null for anything else. */

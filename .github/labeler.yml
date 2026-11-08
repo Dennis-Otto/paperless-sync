@@ -56,6 +56,8 @@
           - lib/Service/UserFilesystem*.php
           - lib/Service/FullStorageException.php
           - lib/Model/DocumentFingerprint.php
+          - lib/Model/DocumentFile.php
+          - lib/Service/FileVersions.php
           - lib/Service/MetadataSidecars.php
           - lib/Service/SystemTagService.php
           - lib/Service/ArchiveTags.php
@@ -66,6 +68,7 @@
           - tests/Unit/Service/NextcloudStorage*
           - tests/Unit/Service/UserFilesystemTest.php
           - tests/Unit/Model/DocumentFingerprintTest.php
+          - tests/Unit/Service/FileVersionsTest.php
           - tests/Unit/Migration/Version000100*
 "area: inbox":
   - changed-files:

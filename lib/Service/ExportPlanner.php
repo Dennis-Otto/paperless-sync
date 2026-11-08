@@ -59,6 +59,7 @@ final class ExportPlanner {
 	private bool $unanswered = false;
 
 	/**
+	 * @param FileVersions $versions the files of the newest versions of the documents, which the archives of a run share
 	 * @param \Closure(array<string, mixed>): string $pathOf the path of a document below the archive folder, from the path template
 	 * @param \Closure(): void $heartbeat the sign of life of the run, for each document that the plan reaches
 	 */
@@ -68,6 +69,7 @@ final class ExportPlanner {
 		private SyncBatch $batch,
 		private TargetFiles $files,
 		private PaperlessClientInterface $paperless,
+		private FileVersions $versions,
 		private \Closure $pathOf,
 		private ExportFilter $filter,
 		private UserTimeZones $timeZones,
@@ -178,10 +180,17 @@ final class ExportPlanner {
 		$checksum = [];
 		$attempt = false;
 		try {
+			// The copy holds the file that Paperless serves, that of the newest version of the
+			// document: its extension, and whether it has an archived version.
+			$document = $this->versions->document($documentId, $document);
 			$target = Paths::join($this->archiveRoot, ($this->pathOf)($document));
 			$hasArchive = is_string($document['archived_file_name'] ?? null) && $document['archived_file_name'] !== '';
 			$useOriginal = !$this->config->preferArchive || !$hasArchive;
-			$sourceRevision = ($useOriginal ? 'original:' : 'archive:') . $this->scalarString($document['modified'] ?? null);
+			// The revision names the newest version as well: a new version is new content, also on a
+			// Paperless-ngx 3.0 that left the time of the change of its document as it was.
+			$version = FileVersions::newest($document);
+			$sourceRevision = ($useOriginal ? 'original:' : 'archive:') . $this->scalarString($document['modified'] ?? null)
+				. ($version !== null ? '@version:' . $version : '');
 			$oldPathValue = $entry !== null ? ($entry['path'] ?? null) : null;
 			$fingerprintValue = $entry !== null ? ($entry['fingerprint'] ?? null) : null;
 			$oldPath = is_string($oldPathValue) ? $oldPathValue : '';
@@ -204,7 +213,7 @@ final class ExportPlanner {
 					// with its revision, for a document that waits for a later run or whose change fails.
 					$known = $this->knownChecksum($entry, $sourceRevision);
 					if ($known === null) {
-						$known = $this->paperless->documentChecksum($documentId, $useOriginal);
+						$known = $this->versions->checksum($documentId, $document, $useOriginal);
 						$checksum = ['remote_checksum' => $known, 'remote_revision' => $sourceRevision];
 					}
 					$fingerprint = $this->completedFingerprint($oldPath, $fingerprint, $known);

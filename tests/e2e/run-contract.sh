@@ -13,10 +13,10 @@
 # contract.py seeds a fresh Paperless through its API, as a household does, and checks
 # every answer that the app reads: the fields of the documents and the trash, the pages
 # of a list, the tasks of an upload, a failed and a refused upload, and the checksums of
-# the metadata against those of the downloads. Then the app runs against it in
-# Nextcloud: the export, with the metadata next to the archive, a new title, the trash of
-# Paperless and back, and the inbox, with a file that Paperless takes and one that it
-# can't read.
+# the metadata against those of the downloads, and on 3.x the versions of a document. Then the
+# app runs against it in Nextcloud: the export, with the metadata next to the archive, a new
+# title, the trash of Paperless and back, on 3.x a new version of another type, and the inbox,
+# with a file that Paperless takes and one that it can't read.
 #
 # The answers of Paperless become the fixtures of the unit tests in
 # tests/fixtures/paperless-ngx-<line>/, the same bytes in every run of one image: contract.py
@@ -226,6 +226,22 @@ RESTORED="${PATHS[0]}"
 assert_missing "${TRASHED}"
 assert_content invoice "${RESTORED}"
 echo "The export, the move and the trash pass after ${SECONDS} s."
+
+# Paperless-ngx 3.x keeps versions of a document and serves the newest: a text as the newest
+# version of the invoice, without an archived version, gives the copy its content and its
+# extension, and the copy keeps its ID through the move.
+if [[ "${LINE}" == 3 ]]; then
+	contract new-version
+	sync_run versioned
+	VERSIONED="${PATHS[0]}"
+	assert_missing "${RESTORED}"
+	assert_content invoice "${VERSIONED}"
+	if [[ "$(file_id "${VERSIONED}")" != "${FILE_ID}" ]]; then
+		echo "The file of the invoice lost its ID ${FILE_ID} with the new version in Paperless." >&2
+		exit 1
+	fi
+	echo "The new version of a document passes after ${SECONDS} s."
+fi
 
 # The inbox: a PDF that Paperless takes, and one that it can't read. The first run uploads
 # both, with the tag Contract, which contract.py made, and the tag Nextcloud, which the run

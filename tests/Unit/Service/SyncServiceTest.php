@@ -1149,6 +1149,117 @@ final class SyncServiceTest extends TestCase {
 	}
 
 	/**
+	 * Paperless-ngx 3.x keeps versions of a document and serves the file of the newest one, while
+	 * the fields of the document describe its first file. A born-digital PDF added to a scan has no
+	 * archived version, so Paperless reports no archive_checksum: the document failed in every run
+	 * before, and its copy kept the old content for good.
+	 */
+	public function testANewVersionWithoutAnArchivedVersionUpdatesTheCopyFromItsOriginal(): void {
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->addVersion(900, 'Strom August digital.pdf', 'application/pdf', false, '%PDF-born-digital');
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame(0, $report->errors);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-born-digital'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH), 'The copy keeps its ID, with its shares and versions.');
+		self::assertSame([[123, false], [123, true]], $this->paperless->downloadRequests, 'The newest version has no archived version, so the run takes its original.');
+		self::assertSame([123], $this->paperless->fileRequests);
+		self::assertSame(0, $this->paperless->checksumRequests, 'The metadata of the newest version named its checksum already.');
+		self::assertSame('original:2026-08-26T11:00:00+02:00@version:900', $this->state->exports[123]['source_revision']);
+
+		$unchanged = $this->service->run();
+
+		self::assertSame(1, $unchanged->unchanged);
+		self::assertSame(2, $this->paperless->downloads);
+		self::assertSame([123, 123], $this->paperless->fileRequests, 'A document whose newest file is a version costs one request in each run.');
+	}
+
+	/**
+	 * A version of another type, such as a text for a scanned PDF, gives the copy its extension:
+	 * the copy moves to its new name, which keeps its ID, and takes the new content in place.
+	 */
+	public function testANewVersionOfAnotherTypeGivesTheCopyItsExtension(): void {
+		$this->exportDocument();
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->addVersion(900, 'notes.txt', 'text/plain', false, 'Plain text of the newest version.');
+
+		$report = $this->service->run();
+
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].txt';
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => 'Plain text of the newest version.'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId($newPath));
+		self::assertSame($newPath, $this->state->exports[123]['path']);
+	}
+
+	/**
+	 * With the originals instead of the archived versions, the copy of a document whose newest
+	 * version is an image is that image, with its extension, though the first file was a PDF.
+	 */
+	public function testTheOriginalOfANewVersionKeepsTheExtensionOfItsType(): void {
+		$this->configService->save(['prefer_archive' => false]);
+		$this->exportDocument();
+		$this->addVersion(900, 'photo.png', 'image/png', true, '%PDF-archive-of-the-photo', 'PNG-photo');
+
+		$report = $this->service->run();
+
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].png';
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => 'PNG-photo'], $this->storage->files);
+		self::assertSame([123, true], $this->paperless->downloadRequests[1]);
+	}
+
+	/**
+	 * Paperless-ngx 3.1 merges documents as versions of another one: the merged document is no
+	 * document of its own any longer, so its copy counts as missing and goes to the deleted folder
+	 * under the safety of the missing scans, while the copy of the document that took it in gets
+	 * the content of its newest version in place.
+	 */
+	public function testADocumentMergedAsAVersionGoesMissingAndItsRootUpdatesInPlace(): void {
+		$this->configService->save(['missing_grace_runs' => 2]);
+		$this->exportDocuments([$this->document(123), $this->document(124)]);
+		$fileId = $this->storage->fileId($this->archivePath(123));
+		$this->paperless->documents = [$this->document(123)];
+		$this->addVersion(124, 'statement.pdf', 'application/pdf', true, '%PDF-merged-statement');
+
+		$first = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . $this->archivePath(123), 'WAIT P124: missing run 1/2'], $first->actions);
+		self::assertSame('%PDF-merged-statement', $this->storage->files[$this->archivePath(123)]);
+		self::assertSame($fileId, $this->storage->fileId($this->archivePath(123)));
+		self::assertSame('%PDF-content', $this->storage->files[$this->archivePath(124)], 'One missing scan leaves the copy where it is.');
+
+		$second = $this->service->run();
+
+		self::assertSame(['MISSING P124: ' . $this->deletedToday(124)], $second->actions);
+		self::assertSame([124, 124], $this->paperless->documentReads, 'A run asks Paperless for the merged document before it counts it as missing.');
+	}
+
+	/** A document of one file on Paperless-ngx 3.x lists itself as its only version, which costs the run nothing. */
+	public function testADocumentOfOneFileCostsNoRequestForItsVersions(): void {
+		$document = $this->document();
+		$document['versions'] = [['id' => 123, 'added' => '2026-08-26T10:00:00+02:00', 'version_label' => null, 'checksum' => hash('sha256', '%PDF-content'), 'is_root' => true]];
+
+		$this->exportDocument($document);
+
+		self::assertSame('archive:2026-08-26T10:00:00+02:00', $this->state->exports[123]['source_revision']);
+		self::assertSame([], $this->paperless->fileRequests);
+	}
+
+	/** The preview of the path template names the extension of the newest version, as a run does. */
+	public function testThePreviewOfThePathTemplateTakesTheExtensionOfTheNewestVersion(): void {
+		$this->exportDocument();
+		$this->addVersion(900, 'notes.txt', 'text/plain', false, 'Plain text of the newest version.');
+
+		$paths = $this->service->previewPaths($this->configService->get(), 5)['paths'];
+
+		self::assertSame('Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].txt', $paths[0]['path']);
+	}
+
+	/**
 	 * Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0. Before, a change of the
 	 * title on 2.x downloaded the document again and replaced the file, which lost its shares,
 	 * comments and versions in Nextcloud.
@@ -4872,6 +4983,25 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documentTypes = ['7' => 'Rechnung'];
 
 		return $this->service->run();
+	}
+
+	/**
+	 * A new file for the document 123, as Paperless-ngx 3.x keeps it: the version first in the field
+	 * versions, the newest first, and a new time of the change of the document, while its other
+	 * fields still describe its first file. The metadata, the downloads and the checksums are those
+	 * of the version: $content, and $original for an original that differs from its archived version.
+	 */
+	private function addVersion(int $version, string $name, string $type, bool $archive, string $content, ?string $original = null): void {
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->documents[0]['versions'] = [
+			['id' => $version, 'added' => '2026-08-26T11:00:00+02:00', 'version_label' => null, 'checksum' => hash('sha256', $original ?? $content), 'is_root' => false],
+			['id' => 123, 'added' => '2026-08-26T10:00:00+02:00', 'version_label' => null, 'checksum' => hash('sha256', '%PDF-content'), 'is_root' => true],
+		];
+		$this->paperless->newestFiles[123] = ['name' => $name, 'type' => $type, 'archive' => $archive];
+		$this->paperless->contents[123] = $content;
+		if ($original !== null) {
+			$this->paperless->originalContents[123] = $original;
+		}
 	}
 
 	/** @return list<array<string, mixed>> the documents with the IDs 1 to $count */

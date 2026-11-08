@@ -32,7 +32,16 @@
         "tags": [
           2
         ],
-        "title": "Monthly invoice"
+        "title": "Monthly invoice",
+        "versions": [
+          {
+            "added": "2026-01-01T00:00:00.000000Z",
+            "checksum": "c9381fc9eb21790309fa8768d6e50047ad0018c586d915b7f57079624052bcea",
+            "id": 1,
+            "is_root": true,
+            "version_label": null
+          }
+        ]
       },
       {
         "added": "2026-01-01T00:00:00.000000Z",
@@ -52,7 +61,16 @@
         "tags": [
           2
         ],
-        "title": "Annual statement"
+        "title": "Annual statement",
+        "versions": [
+          {
+            "added": "2026-01-01T00:00:00.000000Z",
+            "checksum": "240f4ba97ca9cb7f50bad8a7cca23d9126cbe2d63703597ea8830075e6800495",
+            "id": 2,
+            "is_root": true,
+            "version_label": null
+          }
+        ]
       },
       {
         "added": "2026-01-01T00:00:00.000000Z",
@@ -72,7 +90,16 @@
         "tags": [
           1
         ],
-        "title": "Unread letter"
+        "title": "Unread letter",
+        "versions": [
+          {
+            "added": "2026-01-01T00:00:00.000000Z",
+            "checksum": "ac549e31afa74c876af4b62d60f7d2bc4c7f97f6078601ddee9a4e1e164522df",
+            "id": 3,
+            "is_root": true,
+            "version_label": null
+          }
+        ]
       }
     ]
   },
@@ -81,6 +108,6 @@
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields&truncate_content=true&page=1&page_size=1000",
+  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions&truncate_content=true&page=1&page_size=1000",
   "status": 200
 }

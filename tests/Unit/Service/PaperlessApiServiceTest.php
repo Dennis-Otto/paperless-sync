@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\PaperlessConnection;
+use OCA\PaperlessSync\Service\FileVersions;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientFactory;
@@ -196,7 +197,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(self::entries(1, 2001), $scan->documents);
 		self::assertTrue($scan->complete);
 		self::assertSame(2001, $scan->listed);
-		$fields = 'id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields';
+		$fields = 'id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions';
 		self::assertSame([
 			['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 1, 'page_size' => 1000],
 			['ordering' => 'id', 'fields' => $fields, 'truncate_content' => 'true', 'page' => 2, 'page_size' => 1000],
@@ -739,11 +740,9 @@ final class PaperlessApiServiceTest extends TestCase {
 		$document = $this->service->document((int)self::recording($line, 'document')['body']['id']);
 
 		self::assertNotNull($document);
-		$fields = PaperlessApiService::DOCUMENT_FIELDS;
-		sort($fields);
 		$received = array_keys($document);
 		sort($received);
-		self::assertSame($fields, $received);
+		self::assertSame(self::fieldsOf($line), $received);
 	}
 
 	/**
@@ -759,8 +758,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		$scan = $this->service->documents(true);
 		$document = $this->service->document((int)self::recording($line, 'document-notes')['body']['id'], true);
 
-		$fields = [...PaperlessApiService::DOCUMENT_FIELDS, 'notes'];
-		sort($fields);
+		$fields = self::fieldsOf($line, 'notes');
 		self::assertCount(3, $scan->documents);
 		foreach ([...$scan->documents, $document] as $received) {
 			self::assertIsArray($received);
@@ -837,6 +835,90 @@ final class PaperlessApiServiceTest extends TestCase {
 		$this->expectException(UnexpectedValueException::class);
 		$this->expectExceptionMessage($message);
 		$this->service->documentChecksum(123, true);
+	}
+
+	/**
+	 * The answers of a real Paperless-ngx 3.x for a scan with two newer versions: the document
+	 * lists them, the newest first, and its metadata describes the newest, which FileVersions
+	 * gives the copy. A born-digital PDF has no archived version, and a text is of another type.
+	 *
+	 * @return array<string, array{string, string, string}>
+	 */
+	public static function recordedVersions(): array {
+		return [
+			'a PDF without an archived version' => ['version', 'digital.pdf', 'application/pdf'],
+			'a text, a file of another type' => ['version-text', 'notes.txt', 'text/plain'],
+		];
+	}
+
+	#[DataProvider('recordedVersions')]
+	public function testTheMetadataOfANewVersionNamesItsFile(string $name, string $original, string $type): void {
+		$this->responses[] = self::recorded('3', "document-{$name}");
+		$this->responses[] = self::recorded('3', "metadata-{$name}");
+		$recorded = self::recording('3', "document-{$name}")['body'];
+		$metadata = self::recording('3', "metadata-{$name}")['body'];
+
+		$document = $this->service->document((int)$recorded['id']);
+		self::assertNotNull($document);
+		$file = $this->service->documentFile((int)$recorded['id']);
+
+		self::assertSame($recorded['versions'][0]['id'], FileVersions::newest($document));
+		self::assertIsString($document['archived_file_name'], 'The fields of the document describe its first file, a scan with an archived version.');
+		self::assertSame($original, $file->originalFileName);
+		self::assertSame($type, $file->mimeType);
+		self::assertNull($file->archiveFileName);
+		self::assertNull($file->checksum(false));
+		self::assertSame($metadata['original_checksum'], $file->checksum(true));
+		self::assertSame($recorded['versions'][0]['checksum'], $file->checksum(true), 'The list of the versions names the checksum of each original.');
+		self::assertSame(self::URL . "/api/documents/{$recorded['id']}/metadata/", $this->requests[1]['url']);
+	}
+
+	/** A document of a single file: its metadata names its archived version, with the checksums of both. */
+	#[DataProvider('paperlessLines')]
+	public function testTheMetadataOfADocumentNamesItsArchivedVersion(string $line): void {
+		$this->responses[] = self::recorded($line, 'metadata');
+		$metadata = self::recording($line, 'metadata')['body'];
+
+		$file = $this->service->documentFile(1);
+
+		self::assertSame(['invoice.pdf', '0000001.pdf', 'application/pdf'], [$file->originalFileName, $file->archiveFileName, $file->mimeType]);
+		self::assertSame([$metadata['original_checksum'], $metadata['archive_checksum']], [$file->checksum(true), $file->checksum(false)]);
+	}
+
+	/** @return array<string, array{array<string, mixed>, string|null, string|null}> the metadata, the name of the archived version and its checksum */
+	public static function archivedVersions(): array {
+		return [
+			'in the folder of a storage path' => [['has_archive_version' => true, 'archive_media_filename' => 'Example GmbH/2026/Letter.pdf', 'archive_checksum' => 'bbb'], 'Letter.pdf', 'bbb'],
+			'without a name' => [['has_archive_version' => true, 'archive_media_filename' => null, 'archive_checksum' => 'bbb'], null, null],
+			'without one' => [['has_archive_version' => false, 'archive_media_filename' => null, 'archive_checksum' => null], null, null],
+		];
+	}
+
+	/** @param array<string, mixed> $metadata */
+	#[DataProvider('archivedVersions')]
+	public function testTheArchivedVersionOfTheNewestFileIsNamedWithoutItsFolders(array $metadata, ?string $name, ?string $checksum): void {
+		$this->responses[] = [200, $metadata + ['original_filename' => '', 'original_mime_type' => 'application/pdf', 'original_checksum' => 'aaa']];
+
+		$file = $this->service->documentFile(1);
+
+		self::assertSame([$name, $checksum, null], [$file->archiveFileName, $file->checksum(false), $file->originalFileName]);
+	}
+
+	/** @return array<string, array{mixed, string}> */
+	public static function invalidFileMetadata(): array {
+		return [
+			'text instead of an object' => ['"metadata"', 'Paperless returned invalid document metadata.'],
+			'no word on the archived version' => [['original_checksum' => 'aaa'], 'Paperless did not return has_archive_version.'],
+		];
+	}
+
+	#[DataProvider('invalidFileMetadata')]
+	public function testMetadataWithoutTheFileIsRejected(mixed $body, string $message): void {
+		$this->responses[] = [200, $body];
+
+		$this->expectException(UnexpectedValueException::class);
+		$this->expectExceptionMessage($message);
+		$this->service->documentFile(123);
 	}
 
 	public function testUploadSendsTheFileAndReturnsTheTask(): void {
@@ -2548,8 +2630,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertTrue($scan->complete);
 		self::assertSame(3, $scan->listed);
 		self::assertCount(3, $scan->documents);
-		$fields = PaperlessApiService::DOCUMENT_FIELDS;
-		sort($fields);
+		$fields = self::fieldsOf($line);
 		foreach ($scan->documents as $document) {
 			$keys = array_keys($document);
 			sort($keys);
@@ -2755,6 +2836,19 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertIsArray($recording);
 
 		return $recording;
+	}
+
+	/**
+	 * The fields of a run that a real Paperless sends, sorted, with $more: Paperless-ngx 2.x keeps no
+	 * versions of a document and leaves that field out, as one that it doesn't know.
+	 *
+	 * @return list<string>
+	 */
+	private static function fieldsOf(string $line, string ...$more): array {
+		$fields = array_values(array_diff([...PaperlessApiService::DOCUMENT_FIELDS, ...$more], $line === '2' ? ['versions'] : []));
+		sort($fields);
+
+		return $fields;
 	}
 
 	/**
