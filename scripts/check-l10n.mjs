@@ -7,7 +7,9 @@
 // l10n/<language>.json, with its words and its placeholders, in as many forms as a plural of that
 // language has, every text there is one that the code translates, once, l10n/<language>.js, which
 // the browser loads, holds the same as l10n/<language>.json, which PHP loads, and appinfo/info.xml
-// gives the App Store a summary and a description in each language.
+// gives the App Store a summary and a description in each language. Chinese, in the catalogs and
+// for the App Store, writes its dash as Chinese does, and Traditional Chinese the words of Taiwan,
+// as the catalogs of Nextcloud for Taiwan have them.
 //
 //   node scripts/check-l10n.mjs [--fix] [folder]
 //   node scripts/check-l10n.mjs --new <language> [--plural-form <rule>] [folder]
@@ -87,6 +89,82 @@ const storeVariants = {
 	zh_CN: 'zh-hans',
 	zh_HK: 'zh-hant',
 	zh_TW: 'zh-hant',
+}
+
+/**
+ * Words of Simplified Chinese that slip into Traditional Chinese in its characters, with the words
+ * of Taiwan that take their place. The catalogs of Nextcloud for Taiwan, core/l10n/zh_TW.json and
+ * those of lib and of its apps, such as settings and files, have none of them and write the words
+ * on the right; those of Paperless come from src-ui/src/locale/messages.zh_TW.xlf of Paperless-ngx.
+ */
+const taiwanWords = {
+	日誌: '記錄檔 for the log of Nextcloud or of a server, and 事件記錄 for the logs of Paperless',
+	用戶: '使用者',
+	賬號: '帳號',
+	賬戶: '帳號',
+	文件夾: '資料夾',
+	文檔: '文件',
+	默認: '預設',
+	配置: '設定',
+	服務器: '伺服器',
+	網絡: '網路',
+	鏈接: '連結',
+	登錄: '登入',
+	緩存: '快取',
+	令牌: 'Token, as Paperless-ngx writes it',
+	模板: '範本',
+	導出: '匯出',
+	端口: '連接埠',
+	超時: '逾時',
+	軟件: '軟體',
+	信息: '資訊 or 訊息',
+	數據: '資料',
+	字段: '欄位',
+	刷新: '重新整理',
+	搜索: '搜尋',
+	激活: '啟用',
+	禁用: '停用',
+	創建: '建立',
+	獲取: '取得',
+	回收站: '垃圾桶',
+	會話: '工作階段',
+	視頻: '影片',
+	菜單: '選單',
+	窗口: '視窗',
+	屏幕: '螢幕',
+	實時: '即時',
+	兼容: '相容',
+	字節: '位元組',
+	調試: '除錯',
+	打印: '列印',
+	粘貼: '貼上',
+	郵箱: '電子郵件',
+	二維碼: 'QR code',
+}
+
+/**
+ * What a Chinese text writes otherwise than Chinese does, with the line that holds it: a dash as one
+ * —, where Chinese writes two, ——, a space beside the dash, and in Traditional Chinese of Taiwan a word of Simplified Chinese.
+ */
+function chineseProblems(language, where, text) {
+	const lineWith = (holds) => JSON.stringify(text.split('\n').find(holds).trim())
+	const found = []
+	const dash = /(?<!—)—(?!—)/
+	if (dash.test(text)) {
+		found.push(`${where} writes a dash as one —, but Chinese writes two, ——, without spaces around them: ${lineWith((line) => dash.test(line))}`)
+	}
+	const spacedDash = /[^\S\n]——|——[^\S\n]/
+	if (spacedDash.test(text)) {
+		found.push(`${where} writes a space beside the dash ——, but Chinese writes it without spaces around it: ${lineWith((line) => spacedDash.test(line))}`)
+	}
+	if (language === 'zh_TW') {
+		for (const [word, taiwan] of Object.entries(taiwanWords)) {
+			if (text.includes(word)) {
+				found.push(`${where} writes ${word}, a word of Simplified Chinese, where Taiwan writes ${taiwan}: ${lineWith((line) => line.includes(word))}`)
+			}
+		}
+	}
+	return found
 }
 
 /** The calls of PHP whose arguments are texts, by their position and by their name. */
@@ -360,16 +438,18 @@ function placeholders(text) {
 	return [...found].sort().join(', ') || 'none'
 }
 
-/** The languages in which appinfo/info.xml has an element with a text, or null without the file. */
-function storeLanguages(element) {
+/** The texts of an element of appinfo/info.xml by their language, those with words, or null without the file. */
+function storeTexts(element) {
 	const path = join(root, 'appinfo', 'info.xml')
 	if (!existsSync(path)) {
 		return null
 	}
 	const pattern = new RegExp(`<${element}\\s+lang="([^"]+)"\\s*>([\\s\\S]*?)</${element}>`, 'g')
-	return [...readFileSync(path, 'utf8').matchAll(pattern)]
-		.filter((match) => match[2].replace(/<!\[CDATA\[|\]\]>/g, '').trim() !== '')
-		.map((match) => match[1])
+	return new Map(
+		[...readFileSync(path, 'utf8').matchAll(pattern)]
+			.map((match) => [match[1], match[2].replace(/<!\[CDATA\[|\]\]>/g, '').trim()])
+			.filter(([, text]) => text !== ''),
+	)
 }
 
 // What --fix can't do: the words of a text, and a text that the check can't read, whose translation
@@ -470,12 +550,17 @@ for (const language of languages) {
 		if (sources !== null && millions && translated.length === 3 && translated[1] !== translated[2]) {
 			problems.push(`${json} has the form ${JSON.stringify(translated[1])} for millions of ${JSON.stringify(text)}, which the browser shows for every count but one: repeat ${JSON.stringify(translated[2])} there.`)
 		}
+		if (language.startsWith('zh_')) {
+			problems.push(...translated.flatMap((form) => chineseProblems(language, json, form)))
+		}
 	}
 	for (const element of ['summary', 'description']) {
-		const store = storeLanguages(element)
+		const store = storeTexts(element)
 		const storeLanguage = storeVariants[language] ?? language.split(/[_@]/)[0]
-		if (store !== null && !store.includes(storeLanguage)) {
+		if (store !== null && !store.has(storeLanguage)) {
 			problems.push(`appinfo/info.xml has no <${element} lang="${storeLanguage}">, so the App Store shows its English one to whoever reads the app in ${language}.`)
+		} else if (store !== null && language.startsWith('zh_')) {
+			problems.push(...chineseProblems(language, `appinfo/info.xml, in its <${element} lang="${storeLanguage}">,`, store.get(storeLanguage)))
 		}
 	}
 
@@ -506,9 +591,9 @@ if (fixedLanguages.length > 0) {
 // No process.exit() here: it drops what a pipe hasn't taken yet, on Linux all after the first 64 KB.
 if (problems.length > 0) {
 	process.stdout.write(`${problems.join('\n')}\n\n`)
-	process.stdout.write(`${problems.length} problem(s) in the catalogs: an administrator who reads the language sees the English text of a missing one, and a wrong placeholder loses a value or breaks the message.\n`)
-	process.stdout.write('Fix: add each missing text with its words and the same placeholders to its l10n/<language>.json, then run node scripts/check-l10n.mjs --fix, which drops the unused and repeated texts and writes each l10n/<language>.js. docs/development.md#translations explains the check.\n')
+	process.stdout.write(`${problems.length} problem(s) in the catalogs: an administrator who reads the language sees the English text of a missing one, a wrong placeholder loses a value or breaks the message, and Chinese with the dash or the words of another kind of Chinese reads as foreign.\n`)
+	process.stdout.write('Fix: add each missing text with its words and the same placeholders to its l10n/<language>.json, write Chinese as each line above says, then run node scripts/check-l10n.mjs --fix, which drops the unused and repeated texts and writes each l10n/<language>.js. docs/development.md#translations explains the check.\n')
 	process.exitCode = 1
 } else {
-	process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, and appinfo/info.xml has a summary and a description in each language.\n`)
+	process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, appinfo/info.xml has a summary and a description in each language, and Chinese writes its dashes, and in Taiwan its words, as Nextcloud does.\n`)
 }

@@ -1234,6 +1234,27 @@ broken_catalog 'l10n/xx.js has no l10n/xx.json'
 fresh_catalogs
 edit_catalog fr 't["Create missing tags"] = "Autres mots"'
 broken_catalog 'names "Create missing tags" in quotes, but its translation doesn'"'"'t hold "Autres mots"'
+# Chinese writes a dash as two, ——, and Traditional Chinese the words of Taiwan, such as 記錄檔 for
+# the log of Nextcloud and 事件記錄 for that of Paperless, not 日誌, the word of Simplified Chinese,
+# in a text and in each form of a plural. Simplified Chinese keeps its own words, such as 配置.
+fresh_catalogs
+edit_catalog zh_CN 't["Dry-run — nothing was changed"] = "试运行 — 未做任何更改"'
+broken_catalog 'l10n/zh_CN.json writes a dash as one —, but Chinese writes two, ——, without spaces around them: "试运行 — 未做任何更改"'
+fresh_catalogs
+edit_catalog zh_TW 't["Dry-run — nothing was changed"] = "試執行 —— 未做任何變更"'
+broken_catalog 'l10n/zh_TW.json writes a space beside the dash ——, but Chinese writes it without spaces around it: "試執行 —— 未做任何變更"'
+fresh_catalogs
+edit_catalog zh_TW 't["Check that Paperless runs, and the log of Paperless or of the proxy in front of it."] = "請確認 Paperless 正在執行，並檢查 Paperless 或其前端代理伺服器的日誌。"'
+broken_catalog 'l10n/zh_TW.json writes 日誌, a word of Simplified Chinese, where Taiwan writes 記錄檔 for the log of Nextcloud or of a server, and 事件記錄 for the logs of Paperless: "請確認 Paperless 正在執行，並檢查 Paperless 或其前端代理伺服器的日誌。"'
+fresh_catalogs
+edit_catalog zh_TW 't["_%n file is on its way to Paperless already._::_%n files are on their way to Paperless already._"] = ["%n 個文檔已在傳送到 Paperless 的途中。"]'
+broken_catalog 'l10n/zh_TW.json writes 文檔, a word of Simplified Chinese, where Taiwan writes 文件: "%n 個文檔已在傳送到 Paperless 的途中。"'
+fresh_catalogs
+edit_catalog zh_CN 't["Paperless Sync"] = "Paperless Sync 配置与搜索"'
+if ! output="$(node scripts/check-l10n.mjs --fix "$l10n_copy" 2>&1)"; then
+  echo "scripts/check-l10n.mjs should leave the words of Simplified Chinese to l10n/zh_CN.json, but says: $output"
+  exit 1
+fi
 # --new writes an empty catalog in the format of Nextcloud that the check lists, and refuses what
 # it can't or must not do; a folder without a catalog fails as well.
 fresh_catalogs
@@ -1304,6 +1325,15 @@ if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output"
   echo "scripts/check-l10n.mjs should report a language without its summary in appinfo/info.xml, but says: $output"
   exit 1
 fi
+# The App Store reads the Chinese of the app as well, with its dashes and the words of Taiwan.
+sed -i '/<description lang="zh-hant">/,/]]><\/description>/s/使用者/用戶/' "$l10n_copy/app/appinfo/info.xml"
+sed -i '/<summary lang="zh-hans">/s/，/ — /' "$l10n_copy/app/appinfo/info.xml"
+if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" \
+  || [[ "$output" != *'appinfo/info.xml, in its <description lang="zh-hant">, writes 用戶, a word of Simplified Chinese, where Taiwan writes 使用者: "- 透過管理員的同一個連線，為每個 Nextcloud 用戶'* ]] \
+  || [[ "$output" != *'appinfo/info.xml, in its <summary lang="zh-hans">, writes a dash as one —, but Chinese writes two'* ]]; then
+  echo "scripts/check-l10n.mjs should report a word of Simplified Chinese in the Traditional Chinese of appinfo/info.xml, and a dash as one — in its Chinese, but says: $output"
+  exit 1
+fi
 # Simplified Chinese has the code zh-hans in the App Store, which its schema knows, not zh_CN or zh.
 sed -i '/<description lang="zh-hans">/,/]]><\/description>/d' "$l10n_copy/app/appinfo/info.xml"
 if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output" != *'appinfo/info.xml has no <description lang="zh-hans">, so the App Store shows its English one to whoever reads the app in zh_CN.'* ]]; then
@@ -1316,4 +1346,4 @@ if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output"
   echo "scripts/check-l10n.mjs should ask for the description of zh_TW as zh-hant in appinfo/info.xml, but says: $output"
   exit 1
 fi
-echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."
+echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store, Chinese with one — or a space beside ——, or, in Taiwan, a word of Simplified Chinese, and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."
