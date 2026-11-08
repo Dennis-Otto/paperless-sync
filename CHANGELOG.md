@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.6.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.0...v1.6.1) (2026-11-08)
+
+
+### Bug fixes
+
+* **i18n:** the Traditional Chinese of Paperless Sync uses the words of Paperless Unified Search ([#377](https://github.com/Dennis-Otto/paperless-sync/issues/377)) ([0e9f269](https://github.com/Dennis-Otto/paperless-sync/commit/0e9f2692ea142ad18d00a2415a5ae75e77138a4d))
+
 ## [1.6.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.1...v1.6.0) (2026-11-07)
 
 ### Features
