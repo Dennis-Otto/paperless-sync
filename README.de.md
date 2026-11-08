@@ -554,7 +554,7 @@ Die meisten Variablen haben die Namen, die Paperless-ngx für seine eigenen Date
 | `{{ created_month }}`, `{{ created_month_name }}` | Sein Monat, als Zahl oder mit seinem Namen in der Sprache von Nextcloud | `08`, `August` |
 | `{{ created_day }}` | Sein Tag | `26` |
 | `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | Wann es zu Paperless hinzugefügt wurde | `2026-09-01`, `2026`, `09`, `01` |
-| `{{ original_filename }}` | Der Name der hochgeladenen Datei, ohne ihre Endung | `scan` |
+| `{{ original_filename }}` | Der Name der hochgeladenen Datei, ohne ihre Endung; bei Paperless-ngx 3.x der ihrer neuesten Version | `scan` |
 | `{{ extension }}` | Die Endung der exportierten Fassung, mit ihrem Punkt | `.pdf` |
 | `{{ custom_fields.<name> }}` | Der Wert des benutzerdefinierten Felds dieses Namens | `{{ custom_fields.Rechnungsnummer }}`: `RE-2026-08` |
 

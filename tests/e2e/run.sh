@@ -1326,7 +1326,12 @@ scenario_file_versions() {
 	# The newest earlier version of the file is the PDF that the text replaced. The versions app
 	# thins out versions that are seconds apart, as those of the scenarios before, so their count
 	# may drop, and it may list the current file, which it serves no content of, as the newest.
-	curl --fail-with-body --silent --show-error 		--user "sync-target:${PASSWORD}" 		--request PROPFIND 		--header 'Depth: 1' 		--output "${TMP_DIR}/versions-list.xml" 		"${BASE_URL}/remote.php/dav/versions/sync-target/versions/${FILE_ID}"
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--request PROPFIND \
+		--header 'Depth: 1' \
+		--output "${TMP_DIR}/versions-list.xml" \
+		"${BASE_URL}/remote.php/dav/versions/sync-target/versions/${FILE_ID}"
 	newest=''
 	while read -r version; do
 		if curl --fail --silent --user "sync-target:${PASSWORD}" --output "${TMP_DIR}/versions-newest" "${BASE_URL}${version}"; then

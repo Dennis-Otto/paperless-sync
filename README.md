@@ -535,7 +535,7 @@ Most variables have the names that Paperless-ngx uses for its own file names, so
 | `{{ created_month }}`, `{{ created_month_name }}` | Its month, as a number or by its name in the language of Nextcloud | `08`, `August` |
 | `{{ created_day }}` | Its day | `26` |
 | `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | When it was added to Paperless | `2026-09-01`, `2026`, `09`, `01` |
-| `{{ original_filename }}` | The name of the uploaded file, without its extension | `scan` |
+| `{{ original_filename }}` | The name of the uploaded file, without its extension; on Paperless-ngx 3.x, that of its newest version | `scan` |
 | `{{ extension }}` | The extension of the exported version, with its dot | `.pdf` |
 | `{{ custom_fields.<name> }}` | The value of the custom field of that name | `{{ custom_fields.Invoice number }}`: `INV-2026-08` |
 
