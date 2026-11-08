@@ -105,8 +105,15 @@ LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
     "active", "renamed", "tagged", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
-    "per-user",
+    "per-user", "storage-path", "storage-path-logic",
 }
+# The storage paths of Paperless in the scenarios storage-path and storage-path-logic, in which P123
+# has the first or the second: one with a template that the app follows, and one with logic of
+# Jinja, which it can't render, so that its document keeps the path template.
+STORAGE_PATHS = [
+    {"id": 3, "name": "Household", "path": "Household/{{ created_year }}/{{ title }}"},
+    {"id": 5, "name": "Correspondents", "path": "{% if correspondent %}{{ correspondent }}{% else %}Other{% endif %}/{{ title }}"},
+]
 # The versions of Paperless-ngx that the mock plays, with the versions of the API that each serves
 # and its default (src/paperless/settings.py, REST_FRAMEWORK): 2.15 is the last before version 9,
 # and 3.0 made 10 the default.
@@ -396,6 +403,11 @@ def scenario_documents():
         return [document("Monthly invoice corrected", modified, [11, 13] if scenario == "tagged" else None)], []
     if scenario == "excluded":
         return [document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00", [9])], []
+    if scenario in ("storage-path", "storage-path-logic"):
+        # The revision of renamed, with a storage path, which moves its copy without a download.
+        stored = document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")
+        stored["storage_path"] = 3 if scenario == "storage-path" else 5
+        return [stored], []
     if scenario == "trash":
         trashed = document("Monthly invoice corrected", "2026-08-26T11:00:00+02:00")
         trashed["deleted_at"] = "2026-08-27T08:00:00+02:00"
@@ -516,7 +528,7 @@ class Handler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/document_types/":
             self._page(showcase.DOCUMENT_TYPES if self._showcase() else [{"id": 7, "name": "Invoice"}])
         elif parsed.path == "/api/storage_paths/":
-            self._page([])
+            self._page(STORAGE_PATHS if self._scenario() in ("storage-path", "storage-path-logic") else [])
         elif parsed.path == "/api/tags/":
             with LOCK:
                 created = [{"id": tag["id"], "name": tag["name"]} for tag in STATE["createdTags"]]

@@ -408,6 +408,131 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([[], []], [$this->state->exports, $this->storage->files]);
 	}
 
+	/**
+	 * With "Use the storage path of a document in Paperless", a document with a storage path goes
+	 * to the path of its template, and turning the setting on or off moves the copy as a new path
+	 * template does, the same file with its ID, which a dry-run shows first.
+	 */
+	public function testADocumentFollowsItsStoragePathAndTheSettingMovesItsCopy(): void {
+		$this->exportDocument(['storage_path' => 3] + $this->document());
+		$fileId = $this->storage->fileId(self::EXPORTED_PATH);
+		$this->paperless->storagePaths = ['names' => ['3' => 'Haushalt'], 'templates' => ['3' => 'Haushalt/{{ created_year }}/{{ title }}']];
+		$followed = self::ARCHIVE . '/Haushalt/2026/Strom August [P123].pdf';
+		$this->configService->save(['follow_storage_paths' => true]);
+
+		$dryRun = $this->service->run(true);
+
+		self::assertSame(['MOVE P123: ' . $followed], $dryRun->actions);
+		self::assertSame([self::EXPORTED_PATH], array_keys($this->storage->files), 'A dry-run moves nothing.');
+
+		$report = $this->service->run();
+
+		self::assertSame(['MOVE P123: ' . $followed], $report->actions);
+		self::assertSame([$followed => '%PDF-content'], $this->storage->files);
+		self::assertSame($fileId, $this->storage->fileId($followed), 'The copy keeps its ID, and with it its shares.');
+		self::assertSame($followed, $this->state->exports[123]['path']);
+		self::assertSame(1, $this->paperless->downloads);
+		self::assertSame([], $this->paperless->listsRead, 'A template without the owner or a custom field needs neither list.');
+
+		$this->configService->save(['follow_storage_paths' => false]);
+		$back = $this->service->run();
+
+		self::assertSame(['MOVE P123: ' . self::EXPORTED_PATH], $back->actions);
+		self::assertSame($fileId, $this->storage->fileId(self::EXPORTED_PATH));
+	}
+
+	/**
+	 * A storage path whose template the archive can't follow leaves its documents with the path
+	 * template, and the report of a run and of a dry-run names it once; that of a document that
+	 * the archive leaves out is not named.
+	 */
+	public function testTheReportNamesTheStoragePathsThatTheArchiveCannotFollow(): void {
+		$this->paperless->storagePaths = [
+			'names' => ['3' => 'Wohnung', '4' => 'Konto', '5' => 'Privat'],
+			'templates' => ['3' => '{% if correspondent %}{{ correspondent }}{% endif %}/{{ title }}', '4' => '{{ custom_fields.Konto }}/{{ title }}', '5' => '{{ tags }}'],
+		];
+		$this->paperless->tagInfo = ['names' => ['9' => 'Privat'], 'inbox' => []];
+		$this->configService->save(['follow_storage_paths' => true, 'excluded_tags' => 'Privat']);
+		$documents = [
+			['storage_path' => 3] + $this->document(),
+			['storage_path' => 3, 'title' => 'Strom September'] + $this->document(124),
+			['storage_path' => '4'] + $this->document(125),
+			['storage_path' => 5, 'tags' => [9]] + $this->document(126),
+		];
+		$notice = "STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage paths Konto, Wohnung of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them.";
+
+		$this->paperless->documents = $documents;
+		$dryRun = $this->service->run(true);
+		$report = $this->exportDocuments($documents);
+
+		foreach ([$dryRun, $report] as $run) {
+			$notices = array_values(array_filter($run->entries, static fn (array $entry): bool => $entry['type'] === SyncReport::TYPE_STORAGE_PATHS_UNSUPPORTED));
+			self::assertSame([['type' => SyncReport::TYPE_STORAGE_PATHS_UNSUPPORTED, 'values' => ['names' => 'Konto, Wohnung', 'count' => 2]]], $notices);
+			self::assertContains($notice, $run->actions);
+		}
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path'], 'Its documents follow the path template.');
+		self::assertSame(['custom fields'], array_values(array_unique($this->paperless->listsRead)), 'The custom fields tell whether Paperless has the field of a storage path.');
+
+		$this->paperless->storagePaths['names'] = ['3' => 'Wohnung'];
+		$this->paperless->storagePaths['templates'] = ['3' => '{{ tags }}'];
+		$this->paperless->documents = [$documents[0]];
+		$one = $this->service->run(true);
+
+		self::assertContains("STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage path Wohnung of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them.", $one->actions);
+	}
+
+	/**
+	 * The template of a storage path may name the owner or a custom field, as the path template
+	 * may: the run reads the users and the custom fields for it.
+	 */
+	public function testAStoragePathWithTheOwnerAndACustomFieldReadsTheirLists(): void {
+		$this->paperless->users = ['3' => 'dennis'];
+		$this->paperless->customFields = ['1' => ['name' => 'Konto', 'type' => 'string', 'options' => []]];
+		$this->paperless->storagePaths = ['names' => ['3' => 'Haushalt'], 'templates' => ['3' => '{{ owner_username }}/{{ custom_fields|get_cf_value("Konto", "ohne") }}/{{ title }}']];
+		$this->configService->save(['follow_storage_paths' => true]);
+
+		$report = $this->exportDocument(['storage_path' => 3, 'owner' => 3, 'custom_fields' => [['field' => 1, 'value' => 'Giro']]] + $this->document());
+
+		self::assertSame(['EXPORT P123: ' . self::ARCHIVE . '/dennis/Giro/Strom August [P123].pdf'], $report->actions);
+		self::assertSame(['users', 'custom fields'], $this->paperless->listsRead);
+	}
+
+	/** @return array<string, array{string, string, string}> */
+	public static function refusedListsOfAStoragePath(): array {
+		return [
+			'users' => [
+				'{{ owner_username }}/{{ title }}',
+				'usersException',
+				'Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: HTTP 403.',
+			],
+			'custom fields' => [
+				'{{ custom_fields.Konto }}/{{ title }}',
+				'customFieldsException',
+				'Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: HTTP 403.',
+			],
+		];
+	}
+
+	/**
+	 * A list that a storage path needs and Paperless refuses fails the run before a file moves,
+	 * also with the metadata on, as for the path template: without it, its documents would move.
+	 */
+	#[DataProvider('refusedListsOfAStoragePath')]
+	public function testAListThatAStoragePathNeedsAndPaperlessRefusesFailsTheRun(string $template, string $failure, string $message): void {
+		$this->exportDocument(['storage_path' => 3] + $this->document());
+		$this->paperless->storagePaths = ['names' => ['3' => 'Haushalt'], 'templates' => ['3' => $template]];
+		$this->configService->save(['follow_storage_paths' => true, 'write_metadata' => true]);
+		$this->paperless->{$failure} = new RuntimeException('HTTP 403.');
+
+		try {
+			$this->service->run();
+			self::fail('A list that a storage path needs and Paperless refuses fails the run.');
+		} catch (RuntimeException $exception) {
+			self::assertSame($message, $exception->getMessage());
+		}
+		self::assertSame([self::EXPORTED_PATH], array_keys($this->storage->files), 'The file stays where it is.');
+	}
+
 	public function testACustomFieldThatPaperlessDoesNotHaveFailsTheRunBeforeAFileMoves(): void {
 		$this->paperless->documents = [$this->document()];
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
@@ -442,7 +567,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents = $documents;
 		$config = $this->configService->validate(['path_template' => '{{ correspondent }}/{{ added_month }}/{{ title }} [P{{ id }}]', 'excluded_tags' => 'privat']);
 
-		$paths = $this->service->previewPaths($config, 5);
+		$paths = $this->service->previewPaths($config, 5)['paths'];
 
 		self::assertSame([
 			['id' => 207, 'title' => 'Brief 7', 'path' => 'Energie GmbH/09/Brief 7 [P207].pdf', 'skipped' => true],
@@ -463,7 +588,7 @@ final class SyncServiceTest extends TestCase {
 			['id' => '2', 'added' => '2026-09-01T08:00:00+02:00'] + $this->document(),
 		];
 
-		$paths = $this->service->previewPaths($this->configService->get(), 5);
+		$paths = $this->service->previewPaths($this->configService->get(), 5)['paths'];
 
 		self::assertSame([1, 2], array_column($paths, 'id'));
 	}
@@ -472,7 +597,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents = [['title' => null] + $this->document()];
 
 		self::assertSame(
-			[['id' => 123, 'title' => '', 'path' => '_Ohne Korrespondent/_Ohne Dokumenttyp/2026/2026-08-26 - Ohne Titel [P123].pdf', 'skipped' => false]],
+			['paths' => [['id' => 123, 'title' => '', 'path' => '_Ohne Korrespondent/_Ohne Dokumenttyp/2026/2026-08-26 - Ohne Titel [P123].pdf', 'skipped' => false]], 'unsupportedStoragePaths' => []],
 			$this->service->previewPaths($this->configService->get(), 5),
 		);
 	}
@@ -3366,7 +3491,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
 		$config = $this->configService->validate(['path_template' => '{{ title }} [P{{ id }}]', 'included_tags' => 'nextcloud']);
 
-		$paths = $this->service->previewPaths($config, 5);
+		$paths = $this->service->previewPaths($config, 5)['paths'];
 
 		self::assertSame([[202, false], [201, true]], array_map(static fn (array $path): array => [$path['id'], $path['skipped']], $paths));
 	}

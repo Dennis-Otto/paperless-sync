@@ -679,7 +679,16 @@ OC.L10N.register(
 		],
 		"_The last run of Paperless Sync completed with errors: %s_::_The last %n runs of Paperless Sync completed with errors, the last one with: %s_": [
 			"Paperless Sync 已連續 %n 次執行完成但有錯誤，最近一次的錯誤為：%s"
-		]
+		],
+		"Use the storage path of a document in Paperless": "使用文件在 Paperless 中的儲存路徑",
+		"A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.": "有儲存路徑的文件會依其範本的路徑放在封存資料夾下，與 Paperless 的存放方式相同，並帶有標記 [P{{ id }}] 和副檔名；其他文件遵循封存路徑範本。",
+		"A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.": "如果儲存路徑的範本使用了 Jinja 邏輯、篩選器或路徑範本不認識的變數，它也遵循封存路徑範本，報告會列出該儲存路徑。開啟或關閉此開關會移動副本，就像新範本一樣。",
+		"Storage paths of Paperless": "Paperless 的儲存路徑",
+		"_The archive can't follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them._::_The archive can't follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them._": [
+			"封存無法遵循 Paperless 的儲存路徑 {names}：其範本使用了 Jinja 邏輯、篩選器或路徑範本不認識的變數，或 Paperless 中沒有的自訂欄位，或應用程式的帳號看不到它，因此其文件會放到封存路徑範本指定的位置。"
+		],
+		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless 未列出其使用者，而封存所遵循的儲存路徑中的 {{ owner_username }} 需要使用者清單；API Token 所屬的使用者需要檢視使用者的權限：%s",
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自訂欄位，而封存所遵循的儲存路徑使用了自訂欄位；API Token 所屬的使用者需要檢視自訂欄位的權限：%s"
 	},
 	"nplurals=1; plural=0;"
 )

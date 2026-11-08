@@ -452,6 +452,12 @@
 	color: var(--color-text-maxcontrast);
 }
 
+/* The storage paths of those documents that the archive can't follow, under their paths. */
+.paperless-sync-path-preview-storage-paths {
+	margin: 8px 0 0;
+	color: var(--color-text-maxcontrast);
+}
+
 /* A field that offers the users of Nextcloud or the tags of Paperless in a list below it, which
    lies over what follows. */
 .paperless-sync-combobox {

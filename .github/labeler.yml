@@ -51,6 +51,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - lib/Service/PathTemplateService.php
+          - lib/Service/StoragePaths.php
           - lib/Service/NextcloudStorage*.php
           - lib/Service/UserFilesystem*.php
           - lib/Service/FullStorageException.php

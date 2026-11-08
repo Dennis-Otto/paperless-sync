@@ -320,11 +320,26 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		self::assertSame(['4' => 'Energie GmbH'], $this->service->correspondents());
 		self::assertSame(['4' => 'Energie GmbH'], $this->service->documentTypes());
-		self::assertSame(['4' => 'Energie GmbH'], $this->service->storagePaths());
+		self::assertSame(['names' => ['4' => 'Energie GmbH'], 'templates' => []], $this->service->storagePaths());
 		self::assertSame(
 			[self::URL . '/api/correspondents/', self::URL . '/api/document_types/', self::URL . '/api/storage_paths/'],
 			array_column($this->requests, 'url'),
 		);
+	}
+
+	/** A storage path gives its template in its field path; an entry without a name or a template lacks it there. */
+	public function testStoragePathsWithTheirNamesAndTemplates(): void {
+		$this->responses[] = [200, ['count' => 4, 'results' => [
+			['id' => 3, 'name' => 'Haushalt', 'path' => '{{ created_year }}/{{ title }}'],
+			['id' => 4, 'name' => 'Ohne Vorlage'],
+			['id' => 5, 'path' => '{{ title }}'],
+			['id' => 6, 'name' => 'Kaputt', 'path' => ['{{ title }}']],
+		]]];
+
+		self::assertSame([
+			'names' => ['3' => 'Haushalt', '4' => 'Ohne Vorlage', '6' => 'Kaputt'],
+			'templates' => ['3' => '{{ created_year }}/{{ title }}', '5' => '{{ title }}'],
+		], $this->service->storagePaths());
 	}
 
 	public function testTagsWithTheirNamesAndInboxFlags(): void {
@@ -2571,7 +2586,9 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		self::assertEqualsCanonicalizing(['Example GmbH', 'Example Insurance'], array_values($this->service->correspondents()));
 		self::assertEqualsCanonicalizing(['Invoice', 'Statement', 'Letter'], array_values($this->service->documentTypes()));
-		self::assertSame(['Contracts'], array_values($this->service->storagePaths()));
+		$storagePaths = $this->service->storagePaths();
+		self::assertSame(['Contracts'], array_values($storagePaths['names']));
+		self::assertSame(['{{ correspondent }}/{{ title }}'], array_values($storagePaths['templates']), 'Paperless gives the template of each storage path in its field path.');
 		$tags = $this->service->tags();
 		self::assertEqualsCanonicalizing(['Inbox', 'Contract'], array_values($tags['names']));
 		self::assertSame(['Inbox'], array_map(static fn (string $id): string => $tags['names'][$id], $tags['inbox']));

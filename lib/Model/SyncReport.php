@@ -65,6 +65,8 @@ final class SyncReport implements \JsonSerializable {
 	public const TYPE_TAGS_NOT_CREATED = 'tags-not-created';
 	/** A notice: files of the inbox are of types that never go to Paperless, and stay there. */
 	public const TYPE_INBOX_SET_ASIDE = 'inbox-set-aside';
+	/** A notice: storage paths of Paperless have templates that the archive can't follow, so their documents follow the path template. */
+	public const TYPE_STORAGE_PATHS_UNSUPPORTED = 'storage-paths-unsupported';
 
 	/**
 	 * The priority of a line by its type, 1 the highest. A full report gives up its last line of
@@ -259,7 +261,7 @@ final class SyncReport implements \JsonSerializable {
 	 * line in English, $values the numbers and names that the settings page puts into its
 	 * translation.
 	 *
-	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN|self::TYPE_TAGS_TAKEN|self::TYPE_TAGS_NOT_CREATED|self::TYPE_INBOX_SET_ASIDE $type
+	 * @param self::TYPE_SCAN_INCOMPLETE|self::TYPE_EXPORT_STOPPED|self::TYPE_TRASH_EMPTY|self::TYPE_TAGS_UNKNOWN|self::TYPE_TAGS_TAKEN|self::TYPE_TAGS_NOT_CREATED|self::TYPE_INBOX_SET_ASIDE|self::TYPE_STORAGE_PATHS_UNSUPPORTED $type
 	 * @param array<string, int|string> $values
 	 */
 	public function notice(string $type, string $message, array $values = []): void {

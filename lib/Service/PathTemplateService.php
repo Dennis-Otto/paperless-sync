@@ -101,6 +101,91 @@ final class PathTemplateService {
 			throw new InvalidSettingException('The archive path template must contain {{ id }}.', [], 'path_template');
 		}
 
+		return $this->spell($normalized);
+	}
+
+	/**
+	 * The template of a storage path of Paperless, its field path, as the archive follows it, in
+	 * the spelling of validateTemplate(), or null when the app can't render it as Paperless does:
+	 * with logic of Jinja, such as {% if %}, a filter other than get_cf_value of the custom fields,
+	 * a variable that the path template doesn't know, or any other brace, such as the
+	 * {created_year} of older versions of Paperless. Its empty parts go, as Paperless makes no
+	 * folder of them. Unlike the path template, it needn't name {{ id }}: render() adds the marker
+	 * [P{{ id }}] and the extension to its last part, the name of the file, as Paperless adds the
+	 * extension.
+	 */
+	public function storagePathTemplate(string $path): ?string {
+		$parts = array_filter(explode('/', str_replace('\\', '/', $path)), static fn (string $part): bool => trim($part) !== '');
+		if ($parts === []) {
+			return null;
+		}
+		try {
+			$template = $this->spell(implode('/', $parts));
+		} catch (InvalidSettingException) {
+			return null;
+		}
+
+		return preg_match('/[{}]/', preg_replace(self::PLACEHOLDER, '', $template) ?? '') === 1 ? null : $template;
+	}
+
+	/**
+	 * The storage paths of Paperless for the paths of a run. With "Use the storage path of a
+	 * document in Paperless" in $config, a document whose storage path has a template that
+	 * storagePathTemplate() takes, with custom fields that Paperless has, goes to the path of that
+	 * template; the documents of the other storage paths follow the path template, and the report
+	 * names those storage paths, as it names by their IDs those that Paperless doesn't list to the
+	 * account of the app. Without it, every document follows the path template.
+	 *
+	 * @param array<string, string> $names the names of the storage paths, by their IDs
+	 * @param array<array-key, string> $templates their templates, by their IDs, which PHP keeps as numbers
+	 * @param array<string, CustomField> $customFields the custom fields of Paperless, by their IDs, when a template uses one
+	 */
+	public function storagePaths(SyncConfig $config, array $names, array $templates, array $customFields): StoragePaths {
+		$followed = [];
+		$unsupported = [];
+		if ($config->followStoragePaths) {
+			$fields = array_column($customFields, 'name');
+			foreach ($templates as $key => $path) {
+				$id = (string)$key;
+				$template = $this->storagePathTemplate($path);
+				if ($template !== null && array_diff($this->customFieldNames($template), $fields) === []) {
+					$followed[$id] = $config->withPathTemplate($template);
+				} else {
+					$unsupported[$id] = $names[$id] ?? $id;
+				}
+			}
+		}
+
+		return new StoragePaths($names, $followed, $unsupported, $config->followStoragePaths);
+	}
+
+	/**
+	 * The templates of the storage paths that the archive may follow with $config, those that
+	 * storagePathTemplate() takes, for the lists of Paperless that they need: the users and the
+	 * custom fields.
+	 *
+	 * @param array<string, string> $templates the templates of the storage paths, by their IDs
+	 * @return list<string>
+	 */
+	public function storagePathTemplates(SyncConfig $config, array $templates): array {
+		$followed = [];
+		foreach ($config->followStoragePaths ? $templates : [] as $path) {
+			$template = $this->storagePathTemplate($path);
+			if ($template !== null) {
+				$followed[] = $template;
+			}
+		}
+
+		return $followed;
+	}
+
+	/**
+	 * A template whose placeholders are each a variable of the path template, a custom field or
+	 * get_cf_value of one, in one spelling each, such as {{ id }} for {{id}}.
+	 *
+	 * @throws InvalidSettingException
+	 */
+	private function spell(string $normalized): string {
 		foreach ($this->matches($normalized) as $match) {
 			if ($match['name'] !== null && $match['variable'] !== self::CUSTOM_FIELDS) {
 				throw new InvalidSettingException(self::UNKNOWN_FILTER, [self::spelling($match)], 'path_template');

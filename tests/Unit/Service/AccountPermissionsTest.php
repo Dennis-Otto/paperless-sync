@@ -38,6 +38,14 @@ final class AccountPermissionsTest extends TestCase {
 				['export_enabled' => true, 'path_template' => '{{ owner_username }}/{{ custom_fields.Invoice number }}/{{ title }} [P{{ id }}]'] + $none,
 				['view_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_customfield', 'view_uisettings', 'view_user'],
 			],
+			'the archive that follows the storage paths of Paperless, whose templates may name the owner and custom fields' => [
+				['export_enabled' => true, 'follow_storage_paths' => true] + $none,
+				['view_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_customfield', 'view_uisettings', 'view_user'],
+			],
+			'the storage paths without the archive' => [
+				['follow_storage_paths' => true] + $none,
+				['view_document', 'view_uisettings'],
+			],
 			'the archive with the metadata next to it' => [
 				['export_enabled' => true, 'write_metadata' => true] + $none,
 				['view_document', 'view_correspondent', 'view_documenttype', 'view_storagepath', 'view_tag', 'view_customfield', 'view_uisettings'],

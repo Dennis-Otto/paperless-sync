@@ -323,6 +323,7 @@
 		const preview = element('path-preview')
 		const previewStatus = element('path-preview-status')
 		const previewList = element('path-preview-list')
+		const previewStoragePaths = element('path-preview-storage-paths')
 		const targetUser = element('target-user')
 		const targetUserHint = element('target-user-hint')
 		const webhookCreate = element('webhook-create')
@@ -398,7 +399,7 @@
 		// The settings that decide the path of a document, or whether a run skips it, which the
 		// preview of the path template sends, as SettingsController::preview() takes them. A change
 		// of one of them shows the paths anew, once the typing pauses for previewDelay.
-		const previewSettings = ['path_template', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
+		const previewSettings = ['path_template', 'follow_storage_paths', 'prefer_archive', 'skip_inbox', 'excluded_tags', 'included_tags', 'empty_correspondent', 'empty_document_type', 'empty_date', 'untitled']
 		const previewDelay = 400
 		let previewTimer = 0
 		// The number of the last request of the preview: an answer to an earlier one, which may
@@ -923,6 +924,7 @@
 			'tags-taken': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'tags-not-created': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'inbox-set-aside': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'storage-paths-unsupported': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
 			'remove-reassigned': { label: translate('Other user'), tone: 'warning', rank: 2 },
@@ -1022,6 +1024,8 @@
 					: translate('The list of documents of Paperless came back incomplete or changed while the run read it ({received} of {listed} received), so no document counts as missing in this run.', values)
 			case 'export-stopped':
 				return translate('Nextcloud cannot store files in the archive, so the run stopped its exports and moves; the other documents wait for the next run.')
+			case 'storage-paths-unsupported':
+				return unsupportedStoragePaths(Number(values.count) || 0, values.names)
 			case 'tags-unknown':
 				return translatePlural(
 					'Paperless shows the account no tag named {names}, so the files of the inbox go to Paperless without it. Create the tag in Paperless or share it with the account, or turn on "Create missing tags".',
@@ -1471,8 +1475,20 @@
 			}
 		}
 
+		// The storage paths of Paperless whose templates the archive can't follow, in the report of a
+		// run and under the paths of the preview: their documents follow the path template.
+		function unsupportedStoragePaths(count, names) {
+			return translatePlural(
+				'The archive can\'t follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, or which the account of the app can\'t see, so its documents go where the archive path template puts them.',
+				'The archive can\'t follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, or which the account of the app can\'t see, so their documents go where the archive path template puts them.',
+				count,
+				{ names },
+			)
+		}
+
 		// Shows the paths of the newest documents of Paperless as the server rendered them with the
-		// template of the form, or why there are none.
+		// template of the form, or why there are none, and the storage paths of those documents
+		// that the archive can't follow.
 		function showPreview(answer) {
 			pathTemplate.removeAttribute('aria-invalid')
 			includedTagsInput.removeAttribute('aria-invalid')
@@ -1497,6 +1513,9 @@
 				return item
 			}))
 			previewList.hidden = paths.length === 0
+			const storagePaths = Array.isArray(answer.unsupportedStoragePaths) ? answer.unsupportedStoragePaths : []
+			setText(previewStoragePaths, storagePaths.length > 0 ? unsupportedStoragePaths(storagePaths.length, storagePaths.join(', ')) : '')
+			previewStoragePaths.hidden = storagePaths.length === 0 || paths.length === 0
 		}
 
 		// Says why there is no preview: an invalid template or a tag to mirror that Paperless
@@ -1518,6 +1537,7 @@
 			previewStatus.classList.add('paperless-sync-path-preview-status--error')
 			setText(previewStatus, error.message || translate('The preview could not be loaded.'))
 			previewList.hidden = true
+			previewStoragePaths.hidden = true
 		}
 
 		// Asks the server for the paths with the settings of the form, without saving them; only

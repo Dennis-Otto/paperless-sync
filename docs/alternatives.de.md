@@ -101,7 +101,7 @@ Am Ende beider Anleitungen steht eine Kopie jedes fertigen Dokuments, in den Ord
 Der Mount zeigt die Dateien von Paperless in den Ordnern von `PAPERLESS_FILENAME_FORMAT`. Paperless Sync baut dieselben Ordner aus den Metadaten von Paperless, also behalte den Mount, bis sein Archiv vollständig ist:
 
 1. **Schlage das Format nach.** Finde `PAPERLESS_FILENAME_FORMAT` in der Konfiguration von Paperless, etwa in `docker-compose.env`, und sieh nach, ob der Mount `documents/archive` zeigt, die PDF/A-Versionen, oder `documents/originals`.
-2. **Schreibe die Pfadvorlage.** Nimm das Format und übersetze seine Platzhalter mit der Tabelle unten. Beende den letzten Teil mit einem Leerzeichen und `[P{{ id }}]{{ extension }}`: Jeder Dateiname von Paperless Sync trägt die Markierung seines Dokuments, und Paperless fügt die Erweiterung von selbst hinzu. Das Format `{{ created_year }}/{{ correspondent }}/{{ title }}` wird zur Vorlage `{{ created_year }}/{{ correspondent }}/{{ title }} [P{{ id }}]{{ extension }}`.
+2. **Schreibe die Pfadvorlage.** Nimm das Format und übersetze seine Platzhalter mit der Tabelle unten. Beende den letzten Teil mit einem Leerzeichen und `[P{{ id }}]{{ extension }}`: Jeder Dateiname von Paperless Sync trägt die Markierung seines Dokuments, und Paperless fügt die Erweiterung von selbst hinzu. Das Format `{{ created_year }}/{{ correspondent }}/{{ title }}` wird zur Vorlage `{{ created_year }}/{{ correspondent }}/{{ title }} [P{{ id }}]{{ extension }}`. Dokumente mit einem Speicherpfad brauchen keine Vorlage: Schalte *Speicherpfad eines Dokuments in Paperless verwenden* ein.
 3. **Setze die Namen fehlender Werte.** Paperless nennt einen fehlenden Korrespondenten oder Dokumenttyp `none`, außer `PAPERLESS_FILENAME_FORMAT_REMOVE_NONE` ist an. Um diese Ordner zu behalten, schreibe `none` in *Fehlender Korrespondent* und *Fehlender Dokumenttyp*.
 4. **Wähle die Datei und den Ordner.** Wähle das Archiv-PDF für `documents/archive` oder die Originaldatei für `documents/originals`. Wähle einen Basisordner des Zielbenutzers außerhalb des Mounts: nie einen darin, wo die App in den Medienordner von Paperless schreiben würde.
 5. **Starte einen Testlauf** und vergleiche seine Pfade mit denen des Mounts. Ändere die Vorlage, bis sie übereinstimmen, soweit die Tabelle es erlaubt; Paperless ersetzt manche Zeichen, etwa `:`, durch `-`, Paperless Sync durch `_`.
@@ -116,13 +116,13 @@ Der Mount zeigt die Dateien von Paperless in den Ordnern von `PAPERLESS_FILENAME
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | dasselbe |
 | `{{ added }}`, `{{ added_year }}` | dasselbe |
 | `{{ doc_pk }}`, `{{ original_name }}` | dasselbe; `{{ doc_pk }}` hat die sieben Ziffern von Paperless, etwa `0000123` |
-| ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | noch keines: `{{ storage_path }}` setzt nur den Namen des Speicherpfads ein, als einen Ordner |
+| ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | dasselbe, mit [*Speicherpfad eines Dokuments in Paperless verwenden*](guide.de.md#speicherpfade-von-paperless), außer seine Vorlage verwendet Jinja-Logik oder etwas, das diese Tabelle nicht nimmt |
 | `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
 | `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
 | `{{ asn }}`, `{{ tag_list }}` | dasselbe |
 | `{{ owner_username }}` | dasselbe; das Konto der App braucht die Berechtigung, Benutzer anzuzeigen |
 | ein benutzerdefiniertes Feld, über `get_cf_value("Name")` oder `get_cf_value("Name", "Standard")` | dasselbe, oder `{{ custom_fields.Name }}`; das Konto der App braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen |
-| `{{ tags }}`, Jinja-Logik und die anderen Filter von Jinja | noch keines: lass sie weg |
+| `{{ tags }}`, Jinja-Logik und die anderen Filter von Jinja | noch keines: lass sie weg; ein Speicherpfad mit ihnen lässt seine Dokumente bei der Pfadvorlage |
 
 ### Von paperless-nextcloud-sync
 

@@ -64,7 +64,8 @@ final class AccountPermissions {
 	 *   the permissions and the ID of the account;
 	 * - the archive View for Correspondents, Document Types, Storage Paths and Tags, View for Users
 	 *   for {{ owner_username }} and View for Custom Fields for a custom field of the path template
-	 *   or the metadata next to the archive;
+	 *   or the metadata next to the archive, and both when it follows the storage paths of Paperless,
+	 *   whose templates may use them and which the account can't know before it reads them;
 	 * - an upload, from the inbox or with "Send to Paperless", Add for Documents and View for
 	 *   Paperless Tasks, and the tags of the inbox View for Tags, with Add for Tags to create them;
 	 * - per-user ownership View for Users, and with uploads Change for Documents, which gives the
@@ -82,10 +83,10 @@ final class AccountPermissions {
 		$permissions = [self::VIEW_DOCUMENT, self::VIEW_UI_SETTINGS];
 		if ($config->exportEnabled) {
 			array_push($permissions, self::VIEW_CORRESPONDENT, self::VIEW_DOCUMENT_TYPE, self::VIEW_STORAGE_PATH, self::VIEW_TAG);
-			if ($this->pathTemplate->usesOwner($config->pathTemplate)) {
+			if ($config->followStoragePaths || $this->pathTemplate->usesOwner($config->pathTemplate)) {
 				$permissions[] = self::VIEW_USER;
 			}
-			if ($config->writeMetadata || $this->pathTemplate->customFieldNames($config->pathTemplate) !== []) {
+			if ($config->followStoragePaths || $config->writeMetadata || $this->pathTemplate->customFieldNames($config->pathTemplate) !== []) {
 				$permissions[] = self::VIEW_CUSTOM_FIELD;
 			}
 		}

@@ -30,6 +30,7 @@ The scenario verifies:
 - *Synchronize now*, which answers `202` with the queued status before the run starts, and the background job that a worker of Nextcloud runs, whose report the status shows; every other run of the scenario goes through `occ paperless_sync:run`, whose exit code agrees with its report, and `occ paperless_sync:status` reads the same status as the page; without Paperless, both exit with 2
 - archive export through the Paperless download API, and a full quota of the target user, which stops the exports of a run
 - metadata-only moves without downloading the PDF again, with the SHA-256 checksums of Paperless-ngx 3 and, in a mode of the mock, the MD5 checksums of Paperless-ngx 2
+- the storage paths of Paperless: with *Use the storage path of a document in Paperless* on, a dry-run shows and a run makes the move of a document to the path of the template of its storage path, the same file with its ID, and a storage path with logic of Jinja leaves its document with the path template, which the report says once
 - a mirrored file that keeps its file ID through every move and every new content, a share of it that shows the new content, and the version of the previous content that the background job leaves, which a dry-run right before it doesn't hold back
 - the preview of the path template, with the variables of the file names of Paperless, such as the owner, the archive serial number, the name of the month and a custom field, which saves nothing, and a dry-run of unsaved settings, which keeps the saved target user
 - titles and names that the path template keeps as plain text, such as `$1` or `{{ correspondent }}`, and long names in Chinese, emoji and Cyrillic, which are shortened to the bytes that Nextcloud accepts
@@ -113,6 +114,7 @@ A run without either variable runs everything, which is what the CI does: `scrip
 | `export` | *Synchronize now* as a background job, the first export and its entry in the Activity stream |
 | `worker` | a worker of Nextcloud that keeps running, whose next run of *Synchronize now* takes the settings saved since its last one |
 | `moves` | moves of the metadata alone, with the SHA-256 and the MD5 checksums of Paperless, and a file that keeps its ID |
+| `storage-paths` | a document that follows the template of its storage path in Paperless, in a dry-run and a run, and one with logic of Jinja that keeps the path template and is named in the report |
 | `webhook` | the webhook of a workflow of Paperless, its secret and the throttling of wrong ones |
 | `new-content` | a new content of a document, in place, also for a share of the file |
 | `schedule` | the background job as cron starts it, its interval and the version of the previous content |

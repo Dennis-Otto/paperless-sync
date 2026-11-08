@@ -249,6 +249,21 @@ elif mode == "move":
     expect("moved", 1)
     expect("exported", 0)
     expect("errors", 0)
+elif mode == "storage-paths-dry-run":
+    # With the setting on, the dry-run shows the move of P123 to the path of its storage path.
+    expect("dryRun", True)
+    expect("moved", 1)
+    expect("errors", 0)
+    expect_action("MOVE P123: Documents/Paperless/Archive/Household/2026/Monthly invoice corrected [P123].pdf")
+elif mode == "storage-paths-logic":
+    # A storage path with logic of Jinja keeps its document with the path template, and the
+    # report names it once.
+    expect("moved", 1)
+    expect("errors", 0)
+    expect_action(f"MOVE P123: {ARCHIVE}/2026-08-26 - Monthly invoice corrected [P123].pdf")
+    notices = [entry for entry in payload.get("entries", []) if entry.get("type") == "storage-paths-unsupported"]
+    if notices != [{"type": "storage-paths-unsupported", "values": {"names": "Correspondents", "count": 1}}]:
+        raise AssertionError(f"The run does not name the storage path that the archive can't follow once: {payload!r}")
 elif mode == "excluded":
     expect("removedExcluded", 1)
     expect("errors", 0)
