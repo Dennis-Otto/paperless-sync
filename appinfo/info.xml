@@ -300,7 +300,7 @@ Paperless Sync 獨立於 [Paperless Unified Search](https://apps.nextcloud.com/a
 
 說明文件提供[英文版](https://dennis-otto.github.io/paperless-sync/)和[德文版](https://dennis-otto.github.io/paperless-sync/de/)。
 ]]></description>
-	<version>1.6.1</version>
+	<version>1.7.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author homepage="https://github.com/Dennis-Otto">Dennis Otto</author>
 	<namespace>PaperlessSync</namespace>
@@ -321,16 +321,16 @@ Paperless Sync 獨立於 [Paperless Unified Search](https://apps.nextcloud.com/a
 	     line of the block below, so each address has a line of its own, joined by a comment that
 	     the App Store and Nextcloud leave out. -->
 	<!-- x-release-please-start-version -->
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/01-structured-archive-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/01-structured-archive.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/02-admin-settings-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/02-admin-settings.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/03-dry-run-report-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/03-dry-run-report.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/04-inbox-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/04-inbox.png</screenshot>
-	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/05-trash-small.png"><!--
-		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.6.1/screenshots/05-trash.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/01-structured-archive-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/01-structured-archive.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/02-admin-settings-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/02-admin-settings.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/03-dry-run-report-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/03-dry-run-report.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/04-inbox-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/04-inbox.png</screenshot>
+	<screenshot small-thumbnail="https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/05-trash-small.png"><!--
+		-->https://raw.githubusercontent.com/Dennis-Otto/paperless-sync/v1.7.0/screenshots/05-trash.png</screenshot>
 	<!-- x-release-please-end -->
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>

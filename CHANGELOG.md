@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.7.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.1...v1.7.0) (2026-11-08)
+
+
+### Features
+
+* **path:** each document can follow its storage path in Paperless ([#390](https://github.com/Dennis-Otto/paperless-sync/issues/390)) ([6848632](https://github.com/Dennis-Otto/paperless-sync/commit/6848632d5a613aca49916afbd150d469fb0589a0))
+* **path:** the path template takes the placeholders of Paperless's own file names ([#386](https://github.com/Dennis-Otto/paperless-sync/issues/386)) ([f20a92e](https://github.com/Dennis-Otto/paperless-sync/commit/f20a92e9b0e7576289af85c5f50edb3480a6573c))
+
+
+### Bug fixes
+
+* a document with a new file version in Paperless-ngx 3.x gets the content and the file type of that version ([#383](https://github.com/Dennis-Otto/paperless-sync/issues/383)) ([2a8d3aa](https://github.com/Dennis-Otto/paperless-sync/commit/2a8d3aa5efb57805dc93a17f2c3e7d39eca11eae))
+
 ## [1.6.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.0...v1.6.1) (2026-11-08)
 
 ### Bug fixes
