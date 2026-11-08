@@ -347,6 +347,8 @@ Het Paperless-API-token wordt op de server opgeslagen in de credentials manager 
 - Een Paperless-account voor de app, geen superuser, met alleen de rechten die de ingeschakelde functies nodig hebben, dat de instellingen voor je kunnen aanmaken
 
 Paperless Sync staat los van [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide apps begrijpen stabiele documentmarkeringen zoals `[P123]` en kunnen apart worden geïnstalleerd.
+
+De documentatie is er in het [Engels](https://dennis-otto.github.io/paperless-sync/) en het [Duits](https://dennis-otto.github.io/paperless-sync/de/).
 ]]></description>
 	<version>1.7.0</version>
 	<licence>AGPL-3.0-or-later</licence>
