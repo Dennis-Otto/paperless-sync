@@ -153,7 +153,7 @@ function chineseProblems(language, where, text) {
 	if (dash.test(text)) {
 		found.push(`${where} writes a dash as one —, but Chinese writes two, ——, without spaces around them: ${lineWith((line) => dash.test(line))}`)
 	}
-	const spacedDash = /[  　]——|——[  　]/
+	const spacedDash = /[^\S\n]——|——[^\S\n]/
 	if (spacedDash.test(text)) {
 		found.push(`${where} writes a space beside the dash ——, but Chinese writes it without spaces around it: ${lineWith((line) => spacedDash.test(line))}`)
 	}
