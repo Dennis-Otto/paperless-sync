@@ -1548,7 +1548,8 @@
 		}
 
 		// Puts {{ variable }} into the path template where its cursor was, or in place of the text
-		// that was selected, and selects the part to type over, such as the name of a custom field.
+		// that was selected, and selects the part to type over, such as the name of a custom field,
+		// which follows the dot of custom_fields.Name or the bar of custom_fields|get_cf_value("Name").
 		function insertVariable(variable, placeholder) {
 			const text = '{{ ' + variable + ' }}'
 			const focused = document.activeElement === pathTemplate
@@ -1557,7 +1558,7 @@
 			pathTemplate.focus()
 			pathTemplate.setRangeText(text, Math.min(start, end), Math.min(stop, end), 'end')
 			if (placeholder) {
-				const from = Math.min(start, end) + text.length - ' }}'.length - placeholder.length
+				const from = Math.min(start, end) + text.indexOf(placeholder, text.search(/[.|]/))
 				pathTemplate.setSelectionRange(from, from + placeholder.length)
 			}
 			pathTemplate.dispatchEvent(new Event('input', { bubbles: true }))

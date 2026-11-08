@@ -30,9 +30,16 @@ use Random\Randomizer;
 #[Group('property')]
 final class PathTemplatePropertiesTest extends TestCase {
 	private const VARIABLES = [
-		'id', 'title', 'correspondent', 'document_type', 'storage_path',
-		'created', 'created_year', 'created_month', 'added', 'added_year',
-		'original_filename', 'extension',
+		'id', 'doc_pk', 'title', 'correspondent', 'document_type', 'storage_path',
+		'created', 'created_year', 'created_month', 'created_month_name_short',
+		'added', 'added_year', 'added_year_short', 'added_month_name', 'added_month_name_short',
+		'original_filename', 'original_name', 'extension',
+	];
+
+	/** Custom fields in both spellings, with spaces, quotes and a default, for the templates that are only validated. */
+	private const CUSTOM_FIELD_SPELLINGS = [
+		'custom_fields.Invoice number', 'custom_fields. Größe (m²) ', "custom_fields|get_cf_value('Kunde')",
+		'custom_fields | get_cf_value( "Nr" , "none" )', 'custom_fields|get_cf_value("Kunde\'s Nr",\'Kein "Wert"\')',
 	];
 
 	/**
@@ -153,7 +160,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 	public function testAValidatedTemplateIsValidAndStaysTheSame(): void {
 		$accepted = 0;
 		foreach ($this->cases() as $seed => $random) {
-			$template = $this->template($random, true);
+			$template = $this->template($random, true, [...self::VARIABLES, ...self::CUSTOM_FIELD_SPELLINGS]);
 			try {
 				$validated = $this->service->validateTemplate($template);
 			} catch (InvalidArgumentException) {
@@ -165,8 +172,8 @@ final class PathTemplatePropertiesTest extends TestCase {
 			if ($this->service->validateTemplate($validated) !== $validated) {
 				$problems[] = 'Validating the template again changes it.';
 			}
-			if (preg_match('/{{(?! [a-z_]+ }})/', $validated) === 1) {
-				$problems[] = "A placeholder of {$validated} has another spelling than {{ name }}.";
+			if (preg_match('/{{(?! [a-z_]+ }}| custom_fields\.[^{}\/]+ }}| custom_fields\|get_cf_value\(([\'"])[^{}\/]*?\1(?:, ([\'"])[^{}\/]*?\2)?\) }})/', $validated) === 1) {
+				$problems[] = "A placeholder of {$validated} has another spelling than {{ name }}, {{ custom_fields.Name }} or {{ custom_fields|get_cf_value(\"Name\", \"default\") }}.";
 			}
 			$this->assertNoProblems($problems, $seed, ['template' => $template]);
 		}

@@ -115,13 +115,12 @@ Der Mount zeigt die Dateien von Paperless in den Ordnern von `PAPERLESS_FILENAME
 | `{{ title }}`, `{{ correspondent }}`, `{{ document_type }}` | dasselbe |
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | dasselbe |
 | `{{ added }}`, `{{ added_year }}` | dasselbe |
-| `{{ doc_pk }}` | `{{ id }}`, ohne die führenden Nullen: `123`, nicht `0000123` |
-| `{{ original_name }}` | `{{ original_filename }}` |
+| `{{ doc_pk }}`, `{{ original_name }}` | dasselbe; `{{ doc_pk }}` hat die sieben Ziffern von Paperless, etwa `0000123` |
 | ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | noch keines: `{{ storage_path }}` setzt nur den Namen des Speicherpfads ein, als einen Ordner |
-| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_day }}`, `{{ added_month }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
+| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}`, `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
 | `{{ owner_username }}` | dasselbe; das Konto der App braucht die Berechtigung, Benutzer anzuzeigen |
-| ein benutzerdefiniertes Feld, über `get_cf_value("Name")` | `{{ custom_fields.Name }}`; das Konto der App braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen |
-| `{{ created_month_name_short }}`, `{{ added_year_short }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ tags }}` und Jinja-Logik | noch keines: lass sie weg |
+| ein benutzerdefiniertes Feld, über `get_cf_value("Name")` oder `get_cf_value("Name", "Standard")` | dasselbe, oder `{{ custom_fields.Name }}`; das Konto der App braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen |
+| `{{ tags }}`, Jinja-Logik und die anderen Filter von Jinja | noch keines: lass sie weg |
 
 ### Von paperless-nextcloud-sync
 
