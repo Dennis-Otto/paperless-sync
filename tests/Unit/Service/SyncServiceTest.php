@@ -1254,7 +1254,7 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$this->addVersion(900, 'notes.txt', 'text/plain', false, 'Plain text of the newest version.');
 
-		$paths = $this->service->previewPaths($this->configService->get(), 5);
+		$paths = $this->service->previewPaths($this->configService->get(), 5)['paths'];
 
 		self::assertSame('Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P123].txt', $paths[0]['path']);
 	}
