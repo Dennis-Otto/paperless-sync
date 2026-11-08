@@ -1479,8 +1479,8 @@
 		// run and under the paths of the preview: their documents follow the path template.
 		function unsupportedStoragePaths(count, names) {
 			return translatePlural(
-				'The archive can\'t follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, so its documents go where the archive path template puts them.',
-				'The archive can\'t follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, so their documents go where the archive path template puts them.',
+				'The archive can\'t follow the storage path {names} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, or which the account of the app can\'t see, so its documents go where the archive path template puts them.',
+				'The archive can\'t follow the storage paths {names} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn\'t know, or a custom field that Paperless doesn\'t have, or which the account of the app can\'t see, so their documents go where the archive path template puts them.',
 				count,
 				{ names },
 			)

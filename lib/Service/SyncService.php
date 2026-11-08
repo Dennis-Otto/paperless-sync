@@ -668,8 +668,8 @@ final class SyncService {
 		}
 		$list = implode(', ', $names);
 		$paths = count($names) === 1
-			? "The archive can't follow the storage path {$list} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so its documents go where the archive path template puts them."
-			: "The archive can't follow the storage paths {$list} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so their documents go where the archive path template puts them.";
+			? "The archive can't follow the storage path {$list} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them."
+			: "The archive can't follow the storage paths {$list} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them.";
 		$report->notice(SyncReport::TYPE_STORAGE_PATHS_UNSUPPORTED, "STORAGE PATHS NOT FOLLOWED: {$paths}", [
 			'names' => $list,
 			'count' => count($names),

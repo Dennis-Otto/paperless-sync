@@ -459,7 +459,7 @@ final class SyncServiceTest extends TestCase {
 			['storage_path' => '4'] + $this->document(125),
 			['storage_path' => 5, 'tags' => [9]] + $this->document(126),
 		];
-		$notice = "STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage paths Konto, Wohnung of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so their documents go where the archive path template puts them.";
+		$notice = "STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage paths Konto, Wohnung of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so their documents go where the archive path template puts them.";
 
 		$this->paperless->documents = $documents;
 		$dryRun = $this->service->run(true);
@@ -478,7 +478,7 @@ final class SyncServiceTest extends TestCase {
 		$this->paperless->documents = [$documents[0]];
 		$one = $this->service->run(true);
 
-		self::assertContains("STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage path Wohnung of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so its documents go where the archive path template puts them.", $one->actions);
+		self::assertContains("STORAGE PATHS NOT FOLLOWED: The archive can't follow the storage path Wohnung of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, or which the account of the app can't see, so its documents go where the archive path template puts them.", $one->actions);
 	}
 
 	/**

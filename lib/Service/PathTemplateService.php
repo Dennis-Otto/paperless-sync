@@ -133,7 +133,8 @@ final class PathTemplateService {
 	 * document in Paperless" in $config, a document whose storage path has a template that
 	 * storagePathTemplate() takes, with custom fields that Paperless has, goes to the path of that
 	 * template; the documents of the other storage paths follow the path template, and the report
-	 * names those storage paths. Without it, every document follows the path template.
+	 * names those storage paths, as it names by their IDs those that Paperless doesn't list to the
+	 * account of the app. Without it, every document follows the path template.
 	 *
 	 * @param array<string, string> $names the names of the storage paths, by their IDs
 	 * @param array<array-key, string> $templates their templates, by their IDs, which PHP keeps as numbers
@@ -155,7 +156,7 @@ final class PathTemplateService {
 			}
 		}
 
-		return new StoragePaths($names, $followed, $unsupported);
+		return new StoragePaths($names, $followed, $unsupported, $config->followStoragePaths);
 	}
 
 	/**

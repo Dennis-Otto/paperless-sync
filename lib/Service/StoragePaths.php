@@ -15,18 +15,22 @@ use OCA\PaperlessSync\Model\SyncConfig;
  * The storage paths of Paperless in a run, as PathTemplateService::storagePaths() reads them: their
  * names, for {{ storage_path }} and the metadata next to the archive, and with "Use the storage path
  * of a document in Paperless" the settings with the template of each storage path that the archive
- * follows, and the names of those that it can't follow.
+ * follows, and the names of those that it can't follow. A storage path that Paperless doesn't list
+ * to the account of the app, such as one that an administrator owns, is one that it can't follow:
+ * its documents follow the path template, and it is named by its ID, such as #9.
  */
 final class StoragePaths {
 	/**
 	 * @param array<string, string> $names the names of the storage paths, by their IDs
 	 * @param array<string, SyncConfig> $followed the settings with the template of each storage path that the archive follows, by its ID
 	 * @param array<string, string> $unsupported the names of the storage paths whose templates the archive can't follow, by their IDs
+	 * @param bool $follow whether the archive follows the storage paths at all, so that one that Paperless doesn't list is named too
 	 */
 	public function __construct(
 		public readonly array $names,
 		private readonly array $followed = [],
 		private readonly array $unsupported = [],
+		private readonly bool $follow = false,
 	) {
 	}
 
@@ -53,8 +57,13 @@ final class StoragePaths {
 		$names = [];
 		foreach ($documents as $document) {
 			$id = self::idOf($document);
-			if ($id !== null && isset($this->unsupported[$id])) {
+			if ($id === null || isset($this->followed[$id])) {
+				continue;
+			}
+			if (isset($this->unsupported[$id])) {
 				$names[$id] = $this->unsupported[$id];
+			} elseif ($this->follow) {
+				$names[$id] = $this->names[$id] ?? '#' . $id;
 			}
 		}
 		sort($names, SORT_STRING);

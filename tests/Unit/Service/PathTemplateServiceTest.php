@@ -822,21 +822,32 @@ final class PathTemplateServiceTest extends TestCase {
 		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 5])), 'So does a custom field that Paperless does not have.');
 		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 9])), 'So does a storage path that Paperless does not list.');
 		self::assertSame(
-			['Konto', 'Wohnung'],
+			['#9', 'Konto', 'Wohnung'],
 			$storagePaths->unsupported([
 				$this->document(['storage_path' => 4]),
+				$this->document(['id' => 6, 'storage_path' => 9]),
 				$this->document(['id' => 2, 'storage_path' => 5]),
 				$this->document(['id' => 3, 'storage_path' => 4]),
 				$this->document(['id' => 4, 'storage_path' => 3]),
 				$this->document(['id' => 5]),
 			]),
-			'Each storage path that the archive cannot follow is named once, sorted, and only those of the documents.',
+			'Each storage path that the archive cannot follow is named once, sorted, and only those of the documents; one that Paperless does not list to the account is named by its ID.',
 		);
 		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 3])]));
 		self::assertSame(['{{ created_year }}/{{ correspondent }}/{{ title }}', 'Steuern/{{ custom_fields|get_cf_value("Jahr", "ohne") }}/{{ title }}', '{{ custom_fields.Konto }}/{{ title }}'], array_values(array_unique([
 			...$this->service->storagePathTemplates($config, ['3' => $templates['3'], '6' => $templates['6']]),
 			...$this->service->storagePathTemplates($config, $templates),
 		])), 'The lists that a run reads follow the templates that the archive may follow.');
+	}
+
+	/**
+	 * Without the setting, no storage path is named, also none that Paperless does not list, as
+	 * every document follows the path template then.
+	 */
+	public function testWithoutTheSettingNoStoragePathIsNamed(): void {
+		$storagePaths = $this->service->storagePaths(TestConfig::of(['followStoragePaths' => false]), ['4' => 'Wohnung'], ['4' => '{% if a %}x{% endif %}'], []);
+
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 4]), $this->document(['storage_path' => 9])]));
 	}
 
 	/** A storage path without a name in Paperless is named by its ID. */
@@ -846,6 +857,7 @@ final class PathTemplateServiceTest extends TestCase {
 		$storagePaths = $this->service->storagePaths($config, [], ['8' => '{{ tags }}'], []);
 
 		self::assertSame(['8'], $storagePaths->unsupported([$this->document(['storage_path' => 8])]));
+		self::assertSame(['Ablage'], $this->service->storagePaths($config, ['7' => 'Ablage'], [], [])->unsupported([$this->document(['storage_path' => 7])]), 'One that Paperless lists without a template keeps its name.');
 	}
 
 	/** Without the setting, every document follows the path template, and no storage path is named or needs a list. */
