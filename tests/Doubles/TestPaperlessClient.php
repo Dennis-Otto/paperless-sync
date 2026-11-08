@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Doubles;
 
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
@@ -57,6 +58,15 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public array $server = ['version' => '2.20.15', 'apiVersion' => '9'];
 	public int $downloads = 0;
 	public int $checksumRequests = 0;
+	/**
+	 * @var array<int, array{name: string, type: string, archive: bool}> the newest version of each
+	 *                                                                   document that lists one in its field versions, as its metadata names it: the name and the
+	 *                                                                   type of its original and whether it has an archived version. Its content is that of
+	 *                                                                   $contents, and of $originalContents for an original that differs from its archived version.
+	 */
+	public array $newestFiles = [];
+	/** @var list<int> the ID of every document whose metadata a run read for the file of its newest version */
+	public array $fileRequests = [];
 	/** Paperless-ngx up to 2.x, whose checksums are MD5; 3.x reports SHA-256. */
 	public bool $md5Checksums = false;
 	/** @var list<array{int, bool}> the ID of every downloaded document and whether the run asked for its original */
@@ -369,7 +379,25 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 
 	public function documentChecksum(int $documentId, bool $original): string {
 		++$this->checksumRequests;
+		// The metadata of a document is that of its newest version, which may have no archived version.
+		if (!$original && isset($this->newestFiles[$documentId]) && !$this->newestFiles[$documentId]['archive']) {
+			throw new \UnexpectedValueException('Paperless did not return archive_checksum.');
+		}
 		return hash($this->md5Checksums ? 'md5' : 'sha256', $this->content($documentId, $original));
+	}
+
+	public function documentFile(int $documentId): DocumentFile {
+		$this->fileRequests[] = $documentId;
+		$file = $this->newestFiles[$documentId] ?? throw new \UnexpectedValueException('Paperless did not return has_archive_version.');
+		$algorithm = $this->md5Checksums ? 'md5' : 'sha256';
+
+		return new DocumentFile(
+			$file['name'],
+			$file['archive'] ? 'archive.pdf' : null,
+			$file['type'],
+			hash($algorithm, $this->content($documentId, true)),
+			$file['archive'] ? hash($algorithm, $this->content($documentId, false)) : null,
+		);
 	}
 
 	public function findDocument(DocumentFingerprint $content): ?int {

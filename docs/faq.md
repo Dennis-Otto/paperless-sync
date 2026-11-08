@@ -29,6 +29,10 @@ The files of the archive are a mirror of Paperless, and they are read-only by in
 
 A copy that you rename or move stays where you put it, as a file of your own, and the next run writes the document anew at its path; one that you delete comes back the same way. To keep a version of your own, copy the file out of the archive, and edit documents in Paperless. A note above the list of the archive in Files says so as well, also to those who reach it through a share.
 
+### What happens when a document gets a new version in Paperless?
+
+Paperless-ngx 3.x keeps versions of a document, and its copy follows the newest one. A new file for a document, such as a born-digital PDF for a scan, replaces the content of its copy in the next run, in the same file, so the copy keeps its shares, and in a scheduled run Nextcloud keeps the previous content as a version. A version of another type gives the copy its extension, such as `.txt` for a text, and a version without an archived version gives it its original. When you merge documents as versions of another one, which Paperless-ngx 3.1 offers, the merged documents are no documents of their own any longer: their copies count as missing and move to the deleted folder after the required missing scans, as those of documents deleted without the trash do ([deletion settings](#which-deletion-settings-do-i-need)), while the copy of the document that took them in gets their content.
+
 ### Where do deleted files go?
 
 It depends on what deletes them:

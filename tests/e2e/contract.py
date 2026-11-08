@@ -8,8 +8,9 @@ container of the mock, inside the network of Compose, with Python alone:
 
     python contract.py api URL LINE   seeds Paperless and checks every answer that the app reads
     python contract.py token          the token of the API that api got
-    python contract.py rename|trash|restore
-                                      changes the invoice in Paperless for the next run of the app
+    python contract.py rename|trash|restore|new-version
+                                      changes the invoice in Paperless for the next run of the app;
+                                      new-version (3.x) adds a text as its newest version
     python contract.py pdf NAME       a PDF for the inbox of the app, on standard output
     python contract.py wait           waits until Paperless has consumed every upload
     python contract.py report MODE    checks the report of a run of the app on standard input
@@ -75,6 +76,9 @@ DOCUMENTS = {
     "inbox": ("unread.pdf", "Unread letter", "Example Insurance", "Letter", "2026-08-28"),
 }
 RENAMED = "Monthly invoice corrected"
+# The newest version of the invoice on Paperless-ngx 3.x: a text, a file of another type than the
+# scan, for which Paperless keeps no archived version.
+INVOICE_VERSION = ("invoice.txt", b"Synthetic contract test text, the newest version of the invoice.\n", "text/plain")
 # The note on the invoice, which the metadata next to the archive keeps with its author.
 NOTE = "Paid on 1 September."
 # A file of no type that Paperless takes: the zero bytes first make it application/octet-stream.
@@ -273,9 +277,21 @@ def is_field_values(value):
     )
 
 
-# Every field of a document that the app reads (SyncService, PathTemplateService), with
-# the shape that it reads it in. A run asks for these alone, in this order
-# (PaperlessApiService::DOCUMENT_FIELDS), and the answer has no other.
+def is_versions(value):
+    """The versions of a document, the newest first, as FileVersions reads them: the ID of each and
+    whether it is the first file of the document, which comes last."""
+    return (
+        isinstance(value, list)
+        and len(value) > 0
+        and all(isinstance(item, dict) and is_id(item.get("id")) and isinstance(item.get("is_root"), bool) for item in value)
+        and value[-1]["is_root"] is True
+    )
+
+
+# Every field of a document that the app reads (SyncService, PathTemplateService, FileVersions),
+# with the shape that it reads it in. A run asks for these alone, in this order
+# (PaperlessApiService::DOCUMENT_FIELDS), and the answer has no other: Paperless-ngx 2.x keeps no
+# versions and leaves that field out (document_fields()).
 DOCUMENT_FIELDS = {
     "id": is_id,
     "title": is_text,
@@ -293,9 +309,15 @@ DOCUMENT_FIELDS = {
     "archive_serial_number": optional(is_count),
     "page_count": optional(is_count),
     "custom_fields": is_field_values,
+    "versions": is_versions,
 }
 # The query of the documents of a run, as PaperlessApiService::documents() sends it.
 FIELDS = ",".join(DOCUMENT_FIELDS)
+
+
+def document_fields(line):
+    """The fields of a document in the answer of a line of Paperless: 2.x knows no versions."""
+    return {key: value for key, value in DOCUMENT_FIELDS.items() if line == "3" or key != "versions"}
 DOCUMENTS_QUERY = f"ordering=id&fields={FIELDS}&truncate_content=true"
 
 
@@ -455,13 +477,19 @@ def api(url, line):
     check(status in (200, 201), f"Paperless answered HTTP {status} to a new note.")
 
     # The documents, as every run reads them: sorted by ID, with the fields of a run alone.
+    fields = document_fields(line)
     documents = paperless.get(f"/api/documents/?{DOCUMENTS_QUERY}&page=1&page_size=1000", record="documents")
     expect_page("The documents", documents, 3)
     check([item["id"] for item in documents["results"]] == sorted(ids.values()), f"The documents are {documents!r}.")
     for item in documents["results"]:
-        expect_fields(f"The document {item.get('id')}", item, DOCUMENT_FIELDS)
+        expect_fields(f"The document {item.get('id')}", item, fields)
         # Without the list of fields, each document would bring its text, notes and permissions.
-        check(set(item) == set(DOCUMENT_FIELDS), f"Paperless ignored the fields of a run: {sorted(item)!r}")
+        check(set(item) == set(fields), f"Paperless ignored the fields of a run: {sorted(item)!r}")
+        # A document of a single file lists itself as its only version, which costs a run nothing.
+        check(
+            line == "2" or [(entry["id"], entry["is_root"]) for entry in item["versions"]] == [(item["id"], True)],
+            f"The document {item['id']} of one file has the versions {item.get('versions')!r}.",
+        )
         check(item["archived_file_name"], f"Paperless kept no archived version of the document {item['id']}.")
         check(item["mime_type"] == "application/pdf", f"The document {item['id']} has {item['mime_type']!r}.")
         check(item["page_count"] == 1, f"The document {item['id']} has page_count={item['page_count']!r}.")
@@ -469,8 +497,8 @@ def api(url, line):
     # One document by its ID, as a call of the webhook reads it: the same fields as in the list.
     listed = next(item for item in documents["results"] if item["id"] == ids["invoice"])
     single = paperless.get(f"/api/documents/{ids['invoice']}/?fields={FIELDS}&truncate_content=true", record="document")
-    expect_fields("The document read by its ID", single, DOCUMENT_FIELDS)
-    check(set(single) == set(DOCUMENT_FIELDS), f"Paperless ignored the fields of a run for one document: {sorted(single)!r}")
+    expect_fields("The document read by its ID", single, fields)
+    check(set(single) == set(fields), f"Paperless ignored the fields of a run for one document: {sorted(single)!r}")
     check(single == listed, f"The document read by its ID is {single!r}, but the list has {listed!r}.")
     check(invoice_fields == [{"field": priority["id"], "value": choices[0]["id"]}], f"The invoice has {invoice_fields!r}.")
     # The documents with their notes, as a run reads them while it writes the metadata next to
@@ -478,8 +506,8 @@ def api(url, line):
     noted = paperless.get(f"/api/documents/?{NOTES_QUERY}&page=1&page_size=1000", record="documents-notes")
     expect_page("The documents with their notes", noted, 3)
     for item in noted["results"]:
-        expect_fields(f"The document {item.get('id')} with its notes", item, {**DOCUMENT_FIELDS, "notes": is_list})
-        check(set(item) == {*DOCUMENT_FIELDS, "notes"}, f"Paperless ignored the fields of a run with notes: {sorted(item)!r}")
+        expect_fields(f"The document {item.get('id')} with its notes", item, {**fields, "notes": is_list})
+        check(set(item) == {*fields, "notes"}, f"Paperless ignored the fields of a run with notes: {sorted(item)!r}")
         for note in item["notes"]:
             expect_fields(f"A note of the document {item['id']}", note, NOTE_FIELDS)
     noted_invoice = next(item for item in noted["results"] if item["id"] == ids["invoice"])
@@ -583,7 +611,7 @@ def api(url, line):
     paperless.request("DELETE", f"/api/documents/{letter}/", expect=204)
     trash = paperless.get("/api/trash/?page=1&page_size=1000", record="trash")
     expect_page("The trash", trash, 1)
-    expect_fields("The document in the trash", trash["results"][0], {**DOCUMENT_FIELDS, "deleted_at": is_time})
+    expect_fields("The document in the trash", trash["results"][0], {**fields, "deleted_at": is_time})
     check(paperless.get("/api/documents/?page=1&page_size=1000")["count"] == 2, "The trash still lists as active.")
     # A call of the webhook for a document in the trash finds none: the scheduled runs mirror it.
     paperless.request(
@@ -595,9 +623,81 @@ def api(url, line):
 
     shared(paperless, *per_user(paperless, url))
     setup(paperless, url)
+    if line == "3":
+        versions(paperless)
 
     save_state({"url": url, "line": line, "token": paperless.token, "version": version, "ids": ids})
     print(f"Paperless-ngx {version} answers as the app reads it.")
+
+
+def add_version(paperless, document, name, content, mime):
+    """Adds a file as the newest version of a document, as the button of Paperless-ngx 3.x does,
+    and gives the ID of the version."""
+    _, _, task_id = paperless.request("POST", f"/api/documents/{document}/update_version/", upload=(name, content, mime))
+    check(is_text(task_id) and re.match(r"^[0-9a-f-]{36}$", task_id), f"The new version answered {task_id!r}, no task.")
+    task = paperless.task(task_id)
+    check(task["status"] == "SUCCESS", f"Paperless didn't consume {name} as a version of {document}: {task!r}")
+    newest = paperless.get(f"/api/documents/{document}/?fields=id,versions")["versions"][0]
+    check(newest["is_root"] is False, f"The newest version of {document} is its first file after {name}: {newest!r}")
+    return newest["id"]
+
+
+def expect_version(paperless, document, version, name, mime, content, record):
+    """The document lists the version as its newest, and its metadata and its downloads are those
+    of the version, a file without an archived version, as FileVersions reads them: no
+    archive_checksum, which a run read as an error in every run before, and the original in both
+    downloads."""
+    item = paperless.get(f"/api/documents/{document}/?fields={FIELDS}&truncate_content=true", record=f"document-{record}")
+    expect_fields(f"The document {document} with versions", item, DOCUMENT_FIELDS)
+    check(
+        item["versions"][0]["id"] == version and item["versions"][-1]["id"] == document,
+        f"The document {document} lists the versions {item['versions']!r}, not {version} first.",
+    )
+    metadata = paperless.get(f"/api/documents/{document}/metadata/", record=f"metadata-{record}")
+    expected = {
+        "has_archive_version": False,
+        "archive_checksum": None,
+        "original_filename": name,
+        "original_mime_type": mime,
+        "original_checksum": digests(content)["sha256"],
+    }
+    for field, value in expected.items():
+        check(metadata.get(field) == value, f"The metadata of {document} has {field}={metadata.get(field)!r}, not {value!r}.")
+    for original in ("true", "false"):
+        _, received, data = paperless.request("GET", f"/api/documents/{document}/download/?original={original}", raw=True)
+        check(data == content, f"The download of {document} with original={original} is not its newest version {name}.")
+        check(received["Content-Type"].startswith(mime), f"The download of {name} has the type {received['Content-Type']!r}.")
+
+
+def versions(paperless):
+    """Paperless-ngx 3.x keeps versions of a document (FileVersions): a scan with an archived
+    version gets a born-digital PDF without one, as a PDF with text gets unless Paperless archives
+    every file, and then a text, a file of another type. The fields of a document describe its
+    first file, while its metadata and its downloads are those of the newest version. A version is
+    no document of its own, so a document merged into another one is missing for the app. The
+    document goes again, so that the runs of the app see the documents of the scenario alone."""
+    _, _, task_id = paperless.upload("scan.pdf", pdf("Synthetic scanned contract test letter"))
+    task = paperless.task(task_id)
+    check(task["status"] == "SUCCESS", f"Paperless didn't consume the scan: {task!r}")
+    document = int(task["related_document"])
+    scan = paperless.get(f"/api/documents/{document}/?fields={FIELDS}&truncate_content=true")
+    check(scan["archived_file_name"], f"Paperless kept no archived version of the scan: {scan!r}")
+    # No archived version of a new file for a moment, as with PAPERLESS_ARCHIVE_FILE_GENERATION=never.
+    config = paperless.results("/api/config/")[0]
+    paperless.request("PATCH", f"/api/config/{config['id']}/", {"archive_file_generation": "never"})
+    try:
+        born_digital = pdf("Synthetic born-digital contract test letter")
+        first = add_version(paperless, document, "digital.pdf", born_digital, "application/pdf")
+    finally:
+        paperless.request("PATCH", f"/api/config/{config['id']}/", {"archive_file_generation": config["archive_file_generation"]})
+    expect_version(paperless, document, first, "digital.pdf", "application/pdf", born_digital, "version")
+    text = b"Synthetic contract test notes, a version of another type.\n"
+    second = add_version(paperless, document, "notes.txt", text, "text/plain")
+    expect_version(paperless, document, second, "notes.txt", "text/plain", text, "version-text")
+    for version in (first, second):
+        paperless.request("GET", f"/api/documents/{version}/?fields={FIELDS}&truncate_content=true", expect=404)
+    paperless.request("DELETE", f"/api/documents/{document}/", expect=204)
+    paperless.request("POST", "/api/trash/", {"action": "empty", "documents": [document]})
 
 
 def per_user(paperless, url):
@@ -816,6 +916,8 @@ def change(what):
         paperless.request("PATCH", f"/api/documents/{invoice}/", {"title": RENAMED})
     elif what == "trash":
         paperless.request("DELETE", f"/api/documents/{invoice}/", expect=204)
+    elif what == "new-version":
+        add_version(paperless, invoice, *INVOICE_VERSION)
     else:
         paperless.request("POST", "/api/trash/", {"action": "restore", "documents": [invoice]})
 
@@ -913,6 +1015,13 @@ def report(mode):
         expect(exported=0, moved=1, errors=0, trashedDocuments=0)
         paths.append(action(f"MOVE P{invoice}: "))
         check(paths[-1] == f"{ARCHIVE}/{path_of(state, 'invoice', RENAMED)}", f"restore: the copy is at {paths[-1]!r}.")
+    elif mode == "versioned":
+        # A new version of the invoice of another type, without an archived version: the copy
+        # takes its extension and its content, which is the original of the version.
+        expect(exported=1, moved=0, errors=0)
+        paths.append(action(f"EXPORT P{invoice}: "))
+        expected = f"{ARCHIVE}/{path_of(state, 'invoice', RENAMED).removesuffix('.pdf')}.txt"
+        check(paths[-1] == expected, f"versioned: the copy of the invoice is at {paths[-1]!r}, not {expected!r}.")
     elif mode == "import-submitted":
         # "Tags for every import" names contract, in lower case, which finds the tag Contract,
         # and Nextcloud, which Paperless lacks, so the run creates it.
@@ -1133,7 +1242,7 @@ def main(arguments):
         api(*rest)
     elif command == "token":
         print(load_state()["token"])
-    elif command in ("rename", "trash", "restore"):
+    elif command in ("rename", "trash", "restore", "new-version"):
         change(command)
     elif command == "pdf":
         sys.stdout.buffer.write(content_of(rest[0]))

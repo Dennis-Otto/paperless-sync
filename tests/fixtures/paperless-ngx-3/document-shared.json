@@ -32,13 +32,22 @@
     "tags": [
       1
     ],
-    "title": "shared"
+    "title": "shared",
+    "versions": [
+      {
+        "added": "2026-01-01T00:00:00.000000Z",
+        "checksum": "d5efb623174cdeeed269eed9f9e7a482467a2699413eb3953aa51772114085f1",
+        "id": 6,
+        "is_root": true,
+        "version_label": null
+      }
+    ]
   },
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "GET /api/documents/6/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,permissions&truncate_content=true&full_perms=true",
+  "request": "GET /api/documents/6/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions,permissions&truncate_content=true&full_perms=true",
   "status": 200
 }

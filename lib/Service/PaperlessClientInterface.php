@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\Model\ConnectionCheck;
+use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
@@ -193,6 +194,13 @@ interface PaperlessClientInterface {
 
 	/** The checksum that Paperless reports for a version of a document: MD5 up to Paperless-ngx 2.x, SHA-256 since 3.0. */
 	public function documentChecksum(int $documentId, bool $original): string;
+
+	/**
+	 * The file that Paperless serves for a document, from its metadata: since Paperless-ngx 3.0 that
+	 * of its newest version, whose original name, type and archived version the fields of the
+	 * document don't name.
+	 */
+	public function documentFile(int $documentId): DocumentFile;
 
 	/**
 	 * The ID of a document whose original has the content of these checksums, or null when

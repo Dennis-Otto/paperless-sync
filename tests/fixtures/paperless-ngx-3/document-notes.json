@@ -35,13 +35,22 @@
     "tags": [
       2
     ],
-    "title": "Monthly invoice"
+    "title": "Monthly invoice",
+    "versions": [
+      {
+        "added": "2026-01-01T00:00:00.000000Z",
+        "checksum": "c9381fc9eb21790309fa8768d6e50047ad0018c586d915b7f57079624052bcea",
+        "id": 1,
+        "is_root": true,
+        "version_label": null
+      }
+    ]
   },
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
     "X-Version": "3.3.1"
   },
-  "request": "GET /api/documents/1/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,notes&truncate_content=true",
+  "request": "GET /api/documents/1/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions,notes&truncate_content=true",
   "status": 200
 }

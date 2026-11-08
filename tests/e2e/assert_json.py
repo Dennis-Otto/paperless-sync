@@ -560,9 +560,10 @@ elif mode == "names":
             raise AssertionError(f"names: {relative} has a name longer than Nextcloud allows")
         print(quote(path))
 elif mode == "mock-final":
-    # The first export, the revised content and the original one again, the export that the full
-    # quota stopped after its download, and the export after it.
-    expect("downloads", 5)
+    # The first export, the revised content and the original one again, the newest version of the
+    # document and its first file again, the export that the full quota stopped after its download,
+    # and the export after it.
+    expect("downloads", 7)
     expect("invalidAuth", 0)
     uploads = payload.get("uploads", [])
     if sorted(item.get("filename") for item in uploads) != ["broken.pdf", "cancelled.pdf", "copy.pdf", "policy.pdf"]:

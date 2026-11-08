@@ -96,6 +96,6 @@
     "X-Api-Version": "9",
     "X-Version": "2.20.15"
   },
-  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,notes&truncate_content=true&page=1&page_size=1000",
+  "request": "GET /api/documents/?ordering=id&fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions,notes&truncate_content=true&page=1&page_size=1000",
   "status": 200
 }

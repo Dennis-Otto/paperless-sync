@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>}
+ * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>}
  */
 final class SyncService {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -313,6 +313,8 @@ final class SyncService {
 			'complete' => $documentsComplete && $trashComplete,
 			'pathOf' => $pathOf,
 			'filter' => $filter,
+			// The files of the newest versions, which a run reads once for the archives of all users.
+			'versions' => new FileVersions($paperless),
 			'sidecars' => $writesMetadata
 				? fn (SyncConfig $archive, SyncReport $archiveReport, string $archiveRoot): ?MetadataSidecars => $this->sidecars($archive, $archiveReport, $archiveRoot, $correspondents, $documentTypes, $storagePaths, $tags['names'], $customFields)
 				: null,
@@ -344,6 +346,7 @@ final class SyncService {
 			$batch,
 			new TargetFiles($this->storage, $config->targetUser),
 			$paperless,
+			$read['versions'],
 			$read['pathOf'],
 			$read['filter'],
 			$this->timeZones,
@@ -669,6 +672,8 @@ final class SyncService {
 		$tags = $paperless->tags();
 		[$users, $customFields] = $this->templateLists($paperless, $config);
 		$filter = new ExportFilter($config, $tags);
+		// The path of a document that has versions takes the extension of the newest one, as in a run.
+		$versions = new FileVersions($paperless);
 		$paths = [];
 		foreach ($documents as $document) {
 			// A document without a valid ID has no path; a run reports it as an error.
@@ -679,7 +684,7 @@ final class SyncService {
 			$paths[] = [
 				'id' => $documentId,
 				'title' => is_string($document['title'] ?? null) ? (string)$document['title'] : '',
-				'path' => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
+				'path' => $this->pathTemplate->render($config, $versions->document($documentId, $document), $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
 				'skipped' => $filter->excludes($document),
 			];
 		}

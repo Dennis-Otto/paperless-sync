@@ -101,6 +101,11 @@ TAGS = [
 TAG_FIELD = re.compile(rb'name="tags"\r\n(?:[^\r\n]+\r\n)*\r\n(\d+)\r\n')
 # The content of P123 after /control/content/revised, as after a new scan in Paperless.
 REVISED_CONTENT = b"%PDF-1.4\nSynthetic Paperless archive document P123, revised.\n%%EOF\n"
+# The newest version of P123 after /control/version/text, as Paperless-ngx 3.x keeps versions of a
+# document: a text, a file of another type than the scan, without an archived version.
+VERSION_ID = 900
+VERSION_CONTENT = b"Synthetic text, the newest version of P123.\n"
+VERSION_MODIFIED = "2026-08-26T13:00:00+02:00"
 LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
@@ -141,6 +146,8 @@ def reset_state():
             {
                 "scenario": "active",
                 "content": "original",
+                # Whether P123 has the text as its newest version (/control/version/text).
+                "version": None,
                 # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0.
                 "checksum": "sha256",
                 "downloads": 0,
@@ -344,6 +351,27 @@ def paperless_checksum(data):
     return hashlib.new(algorithm, data).hexdigest()
 
 
+def versioned(item):
+    """A document as Paperless-ngx 3.x lists it, with its versions, the newest first: P123 with the
+    text as its newest after /control/version/text, which changes the document as well, every
+    other one with itself alone. Paperless-ngx 2.x keeps no versions."""
+    with LOCK:
+        version, paperless = STATE["version"], STATE["paperless"]
+    if paperless.startswith("2.") or "id" not in item:
+        return item
+    first = {"id": item["id"], "added": item.get("added"), "version_label": None, "checksum": hashlib.sha256(original_content(item["id"])).hexdigest(), "is_root": True}
+    if item["id"] != 123 or version is None:
+        return {**item, "versions": [first]}
+    newest = {
+        "id": VERSION_ID,
+        "added": VERSION_MODIFIED,
+        "version_label": None,
+        "checksum": hashlib.sha256(VERSION_CONTENT).hexdigest(),
+        "is_root": False,
+    }
+    return {**item, "modified": VERSION_MODIFIED, "versions": [newest, first]}
+
+
 def restored():
     # Paperless writes the time of the restore into the document, so the app compares
     # its checksum before it moves the copy back.
@@ -458,6 +486,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         documents, trash = scenario_documents()
+        documents = [versioned(item) for item in documents]
         query = parse_qs(parsed.query)
         # Paperless sends who may view a document only for a request with full_perms=true.
         if query.get("full_perms") == ["true"]:
@@ -563,6 +592,23 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 checksum = paperless_checksum(data)
                 self._json(200, {"original_checksum": checksum, "archive_checksum": checksum})
+        elif STATE["version"] is not None and parsed.path in ("/api/documents/123/download/", "/api/documents/123/metadata/"):
+            # Paperless-ngx 3.x serves the newest version of a document, and its metadata describes
+            # that version: here the text, which has no archived version.
+            with LOCK:
+                STATE["downloads" if parsed.path.endswith("/download/") else "metadataRequests"] += 1
+            if parsed.path.endswith("/download/"):
+                self._bytes(200, VERSION_CONTENT, "text/plain")
+            else:
+                self._json(200, {
+                    "original_checksum": paperless_checksum(VERSION_CONTENT),
+                    "archive_checksum": None,
+                    "has_archive_version": False,
+                    "original_filename": "invoice.txt",
+                    "original_mime_type": "text/plain",
+                    "media_filename": f"0000123_v{VERSION_ID}.txt",
+                    "archive_media_filename": None,
+                })
         elif match := re.fullmatch(r"/api/documents/(123|124|5\d\d)/(download|metadata)/", parsed.path):
             # P123, P124, and the documents of the uploads, which the scenario per-user lists.
             data = document_content(int(match.group(1)))
@@ -614,6 +660,16 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["content"] = content
             self._json(200, {"content": content})
+            return
+        if parsed.path.startswith("/control/version/"):
+            # The newest version of P123: /control/version/text, or none for the scan alone.
+            version = parsed.path.rsplit("/", 1)[-1]
+            if version not in {"none", "text"}:
+                self._json(400, {"detail": "Unknown version"})
+                return
+            with LOCK:
+                STATE["version"] = None if version == "none" else version
+            self._json(200, {"version": version})
             return
         if parsed.path.startswith("/control/checksum/"):
             algorithm = parsed.path.rsplit("/", 1)[-1]
