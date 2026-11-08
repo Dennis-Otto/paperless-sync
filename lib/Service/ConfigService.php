@@ -67,6 +67,7 @@ final class ConfigService {
 		'ownership' => SyncConfig::SINGLE,
 		'user_map' => '',
 		'user_group' => '',
+		'follow_storage_paths' => false,
 	];
 
 	/**
@@ -274,7 +275,7 @@ final class ConfigService {
 			'recursive_inbox' => 'recursiveInbox', 'inbox_folder_tags' => 'inboxFolderTags', 'inbox_tags' => 'inboxTags',
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
 			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup', 'nextcloud_tags' => 'nextcloudTags',
-			'ownership' => 'ownership', 'user_map' => 'userMap', 'user_group' => 'userGroup',
+			'ownership' => 'ownership', 'user_map' => 'userMap', 'user_group' => 'userGroup', 'follow_storage_paths' => 'followStoragePaths',
 			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
@@ -575,7 +576,7 @@ final class ConfigService {
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
 			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
 			(bool)$values['nextcloud_tags'], (string)$values['ownership'], (string)$values['user_map'],
-			(string)$values['user_group'],
+			(string)$values['user_group'], (bool)$values['follow_storage_paths'],
 		);
 	}
 }

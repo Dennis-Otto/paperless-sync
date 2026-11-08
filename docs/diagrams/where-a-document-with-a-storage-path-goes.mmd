@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: Where a document with a storage path goes
+    accDescr: With Use the storage path of a document in Paperless on, a run asks of every document whether it has a storage path in Paperless. A document without one follows the archive path template. For one with a storage path, the run asks whether the app can render its template: only the variables of the path template, a custom field that Paperless has, and get_cf_value as the one filter. If it can, the document goes below the archive folder to the path of that template, and its file name gets the marker [P123] and its extension. If it can't, because of logic of Jinja, another filter, an unknown variable or a custom field that Paperless lacks, the document follows the archive path template, and the report of the run, the dry-run and the preview name the storage path once. Turning the setting on or off moves the copies as a new template does: each stays the same file, with its shares.
+
+    document["Each document<br>of Paperless"] --> has{"Has it a storage path<br>in Paperless?"}
+    has -->|no| template["The archive path template"]
+    has -->|yes| renders{"Can the app render<br>its template: the variables of<br>the path template, a custom field<br>that Paperless has, get_cf_value?"}
+    renders -->|yes| storage["The path of the template of<br>its storage path, below the<br>archive folder"]
+    renders -->|"no: logic of Jinja, another filter,<br>an unknown variable or a<br>missing custom field"| named["The report, the dry-run and<br>the preview name the<br>storage path once"]
+    named --> template
+    storage --> marker["The file name gets the<br>marker [P123] and its extension"]
+    template --> marker
+    marker --> moves["A change of the setting moves<br>the copy as a new template does:<br>the same file, with its shares"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class document,has,renders check
+    class storage,marker,moves kept
+    class template,named changed

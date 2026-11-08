@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use InvalidArgumentException;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Tests\Doubles\TestConfig;
 use OCP\IConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -749,6 +750,130 @@ final class PathTemplateServiceTest extends TestCase {
 
 	public function testAMonthThatNoCalendarHasKeepsItsNumber(): void {
 		self::assertSame('13/[P1].pdf', $this->service->render($this->config('{{ created_month_name }}/[P{{ id }}]'), $this->document(['created' => '2026-13-01']), [], [], []));
+	}
+
+	/** @return array<string, array{string, string}> the template of a storage path of Paperless, and the one that the archive follows */
+	public static function storagePathTemplates(): array {
+		return [
+			'the example of Paperless' => ['{{ created_year }}/{{ correspondent }}/{{ title }}', '{{ created_year }}/{{ correspondent }}/{{ title }}'],
+			'without spaces' => ['{{owner_username}}/{{document_type}}/{{title}}', '{{ owner_username }}/{{ document_type }}/{{ title }}'],
+			'a custom field as Paperless writes it' => ['{{ custom_fields|get_cf_value("Account", "none") }}/{{ title }}', '{{ custom_fields|get_cf_value("Account", "none") }}/{{ title }}'],
+			'with the marker and the extension' => ['Steuern/{{ title }} [P{{ id }}]{{ extension }}', 'Steuern/{{ title }} [P{{ id }}]{{ extension }}'],
+			'slashes at its ends, between its parts and backslashes' => ['/Steuern//{{ created_year }}\\{{ title }}/', 'Steuern/{{ created_year }}/{{ title }}'],
+			'one part of blanks' => ['Steuern/ /{{ title }}', 'Steuern/{{ title }}'],
+		];
+	}
+
+	#[DataProvider('storagePathTemplates')]
+	public function testTakesTheTemplateOfAStoragePathThatItCanRender(string $path, string $template): void {
+		self::assertSame($template, $this->service->storagePathTemplate($path));
+	}
+
+	/** @return array<string, array{string}> */
+	public static function unsupportedStoragePathTemplates(): array {
+		return [
+			'empty' => [''],
+			'only slashes' => [' / /'],
+			'logic of Jinja' => ['{% if correspondent %}{{ correspondent }}{% else %}Other{% endif %}/{{ title }}'],
+			'a comment of Jinja' => ['{# year #}{{ created_year }}/{{ title }}'],
+			'a variable that the template does not know' => ['{{ created_year }}/{{ created_time }}/{{ title }}'],
+			'the tags as a list' => ['{{ tags }}/{{ title }}'],
+			'a filter of Jinja' => ['{{ correspondent|lower }}/{{ title }}'],
+			'get_cf_value on another variable' => ['{{ title|get_cf_value("Account") }}'],
+			'a custom field without a name' => ['{{ custom_fields. }}/{{ title }}'],
+			'the placeholders of older versions of Paperless' => ['{created_year}/{correspondent}/{title}'],
+			'a brace alone' => ['{{ created_year }}/{{ title }}}'],
+		];
+	}
+
+	/** A storage path that the archive can't render as Paperless does is not followed, so its documents keep the path template. */
+	#[DataProvider('unsupportedStoragePathTemplates')]
+	public function testRefusesTheTemplateOfAStoragePathThatItCannotRender(string $path): void {
+		self::assertNull($this->service->storagePathTemplate($path));
+	}
+
+	/**
+	 * With the setting on, a document whose storage path has a template that the archive can
+	 * render goes to its path, with the marker and the extension added; one without a storage
+	 * path, and one of a storage path that it can't follow, keep the path template, and the latter
+	 * is named. A custom field that Paperless doesn't have makes a storage path one that the
+	 * archive can't follow, as the path template would fail the run with it.
+	 */
+	public function testADocumentFollowsTheTemplateOfItsStoragePath(): void {
+		$config = TestConfig::of(['pathTemplate' => '{{ correspondent }}/{{ title }} [P{{ id }}]', 'followStoragePaths' => true]);
+		$names = ['3' => 'Haushalt', '4' => 'Wohnung', '5' => 'Konto', '6' => 'Steuern'];
+		$templates = [
+			'3' => '{{ created_year }}/{{ correspondent }}/{{ title }}',
+			'4' => '{% if correspondent %}{{ correspondent }}{% endif %}/{{ title }}',
+			'5' => '{{ custom_fields.Konto }}/{{ title }}',
+			'6' => 'Steuern/{{ custom_fields|get_cf_value("Jahr", "ohne") }}/{{ title }}',
+		];
+		$customFields = ['1' => ['name' => 'Jahr', 'type' => 'string', 'options' => []]];
+
+		$storagePaths = $this->service->storagePaths($config, $names, $templates, $customFields);
+		$pathOf = fn (array $document): string => $this->service->render($storagePaths->configOf($config, $document), $document, ['4' => 'Energie GmbH'], [], $storagePaths->names, [], [], $customFields);
+
+		self::assertSame('2026/Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 3])));
+		self::assertSame('2026/Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => '3'])), 'Paperless may give the ID as a string of digits.');
+		self::assertSame('Steuern/ohne/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 6])));
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document()), 'A document without a storage path follows the path template.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => null])));
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 4])), 'Logic of Jinja leaves the document with the path template.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 5])), 'So does a custom field that Paperless does not have.');
+		self::assertSame('Energie GmbH/Rechnung [P1].pdf', $pathOf($this->document(['storage_path' => 9])), 'So does a storage path that Paperless does not list.');
+		self::assertSame(
+			['Konto', 'Wohnung'],
+			$storagePaths->unsupported([
+				$this->document(['storage_path' => 4]),
+				$this->document(['id' => 2, 'storage_path' => 5]),
+				$this->document(['id' => 3, 'storage_path' => 4]),
+				$this->document(['id' => 4, 'storage_path' => 3]),
+				$this->document(['id' => 5]),
+			]),
+			'Each storage path that the archive cannot follow is named once, sorted, and only those of the documents.',
+		);
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 3])]));
+		self::assertSame(['{{ created_year }}/{{ correspondent }}/{{ title }}', 'Steuern/{{ custom_fields|get_cf_value("Jahr", "ohne") }}/{{ title }}', '{{ custom_fields.Konto }}/{{ title }}'], array_values(array_unique([
+			...$this->service->storagePathTemplates($config, ['3' => $templates['3'], '6' => $templates['6']]),
+			...$this->service->storagePathTemplates($config, $templates),
+		])), 'The lists that a run reads follow the templates that the archive may follow.');
+	}
+
+	/** A storage path without a name in Paperless is named by its ID. */
+	public function testAStoragePathWithoutANameIsNamedByItsId(): void {
+		$config = TestConfig::of(['followStoragePaths' => true]);
+
+		$storagePaths = $this->service->storagePaths($config, [], ['8' => '{{ tags }}'], []);
+
+		self::assertSame(['8'], $storagePaths->unsupported([$this->document(['storage_path' => 8])]));
+	}
+
+	/** Without the setting, every document follows the path template, and no storage path is named or needs a list. */
+	public function testWithoutTheSettingNoDocumentFollowsItsStoragePath(): void {
+		$config = TestConfig::of(['pathTemplate' => '{{ title }} [P{{ id }}]']);
+		$templates = ['3' => '{{ owner_username }}/{{ title }}', '4' => '{% if x %}{% endif %}'];
+
+		$storagePaths = $this->service->storagePaths($config, ['3' => 'Haushalt', '4' => 'Wohnung'], $templates, []);
+
+		self::assertSame($config, $storagePaths->configOf($config, $this->document(['storage_path' => 3])));
+		self::assertSame([], $storagePaths->unsupported([$this->document(['storage_path' => 4])]));
+		self::assertSame(['3' => 'Haushalt', '4' => 'Wohnung'], $storagePaths->names);
+		self::assertSame([], $this->service->storagePathTemplates($config, $templates));
+	}
+
+	/** A storage path follows the same rules as the path template: plain values, cleaned names and the byte limits. */
+	public function testTheTemplateOfAStoragePathKeepsTheRulesOfThePaths(): void {
+		$config = TestConfig::of(['followStoragePaths' => true]);
+		$storagePaths = $this->service->storagePaths($config, ['3' => 'Lang'], ['3' => '../{{ correspondent }}/{{ title }}'], []);
+		$document = $this->document(['storage_path' => 3, 'title' => str_repeat('Ä', 200) . ' $1 {{ id }}']);
+
+		$path = $this->service->render($storagePaths->configOf($config, $document), $document, ['4' => 'CON'], [], $storagePaths->names);
+
+		[$folder, $correspondent, $file] = explode('/', $path);
+		self::assertSame('Folder', $folder, 'A part that is no name, such as .., never leaves the archive.');
+		self::assertSame('_CON', $correspondent, 'The name of a device of Windows gets its _.');
+		self::assertStringEndsWith(' [P1].pdf', $file);
+		self::assertLessThanOrEqual(217, strlen($file));
 	}
 
 	/** @param array<string, mixed> $overrides @return array<string, mixed> */

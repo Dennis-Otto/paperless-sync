@@ -95,6 +95,11 @@ final class SyncConfig implements \JsonSerializable {
 		public readonly string $userMap = '',
 		/** The ID of the group of Nextcloud whose members alone get their documents in per-user ownership; '' for every user. */
 		public readonly string $userGroup = '',
+		/**
+		 * Whether a document with a storage path in Paperless goes to the path of its template, as
+		 * Paperless files it, when the app can render that template; the others follow $pathTemplate.
+		 */
+		public readonly bool $followStoragePaths = false,
 	) {
 	}
 
@@ -117,6 +122,14 @@ final class SyncConfig implements \JsonSerializable {
 	public function withBatchSize(int $batchSize): self {
 		$values = get_object_vars($this);
 		$values['batchSize'] = $batchSize;
+
+		return new self(...$values);
+	}
+
+	/** The same settings with another path template, such as that of a storage path of Paperless that a document follows. */
+	public function withPathTemplate(string $pathTemplate): self {
+		$values = get_object_vars($this);
+		$values['pathTemplate'] = $pathTemplate;
 
 		return new self(...$values);
 	}

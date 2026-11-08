@@ -421,6 +421,29 @@ try {
 	expect((await template.getAttribute('aria-invalid')) === null && await unsaved.isHidden(), 'The saved template is valid and nothing is unsaved.')
 	console.log('Settings: the preview shows the paths of the newest documents with the template of the form, and a variable goes in at the cursor.')
 
+	// The switch of the storage paths of Paperless shows the paths anew with the switch of the
+	// form, and the preview names the storage paths of the newest documents that the archive
+	// can't follow once, under their paths; the answer of the server is the mock's here.
+	const preview = `${SETTINGS}/preview`
+	const followStoragePaths = page.locator('[data-setting="follow_storage_paths"]')
+	const unsupported = page.locator('#paperless-sync-path-preview-storage-paths')
+	await page.route(`**${preview}`, async (route) => {
+		const follows = route.request().postDataJSON().settings.follow_storage_paths === true
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ template: savedTemplate, connected: true, paths: [{ id: 7, title: 'Rent', path: 'Rent [P7].pdf', skipped: false }], unsupportedStoragePaths: follows ? ['Correspondents', 'Taxes'] : [] }),
+		})
+	})
+	await followStoragePaths.check()
+	await unsupported.filter({ hasText: 'The archive can\'t follow the storage paths Correspondents, Taxes of Paperless' }).waitFor({ timeout: 5000 })
+	expect(await unsaved.isVisible(), 'The switch of the storage paths is an unsaved change.')
+	await followStoragePaths.uncheck()
+	await unsupported.waitFor({ state: 'hidden', timeout: 5000 })
+	await page.unroute(`**${preview}`)
+	expect(await unsaved.isHidden(), 'Without the switch, nothing is unsaved.')
+	console.log('Settings: the switch of the storage paths shows the paths anew, and the preview names the storage paths that the archive can\'t follow.')
+
 	// A dry-run tries the unsaved settings of the form, and the report says so; without a
 	// change, it sends none. The status that a save asked for before it, which the server
 	// answered with the report from before the dry-run, may arrive after the report of the

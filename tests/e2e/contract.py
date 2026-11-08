@@ -526,6 +526,9 @@ def api(url, line):
             expect_fields(f"The entry {item.get('id')} of {kind}", item, {"id": is_id, "name": is_text})
             if kind == "tags":
                 check(item["is_inbox_tag"] is (item["id"] == inbox_tag), f"The tag {item!r} has is_inbox_tag wrong.")
+            if kind == "storage_paths":
+                # The template, which a document follows with "Use the storage path of a document in Paperless".
+                check(item.get("path") == "{{ correspondent }}/{{ title }}", f"The storage path {item!r} has no template in its field path.")
             if kind == "custom_fields":
                 check(item["data_type"] == "select" and item["extra_data"]["select_options"] == choices, f"{item!r}")
 

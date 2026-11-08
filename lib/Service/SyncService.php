@@ -299,13 +299,19 @@ final class SyncService {
 		$trashComplete = $this->checkScan($report, 'trashed documents', $trashScan);
 		$correspondents = $paperless->correspondents();
 		$documentTypes = $paperless->documentTypes();
-		$storagePaths = $paperless->storagePaths();
+		$storagePathList = $paperless->storagePaths();
 		$tags = $paperless->tags();
-		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null, $users);
+		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null, $users, $storagePathList['templates']);
+		$storagePaths = $this->pathTemplate->storagePaths($config, $storagePathList['names'], $storagePathList['templates'], $customFields);
 		$filter = new ExportFilter($config, $tags);
 		$report->activeDocuments = count($documentScan->documents);
 		$report->trashedDocuments = count($trashScan->documents);
-		$pathOf = /** @param array<string, mixed> $document */ fn (array $document): string => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields);
+		$this->noticeOfUnsupportedStoragePaths($report, $storagePaths->unsupported(array_values(array_filter(
+			$documentScan->documents,
+			/** @param array<string, mixed> $document */
+			static fn (array $document): bool => !$filter->excludes($document),
+		))));
+		$pathOf = /** @param array<string, mixed> $document */ fn (array $document): string => $this->pathTemplate->render($storagePaths->configOf($config, $document), $document, $correspondents, $documentTypes, $storagePaths->names, $tags['names'], $users, $customFields);
 
 		return [
 			'documents' => $documentScan->documents,
@@ -314,7 +320,7 @@ final class SyncService {
 			'pathOf' => $pathOf,
 			'filter' => $filter,
 			'sidecars' => $writesMetadata
-				? fn (SyncConfig $archive, SyncReport $archiveReport, string $archiveRoot): ?MetadataSidecars => $this->sidecars($archive, $archiveReport, $archiveRoot, $correspondents, $documentTypes, $storagePaths, $tags['names'], $customFields)
+				? fn (SyncConfig $archive, SyncReport $archiveReport, string $archiveRoot): ?MetadataSidecars => $this->sidecars($archive, $archiveReport, $archiveRoot, $correspondents, $documentTypes, $storagePaths->names, $tags['names'], $customFields)
 				: null,
 			'tagNames' => $tags['names'],
 		];
@@ -651,13 +657,34 @@ final class SyncService {
 	}
 
 	/**
+	 * Names the storage paths of Paperless whose templates the archive can't follow, once in a
+	 * run: the documents of each go where the path template puts them.
+	 *
+	 * @param list<string> $names
+	 */
+	private function noticeOfUnsupportedStoragePaths(SyncReport $report, array $names): void {
+		if ($names === []) {
+			return;
+		}
+		$list = implode(', ', $names);
+		$paths = count($names) === 1
+			? "The archive can't follow the storage path {$list} of Paperless, which uses logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so its documents go where the archive path template puts them."
+			: "The archive can't follow the storage paths {$list} of Paperless, which use logic of Jinja, a filter or a variable that the path template doesn't know, or a custom field that Paperless doesn't have, so their documents go where the archive path template puts them.";
+		$report->notice(SyncReport::TYPE_STORAGE_PATHS_UNSUPPORTED, "STORAGE PATHS NOT FOLLOWED: {$paths}", [
+			'names' => $list,
+			'count' => count($names),
+		]);
+	}
+
+	/**
 	 * The paths that the newest documents of Paperless would have in the archive with $config, such
 	 * as the settings of the page before they are saved, relative to the archive folder, for the
 	 * preview of the path template; skipped is whether a run leaves the document out, as one of
-	 * the inbox, with an excluded tag or without a tag to mirror. It reads Paperless, through the
-	 * connection of $config, and nothing else, and changes nothing.
+	 * the inbox, with an excluded tag or without a tag to mirror. The storage paths of the other
+	 * documents whose templates the archive can't follow come with them, as a run names them. It
+	 * reads Paperless, through the connection of $config, and nothing else, and changes nothing.
 	 *
-	 * @return list<array{id: int, title: string, path: string, skipped: bool}>
+	 * @return array{paths: list<array{id: int, title: string, path: string, skipped: bool}>, unsupportedStoragePaths: list<string>}
 	 * @throws InvalidArgumentException when Paperless lacks a custom field of the template or a tag to mirror
 	 */
 	public function previewPaths(SyncConfig $config, int $count): array {
@@ -665,26 +692,32 @@ final class SyncService {
 		$documents = $paperless->newestDocuments($count);
 		$correspondents = $paperless->correspondents();
 		$documentTypes = $paperless->documentTypes();
-		$storagePaths = $paperless->storagePaths();
+		$storagePathList = $paperless->storagePaths();
 		$tags = $paperless->tags();
-		[$users, $customFields] = $this->templateLists($paperless, $config);
+		[$users, $customFields] = $this->templateLists($paperless, $config, null, null, $storagePathList['templates']);
+		$storagePaths = $this->pathTemplate->storagePaths($config, $storagePathList['names'], $storagePathList['templates'], $customFields);
 		$filter = new ExportFilter($config, $tags);
 		$paths = [];
+		$mirrored = [];
 		foreach ($documents as $document) {
 			// A document without a valid ID has no path; a run reports it as an error.
 			$documentId = is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
 			if ($documentId < 1) {
 				continue;
 			}
+			$skipped = $filter->excludes($document);
 			$paths[] = [
 				'id' => $documentId,
 				'title' => is_string($document['title'] ?? null) ? (string)$document['title'] : '',
-				'path' => $this->pathTemplate->render($config, $document, $correspondents, $documentTypes, $storagePaths, $tags['names'], $users, $customFields),
-				'skipped' => $filter->excludes($document),
+				'path' => $this->pathTemplate->render($storagePaths->configOf($config, $document), $document, $correspondents, $documentTypes, $storagePaths->names, $tags['names'], $users, $customFields),
+				'skipped' => $skipped,
 			];
+			if (!$skipped) {
+				$mirrored[] = $document;
+			}
 		}
 
-		return $paths;
+		return ['paths' => $paths, 'unsupportedStoragePaths' => $storagePaths->unsupported($mirrored)];
 	}
 
 	/**
@@ -698,25 +731,38 @@ final class SyncService {
 	 * leaves the metadata to a run with the permission. The third value says whether the run
 	 * writes the metadata. A run of per-user ownership has read the users already, in $users.
 	 *
+	 * With "Use the storage path of a document in Paperless", the templates of the storage paths
+	 * that the archive may follow, of $storagePathTemplates, need these lists as the path template
+	 * does.
+	 *
 	 * @param array<string, string>|null $users
+	 * @param array<string, string> $storagePathTemplates the templates of the storage paths of Paperless, by their IDs
 	 * @return array{array<string, string>, array<string, array{name: string, type: string, options: array<string, string>}>, bool}
 	 */
-	private function templateLists(PaperlessClientInterface $paperless, SyncConfig $config, ?SyncReport $metadata = null, ?array $users = null): array {
+	private function templateLists(PaperlessClientInterface $paperless, SyncConfig $config, ?SyncReport $metadata = null, ?array $users = null, array $storagePathTemplates = []): array {
 		$customFields = [];
+		$followed = $this->pathTemplate->storagePathTemplates($config, $storagePathTemplates);
+		$owner = $this->pathTemplate->usesOwner($config->pathTemplate);
 		try {
 			if ($users === null) {
-				$users = $this->pathTemplate->usesOwner($config->pathTemplate) ? $paperless->users() : [];
+				$users = $owner || array_filter($followed, $this->pathTemplate->usesOwner(...)) !== [] ? $paperless->users() : [];
 			}
 		} catch (RuntimeException $exception) {
-			throw new RunException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception);
+			throw $owner
+				? new RunException('Paperless did not list its users, which the archive path template needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception)
+				: new RunException('Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s', [RunError::of($exception)], $exception);
 		}
 		$template = $this->pathTemplate->customFieldNames($config->pathTemplate) !== [];
+		$storagePath = array_filter($followed, fn (string $followedTemplate): bool => $this->pathTemplate->customFieldNames($followedTemplate) !== []) !== [];
 		$writesMetadata = $metadata !== null;
 		try {
-			if ($template || $writesMetadata) {
+			if ($template || $storagePath || $writesMetadata) {
 				$customFields = $paperless->customFields();
 			}
 		} catch (RuntimeException $exception) {
+			if ($storagePath && !$template) {
+				throw new RunException('Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s', [RunError::of($exception)], $exception);
+			}
 			if ($template || $metadata === null) {
 				throw new RunException('Paperless did not list its custom fields, which the archive path template uses; the user of the API token needs the permission to view custom fields: %s', [RunError::of($exception)], $exception);
 			}

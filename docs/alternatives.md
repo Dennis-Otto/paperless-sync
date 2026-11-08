@@ -101,7 +101,7 @@ Both guides end with one copy of every finished document, in the folders that pe
 The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FORMAT`. Paperless Sync builds the same folders from the metadata of Paperless, so keep the mount until its archive is complete:
 
 1. **Look up the format.** Find `PAPERLESS_FILENAME_FORMAT` in the configuration of Paperless, such as `docker-compose.env`, and see whether the mount shows `documents/archive`, the PDF/A versions, or `documents/originals`.
-2. **Write the path template.** Take the format and translate its placeholders with the table below. End the last part with a space and `[P{{ id }}]{{ extension }}`: every file name of Paperless Sync carries the marker of its document, and Paperless adds the extension on its own. The format `{{ created_year }}/{{ correspondent }}/{{ title }}` becomes the template `{{ created_year }}/{{ correspondent }}/{{ title }} [P{{ id }}]{{ extension }}`.
+2. **Write the path template.** Take the format and translate its placeholders with the table below. End the last part with a space and `[P{{ id }}]{{ extension }}`: every file name of Paperless Sync carries the marker of its document, and Paperless adds the extension on its own. The format `{{ created_year }}/{{ correspondent }}/{{ title }}` becomes the template `{{ created_year }}/{{ correspondent }}/{{ title }} [P{{ id }}]{{ extension }}`. Documents with a storage path need no template: turn on *Use the storage path of a document in Paperless*.
 3. **Set the names of missing values.** Paperless names a missing correspondent or document type `none`, unless `PAPERLESS_FILENAME_FORMAT_REMOVE_NONE` is on. To keep these folders, write `none` into *Missing correspondent* and *Missing document type*.
 4. **Choose the file and the folder.** Choose the archive PDF for `documents/archive` or the original file for `documents/originals`. Choose a base folder of the target user outside the mount: never one inside it, where the app would write into the media folder of Paperless.
 5. **Start a dry run** and compare its paths with those of the mount. Change the template until they match, as far as the table allows; Paperless replaces some characters, such as `:`, with `-`, Paperless Sync with `_`.
@@ -116,13 +116,13 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | the same |
 | `{{ added }}`, `{{ added_year }}` | the same |
 | `{{ doc_pk }}`, `{{ original_name }}` | the same; `{{ doc_pk }}` has the seven digits of Paperless, such as `0000123` |
-| a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | none yet: `{{ storage_path }}` puts only the name of the storage path in, as one folder |
+| a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | the same, with [*Use the storage path of a document in Paperless*](guide.md#storage-paths-of-paperless) on: the template of its storage path, unless it uses Jinja logic or what this table doesn't take, and the report names such a storage path |
 | `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}` | the same; the name of a month is in the language of Nextcloud |
 | `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | the same; the name of a month is in the language of Nextcloud |
 | `{{ asn }}`, `{{ tag_list }}` | the same |
 | `{{ owner_username }}` | the same; the account of the app needs the permission to view users |
 | a custom field, through `get_cf_value("Name")` or `get_cf_value("Name", "default")` | the same, or `{{ custom_fields.Name }}`; the account of the app needs the permission to view custom fields |
-| `{{ tags }}`, Jinja logic and the other filters of Jinja | none yet: leave them out |
+| `{{ tags }}`, Jinja logic and the other filters of Jinja | none yet: leave them out; a storage path with them keeps its documents with the path template |
 
 ### From paperless-nextcloud-sync
 

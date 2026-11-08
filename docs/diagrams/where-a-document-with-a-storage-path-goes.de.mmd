@@ -1,0 +1,19 @@
+flowchart TB
+    accTitle: Wohin ein Dokument mit einem Speicherpfad kommt
+    accDescr: Mit Speicherpfad eines Dokuments in Paperless verwenden fragt ein Lauf bei jedem Dokument, ob es in Paperless einen Speicherpfad hat. Ein Dokument ohne einen folgt der Archiv-Pfadvorlage. Bei einem mit Speicherpfad fragt der Lauf, ob die App seine Vorlage darstellen kann: nur die Variablen der Pfadvorlage, ein benutzerdefiniertes Feld, das Paperless hat, und get_cf_value als einziger Filter. Kann sie es, kommt das Dokument unterhalb des Archivordners an den Pfad dieser Vorlage, und sein Dateiname bekommt die Markierung [P123] und seine Endung. Kann sie es nicht, wegen Logik von Jinja, eines anderen Filters, einer unbekannten Variable oder eines benutzerdefinierten Felds, das Paperless fehlt, folgt das Dokument der Archiv-Pfadvorlage, und der Bericht des Laufs, der Testlauf und die Vorschau nennen den Speicherpfad einmal. Das Ein- oder Ausschalten verschiebt die Kopien wie eine neue Vorlage: Jede bleibt dieselbe Datei, mit ihren Freigaben.
+
+    document["Jedes Dokument<br>von Paperless"] --> has{"Hat es einen Speicherpfad<br>in Paperless?"}
+    has -->|nein| template["Die Archiv-Pfadvorlage"]
+    has -->|ja| renders{"Kann die App seine Vorlage<br>darstellen: die Variablen der<br>Pfadvorlage, ein benutzerdefiniertes<br>Feld, das Paperless hat, get_cf_value?"}
+    renders -->|ja| storage["Der Pfad der Vorlage seines<br>Speicherpfads, unterhalb des<br>Archivordners"]
+    renders -->|"nein: Logik von Jinja, ein anderer<br>Filter, eine unbekannte Variable oder<br>ein fehlendes benutzerdefiniertes Feld"| named["Der Bericht, der Testlauf und<br>die Vorschau nennen den<br>Speicherpfad einmal"]
+    named --> template
+    storage --> marker["Der Dateiname bekommt die<br>Markierung [P123] und seine Endung"]
+    template --> marker
+    marker --> moves["Eine Änderung der Einstellung<br>verschiebt die Kopie wie eine neue<br>Vorlage: dieselbe Datei, mit ihren Freigaben"]
+    classDef check fill:#526cfe2e,stroke:#526cfe,stroke-width:2px
+    classDef kept fill:#16a34a2e,stroke:#16a34a,stroke-width:2px
+    classDef changed fill:#f59e0b2e,stroke:#f59e0b,stroke-width:2px
+    class document,has,renders check
+    class storage,marker,moves kept
+    class template,named changed
