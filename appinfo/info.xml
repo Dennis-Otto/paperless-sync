@@ -35,7 +35,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Leads through the setup with Getting started, and creates the account of the app in Paperless in one step, with only the permissions that your features need
 - Delegates the settings to a group, for the person who runs Paperless but isn't an administrator of Nextcloud
 - Runs through native Nextcloud background jobs with resumable state, and mirrors a new or changed document within seconds when a workflow of Paperless calls its webhook, protected by a secret
-- Reports what each run and dry-run changed, errors first, in the settings and in the Activity stream, with links to the files
+- Reports what each run and dry-run changed on the settings page, errors first, and what each run changed in the Activity stream, with links to the files
 - Notifies the administrators when the mirror keeps failing, with setup checks under Administration and a status API for monitors such as Uptime Kuma or Home Assistant
 - Offers `occ` commands for scripts and monitoring: a run, a dry-run, the status, and copies written again, with JSON output
 - Follows the language of Nextcloud in English, German, French, Spanish, Simplified Chinese, and Traditional Chinese
@@ -82,7 +82,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Führt mit „Erste Schritte“ durch die Einrichtung und legt das Konto der App in Paperless in einem Schritt an, mit nur den Rechten, die deine Funktionen brauchen
 - Delegiert die Einstellungen an eine Gruppe, für die Person, die Paperless betreibt, aber kein Administrator von Nextcloud ist
 - Verwendet native Nextcloud-Hintergrundjobs und einen wiederaufnehmbaren Synchronisationszustand und spiegelt ein neues oder geändertes Dokument in Sekunden, wenn ein Arbeitsablauf von Paperless seinen durch ein Geheimnis geschützten Webhook aufruft
-- Berichtet, was jeder Lauf und Testlauf geändert hat, Fehler zuerst, in den Einstellungen und im Aktivitätenstrom, mit Links zu den Dateien
+- Berichtet in den Einstellungen, was jeder Lauf und Testlauf geändert hat, Fehler zuerst, und im Aktivitätenstrom, was jeder Lauf geändert hat, mit Links zu den Dateien
 - Benachrichtigt die Administratoren, wenn der Spiegel wiederholt fehlschlägt, mit Einrichtungsprüfungen in der Verwaltung und einer Status-API für Überwachungsdienste wie Uptime Kuma oder Home Assistant
 - Bietet `occ`-Befehle für Skripte und Überwachung: einen Lauf, einen Testlauf, den Status und neu geschriebene Kopien, mit JSON-Ausgabe
 - Folgt der Sprache von Nextcloud auf Englisch, Deutsch, Französisch, Spanisch, vereinfachtem und traditionellem Chinesisch
@@ -131,7 +131,7 @@ Paperless Sync refleja los documentos finalizados de Paperless-ngx en una estruc
 - Guía la configuración con Primeros pasos y crea la cuenta de la aplicación en Paperless en un solo paso, solo con los permisos que necesitan tus funciones
 - Delega los ajustes a un grupo, para la persona que gestiona Paperless pero no es administradora de Nextcloud
 - Se ejecuta con las tareas en segundo plano nativas de Nextcloud y un estado que se puede reanudar, y refleja un documento nuevo o cambiado en segundos cuando un flujo de trabajo de Paperless llama a su webhook, protegido con un secreto
-- Informa de lo que cambió cada ejecución y cada simulación, los errores primero, en los ajustes y en el flujo de Actividad, con enlaces a los ficheros
+- Informa en los ajustes de lo que cambió cada ejecución y cada simulación, los errores primero, y en el flujo de Actividad de lo que cambió cada ejecución, con enlaces a los ficheros
 - Avisa a los administradores cuando el reflejo falla repetidamente, con comprobaciones de la configuración en Administración y una API de estado para monitores como Uptime Kuma o Home Assistant
 - Ofrece comandos `occ` para scripts y supervisión: una ejecución, una simulación, el estado y las copias escritas de nuevo, con salida JSON
 - Sigue el idioma de Nextcloud en inglés, alemán, francés, español, chino simplificado y chino tradicional
@@ -180,7 +180,7 @@ Paperless Sync reflète les documents finalisés de Paperless-ngx dans une arbor
 - Guide la configuration avec Premiers pas et crée le compte de l’application dans Paperless en une seule étape, avec uniquement les permissions dont vos fonctions ont besoin
 - Délègue les paramètres à un groupe, pour la personne qui gère Paperless sans être administratrice de Nextcloud
 - S’exécute par les tâches de fond natives de Nextcloud, avec un état qui peut reprendre, et reflète un document nouveau ou modifié en quelques secondes quand un workflow de Paperless appelle son webhook, protégé par un secret
-- Rend compte de ce que chaque exécution et chaque simulation a changé, les erreurs d’abord, dans les paramètres et dans le flux d’Activité, avec des liens vers les fichiers
+- Rend compte dans les paramètres de ce que chaque exécution et chaque simulation a changé, les erreurs d’abord, et dans le flux d’Activité de ce que chaque exécution a changé, avec des liens vers les fichiers
 - Prévient les administrateurs quand le miroir échoue à répétition, avec des vérifications de la configuration sous Administration et une API d’état pour des outils de supervision comme Uptime Kuma ou Home Assistant
 - Propose des commandes `occ` pour les scripts et la supervision : une exécution, une simulation, l’état et les copies réécrites, avec une sortie JSON
 - Suit la langue de Nextcloud en anglais, allemand, français, espagnol, chinois simplifié et chinois traditionnel
@@ -229,7 +229,7 @@ Paperless Sync 将 Paperless-ngx 中已定稿的文档镜像到 Nextcloud 中清
 - 通过“入门指南”引导完成设置，并一步在 Paperless 中为本应用创建账号，只授予您所用功能需要的权限
 - 可将设置委派给某个群组，方便负责 Paperless 但不是 Nextcloud 管理员的人员管理
 - 通过 Nextcloud 原生后台任务运行，状态可断点续传；当 Paperless 的工作流调用受密钥保护的 Webhook 时，在几秒内镜像新建或更改的文档
-- 在设置和“动态”中报告每次运行和试运行所做的更改，错误优先显示，并附有指向文件的链接
+- 在设置中报告每次运行和试运行所做的更改，错误优先显示；在“动态”中报告每次运行所做的更改；均附有指向文件的链接
 - 镜像持续失败时通知管理员，在“管理”下提供设置检查，并为 Uptime Kuma 或 Home Assistant 等监控工具提供状态 API
 - 提供用于脚本和监控的 `occ` 命令：运行、试运行、查看状态和重新写入副本，支持 JSON 输出
 - 跟随 Nextcloud 的语言，支持英语、德语、法语、西班牙语、简体中文和繁体中文
@@ -278,7 +278,7 @@ Paperless Sync 將 Paperless-ngx 中已定稿的文件鏡像到 Nextcloud 中清
 - 透過「入門指南」引導完成設定，並一步在 Paperless 中為本應用程式建立帳號，只授予您所用功能需要的權限
 - 可將設定委派給某個群組，方便負責 Paperless 但不是 Nextcloud 管理員的人員管理
 - 透過 Nextcloud 原生的背景作業執行，中斷後可從中斷處繼續；當 Paperless 的工作流程呼叫受金鑰保護的 Webhook 時，在幾秒內鏡像新增或變更的文件
-- 在設定和「活動」中報告每次執行和試執行所做的變更，錯誤優先顯示，並附有指向檔案的連結
+- 在設定中報告每次執行和試執行所做的變更，錯誤優先顯示；在「活動」中報告每次執行所做的變更；均附有指向檔案的連結
 - 鏡像持續失敗時通知管理員，在「管理」下提供設定檢查，並為 Uptime Kuma 或 Home Assistant 等監控工具提供狀態 API
 - 提供用於指令碼和監控的 `occ` 命令：執行、試執行、查看狀態和重新寫入副本，支援 JSON 輸出
 - 跟隨 Nextcloud 的語言，支援英文、德文、法文、西班牙文、簡體中文和繁體中文
