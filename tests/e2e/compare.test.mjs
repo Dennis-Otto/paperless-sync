@@ -56,15 +56,15 @@ test('the report of a language lists its pictures that look different, and count
 		'docs/images/diagrams/how-paperless-sync-moves-documents.svg',
 		'docs/images/de/settings-light.png',
 		'docs/images/de/report-dark.png',
-		'screenshots/01-admin-settings.png',
-		'screenshots/01-admin-settings-small.png',
+		'screenshots/02-admin-settings.png',
+		'screenshots/02-admin-settings-small.png',
 	]
 	const kept = {
 		pictures: [
 			{ path: 'docs/images/de/report-dark.png', status: 'changed', share: 0.25 },
 			{ path: 'docs/images/new-picture.png', status: 'new', share: null },
 			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.5 },
-			{ path: 'screenshots/01-admin-settings-small.png', status: 'deleted' },
+			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted' },
 			{ path: '.github/social-preview.png', status: 'changed', share: 0.1 },
 		],
 		ignored: [],
@@ -74,7 +74,7 @@ test('the report of a language lists its pictures that look different, and count
 		images: [
 			{ path: 'docs/images/new-picture.png', status: 'new', share: null },
 			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.5 },
-			{ path: 'screenshots/01-admin-settings-small.png', status: 'deleted', share: null },
+			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null },
 		],
 		unchanged: 2,
 	})
@@ -115,7 +115,7 @@ test('the pictures of each language are those that screenshots.sh renders', () =
 	assert.ok(!PICTURES.en.test('docs/images/de/archive.gif'))
 	assert.ok(!PICTURES.en.test('docs/images/app.svg'))
 	assert.ok(PICTURES.de.test('docs/images/de/archive.gif'))
-	assert.ok(!PICTURES.de.test('screenshots/01-admin-settings.png'))
+	assert.ok(!PICTURES.de.test('screenshots/02-admin-settings.png'))
 })
 
 // The paths of a trigger of a workflow, one per line below "paths:".

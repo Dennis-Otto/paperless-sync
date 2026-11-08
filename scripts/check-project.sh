@@ -89,7 +89,7 @@ for path in README.md README.de.md CHANGELOG.md docs/guide.md docs/guide.de.md d
   mkdocs.yml docs/images/app.svg docs/stylesheets/brand.css .github/mkdocs_project.py \
   .github/social-cards/preview.yml tests/website/test_mkdocs_project.py \
   .github/workflows/ci.yml .github/renovate.json5 version.txt .release-please-manifest.json \
-  composer.lock screenshots/01-admin-settings.png scripts/check-package.sh \
+  composer.lock screenshots/02-admin-settings.png scripts/check-package.sh \
   tests/package/test_check_package.sh; do
   expect skip "$path"
 done
