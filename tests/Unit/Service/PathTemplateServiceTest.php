@@ -476,6 +476,30 @@ final class PathTemplateServiceTest extends TestCase {
 		);
 	}
 
+	/** @return array<string, array{mixed, string}> */
+	public static function variantsOfEnglish(): array {
+		return [
+			'British English, where ICU writes Sept' => [false, 'en_GB'],
+			'Australian English, forced, where ICU writes June' => ['en-AU', 'de'],
+			'American English' => [false, 'en_US'],
+		];
+	}
+
+	/** Every English writes the short name with three letters, as Paperless does, whatever ICU writes. */
+	#[RequiresPhpExtension('intl')]
+	#[DataProvider('variantsOfEnglish')]
+	public function testShortensTheNameOfTheMonthWithThreeLettersInEveryEnglish(mixed $forced, string $default): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getSystemValue')->with('force_language', false)->willReturn($forced);
+		$config->method('getSystemValueString')->with('default_language', '')->willReturn($default);
+		$service = new PathTemplateService($config);
+
+		self::assertSame(
+			'Jun Sep/September [P1].pdf',
+			$service->render($this->config('{{ created_month_name_short }} {{ added_month_name_short }}/{{ added_month_name }} [P{{ id }}]'), $this->document(['created' => '2026-06-02', 'added' => '2026-09-01']), [], [], []),
+		);
+	}
+
 	public function testShortensTheNameOfTheMonthInEnglishWithoutTheLanguageOfNextcloud(): void {
 		self::assertSame(
 			'Mar/September Sep [P1].pdf',

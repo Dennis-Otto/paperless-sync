@@ -492,9 +492,12 @@ final class PathTemplateService {
 		if (!isset($this->monthNames[$key])) {
 			$english = self::MONTHS[$month - 1] ?? sprintf('%02d', $month);
 			$english = $pattern === self::SHORT_MONTH ? substr($english, 0, 3) : $english;
+			// Every English writes the short name as Paperless does, with three letters: ICU gives `Sept` in British English.
+			$language = $this->language();
+			$threeLetters = $pattern === self::SHORT_MONTH && preg_match('/^en(?:[_-]|$)/i', $language) === 1;
 			// IntlDateFormatter comes with the extension intl, so there is nothing to autoload.
-			$formatter = class_exists(\IntlDateFormatter::class, false) && isset(self::MONTHS[$month - 1])
-				? new \IntlDateFormatter($this->language(), \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, 'UTC', \IntlDateFormatter::GREGORIAN, $pattern)
+			$formatter = !$threeLetters && class_exists(\IntlDateFormatter::class, false) && isset(self::MONTHS[$month - 1])
+				? new \IntlDateFormatter($language, \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, 'UTC', \IntlDateFormatter::GREGORIAN, $pattern)
 				: null;
 			$name = $formatter?->format(new \DateTimeImmutable(sprintf('2000-%02d-01T12:00:00Z', $month)));
 			$this->monthNames[$key] = $this->cleanComponent(is_string($name) ? $name : $english, $english);
