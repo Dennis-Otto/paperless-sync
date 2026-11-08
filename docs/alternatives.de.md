@@ -116,7 +116,7 @@ Der Mount zeigt die Dateien von Paperless in den Ordnern von `PAPERLESS_FILENAME
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | dasselbe |
 | `{{ added }}`, `{{ added_year }}` | dasselbe |
 | `{{ doc_pk }}`, `{{ original_name }}` | dasselbe; `{{ doc_pk }}` hat die sieben Ziffern von Paperless, etwa `0000123` |
-| ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | dasselbe, mit [*Speicherpfad eines Dokuments in Paperless verwenden*](guide.de.md#speicherpfade-von-paperless): die Vorlage seines Speicherpfads, außer sie verwendet Jinja-Logik oder etwas, das diese Tabelle nicht nimmt, und der Bericht nennt einen solchen Speicherpfad |
+| ein Dokument mit einem [Speicherpfad](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), das Paperless nach der Vorlage dieses Pfads ablegt | dasselbe, mit [*Speicherpfad eines Dokuments in Paperless verwenden*](guide.de.md#speicherpfade-von-paperless), außer seine Vorlage verwendet Jinja-Logik oder etwas, das diese Tabelle nicht nimmt |
 | `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
 | `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | dasselbe; der Name eines Monats steht in der Sprache von Nextcloud |
 | `{{ asn }}`, `{{ tag_list }}` | dasselbe |

@@ -116,7 +116,7 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | the same |
 | `{{ added }}`, `{{ added_year }}` | the same |
 | `{{ doc_pk }}`, `{{ original_name }}` | the same; `{{ doc_pk }}` has the seven digits of Paperless, such as `0000123` |
-| a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | the same, with [*Use the storage path of a document in Paperless*](guide.md#storage-paths-of-paperless) on: the template of its storage path, unless it uses Jinja logic or what this table doesn't take, and the report names such a storage path |
+| a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | the same, with [*Use the storage path of a document in Paperless*](guide.md#storage-paths-of-paperless) on, unless its template uses Jinja logic or what this table doesn't take |
 | `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}` | the same; the name of a month is in the language of Nextcloud |
 | `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | the same; the name of a month is in the language of Nextcloud |
 | `{{ asn }}`, `{{ tag_list }}` | the same |
