@@ -45,7 +45,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 	/**
 	 * The variables of the templates that people saved before the variables of the file names of
 	 * Paperless came (#385), with two custom fields in the spelling of a dot. Like the generator of
-	 * the cases, this list belongs to paths-before.json: change neither.
+	 * the cases, this list belongs to PathTemplatePathsBefore.json: change neither.
 	 */
 	private const VARIABLES_BEFORE = [
 		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'owner_username', 'tag_list', 'asn', 'page_count',
@@ -55,7 +55,7 @@ final class PathTemplatePropertiesTest extends TestCase {
 	];
 
 	/** The paths of the templates of before, by the seeds of their cases. */
-	private const PATHS_BEFORE = __DIR__ . '/paths-before.json';
+	private const PATHS_BEFORE = __DIR__ . '/PathTemplatePathsBefore.json';
 
 	private PathTemplateService $service;
 
@@ -116,10 +116,11 @@ final class PathTemplatePropertiesTest extends TestCase {
 
 	/**
 	 * A template that people saved before keeps every path byte for byte, so that a new variable
-	 * or spelling moves no file of an archive. paths-before.json holds the SHA-256 of the saved
-	 * template and the path of 500 random templates of the variables of before, with documents
-	 * that have a value for each or none, as the code before #385 rendered them. A change that
-	 * moves paths on purpose writes the file anew, says so in its changelog and moves the files:
+	 * or spelling moves no file of an archive. PathTemplatePathsBefore.json holds the SHA-256 of
+	 * the saved template and the path of 500 random templates of the variables of before, with
+	 * documents that have a value for each or none, as the code before #385 rendered them. A
+	 * change that moves paths on purpose writes the file anew, says so in its changelog and
+	 * moves the files:
 	 *
 	 *     PATHS_BEFORE=write vendor/bin/phpunit --filter testTemplatesOfBeforeKeepTheirPaths
 	 */
