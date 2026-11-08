@@ -325,7 +325,7 @@ that coverage and holds it to its floor, or a script of `js/` has no floor in
 `tests/e2e/coverage-floor.json`, or a catalog in `l10n/`, such as `l10n/fr.json`, lacks a text that the code
 translates, has one that no code translates, a placeholder of another kind, a lone `%`, a text
 twice, another number of forms for a plural than its `pluralForm` names or a form for millions that
-differs, names a label in quotes in other words than the label, writes a dash of Chinese as one `—`
+differs, names a label in quotes in other words than the label, writes a dash of Chinese as one `—` or with spaces
 or a word of Simplified Chinese, such as 日誌, in Traditional Chinese, or differs from its
 copy for the browser, such as `l10n/fr.js`, or `appinfo/info.xml` has no summary or description in its language."""
 why = """These checks keep what only this app has in step: the end-to-end tests with

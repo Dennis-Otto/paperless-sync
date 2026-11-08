@@ -144,7 +144,7 @@ const taiwanWords = {
 
 /**
  * What a Chinese text writes otherwise than Chinese does, with the line that holds it: a dash as one
- * —, where Chinese writes two, ——, and in Traditional Chinese of Taiwan a word of Simplified Chinese.
+ * —, where Chinese writes two, ——, a space beside the dash, and in Traditional Chinese of Taiwan a word of Simplified Chinese.
  */
 function chineseProblems(language, where, text) {
 	const lineWith = (holds) => JSON.stringify(text.split('\n').find(holds).trim())
@@ -152,6 +152,10 @@ function chineseProblems(language, where, text) {
 	const dash = /(?<!—)—(?!—)/
 	if (dash.test(text)) {
 		found.push(`${where} writes a dash as one —, but Chinese writes two, ——, without spaces around them: ${lineWith((line) => dash.test(line))}`)
+	}
+	const spacedDash = /[  　]——|——[  　]/
+	if (spacedDash.test(text)) {
+		found.push(`${where} writes a space beside the dash ——, but Chinese writes it without spaces around it: ${lineWith((line) => spacedDash.test(line))}`)
 	}
 	if (language === 'zh_TW') {
 		for (const [word, taiwan] of Object.entries(taiwanWords)) {
