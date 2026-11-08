@@ -412,6 +412,10 @@ try {
 	await template.press('Home')
 	await page.locator('[data-variable="created_year"]').click()
 	expect((await template.inputValue()) === '{{ created_year }}[P{{ id }}]', `The variable must go in at the cursor: ${await template.inputValue()}`)
+	// A custom field in the spelling of Paperless goes in at the cursor, with its name selected to type over.
+	await page.locator('[data-variable^="custom_fields|get_cf_value("]').click()
+	const [withField, selectedName] = await template.evaluate((input) => [input.value, input.value.slice(input.selectionStart, input.selectionEnd)])
+	expect(withField === '{{ created_year }}{{ custom_fields|get_cf_value("Name", "none") }}[P{{ id }}]' && selectedName === 'Name', `The custom field must go in at the cursor with its name selected: ${withField}, ${selectedName}`)
 	await template.fill(savedTemplate)
 	await previewList.locator('li').first().waitFor({ timeout: 5000 })
 	expect((await template.getAttribute('aria-invalid')) === null && await unsaved.isHidden(), 'The saved template is valid and nothing is unsaved.')

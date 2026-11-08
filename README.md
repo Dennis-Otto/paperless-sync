@@ -515,11 +515,12 @@ The *File conflict policy* decides what a run does when a file other than its ow
 
 ### Path template variables
 
-Most variables have the names that Paperless-ngx uses for its own file names, so many templates of a storage path of Paperless work here once `{{ id }}` is added. Templates with logic of Jinja, with `custom_fields|get_cf_value(...)` or with a variable that the table below doesn't list don't. For a document created on 26 August 2026 and added on 1 September:
+The variables have the names that Paperless-ngx uses for its own file names, `PAPERLESS_FILENAME_FORMAT`, and for its storage paths, so such a template works here once `{{ id }}` is added, unless it uses logic of Jinja, a filter other than `get_cf_value` of the custom fields, or a variable that the table below doesn't list. For a document created on 26 August 2026 and added on 1 September:
 
 | Variable | Value | Example |
 | --- | --- | --- |
 | `{{ id }}` | The ID of the document in Paperless | `123` |
+| `{{ doc_pk }}` | Its ID in seven digits, as Paperless writes it | `0000123` |
 | `{{ title }}` | Its title | `Electricity bill` |
 | `{{ correspondent }}` | The name of its correspondent | `City Utilities` |
 | `{{ document_type }}` | The name of its document type | `Invoice` |
@@ -530,16 +531,19 @@ Most variables have the names that Paperless-ngx uses for its own file names, so
 | `{{ page_count }}` | The number of its pages | `2` |
 | `{{ created }}` | The date of the document | `2026-08-26` |
 | `{{ created_year }}`, `{{ created_year_short }}` | Its year, in four or two digits | `2026`, `26` |
-| `{{ created_month }}`, `{{ created_month_name }}` | Its month, as a number or by its name in the language of Nextcloud | `08`, `August` |
+| `{{ created_month }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}` | Its month, as a number, by its name or by its short name in the language of Nextcloud | `08`, `August`, `Aug` |
 | `{{ created_day }}` | Its day | `26` |
-| `{{ added }}`, `{{ added_year }}`, `{{ added_month }}`, `{{ added_day }}` | When it was added to Paperless | `2026-09-01`, `2026`, `09`, `01` |
-| `{{ original_filename }}` | The name of the uploaded file, without its extension | `scan` |
+| `{{ added }}` | The date when it was added to Paperless | `2026-09-01` |
+| `{{ added_year }}`, `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | The year, month and day of that date, as those of `{{ created }}` | `2026`, `26`, `09`, `September`, `Sep`, `01` |
+| `{{ original_filename }}`, `{{ original_name }}` | The name of the uploaded file, without its extension | `scan` |
 | `{{ extension }}` | The extension of the exported version, with its dot | `.pdf` |
 | `{{ custom_fields.<name> }}` | The value of the custom field of that name | `{{ custom_fields.Invoice number }}`: `INV-2026-08` |
 
 The template must contain `{{ id }}`. A variable may be written with or without spaces, such as `{{id}}`, and is saved as `{{ id }}`. Every value goes into the path as plain text, so a `$1` or a `{{ title }}` in a title stays as it is.
 
-A value that a document lacks is empty, such as an owner, tags, an archive serial number or a custom field, and a folder that only such a value would name is called `Folder`; a missing correspondent, document type, date or title takes its fallback name from *Advanced fallback names*. The name of a custom field is written as in Paperless, with its spaces and capitals, and may hold any character but `{`, `}` and `/`. A select field gives the label of its choice, a document link the IDs of the documents, a yes or no field `true` or `false`, and a monetary field its amount as Paperless writes it, such as `EUR12.30`. `{{ created_month_name }}` names the month in the language that Nextcloud forces or has as its default, `force_language` or `default_language` in its `config.php`, and in English without either: never in the language of the administrator who starts a run, so the paths are the same in every run. A change of that language moves the files, like a change of the template. The names in the language of Nextcloud need PHP's `intl` extension; without it they are English, so installing or removing `intl` also moves the files of such a template.
+A custom field may also be written as Paperless writes it, `{{ custom_fields|get_cf_value("Invoice number") }}`, with the value of `{{ custom_fields.Invoice number }}`. A second text is the default for a document without a value: `{{ custom_fields|get_cf_value("Invoice number", "none") }}` gives `none` for a document that doesn't have the field or has no value in it; an empty text stays empty, as in Paperless. The name and the default are in double or single quotes and may hold any character but `{`, `}`, `/` and their quote. A template with another filter of Jinja, such as `{{ title|upper }}`, isn't saved, and the settings name the filter.
+
+A value that a document lacks is empty, such as an owner, tags, an archive serial number or a custom field, and a folder that only such a value would name is called `Folder`; a missing correspondent, document type, date or title takes its fallback name from *Advanced fallback names*. The name of a custom field is written as in Paperless, with its spaces and capitals, and may hold any character but `{`, `}` and `/`. A select field gives the label of its choice, a document link the IDs of the documents, a yes or no field `true` or `false`, and a monetary field its amount as Paperless writes it, such as `EUR12.30`. `{{ created_month_name }}` and the other names of a month name it in the language that Nextcloud forces or has as its default, `force_language` or `default_language` in its `config.php`, and in English without either: never in the language of the administrator who starts a run, so the paths are the same in every run. The short names are those of that language, such as `Mär` in German, without a dot at their end, and in every English, such as British English, the first three letters, as Paperless writes them. A change of that language moves the files, like a change of the template. The names in the language of Nextcloud need PHP's `intl` extension; without it they are English, so installing or removing `intl` also moves the files of such a template.
 
 The users and the custom fields of Paperless are read only for a template that uses them, and the users in every run of [per-user ownership](#per-user-ownership). For `{{ owner_username }}`, the account of the app needs the permission to view users in Paperless, and for a custom field the permission to view custom fields; without it, the run fails before a file moves and names the permission. A custom field that Paperless doesn't have, such as one with a typo or one that was renamed, stops the run too, because its value would be empty in the path of every document.
 

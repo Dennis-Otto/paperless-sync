@@ -21,12 +21,16 @@ use OCP\IConfig;
 final class PathTemplateService {
 	public const DEFAULT_TEMPLATE = '{{ correspondent }}/{{ document_type }}/{{ created_year }}/{{ created }} - {{ title }} [P{{ id }}]{{ extension }}';
 
-	/** The variables of the template, in the order of the guide; custom_fields.<name> comes with them. */
+	/**
+	 * The variables of the template, in the order of the guide, with the names of the file names of
+	 * Paperless, PAPERLESS_FILENAME_FORMAT, such as doc_pk; custom_fields.<name> and
+	 * custom_fields|get_cf_value("<name>") come with them.
+	 */
 	public const VARIABLES = [
-		'id', 'title', 'correspondent', 'document_type', 'storage_path', 'owner_username', 'tag_list', 'asn', 'page_count',
-		'created', 'created_year', 'created_year_short', 'created_month', 'created_month_name', 'created_day',
-		'added', 'added_year', 'added_month', 'added_day',
-		'original_filename', 'extension',
+		'id', 'doc_pk', 'title', 'correspondent', 'document_type', 'storage_path', 'owner_username', 'tag_list', 'asn', 'page_count',
+		'created', 'created_year', 'created_year_short', 'created_month', 'created_month_name', 'created_month_name_short', 'created_day',
+		'added', 'added_year', 'added_year_short', 'added_month', 'added_month_name', 'added_month_name_short', 'added_day',
+		'original_filename', 'original_name', 'extension',
 	];
 
 	/** The longest folder name in bytes; Nextcloud accepts 250. */
@@ -41,12 +45,18 @@ final class PathTemplateService {
 	/**
 	 * A placeholder: {{ name }}, or {{ custom_fields.Name }} with the name of a custom field of
 	 * Paperless, which may hold any character but the braces and the slash, which separates the
-	 * names of the path.
+	 * names of the path. Paperless's own spelling of a custom field,
+	 * {{ custom_fields|get_cf_value("Name") }}, takes the name in quotes, and a default for a
+	 * document without a value after it: get_cf_value("Name", "none"). Its groups are given by
+	 * their names, and those of the other spelling are null.
 	 */
-	private const PLACEHOLDER = '/{{\s*([a-z_]+)(?:\.([^{}\/]*?))?\s*}}/';
+	private const PLACEHOLDER = '/{{\s*(?<variable>[a-z_]+)(?:\.(?<field>[^{}\/]*?)|\s*\|\s*get_cf_value\(\s*(?<quote>["\'])(?<name>(?:(?!\k<quote>)[^{}\/])*)\k<quote>\s*(?:,\s*(?<defaultQuote>["\'])(?<default>(?:(?!\k<defaultQuote>)[^{}\/])*)\k<defaultQuote>\s*)?\))?\s*}}/';
 
-	/** The variable of the custom fields, which names its field after a dot. */
+	/** The variable of the custom fields, which names its field after a dot or in get_cf_value. */
 	private const CUSTOM_FIELDS = 'custom_fields';
+
+	/** A filter of Jinja other than get_cf_value of the custom fields, which no template may use. */
+	private const UNKNOWN_FILTER = 'Unknown archive path filter: %s. Only a custom field takes one, get_cf_value, as in {{ custom_fields|get_cf_value("Invoice number", "none") }}.';
 
 	/** The names of devices, which Windows doesn't allow as the name of a file or folder, with any extension. */
 	private const WINDOWS_RESERVED = [
@@ -59,17 +69,21 @@ final class PathTemplateService {
 	 * The values that are shortened when a name would be too long, with those of the custom fields;
 	 * the dates, the numbers, the ID and the extension stay whole.
 	 */
-	private const FREE_TEXT = ['title', 'correspondent', 'document_type', 'storage_path', 'original_filename', 'owner_username', 'tag_list'];
+	private const FREE_TEXT = ['title', 'correspondent', 'document_type', 'storage_path', 'original_filename', 'original_name', 'owner_username', 'tag_list'];
 
 	/** The names of the months without the extension intl of PHP, which knows them in every language. */
 	private const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-	/** @var array<int, string> the names of the months in the language of Nextcloud, by their numbers */
+	/** The patterns of ICU for the name of a month on its own, whole and short. */
+	private const LONG_MONTH = 'LLLL';
+	private const SHORT_MONTH = 'LLL';
+
+	/** @var array<string, string> the names of the months in the language of Nextcloud, by their patterns and numbers, such as LLLL3 */
 	private array $monthNames = [];
 
 	/**
-	 * $config gives the language of Nextcloud, in which {{ created_month_name }} names the month;
-	 * without it, the names are English.
+	 * $config gives the language of Nextcloud, in which {{ created_month_name }} and the other
+	 * names of months name the month; without it, the names are English.
 	 *
 	 * @psalm-suppress PossiblyUnusedMethod
 	 */
@@ -87,22 +101,29 @@ final class PathTemplateService {
 			throw new InvalidSettingException('The archive path template must contain {{ id }}.', [], 'path_template');
 		}
 
-		preg_match_all(self::PLACEHOLDER, $normalized, $matches, PREG_SET_ORDER);
-		foreach ($matches as $match) {
-			$field = $match[2] ?? null;
-			if ($match[1] === self::CUSTOM_FIELDS && trim((string)$field) === '') {
+		foreach ($this->matches($normalized) as $match) {
+			if ($match['name'] !== null && $match['variable'] !== self::CUSTOM_FIELDS) {
+				throw new InvalidSettingException(self::UNKNOWN_FILTER, [self::spelling($match)], 'path_template');
+			}
+			$field = $match['name'] ?? $match['field'];
+			if ($match['variable'] === self::CUSTOM_FIELDS && trim((string)$field) === '') {
 				throw new InvalidSettingException('Name the custom field in the archive path template, such as {{ custom_fields.Invoice number }}.', [], 'path_template');
 			}
-			if (!($field === null ? in_array($match[1], self::VARIABLES, true) : $match[1] === self::CUSTOM_FIELDS)) {
-				throw new InvalidSettingException('Unknown archive path variable: %s.', ['{{ ' . $match[1] . ($field === null ? '' : '.' . $field) . ' }}'], 'path_template');
+			if (!($field === null ? in_array($match['variable'], self::VARIABLES, true) : $match['variable'] === self::CUSTOM_FIELDS)) {
+				throw new InvalidSettingException('Unknown archive path variable: %s.', ['{{ ' . (string)$match['variable'] . ($field === null ? '' : '.' . $field) . ' }}'], 'path_template');
 			}
 		}
-		if (preg_match('/{{|}}/', preg_replace(self::PLACEHOLDER, '', $normalized) ?? '') === 1) {
+		$rest = preg_replace(self::PLACEHOLDER, '', $normalized) ?? '';
+		// A filter of Jinja, such as {{ title|upper }}, which no template of Paperless Sync knows.
+		if (preg_match('/{{[^{}\/]*\|[^{}\/]*}}/', $rest, $filter) === 1) {
+			throw new InvalidSettingException(self::UNKNOWN_FILTER, [$filter[0]], 'path_template');
+		}
+		if (preg_match('/{{|}}/', $rest) === 1) {
 			throw new InvalidSettingException('The archive path template contains an invalid placeholder.', [], 'path_template');
 		}
 
 		// One spelling of every placeholder, such as {{ id }} for {{id}}.
-		return preg_replace_callback(self::PLACEHOLDER, static fn (array $match): string => '{{ ' . self::key($match) . ' }}', $normalized) ?? $normalized;
+		return preg_replace_callback(self::PLACEHOLDER, self::spelling(...), $normalized, flags: PREG_UNMATCHED_AS_NULL) ?? $normalized;
 	}
 
 	/** Whether the template names the owner of a document, for which Paperless lists its users. */
@@ -117,9 +138,9 @@ final class PathTemplateService {
 	 */
 	public function customFieldNames(string $template): array {
 		$names = [];
-		foreach ($this->keys($template) as $key) {
-			if (str_starts_with($key, self::CUSTOM_FIELDS . '.')) {
-				$names[] = substr($key, strlen(self::CUSTOM_FIELDS) + 1);
+		foreach ($this->placeholders($template) as ['field' => $field]) {
+			if ($field !== null) {
+				$names[] = $field;
 			}
 		}
 
@@ -217,11 +238,16 @@ final class PathTemplateService {
 		$storagePathId = isset($document['storage_path']) ? (string)$document['storage_path'] : '';
 		$ownerId = isset($document['owner']) ? (string)$document['owner'] : '';
 
+		$originalName = $this->cleanComponent(pathinfo($originalFilename, PATHINFO_FILENAME), $config->untitled);
+
 		// A value that a document doesn't have, such as an owner, a tag or a custom field, is empty;
-		// a name that only it would fill takes the fallback of its kind, Folder or Document.
+		// a name that only it would fill takes the fallback of its kind, Folder or Document. The
+		// names of the file names of Paperless give what Paperless gives, such as its ID in seven
+		// digits for {{ doc_pk }}.
 		/** @var array<string, string> $values */
 		$values = [
 			'id' => $id,
+			'doc_pk' => str_pad($id, 7, '0', STR_PAD_LEFT),
 			'title' => $this->cleanComponent(is_string($document['title'] ?? null) ? (string)$document['title'] : '', $config->untitled),
 			'correspondent' => $this->cleanComponent($correspondents[$correspondentId] ?? '', $config->emptyCorrespondent),
 			'document_type' => $this->cleanComponent($documentTypes[$documentTypeId] ?? '', $config->emptyDocumentType),
@@ -235,19 +261,26 @@ final class PathTemplateService {
 			'created_year_short' => $created !== '' ? substr($created, 2, 2) : $config->emptyDate,
 			'created_month' => $created !== '' ? substr($created, 5, 2) : $config->emptyDate,
 			'created_month_name' => $created !== '' ? $this->monthName((int)substr($created, 5, 2)) : $config->emptyDate,
+			'created_month_name_short' => $created !== '' ? $this->monthName((int)substr($created, 5, 2), self::SHORT_MONTH) : $config->emptyDate,
 			'created_day' => $created !== '' ? substr($created, 8, 2) : $config->emptyDate,
 			'added' => $added !== '' ? $added : $config->emptyDate,
 			'added_year' => $added !== '' ? substr($added, 0, 4) : $config->emptyDate,
+			'added_year_short' => $added !== '' ? substr($added, 2, 2) : $config->emptyDate,
 			'added_month' => $added !== '' ? substr($added, 5, 2) : $config->emptyDate,
+			'added_month_name' => $added !== '' ? $this->monthName((int)substr($added, 5, 2)) : $config->emptyDate,
+			'added_month_name_short' => $added !== '' ? $this->monthName((int)substr($added, 5, 2), self::SHORT_MONTH) : $config->emptyDate,
 			'added_day' => $added !== '' ? substr($added, 8, 2) : $config->emptyDate,
-			'original_filename' => $this->cleanComponent(pathinfo($originalFilename, PATHINFO_FILENAME), $config->untitled),
+			'original_filename' => $originalName,
+			'original_name' => $originalName,
 			'extension' => $extension,
 		];
 		$freeText = self::FREE_TEXT;
-		foreach ($this->customFieldNames($config->pathTemplate) as $name) {
-			$key = self::CUSTOM_FIELDS . '.' . $name;
-			$values[$key] = $this->cleanComponent($this->customFieldValue($document, $name, $customFields), '');
-			$freeText[] = $key;
+		// A custom field without a value takes the default of its get_cf_value, and is empty without one.
+		foreach ($this->placeholders($config->pathTemplate) as ['key' => $key, 'field' => $field, 'default' => $default]) {
+			if ($field !== null && !isset($values[$key])) {
+				$values[$key] = $this->cleanComponent($this->customFieldValue($document, $field, $customFields) ?? $default ?? '', '');
+				$freeText[] = $key;
+			}
 		}
 
 		// Each part of the template becomes one name of the path, so a value can't add a folder.
@@ -359,7 +392,13 @@ final class PathTemplateService {
 	 * @param array<string, string> $values
 	 */
 	private function substitute(string $template, array $values): string {
-		return preg_replace_callback(self::PLACEHOLDER, static fn (array $match): string => $values[self::key($match)] ?? $match[0], $template) ?? $template;
+		return preg_replace_callback(
+			self::PLACEHOLDER,
+			/** @param array<array-key, ?string> $match */
+			static fn (array $match): string => $values[self::key($match)] ?? (string)$match[0],
+			$template,
+			flags: PREG_UNMATCHED_AS_NULL,
+		) ?? $template;
 	}
 
 	/**
@@ -369,34 +408,102 @@ final class PathTemplateService {
 	 * @return list<string>
 	 */
 	private function keys(string $template): array {
-		preg_match_all(self::PLACEHOLDER, $template, $matches, PREG_SET_ORDER);
-
-		return array_map(self::key(...), $matches);
+		return array_column($this->placeholders($template), 'key');
 	}
 
-	/** @param array<array-key, string> $match a match of PLACEHOLDER */
+	/**
+	 * The placeholders of a template, in their order: the key of the value of each, the name of
+	 * its custom field and the default of its get_cf_value, or null for a placeholder without one.
+	 *
+	 * @return list<array{key: string, field: ?string, default: ?string}>
+	 */
+	private function placeholders(string $template): array {
+		return array_map(static fn (array $match): array => [
+			'key' => self::key($match),
+			'field' => self::field($match),
+			'default' => $match['default'],
+		], $this->matches($template));
+	}
+
+	/**
+	 * The matches of PLACEHOLDER in a template, with null for each group that a match doesn't use.
+	 *
+	 * @return list<array<array-key, ?string>>
+	 */
+	private function matches(string $template): array {
+		preg_match_all(self::PLACEHOLDER, $template, $matches, PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL);
+
+		return $matches;
+	}
+
+	/**
+	 * The key of the value of a placeholder: the name of its variable, custom_fields.<name> for a
+	 * custom field, and its own spelling for a get_cf_value with a default, whose value differs
+	 * from that of the field for a document without one.
+	 *
+	 * @param array<array-key, ?string> $match a match of PLACEHOLDER
+	 */
 	private static function key(array $match): string {
-		return isset($match[2]) ? self::CUSTOM_FIELDS . '.' . trim($match[2]) : $match[1];
+		if ($match['default'] !== null) {
+			return substr(self::spelling($match), strlen('{{ '), -strlen(' }}'));
+		}
+		$field = self::field($match);
+
+		return $field === null ? (string)$match['variable'] : self::CUSTOM_FIELDS . '.' . $field;
+	}
+
+	/**
+	 * The name of the custom field of a placeholder, as get_cf_value writes it or without the
+	 * spaces around it after a dot, or null for a placeholder without one.
+	 *
+	 * @param array<array-key, ?string> $match a match of PLACEHOLDER
+	 */
+	private static function field(array $match): ?string {
+		return $match['name'] ?? ($match['field'] === null ? null : trim($match['field']));
+	}
+
+	/**
+	 * The one spelling of a placeholder, such as {{ id }} for {{id}}, and
+	 * {{ custom_fields|get_cf_value("Name", "none") }} with the quotes that it was written with.
+	 *
+	 * @param array<array-key, ?string> $match a match of PLACEHOLDER
+	 */
+	private static function spelling(array $match): string {
+		if ($match['name'] === null) {
+			return '{{ ' . self::key($match) . ' }}';
+		}
+		// A match with a name has its quote, and one with a default the quote of the default.
+		$quote = (string)$match['quote'];
+		$defaultQuote = (string)$match['defaultQuote'];
+		$default = $match['default'] === null ? '' : ', ' . $defaultQuote . $match['default'] . $defaultQuote;
+
+		return '{{ ' . (string)$match['variable'] . '|get_cf_value(' . $quote . $match['name'] . $quote . $default . ') }}';
 	}
 
 	/**
 	 * The name of a month in the language of Nextcloud, the same in every run: the language that
 	 * Nextcloud forces or has as its default, never the one of the administrator who starts a run,
 	 * which would move the files between the runs of two of them. ICU's standalone form, "LLLL",
-	 * names the month on its own, as in "März" or "март".
+	 * names the month on its own, as in "März" or "март", and "LLL" shortens it, as in "Mär", and in
+	 * English to its first three letters, as Paperless's own {{ created_month_name_short }}.
 	 */
-	private function monthName(int $month): string {
-		if (!isset($this->monthNames[$month])) {
+	private function monthName(int $month, string $pattern = self::LONG_MONTH): string {
+		$key = $pattern . $month;
+		if (!isset($this->monthNames[$key])) {
 			$english = self::MONTHS[$month - 1] ?? sprintf('%02d', $month);
+			$english = $pattern === self::SHORT_MONTH ? substr($english, 0, 3) : $english;
+			// Every English writes the short name as Paperless does, with three letters: ICU gives `Sept` in British English.
+			$language = $this->language();
+			$threeLetters = $pattern === self::SHORT_MONTH && preg_match('/^en(?:[_-]|$)/i', $language) === 1;
 			// IntlDateFormatter comes with the extension intl, so there is nothing to autoload.
-			$formatter = class_exists(\IntlDateFormatter::class, false) && isset(self::MONTHS[$month - 1])
-				? new \IntlDateFormatter($this->language(), \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, 'UTC', \IntlDateFormatter::GREGORIAN, 'LLLL')
+			$formatter = !$threeLetters && class_exists(\IntlDateFormatter::class, false) && isset(self::MONTHS[$month - 1])
+				? new \IntlDateFormatter($language, \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, 'UTC', \IntlDateFormatter::GREGORIAN, $pattern)
 				: null;
 			$name = $formatter?->format(new \DateTimeImmutable(sprintf('2000-%02d-01T12:00:00Z', $month)));
-			$this->monthNames[$month] = $this->cleanComponent(is_string($name) ? $name : $english, $english);
+			$this->monthNames[$key] = $this->cleanComponent(is_string($name) ? $name : $english, $english);
 		}
 
-		return $this->monthNames[$month];
+		return $this->monthNames[$key];
 	}
 
 	/** The language of Nextcloud for everyone: the one that it forces, or else its default one, or else English. */
@@ -440,14 +547,14 @@ final class PathTemplateService {
 
 	/**
 	 * The value of a custom field of a document as text: the choice of a select field by its label,
-	 * the documents of a link field by their IDs, a yes or no as true or false, and nothing when the
-	 * document has no value.
+	 * the documents of a link field by their IDs, a yes or no as true or false, and null when the
+	 * document has no value, as Paperless's get_cf_value then gives its default.
 	 *
 	 * @param array<string, mixed> $document
 	 * @param array<string, CustomField> $customFields
 	 * @psalm-suppress MixedAssignment
 	 */
-	private function customFieldValue(array $document, string $name, array $customFields): string {
+	private function customFieldValue(array $document, string $name, array $customFields): ?string {
 		$instances = $document['custom_fields'] ?? null;
 		foreach (is_array($instances) ? $instances : [] as $instance) {
 			$fieldId = is_array($instance) ? ($instance['field'] ?? null) : null;
@@ -456,6 +563,9 @@ final class PathTemplateService {
 				continue;
 			}
 			$value = $instance['value'] ?? null;
+			if ($value === null) {
+				return null;
+			}
 			if ($definition['type'] === 'select') {
 				return is_scalar($value) ? ($definition['options'][(string)$value] ?? '') : '';
 			}
@@ -468,7 +578,7 @@ final class PathTemplateService {
 			};
 		}
 
-		return '';
+		return null;
 	}
 
 	/** @param mixed $value */

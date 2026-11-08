@@ -115,13 +115,14 @@ The mount shows the files of Paperless in the folders of `PAPERLESS_FILENAME_FOR
 | `{{ title }}`, `{{ correspondent }}`, `{{ document_type }}` | the same |
 | `{{ created }}`, `{{ created_year }}`, `{{ created_month }}` | the same |
 | `{{ added }}`, `{{ added_year }}` | the same |
-| `{{ doc_pk }}` | `{{ id }}`, without the leading zeros: `123`, not `0000123` |
-| `{{ original_name }}` | `{{ original_filename }}` |
+| `{{ doc_pk }}`, `{{ original_name }}` | the same; `{{ doc_pk }}` has the seven digits of Paperless, such as `0000123` |
 | a document with a [storage path](https://docs.paperless-ngx.com/advanced_usage/#storage-paths), which Paperless files by the template of that path | none yet: `{{ storage_path }}` puts only the name of the storage path in, as one folder |
-| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_day }}`, `{{ added_month }}`, `{{ added_day }}`, `{{ asn }}`, `{{ tag_list }}` | the same; the name of a month is in the language of Nextcloud |
+| `{{ created_year_short }}`, `{{ created_month_name }}`, `{{ created_month_name_short }}`, `{{ created_day }}` | the same; the name of a month is in the language of Nextcloud |
+| `{{ added_year_short }}`, `{{ added_month }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ added_day }}` | the same; the name of a month is in the language of Nextcloud |
+| `{{ asn }}`, `{{ tag_list }}` | the same |
 | `{{ owner_username }}` | the same; the account of the app needs the permission to view users |
-| a custom field, through `get_cf_value("Name")` | `{{ custom_fields.Name }}`; the account of the app needs the permission to view custom fields |
-| `{{ created_month_name_short }}`, `{{ added_year_short }}`, `{{ added_month_name }}`, `{{ added_month_name_short }}`, `{{ tags }}` and Jinja logic | none yet: leave them out |
+| a custom field, through `get_cf_value("Name")` or `get_cf_value("Name", "default")` | the same, or `{{ custom_fields.Name }}`; the account of the app needs the permission to view custom fields |
+| `{{ tags }}`, Jinja logic and the other filters of Jinja | none yet: leave them out |
 
 ### From paperless-nextcloud-sync
 
