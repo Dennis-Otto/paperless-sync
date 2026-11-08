@@ -1,3 +1,0 @@
-### Bug fixes
-
-- **The Traditional Chinese of Paperless Sync uses the words of Taiwan for logs and admins, as Paperless Unified Search does:** the connection checklist asked to check the 日誌 of Paperless, the word of Simplified Chinese, and now says 事件記錄 for the logs of Paperless and 記錄檔 for that of its proxy, as Paperless-ngx and Nextcloud write them for Taiwan. Setting up the account of the app calls an Admin of Paperless 管理者, as Paperless-ngx does, and keeps 管理員 for the administrators of Nextcloud. The dash in *Configured — leave blank to keep it* and *Dry-run — nothing was changed* is the Chinese one, ——, in Traditional and in Simplified Chinese.

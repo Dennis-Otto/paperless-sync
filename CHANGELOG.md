@@ -6,10 +6,9 @@ All notable changes to this project are documented in this file.
 
 ## [1.6.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.0...v1.6.1) (2026-11-08)
 
-
 ### Bug fixes
 
-* **i18n:** the Traditional Chinese of Paperless Sync uses the words of Paperless Unified Search ([#377](https://github.com/Dennis-Otto/paperless-sync/issues/377)) ([0e9f269](https://github.com/Dennis-Otto/paperless-sync/commit/0e9f2692ea142ad18d00a2415a5ae75e77138a4d))
+- **The Traditional Chinese of Paperless Sync uses the words of Taiwan for logs and admins, as Paperless Unified Search does:** the connection checklist asked to check the 日誌 of Paperless, the word of Simplified Chinese, and now says 事件記錄 for the logs of Paperless and 記錄檔 for that of its proxy, as Paperless-ngx and Nextcloud write them for Taiwan. Setting up the account of the app calls an Admin of Paperless 管理者, as Paperless-ngx does, and keeps 管理員 for the administrators of Nextcloud. The dash in *Configured — leave blank to keep it* and *Dry-run — nothing was changed* is the Chinese one, ——, in Traditional and in Simplified Chinese.
 
 ## [1.6.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.5.1...v1.6.0) (2026-11-07)
 
