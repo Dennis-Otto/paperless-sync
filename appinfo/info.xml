@@ -8,6 +8,7 @@
 	<summary lang="fr">Refléter les documents de Paperless-ngx dans Fichiers de Nextcloud et envoyer des fichiers de Nextcloud vers Paperless</summary>
 	<summary lang="zh-hans">将 Paperless-ngx 文档镜像到 Nextcloud 的“文件”中，并将文件从 Nextcloud 发送到 Paperless</summary>
 	<summary lang="zh-hant">將 Paperless-ngx 文件鏡像到 Nextcloud 的「檔案」中，並將檔案從 Nextcloud 傳送到 Paperless</summary>
+	<summary lang="nl">Paperless-ngx-documenten spiegelen naar Nextcloud Bestanden en bestanden vanuit Nextcloud naar Paperless versturen</summary>
 	<description><![CDATA[
 ### A native bridge between Paperless-ngx and Nextcloud
 
@@ -38,7 +39,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Reports what each run and dry-run changed on the settings page, errors first, and what each run changed in the Activity stream, with links to the files
 - Notifies the administrators when the mirror keeps failing, with setup checks under Administration and a status API for monitors such as Uptime Kuma or Home Assistant
 - Offers `occ` commands for scripts and monitoring: a run, a dry-run, the status, and copies written again, with JSON output
-- Follows the language of Nextcloud in English, German, French, Spanish, Simplified Chinese, and Traditional Chinese
+- Follows the language of Nextcloud in English, German (informal and formal), French, Spanish, Dutch, Simplified Chinese, and Traditional Chinese
 - Can be [tried in a few minutes](https://dennis-otto.github.io/paperless-sync/#try-it) with a demo in Docker, which starts Nextcloud and Paperless-ngx with a made-up household archive
 
 ### Safe by default
@@ -85,7 +86,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Berichtet in den Einstellungen, was jeder Lauf und Testlauf geändert hat, Fehler zuerst, und im Aktivitätenstrom, was jeder Lauf geändert hat, mit Links zu den Dateien
 - Benachrichtigt die Administratoren, wenn der Spiegel wiederholt fehlschlägt, mit Einrichtungsprüfungen in der Verwaltung und einer Status-API für Überwachungsdienste wie Uptime Kuma oder Home Assistant
 - Bietet `occ`-Befehle für Skripte und Überwachung: einen Lauf, einen Testlauf, den Status und neu geschriebene Kopien, mit JSON-Ausgabe
-- Folgt der Sprache von Nextcloud auf Englisch, Deutsch, Französisch, Spanisch, vereinfachtem und traditionellem Chinesisch
+- Folgt der Sprache von Nextcloud auf Englisch, Deutsch (mit Du und mit Sie), Französisch, Spanisch, Niederländisch, vereinfachtem und traditionellem Chinesisch
 - Lässt sich mit einer Demo in Docker [in wenigen Minuten ausprobieren](https://dennis-otto.github.io/paperless-sync/de/#ausprobieren), die Nextcloud und Paperless-ngx mit einem erfundenen Haushaltsarchiv startet
 
 ### Standardmäßig sicher
@@ -134,7 +135,7 @@ Paperless Sync refleja los documentos finalizados de Paperless-ngx en una estruc
 - Informa en los ajustes de lo que cambió cada ejecución y cada simulación, los errores primero, y en el flujo de Actividad de lo que cambió cada ejecución, con enlaces a los ficheros
 - Avisa a los administradores cuando el reflejo falla repetidamente, con comprobaciones de la configuración en Administración y una API de estado para monitores como Uptime Kuma o Home Assistant
 - Ofrece comandos `occ` para scripts y supervisión: una ejecución, una simulación, el estado y las copias escritas de nuevo, con salida JSON
-- Sigue el idioma de Nextcloud en inglés, alemán, francés, español, chino simplificado y chino tradicional
+- Sigue el idioma de Nextcloud en inglés, alemán (informal y formal), francés, español, neerlandés, chino simplificado y chino tradicional
 - Se puede [probar en pocos minutos](https://dennis-otto.github.io/paperless-sync/#try-it) con una demo en Docker, que inicia Nextcloud y Paperless-ngx con un archivo doméstico inventado
 
 ### Seguro por defecto
@@ -183,7 +184,7 @@ Paperless Sync reflète les documents finalisés de Paperless-ngx dans une arbor
 - Rend compte dans les paramètres de ce que chaque exécution et chaque simulation a changé, les erreurs d’abord, et dans le flux d’Activité de ce que chaque exécution a changé, avec des liens vers les fichiers
 - Prévient les administrateurs quand le miroir échoue à répétition, avec des vérifications de la configuration sous Administration et une API d’état pour des outils de supervision comme Uptime Kuma ou Home Assistant
 - Propose des commandes `occ` pour les scripts et la supervision : une exécution, une simulation, l’état et les copies réécrites, avec une sortie JSON
-- Suit la langue de Nextcloud en anglais, allemand, français, espagnol, chinois simplifié et chinois traditionnel
+- Suit la langue de Nextcloud en anglais, allemand (tutoiement et vouvoiement), français, espagnol, néerlandais, chinois simplifié et chinois traditionnel
 - Peut être [essayé en quelques minutes](https://dennis-otto.github.io/paperless-sync/#try-it) avec une démo dans Docker, qui démarre Nextcloud et Paperless-ngx avec une archive domestique inventée
 
 ### Sûr par défaut
@@ -232,7 +233,7 @@ Paperless Sync 将 Paperless-ngx 中已定稿的文档镜像到 Nextcloud 中清
 - 在设置中报告每次运行和试运行所做的更改，错误优先显示；在“动态”中报告每次运行所做的更改；均附有指向文件的链接
 - 镜像持续失败时通知管理员，在“管理”下提供设置检查，并为 Uptime Kuma 或 Home Assistant 等监控工具提供状态 API
 - 提供用于脚本和监控的 `occ` 命令：运行、试运行、查看状态和重新写入副本，支持 JSON 输出
-- 跟随 Nextcloud 的语言，支持英语、德语、法语、西班牙语、简体中文和繁体中文
+- 跟随 Nextcloud 的语言，支持英语、德语（非正式和正式）、法语、西班牙语、荷兰语、简体中文和繁体中文
 - 可通过 Docker 中的演示[在几分钟内试用](https://dennis-otto.github.io/paperless-sync/#try-it)，它会启动 Nextcloud 和 Paperless-ngx，并载入一个虚构的家庭归档
 
 ### 默认安全
@@ -281,7 +282,7 @@ Paperless Sync 將 Paperless-ngx 中已定稿的文件鏡像到 Nextcloud 中清
 - 在設定中報告每次執行和試執行所做的變更，錯誤優先顯示；在「活動」中報告每次執行所做的變更；均附有指向檔案的連結
 - 鏡像持續失敗時通知管理員，在「管理」下提供設定檢查，並為 Uptime Kuma 或 Home Assistant 等監控工具提供狀態 API
 - 提供用於指令碼和監控的 `occ` 命令：執行、試執行、查看狀態和重新寫入副本，支援 JSON 輸出
-- 跟隨 Nextcloud 的語言，支援英文、德文、法文、西班牙文、簡體中文和繁體中文
+- 跟隨 Nextcloud 的語言，支援英文、德文（非正式與正式）、法文、西班牙文、荷蘭文、簡體中文和繁體中文
 - 可透過 Docker 中的示範[在幾分鐘內試用](https://dennis-otto.github.io/paperless-sync/#try-it)，它會啟動 Nextcloud 和 Paperless-ngx，並載入一個虛構的家庭封存
 
 ### 預設安全
@@ -299,6 +300,55 @@ Paperless API Token 儲存在伺服器端 Nextcloud 的憑證管理器中，絕�
 Paperless Sync 獨立於 [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search)。兩個應用程式都能辨識 `[P123]` 這類穩定的文件標記，可以分別安裝。
 
 說明文件提供[英文版](https://dennis-otto.github.io/paperless-sync/)和[德文版](https://dennis-otto.github.io/paperless-sync/de/)。
+]]></description>
+	<description lang="nl"><![CDATA[
+### Een native brug tussen Paperless-ngx en Nextcloud
+
+Paperless Sync spiegelt afgeronde Paperless-ngx-documenten naar een leesbare mappenstructuur in Nextcloud. Paperless blijft het leidende documentarchief, terwijl Nextcloud vertrouwde toegang biedt via Bestanden, de desktopsynchronisatie, de mobiele apps, delen en de ingebouwde viewer. Bestanden die je in een inboxmap van Nextcloud zet, gaan de andere kant op, naar Paperless.
+
+### Het archief in Bestanden
+
+- Bouwt de mappen op uit correspondent, documenttype, datum, titel en document-ID, met een padsjabloon dat tijdens het typen toont waar de nieuwste documenten terechtkomen, of volgt de opslagpaden van Paperless
+- Exporteert archief-pdf's of originele bestanden, en verplaatst of hernoemt een kopie wanneer de metadata in Paperless verandert: het blijft hetzelfde bestand, met zijn delingen, reacties en versies
+- Geeft elke Nextcloud-gebruiker de documenten die hij in Paperless bezit, en desgewenst ook die welke Paperless met hem deelt, via de ene verbinding van de beheerder (optioneel eigendom per gebruiker)
+- Wacht met documenten in de inbox van Paperless tot ze afgerond zijn, laat documenten met een uitgesloten label weg, of spiegelt alleen de documenten met de labels die je kiest
+- Toont de labels van Paperless als Nextcloud-labels op de kopieën, zodat Bestanden het archief erop filtert en doorzoekt
+- Schrijft desgewenst metadata naast het archief: een JSON-bestand per document, met zijn labels, notities en aangepaste velden, en een index.csv van het hele archief
+- Spiegelt de prullenbak van Paperless naar een eigen map en verwijdert lege archiefmappen na verplaatsingen en verwijderingen
+
+### Inbox en Bestanden
+
+- Importeert bestanden uit een inboxmap van Nextcloud in Paperless, desgewenst met een label voor elke submap, en verplaatst een mislukte import naar een foutmap, naast de reden
+- Verstuurt een bestand of een map vanuit het menu in Bestanden naar Paperless, voor een groep naar keuze, en opent het document van een gespiegelde kopie in Paperless
+- Verstuurt bestanden naar Paperless volgens regels van Flow, zoals elke pdf die een lid van een groep uploadt, met eigen labels
+- Toont boven elke map van de app in Bestanden een notitie die zegt wat de map doet, ook voor mensen die haar via een deling bereiken
+
+### Installatie en gebruik
+
+- Leidt met Aan de slag door de installatie, en maakt het account van de app in Paperless in één stap aan, met alleen de rechten die je functies nodig hebben
+- Delegeert de instellingen aan een groep, voor wie Paperless beheert maar geen beheerder van Nextcloud is
+- Draait via de eigen achtergrondtaken van Nextcloud met hervatbare toestand, en spiegelt een nieuw of gewijzigd document binnen seconden wanneer een workflow van Paperless de webhook aanroept, beschermd door een geheim
+- Meldt op de instellingenpagina wat elke run en proefrun heeft gewijzigd, fouten eerst, en in de activiteitenstroom wat elke run heeft gewijzigd, met links naar de bestanden
+- Waarschuwt de beheerders wanneer het spiegelen blijft mislukken, met installatiecontroles onder Beheer en een status-API voor monitors zoals Uptime Kuma of Home Assistant
+- Biedt `occ`-opdrachten voor scripts en monitoring: een run, een proefrun, de status en opnieuw geschreven kopieën, met JSON-uitvoer
+- Volgt de taal van Nextcloud in het Engels, Duits (informeel en formeel), Frans, Spaans, Nederlands, Vereenvoudigd Chinees en Traditioneel Chinees
+- Is [in een paar minuten uit te proberen](https://dennis-otto.github.io/paperless-sync/#try-it) met een demo in Docker, die Nextcloud en Paperless-ngx start met een verzonnen huishoudarchief
+
+### Standaard veilig
+
+Synchronisatie staat uit tot een beheerder de configuratie voltooit en valideert. Definitief verwijderen moet uitdrukkelijk worden ingeschakeld en kan worden beschermd door meerdere bevestigingen dat een document ontbreekt. Een proefrun toont wijzigingen vooraf zonder bestanden te wijzigen.
+
+Het Paperless-API-token wordt op de server opgeslagen in de credentials manager van Nextcloud en nooit naar de browser teruggestuurd. De app werkt rechtstreeks via de bestandssysteem-API van Nextcloud, dus er is geen Nextcloud-wachtwoord of WebDAV-wachtwoord nodig. Een Paperless in je lokale netwerk, zoals `http://paperless:8000`, werkt zonder dat de bescherming van Nextcloud tegen server-side request forgery voor de hele server uit moet.
+
+### Vereisten
+
+- Nextcloud 33 tot 35 met betrouwbare cron-achtergrondtaken
+- Een bereikbare Paperless-ngx-instantie, versie 2.16 of nieuwer, inclusief 3.x, met API-toegang
+- Een Paperless-account voor de app, geen superuser, met alleen de rechten die de ingeschakelde functies nodig hebben, dat de instellingen voor je kunnen aanmaken
+
+Paperless Sync staat los van [Paperless Unified Search](https://apps.nextcloud.com/apps/paperless_unified_search). Beide apps begrijpen stabiele documentmarkeringen zoals `[P123]` en kunnen apart worden geïnstalleerd.
+
+De documentatie is er in het [Engels](https://dennis-otto.github.io/paperless-sync/) en het [Duits](https://dennis-otto.github.io/paperless-sync/de/).
 ]]></description>
 	<version>1.7.0</version>
 	<licence>AGPL-3.0-or-later</licence>

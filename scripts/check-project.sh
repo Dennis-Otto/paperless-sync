@@ -1234,6 +1234,14 @@ broken_catalog 'l10n/xx.js has no l10n/xx.json'
 fresh_catalogs
 edit_catalog fr 't["Create missing tags"] = "Autres mots"'
 broken_catalog 'names "Create missing tags" in quotes, but its translation doesn'"'"'t hold "Autres mots"'
+# A variant of a language, such as the formal German of de_DE, names the folders and the fallbacks
+# for metadata as its language does, so that its catalog moves no archive, and --fix writes them.
+fresh_catalogs
+edit_catalog de_DE 't["Archive"] = "Akten"; t["_No correspondent"] = "_Kein Korrespondent"'
+broken_catalog 'l10n/de_DE.json names the folder "Archive" "Akten", but l10n/de.json "Archiv"'
+broken_catalog 'l10n/de_DE.json names the folder "_No correspondent" "_Kein Korrespondent", but l10n/de.json "_Ohne Korrespondent"'
+node scripts/check-l10n.mjs --fix "$l10n_copy" >/dev/null
+cmp -s l10n/de_DE.json "$l10n_copy/de_DE.json" || { echo 'scripts/check-l10n.mjs --fix should give l10n/de_DE.json the folder names of l10n/de.json.'; exit 1; }
 # Chinese writes a dash as two, ——, and Traditional Chinese the words of Taiwan, such as 記錄檔 for
 # the log of Nextcloud and 事件記錄 for that of Paperless, not 日誌, the word of Simplified Chinese,
 # in a text and in each form of a plural. Simplified Chinese keeps its own words, such as 配置.
@@ -1266,23 +1274,26 @@ if ! grep -qF '"_%n minute_::_%n minutes_": [' "$l10n_copy/it.json" \
   exit 1
 fi
 # A language with one form for every count, such as Japanese, starts without --plural-form too, and
-# --new zh_CN writes the rule and the texts of the catalog of Simplified Chinese, in any order.
+# --new zh_CN and --new de_DE write the rule and the texts of the catalogs of Simplified Chinese and
+# of the formal German, in any order.
 node scripts/check-l10n.mjs --new ja "$l10n_copy" >/dev/null
 if [[ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).translations["_%n minute_::_%n minutes_"].length' "$l10n_copy/ja.json")" != 1 ]]; then
   echo 'scripts/check-l10n.mjs --new ja should write one form for a plural, as Japanese has.'
   exit 1
 fi
-mkdir "$l10n_copy/zh"
-node scripts/check-l10n.mjs --new zh_CN "$l10n_copy/zh" >/dev/null
-if ! node -e 'const read = (file) => JSON.parse(require("fs").readFileSync(file, "utf8"));
-  const [made, shipped] = process.argv.slice(1).map(read);
-  process.exit(made.pluralForm === shipped.pluralForm
-    && JSON.stringify(Object.keys(made.translations).sort()) === JSON.stringify(Object.keys(shipped.translations).sort()) ? 0 : 1)' \
-  "$l10n_copy/zh/zh_CN.json" l10n/zh_CN.json; then
-  echo 'scripts/check-l10n.mjs --new zh_CN should write the "pluralForm" and the texts of l10n/zh_CN.json, the one form of Nextcloud for Chinese.'
-  exit 1
-fi
-rm -r "$l10n_copy/zh"
+for shipped in 'zh_CN|the one form of Nextcloud for Chinese' 'de_DE|the two forms of Nextcloud for German'; do
+  mkdir "$l10n_copy/new"
+  node scripts/check-l10n.mjs --new "${shipped%%|*}" "$l10n_copy/new" >/dev/null
+  if ! node -e 'const read = (file) => JSON.parse(require("fs").readFileSync(file, "utf8"));
+    const [made, shipped] = process.argv.slice(1).map(read);
+    process.exit(made.pluralForm === shipped.pluralForm
+      && JSON.stringify(Object.keys(made.translations).sort()) === JSON.stringify(Object.keys(shipped.translations).sort()) ? 0 : 1)' \
+    "$l10n_copy/new/${shipped%%|*}.json" "l10n/${shipped%%|*}.json"; then
+    echo "scripts/check-l10n.mjs --new ${shipped%%|*} should write the \"pluralForm\" and the texts of l10n/${shipped%%|*}.json, ${shipped##*|}."
+    exit 1
+  fi
+  rm -r "$l10n_copy/new"
+done
 node scripts/check-l10n.mjs --new sv --plural-form 'nplurals=2; plural=(n != 1);' "$l10n_copy" >/dev/null
 # The codes of Nextcloud also have digits, as Spanish of Latin America has, and a script. The
 # App Store has a code of its own for a few variants, such as sr-latn for sr@latin and zh-hant for
@@ -1346,4 +1357,4 @@ if output="$(node "$l10n_copy/app/scripts/check-l10n.mjs" 2>&1)" || [[ "$output"
   echo "scripts/check-l10n.mjs should ask for the description of zh_TW as zh-hant in appinfo/info.xml, but says: $output"
   exit 1
 fi
-echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store, Chinese with one — or a space beside ——, or, in Taiwan, a word of Simplified Chinese, and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."
+echo "scripts/check-l10n.mjs reports a missing, an unused, a repeated, an unreadable text, a wrong placeholder, a lone %, the wrong forms of a plural, a language without its texts for the App Store, a variant that names a folder otherwise than its language, Chinese with one — or a space beside ——, or, in Taiwan, a word of Simplified Chinese, and a broken catalog in every language, --fix writes each l10n/<language>.js anew, and --new starts a language."

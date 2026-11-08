@@ -86,6 +86,12 @@ take_pictures() {
 	# The owner of the archive starts with empty files, without the examples of Nextcloud.
 	occ nextcloud php occ config:system:set skeletondirectory --value='' >/dev/null
 	occ --env "OC_PASS=${PASSWORD}" nextcloud php occ user:add --password-from-env --display-name=Paperless "${TARGET_USER}" >/dev/null
+	# The users speak the language itself, not the variant that the browser asks for: Chromium
+	# sends de-DE, and without a language of its own a user would get the formal l10n/de_DE.json,
+	# while the German docs and language.mjs speak with the du of l10n/de.json.
+	for user in e2e-admin "${TARGET_USER}"; do
+		occ nextcloud php occ user:setting "${user}" core lang "${language}" >/dev/null
+	done
 	occ nextcloud php occ app:enable paperless_sync >/dev/null
 	# Nothing but the app on the pages: no first-run wizard and no dashboard tour.
 	for app in firstrunwizard nextcloud_announcements recommendations support; do

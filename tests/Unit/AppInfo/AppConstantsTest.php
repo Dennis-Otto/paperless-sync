@@ -23,6 +23,7 @@ final class AppConstantsTest extends TestCase {
 			'British English' => ['en_GB', 'https://dennis-otto.github.io/paperless-sync/guide.html#being-notified'],
 			'a language whose code only starts with the letters de' => ['dev', 'https://dennis-otto.github.io/paperless-sync/guide.html#being-notified'],
 			'French, which the website has no translation of' => ['fr', 'https://dennis-otto.github.io/paperless-sync/guide.html#being-notified'],
+			'Dutch, which the website has no translation of either' => ['nl', 'https://dennis-otto.github.io/paperless-sync/guide.html#being-notified'],
 			'no language' => ['', 'https://dennis-otto.github.io/paperless-sync/guide.html#being-notified'],
 		];
 	}

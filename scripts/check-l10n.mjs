@@ -7,15 +7,17 @@
 // l10n/<language>.json, with its words and its placeholders, in as many forms as a plural of that
 // language has, every text there is one that the code translates, once, l10n/<language>.js, which
 // the browser loads, holds the same as l10n/<language>.json, which PHP loads, and appinfo/info.xml
-// gives the App Store a summary and a description in each language. Chinese, in the catalogs and
+// gives the App Store a summary and a description in each language. A variant of a language, such
+// as de_DE, the formal German, names the folders as its language does. Chinese, in the catalogs and
 // for the App Store, writes its dash as Chinese does, and Traditional Chinese the words of Taiwan,
 // as the catalogs of Nextcloud for Taiwan have them.
 //
 //   node scripts/check-l10n.mjs [--fix] [folder]
 //   node scripts/check-l10n.mjs --new <language> [--plural-form <rule>] [folder]
 //
-// --fix drops the texts that no code translates and the second of a repeated one, and writes each
-// l10n/<language>.js from its l10n/<language>.json; a missing text needs its words, so the check
+// --fix drops the texts that no code translates and the second of a repeated one, gives a variant
+// the folder names of its language, and writes each l10n/<language>.js from its
+// l10n/<language>.json; a missing text needs its words, so the check
 // lists it. --new writes the catalogs of a new language with an empty translation of every text,
 // which the check then lists, and takes the rule of its plurals from the table below or from
 // --plural-form, as core/l10n/<language>.json of Nextcloud names it. folder is that of the
@@ -56,14 +58,18 @@ const folder = positionals[0] ?? join(root, 'l10n')
 /**
  * The rules of the plurals of the largest languages of Nextcloud, from core/l10n/ of Nextcloud, so
  * that --new starts one without --plural-form. Chinese, Japanese and Korean have one form for
- * every count.
+ * every count, German and Dutch one for a single thing and one for every other count, also the
+ * formal German, de_DE, which Nextcloud keeps as a language of its own.
  */
 const oneForm = 'nplurals=1; plural=0;'
+const oneAndOther = 'nplurals=2; plural=(n != 1);'
 const pluralRules = {
+	de: oneAndOther,
+	de_DE: oneAndOther,
 	it: 'nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;',
 	ja: oneForm,
 	ko: oneForm,
-	nl: 'nplurals=2; plural=(n != 1);',
+	nl: oneAndOther,
 	pl: 'nplurals=4; plural=(n==1 ? 0 : (n%10>=2 && n%10<=4) && (n%100<12 || n%100>14) ? 1 : n!=1 && (n%10>=0 && n%10<=1) || (n%10>=5 && n%10<=9) || (n%100>=12 && n%100<=14) ? 2 : 3);',
 	pt_BR: 'nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;',
 	ru: 'nplurals=4; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : n%10==0 || (n%10>=5 && n%10<=9) || (n%100>=11 && n%100<=14)? 2 : 3);',
@@ -452,6 +458,20 @@ function storeTexts(element) {
 	)
 }
 
+/**
+ * The English names of the folders and the fallback names of metadata, which a new installation
+ * proposes in the default language of Nextcloud: NAMES of lib/Service/ConfigService.php, or none
+ * without the file.
+ */
+function folderNames() {
+	const path = join(root, 'lib', 'Service', 'ConfigService.php')
+	if (!existsSync(path)) {
+		return []
+	}
+	const names = /\bconst NAMES = \[([^\]]*)\]/.exec(readFileSync(path, 'utf8'))?.[1] ?? ''
+	return [...names.matchAll(/=>\s*('(?:[^'\\]|\\.)*')/g)].map((match) => phpValue(match[1]))
+}
+
 // What --fix can't do: the words of a text, and a text that the check can't read, whose translation
 // would look unused.
 const problems = [...unreadable]
@@ -466,6 +486,9 @@ for (const name of entries.filter((entry) => entry.endsWith('.js'))) {
 	}
 }
 const fixedLanguages = []
+const names = folderNames()
+// The translations of each catalog read so far; the sorted languages read de before de_DE.
+const catalogs = new Map()
 for (const language of languages) {
 	const json = `l10n/${language}.json`
 	const browser = `l10n/${language}.js`
@@ -563,6 +586,22 @@ for (const language of languages) {
 			problems.push(...chineseProblems(language, `appinfo/info.xml, in its <${element} lang="${storeLanguage}">,`, store.get(storeLanguage)))
 		}
 	}
+	// A variant of a language, such as de_DE, the formal German, addresses the reader in its own way
+	// but names the folders as its language does: a Nextcloud in the variant proposed the names of the
+	// language before the variant had a catalog, so that its own names would move an archive that
+	// never stored them. --fix writes the names of the language.
+	const generic = language.split(/[_@]/)[0]
+	const own = generic === language ? undefined : catalogs.get(generic)
+	for (const name of own === undefined ? [] : names) {
+		if (typeof own[name] === 'string' && own[name].trim() !== '' && translations[name] !== own[name]) {
+			if (fix && unreadable.length === 0) {
+				translations[name] = own[name]
+			} else {
+				problems.push(`${json} names the folder ${JSON.stringify(name)} ${JSON.stringify(translations[name] ?? null)}, but l10n/${generic}.json ${JSON.stringify(own[name])}: ${language} changes how the app addresses the reader, not the folders that a Nextcloud in ${language} proposed from l10n/${generic}.json before. Write the name of l10n/${generic}.json, as --fix does.`)
+			}
+		}
+	}
+	catalogs.set(language, translations)
 
 	// What --fix does: drop the texts that no code translates and the second of a repeated one, and
 	// write the catalog and its copy for the browser in the format of Nextcloud.
@@ -595,5 +634,5 @@ if (problems.length > 0) {
 	process.stdout.write('Fix: add each missing text with its words and the same placeholders to its l10n/<language>.json, write Chinese as each line above says, then run node scripts/check-l10n.mjs --fix, which drops the unused and repeated texts and writes each l10n/<language>.js. docs/development.md#translations explains the check.\n')
 	process.exitCode = 1
 } else {
-	process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, appinfo/info.xml has a summary and a description in each language, and Chinese writes its dashes, and in Taiwan its words, as Nextcloud does.\n`)
+	process.stdout.write(`The ${used.size} texts that the app translates are all in ${languages.map((language) => `l10n/${language}.json`).join(', ')}, with their words, placeholders and plural forms, once each, each l10n/<language>.js holds the same, appinfo/info.xml has a summary and a description in each language, a variant such as de_DE names the folders as its language, and Chinese writes its dashes, and in Taiwan its words, as Nextcloud does.\n`)
 }

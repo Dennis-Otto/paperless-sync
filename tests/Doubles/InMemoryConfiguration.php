@@ -57,6 +57,8 @@ trait InMemoryConfiguration {
 	private string $defaultLanguage = 'en';
 	/** The forced language of Nextcloud, false when none is set, as config.php holds it. */
 	private bool|string $forcedLanguage = false;
+	/** @var list<string> the catalogs of l10n/ that the app lacks in a test, such as de_DE of a version before it */
+	private array $withoutCatalogs = [];
 	/** @var list<string> the IDs of the groups of Nextcloud */
 	private array $groupsOfNextcloud = ['admin', 'scanners'];
 	/** @var array<string, list<string>> the IDs of the members of the groups of Nextcloud, by the IDs of the groups */
@@ -203,8 +205,8 @@ trait InMemoryConfiguration {
 
 	/**
 	 * Nextcloud's translations of the app, with $defaultLanguage as the language of the instance:
-	 * each language from its catalog in l10n/, so that a test also finds a text that a catalog
-	 * lacks, and English, the language of the texts in the code.
+	 * each language from its catalog in l10n/, but those of $withoutCatalogs, so that a test also
+	 * finds a text that a catalog lacks, and English, the language of the texts in the code.
 	 *
 	 * @return IFactory&MockObject
 	 */
@@ -212,7 +214,9 @@ trait InMemoryConfiguration {
 		/** @var array<string, array<string, string>> $catalogs */
 		$catalogs = [];
 		foreach (glob(__DIR__ . '/../../l10n/*.json') ?: [] as $file) {
-			$catalogs[basename($file, '.json')] = json_decode((string)file_get_contents($file), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			if (!in_array(basename($file, '.json'), $this->withoutCatalogs, true)) {
+				$catalogs[basename($file, '.json')] = json_decode((string)file_get_contents($file), true, 512, JSON_THROW_ON_ERROR)['translations'];
+			}
 		}
 		$languages = ['en', ...array_keys($catalogs)];
 		$factory = $this->createStub(IFactory::class);
