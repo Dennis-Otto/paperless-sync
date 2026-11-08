@@ -92,7 +92,7 @@ Yes, the files belong to the target user, so the quota of that user applies. Whe
 
 ### Does it work with object storage such as S3?
 
-Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) tracks adding S3 to the end-to-end tests.
+Yes. The app writes through the file API of Nextcloud, which hides where the files are, so the archive and the inbox use the primary storage of Nextcloud, local or object storage such as S3, as any other file does. Version 0.1.10 fixed the upload of inbox files from object storage, and the end-to-end tests run on S3 object storage in every change of the app.
 
 ## Setup and operation
 

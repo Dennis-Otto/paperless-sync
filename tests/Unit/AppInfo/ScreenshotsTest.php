@@ -84,6 +84,24 @@ final class ScreenshotsTest extends TestCase {
 		}
 	}
 
+	/**
+	 * The App Store shows the first screenshot largest, on the page of the app and in its
+	 * search, so it is the archive in Files, which the app makes, not its settings. The number
+	 * in front of each file name is its place in appinfo/info.xml, as tests/e2e/screenshots.mjs
+	 * names them.
+	 */
+	public function testTheArchiveInFilesComesFirstAndEachNameHasItsPlace(): void {
+		$names = array_map(
+			static fn (array $screenshot): string => basename($screenshot['url']),
+			self::screenshots(self::infoXml()),
+		);
+
+		self::assertSame('01-structured-archive.png', $names[0]);
+		foreach ($names as $index => $name) {
+			self::assertStringStartsWith(sprintf('%02d-', $index + 1), $name, "$name is screenshot " . ($index + 1) . ' of appinfo/info.xml.');
+		}
+	}
+
 	/** The files of the addresses are in screenshots/, each thumbnail fitted into its box. */
 	public function testEveryThumbnailIsTheScreenshotShrunkIntoItsBox(): void {
 		foreach (self::screenshots(self::infoXml()) as ['url' => $url, 'thumbnail' => $thumbnail]) {

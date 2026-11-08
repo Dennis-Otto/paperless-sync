@@ -92,7 +92,7 @@ Ja, die Dateien gehören dem Zielbenutzer, also gilt das Kontingent dieses Benut
 
 ### Funktioniert es mit Objektspeicher wie S3?
 
-Ja. Die App schreibt über die Datei-API von Nextcloud, die verbirgt, wo die Dateien liegen, also verwenden das Archiv und der Eingang den primären Speicher von Nextcloud, lokal oder Objektspeicher wie S3, wie jede andere Datei. Version 0.1.10 hat das Hochladen von Dateien des Eingangs aus Objektspeicher repariert, und [#93](https://github.com/Dennis-Otto/paperless-sync/issues/93) verfolgt, S3 in die End-to-End-Tests aufzunehmen.
+Ja. Die App schreibt über die Datei-API von Nextcloud, die verbirgt, wo die Dateien liegen, also verwenden das Archiv und der Eingang den primären Speicher von Nextcloud, lokal oder Objektspeicher wie S3, wie jede andere Datei. Version 0.1.10 hat das Hochladen von Dateien des Eingangs aus Objektspeicher repariert, und die End-to-End-Tests laufen in jeder Änderung der App auch auf S3-Objektspeicher.
 
 ## Einrichtung und Betrieb
 
