@@ -51,6 +51,7 @@ final class ConfigServiceTest extends TestCase {
 		$french = ['Documents/Paperless', 'Archives', 'Boîte de réception', 'Imports échoués', '_Supprimés', '_Sans correspondant', '_Sans type de document', '_Sans date', 'Sans titre'];
 		$spanish = ['Documentos/Paperless', 'Archivo', 'Bandeja de entrada', 'Importaciones fallidas', '_Eliminados', '_Sin interlocutor', '_Sin tipo de documento', '_Sin fecha', 'Sin título'];
 		$chinese = ['文档/Paperless', '归档', '收件箱', '导入失败', '_已删除', '_无往来方', '_无文档类型', '_无日期', '无标题'];
+		$traditionalChinese = ['文件/Paperless', '封存', '收件匣', '匯入失敗', '_已刪除', '_無關聯方', '_無文件類型', '_無日期', '無標題'];
 
 		return [
 			'English' => ['en', $english],
@@ -62,7 +63,8 @@ final class ConfigServiceTest extends TestCase {
 			'Spanish' => ['es', $spanish],
 			'Spanish of Mexico, with the catalog of Spanish' => ['es_MX', $spanish],
 			'Simplified Chinese' => ['zh_CN', $chinese],
-			'Traditional Chinese, without a catalog of it or of Chinese' => ['zh_TW', $english],
+			'Traditional Chinese of Taiwan' => ['zh_TW', $traditionalChinese],
+			'Traditional Chinese of Hong Kong, without a catalog of it or of Chinese' => ['zh_HK', $english],
 			'Italian, without a catalog yet' => ['it', $english],
 			'Brazilian Portuguese, without a catalog of it or of Portuguese' => ['pt_BR', $english],
 		];
