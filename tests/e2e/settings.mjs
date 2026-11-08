@@ -157,8 +157,8 @@ try {
 	expect((await interval.getAttribute('min')) === '5', 'The interval must be at least the 5 minutes between two background jobs.')
 	const helpLinks = await page.locator('.paperless-sync-help').evaluateAll((links) => links.map((link) => [link.href, link.getAttribute('aria-label')]))
 	expect(
-		helpLinks.length === 15 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
-		`Getting started, the delegation of the page, every section, the setup of the account, per-user ownership, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
+		helpLinks.length === 16 && helpLinks.every(([href, label]) => href.startsWith('https://dennis-otto.github.io/paperless-sync/guide.html#') && label.startsWith('Help on ')),
+		`Getting started, the delegation of the page, every section, the setup of the account, per-user ownership, the storage paths of Paperless, the tags to mirror, the metadata next to the archive, the tags in Nextcloud and sending from Files must link to their parts of the guide: ${JSON.stringify(helpLinks)}`,
 	)
 	console.log('Settings: Disconnect sits at the end of the bar, checkboxes align with their labels, and every section links to the guide.')
 	// Who gets the documents: both options of each user show the table and the group, which the target user alone doesn't need.
