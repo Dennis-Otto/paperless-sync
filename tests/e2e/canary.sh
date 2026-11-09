@@ -30,13 +30,42 @@ TMP_DIR="$(mktemp -d)"
 # The trap of EXIT below runs it, which ShellCheck doesn't follow past the exits at the end.
 # shellcheck disable=SC2317,SC2329
 cleanup() {
-	gpgconf --kill all >/dev/null 2>&1 || true
+	# Only the agent of the keyring of the canary: before it, gpgconf would stop the agent of
+	# your own keys.
+	if [[ "${GNUPGHOME:-}" == "${TMP_DIR}/gnupg" ]]; then
+		gpgconf --kill all >/dev/null 2>&1 || true
+	fi
 	rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
 
+# The coming Nextcloud comes from the servers of Nextcloud, not from a release on GitHub, so
+# curl downloads it without a token: .github/download.sh is for the asset of a release on
+# GitHub, through its API (the blueprint's decision 0133, which leaves the downloads of other
+# hosts to curl), and the token of the job goes to no other host. curl tries again after
+# every error, a reset connection too, and after a stall, as the blueprint's decision 0011
+# has it: 15 seconds to connect, 30 seconds below 1 KB a second, 5 minutes for a file, up to
+# six times, 1, 2, 4, 8 and 16 seconds apart, and no new attempt after 10 minutes, well
+# within the 30 minutes of the job. When every attempt fails, the canary stops with the error
+# of curl and a line that says what happened, and with E2E_ARTIFACTS keeps both as the log of
+# a failed run, so that tests/e2e/failure.py names that line as the first error in the issue
+# of the canary.
 fetch() {
-	curl --fail --location --silent --show-error --retry 3 --remote-time --output "$2" "$1"
+	if curl --fail --location --silent --show-error --retry 5 --retry-all-errors --retry-max-time 600 \
+		--connect-timeout 15 --speed-limit 1024 --speed-time 30 --max-time 300 --remote-time \
+		--output "$2" "$1" 2>"${TMP_DIR}/curl.log"; then
+		return 0
+	fi
+	# failure.py cuts a first error after 300 characters, so the line stays short enough for
+	# the longest address, that of the signature of a prerelease.
+	echo "Nextcloud's server didn't deliver $1 in up to six attempts: a timeout or 502, 503 or 504 is an outage, run the canary again later; a 404 means Nextcloud moved the file." >>"${TMP_DIR}/curl.log"
+	cat "${TMP_DIR}/curl.log" >&2
+	if [[ -n "${E2E_ARTIFACTS:-}" ]]; then
+		mkdir -p "${E2E_ARTIFACTS}/coming"
+		cp "${TMP_DIR}/curl.log" "${E2E_ARTIFACTS}/coming/run.log"
+		echo "The coming Nextcloud, which the canary couldn't download" >"${E2E_ARTIFACTS}/coming/title.txt"
+	fi
+	exit 1
 }
 
 # This is PHP code, not a shell expression.
