@@ -2255,7 +2255,7 @@ print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if 
 # Nextcloud in French, as a new installation sees it: its default language, an administrator
 # without a language of their own, and none of the names that the steps above stored; then the
 # administrator in every other language of l10n/. Last, because it takes these names away and
-# leaves the installation in French.
+# leaves Nextcloud in French, with an administrator in the last language of CATALOGS.
 scenario_languages() {
 	occ config:system:set default_language --value=fr >/dev/null
 	occ user:setting --delete e2e-admin core lang >/dev/null
