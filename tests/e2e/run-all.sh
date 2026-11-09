@@ -299,7 +299,7 @@ run() {
 	if [[ "${key}" == "${newest}" ]]; then
 		coverage=1
 	fi
-	# A selection that names the scenario french means it, on every version.
+	# A selection that names the scenario languages means it, on every version.
 	languages="${coverage}"
 	if [[ -n "${E2E_ONLY:-}" ]]; then
 		languages=1

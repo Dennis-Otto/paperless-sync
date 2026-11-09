@@ -454,7 +454,7 @@ rm -rf "$scenario_folder"
 expect_stop 'E2E_ONLY names nope' tests/e2e/run.sh E2E_ONLY=nope
 expect_stop 'E2E_BROWSER names nope' tests/e2e/run.sh E2E_BROWSER=nope
 expect_stop 'E2E_UPGRADE=1 runs the upgrade' tests/e2e/run.sh E2E_UPGRADE=1 E2E_ONLY=files
-expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=french E2E_ACCESSIBILITY=0
+expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=languages E2E_ACCESSIBILITY=0
 expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_ONLY=browser E2E_ACCESSIBILITY=0
 expect_stop 'leave nothing to run' tests/e2e/run.sh E2E_BROWSER=files E2E_ACCESSIBILITY=0
 expect_stop 'E2E_VARIANTS names pgsql+upgrade' tests/e2e/run-all.sh E2E_VERSIONS=33 E2E_VARIANTS=pgsql+upgrade E2E_ONLY=files
@@ -478,8 +478,8 @@ expect_plan 'connection files flow' E2E_ONLY='flow files' E2E_BROWSER=none
 expect_plan 'connection flow browser (flow)' E2E_BROWSER=flow
 expect_plan 'connection dry-run export files flow browser (accessibility flow)' E2E_BROWSER='flow accessibility'
 expect_plan 'connection inbox' E2E_ONLY=inbox
-expect_plan 'connection french' E2E_ONLY=french
-expect_plan 'connection' E2E_ONLY='connection french' E2E_LANGUAGES=0
+expect_plan 'connection languages' E2E_ONLY=languages
+expect_plan 'connection' E2E_ONLY='connection languages' E2E_LANGUAGES=0
 expect_plan "${whole_plan/ browser ($all_checks)/}" E2E_BROWSER=none
 expect_plan "${whole_plan/ browser ($all_checks)/}" E2E_ACCESSIBILITY=0 E2E_LANGUAGES=1
 for scenario in ${scenario_functions}; do
@@ -1113,9 +1113,10 @@ echo "The lock file of ESLint holds a minimatch with the fix of GHSA-g3hv-75wg-m
 node --test --test-reporter=dot tests/e2e/thumbnail.test.mjs
 echo "tests/e2e/thumbnail.mjs shrinks a screenshot into the box of its thumbnail, each pixel the average of those it covers."
 # The language of the pictures: the German ones find every text of the app that they look
-# for in its catalog, l10n/de.json, and the languages without pictures have their folders.
+# for in its catalog, l10n/de.json, and the languages without pictures have their folders. Every
+# catalog of l10n/ has its language in the end-to-end test of the languages, languages.mjs.
 node --test --test-reporter=dot tests/e2e/language.test.mjs
-echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German."
+echo "tests/e2e/language.mjs takes the English pictures to docs/images/ and the German ones to docs/images/de/, with every text that they look for in German, and knows every language of l10n/."
 # The animations of the documentation: each that the script records is there in both
 # languages and both themes, and stays below 1 MB.
 node --test --test-reporter=dot tests/e2e/screenshots.test.mjs
