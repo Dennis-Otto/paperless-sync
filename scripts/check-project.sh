@@ -462,6 +462,79 @@ fi
 rm -rf "$download_folder"
 echo "tests/e2e/packages.sh takes the last release that the job downloaded, and when GitHub doesn't deliver it otherwise, failure.py names that as the first error."
 
+printf '\n== %s\n' "The downloads of the coming Nextcloud"
+# tests/e2e/canary.sh downloads the coming Nextcloud from the servers of Nextcloud with curl,
+# without a token, which goes to no host but GitHub's (the blueprint's decision 0133), and
+# tries again after every error and after a stall (its decision 0011), so that a short outage
+# of download.nextcloud.com doesn't fail the canary and add a run to its issue. When every
+# attempt fails, the canary keeps what curl said in coming of E2E_ARTIFACTS, where
+# tests/e2e/failure.py names it as the first error. A curl in place of the real one records
+# its arguments and fails as a server that doesn't answer, a docker in place of the real one
+# names the newest release of Nextcloud, and a gpgconf records whether the canary stops a
+# gpg-agent, which before its own keyring would be that of your keys.
+canary_folder="$(mktemp -d)"
+mkdir "$canary_folder/bin"
+cat >"$canary_folder/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >>"$CANARY_FOLDER/arguments"
+echo 'curl: (28) Operation timed out after 300001 milliseconds with 0 bytes received' >&2
+exit 28
+EOF
+cat >"$canary_folder/bin/docker" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" != run ]] || echo 33.0.0.16
+EOF
+cat >"$canary_folder/bin/gpgconf" <<'EOF'
+#!/usr/bin/env bash
+echo "gpgconf $*" >>"$CANARY_FOLDER/gpgconf"
+EOF
+chmod +x "$canary_folder/bin/curl" "$canary_folder/bin/docker" "$canary_folder/bin/gpgconf"
+if env GITHUB_OUTPUT='' PATH="$canary_folder/bin:$PATH" CANARY_FOLDER="$canary_folder" DOCKER_BIN="$canary_folder/bin/docker" \
+  E2E_ARTIFACTS="$canary_folder/artifacts" bash tests/e2e/canary.sh >"$canary_folder/log" 2>&1; then
+  cat "$canary_folder/log"
+  echo "tests/e2e/canary.sh passes although the server of Nextcloud doesn't deliver the coming Nextcloud."
+  exit 1
+fi
+canary_missing=()
+for option in --fail --retry-all-errors --retry-max-time --connect-timeout --speed-limit --speed-time --max-time; do
+  if ! grep -qx -e "$option" "$canary_folder/arguments" 2>/dev/null; then
+    canary_missing+=("$option")
+  fi
+done
+canary_retries="$(grep -A 1 -x -e --retry "$canary_folder/arguments" 2>/dev/null | sed -n 2p || true)"
+if [[ ! "$canary_retries" =~ ^[0-9]+$ ]] || ((canary_retries < 5)); then
+  canary_missing+=("--retry 5")
+fi
+if ((${#canary_missing[@]} > 0)); then
+  cat "$canary_folder/log"
+  echo "tests/e2e/canary.sh downloads without curl's ${canary_missing[*]}: it should try again after every error and after a stall, as the blueprint's decision 0011 has it."
+  exit 1
+fi
+if grep -qxE -e '-H|--header|-u|--user|--oauth2-bearer|-n|--netrc' "$canary_folder/arguments"; then
+  echo "tests/e2e/canary.sh sends a header or a credential to the server of Nextcloud, which needs none: the token of the job goes to no host but GitHub's."
+  exit 1
+fi
+if [[ -e "$canary_folder/gpgconf" ]]; then
+  echo "tests/e2e/canary.sh stops a gpg-agent although it stopped before its own keyring, so it stops that of your keys: $(cat "$canary_folder/gpgconf")"
+  exit 1
+fi
+canary_title="$(cat "$canary_folder/artifacts/coming/title.txt" 2>/dev/null || true)"
+if [[ "$canary_title" != "The coming Nextcloud, which the canary couldn't download" ]] ||
+  ! grep -q '^curl: (28) Operation timed out' "$canary_folder/artifacts/coming/run.log"; then
+  cat "$canary_folder/log"
+  echo "tests/e2e/canary.sh should keep the error of curl and its title in coming of E2E_ARTIFACTS when the server of Nextcloud doesn't deliver the coming Nextcloud."
+  exit 1
+fi
+if [[ -n "$python" ]]; then
+  canary_error="$("$python" -B tests/e2e/failure.py "$canary_folder/artifacts")"
+  if [[ "$canary_error" != *"**The coming Nextcloud, which the canary couldn't download**: \`download.nextcloud.com didn't deliver https://download.nextcloud.com/server/prereleases/ in any of up to six attempts: "*"run the canary again later"* ]]; then
+    echo "tests/e2e/failure.py should name that the server of Nextcloud didn't deliver the coming Nextcloud as the first error, not: $canary_error"
+    exit 1
+  fi
+fi
+rm -rf "$canary_folder"
+echo "tests/e2e/canary.sh downloads the coming Nextcloud without a token and tries again after every error, and when the server of Nextcloud doesn't deliver it, failure.py names that as the first error."
+
 printf '\n== %s\n' "The scenarios of the end-to-end tests"
 # tests/e2e/run.sh runs the scenarios of its list, so a function that the list leaves out would
 # never run, and nothing would fail. Each start of the script compares both, and E2E_PLAN=1 ends

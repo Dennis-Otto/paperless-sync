@@ -143,7 +143,7 @@ differently there."""
 title = "The end-to-end tests against the coming Nextcloud"
 problem = """The weekly canary failed: the end-to-end tests against the beta or release
 candidate of the next major version of Nextcloud, or against the daily build of its
-master branch, or the canary couldn't set that Nextcloud up. The summary names the first
+master branch, or the canary couldn't download or set that Nextcloud up. The summary names the first
 error and the last step that passed, and the artifact *e2e-coming* keeps the log,
 the log of Nextcloud, nextcloud.log, the apps, the logs of the containers and, of a check in the browser that
 failed, its trace and its screenshots. It opened the issue *The coming Nextcloud breaks the
@@ -158,7 +158,9 @@ a test, such as an address or a line of the log that the test expects. Adapt the
 test to it, without breaking the versions that `appinfo/info.xml` supports. Leave
 `max-version` as it is: the upstream bot raises it once Nextcloud releases the version.
 When the coming Nextcloud itself is broken, wait for its next build; the canary closes the
-issue once the tests pass again."""
+issue once the tests pass again. When the first error says that the server of Nextcloud
+didn't deliver a file in any of its attempts, the server had an outage: run the canary again
+later."""
 commands = [
   "bash tests/e2e/canary.sh",
   "KEEP_E2E=1 bash tests/e2e/canary.sh  # keeps the coming Nextcloud running after a failure",
@@ -281,7 +283,12 @@ once than `E2E_PARALLEL` names. *The download of the last release for the upgrad
 `tests/e2e/packages.sh` downloads the last release itself although `E2E_RELEASE_FILE` names
 the one that the job downloaded through the API, or `tests/e2e/run-all.sh` doesn't upgrade
 from it, or doesn't keep what `tests/e2e/packages.sh` said where `tests/e2e/failure.py` names
-it as the first error when GitHub doesn't deliver the release. *The scenarios of the end-to-end tests*: a function
+it as the first error when GitHub doesn't deliver the release. *The downloads of the coming
+Nextcloud*: `tests/e2e/canary.sh` downloads without the options of curl that try again after
+every error and after a stall, sends a header or a credential to the server of Nextcloud,
+stops a gpg-agent before its own keyring, which would be that of your keys, or doesn't keep
+what curl said where `tests/e2e/failure.py` names it as the first error when the server
+doesn't deliver the coming Nextcloud. *The scenarios of the end-to-end tests*: a function
 `scenario_<name>` of `tests/e2e/run.sh` has no entry in its list `SCENARIOS`, an entry has no
 function or comes before a scenario that it needs, the table of `tests/e2e/README.md` lacks a
 scenario, a selection such as `E2E_ONLY=files` plans otherwise than its sample, or a workflow
