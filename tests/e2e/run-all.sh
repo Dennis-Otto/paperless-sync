@@ -48,7 +48,8 @@
 # SQLite of each run there instead of on the disk; the CI sets it.
 # E2E_ARTIFACTS, a folder, gets a folder for each run that failed, named by its key, such
 # as 35 or 35-pgsql-upgrade, with its log, run.log, its title, title.txt, and the evidence
-# that run.sh keeps; tests/e2e/failure.py names the first error of each from there.
+# that run.sh keeps, and package-release or package-commit when a package of the upgrade
+# fails before the runs; tests/e2e/failure.py names the first error of each from there.
 # The run on the newest version measures the coverage of the JavaScript of the app in the
 # checks in the browser (E2E_COVERAGE=1 of run.sh), whose table follows that of the runs in
 # the summary of the job; its folder in E2E_ARTIFACTS gets the reports, also when it passes.
@@ -206,14 +207,30 @@ upgrade_newest="${newest}"
 if [[ "${E2E_PLAN:-0}" == "1" ]]; then
 	release_version="the last release"
 fi
+# A package of the upgrade from packages.sh, release or commit, whose path it prints. Its
+# messages go to the log of the job as they come, and into a log of their own: when it fails,
+# such as when GitHub doesn't deliver the last release in five minutes, E2E_ARTIFACTS gets
+# that log in a folder package-release or package-commit, as of a run that failed, so that
+# failure.py names its error and the artifact of the job keeps it.
+package() {
+	local kind="$1" title="$2" log="${LOG_DIR}/package-$1.log"
+	if ! { bash "${SCRIPT_DIR}/packages.sh" "${kind}" "${LOG_DIR}/packages" 2>&1 >&3 | tee "${log}" >&2; } 3>&1; then
+		if [[ -n "${E2E_ARTIFACTS:-}" ]]; then
+			mkdir -p "${E2E_ARTIFACTS}/package-${kind}"
+			cp "${log}" "${E2E_ARTIFACTS}/package-${kind}/run.log"
+			echo "${title}" >"${E2E_ARTIFACTS}/package-${kind}/title.txt"
+		fi
+		return 1
+	fi
+}
 for variant in "${variants[@]}"; do
 	if [[ "${variant}" == *+upgrade && -n "${E2E_ONLY:-}${E2E_BROWSER:-}" ]]; then
 		echo "E2E_VARIANTS names ${variant}, and E2E_UPGRADE=1 runs the upgrade in place of the scenarios, so E2E_ONLY and E2E_BROWSER select nothing there." >&2
 		exit 1
 	fi
 	if [[ "${variant}" == *+upgrade && -z "${release_version}" ]]; then
-		E2E_RELEASE_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" release "${LOG_DIR}/packages")"
-		E2E_PACKAGE="$(bash "${SCRIPT_DIR}/packages.sh" commit "${LOG_DIR}/packages")"
+		E2E_RELEASE_PACKAGE="$(package release "The package of the last release, which the upgrade starts from")"
+		E2E_PACKAGE="$(package commit "The package of the commit, which the upgrade installs")"
 		export E2E_RELEASE_PACKAGE E2E_PACKAGE
 		read -r release_version release_low release_high <<<"$(bash "${SCRIPT_DIR}/packages.sh" info "${E2E_RELEASE_PACKAGE}")"
 		range="$(supported)"
