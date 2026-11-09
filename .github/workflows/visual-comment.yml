@@ -5,13 +5,15 @@ name: Visual check comment
 
 # The second half of the visual check (visual.yml). When the check of a pull request
 # ends, this workflow posts or updates one comment on the pull request: the pictures
-# that look different, with the share of their pixels that changed, and links to them
-# before and after. When one language failed to render, the comment still lists the
-# pictures of the other one and names the language that failed. It may comment, so it
-# never checks out or runs the code of the pull request: it reads only the reports of
+# that look different, with the share of their pixels that changed and whether the
+# artifact has a picture of their difference, their changed pixels in red, and links to
+# them before and after. When one language failed to render, the comment still lists
+# the pictures of the other one and names the language that failed. It may comment, so
+# it never checks out or runs the code of the pull request: it reads only the reports of
 # the check, takes nothing from them but paths and numbers it checks, and writes the
 # comment itself. A pull request whose pictures all look as committed gets no comment,
-# or its comment from before updated.
+# or its comment from before updated. tests/e2e/compare.test.mjs runs the script that
+# writes the comment on reports of the check.
 
 on:
   workflow_run: # zizmor: ignore[dangerous-triggers] reads the reports of the check only, never the code of the pull request
@@ -89,6 +91,14 @@ jobs:
               r"|screenshots/[a-z0-9][a-z0-9-]*\.png)$"
           )
           statuses = {"changed", "new", "deleted"}
+
+
+          def diff_path(path):
+              """Where the artifact has the picture of the difference of the picture at path,
+              as compare.mjs and keep name it: under diff/, as a PNG."""
+              return f"diff/{path}" + ("" if path.lower().endswith(".png") else ".png")
+
+
           languages = {"en": "English", "de": "German"}
           sha = os.environ["HEAD_SHA"][:7]
           run = os.environ["RUN_URL"]
@@ -114,7 +124,7 @@ jobs:
 
 
           lines = ["<!-- visual-check -->", "### Visual check", ""]
-          rows, unchanged, read, missing = [], 0, [], []
+          rows, unchanged, read, missing, drawn = [], 0, [], [], 0
           for code in languages:
               try:
                   with open(f"{folder}/visual-{code}/report.json") as file:
@@ -137,7 +147,10 @@ jobs:
                       and (share is None or is_share(share))
                   ):
                       shown = percent(share) if status == "changed" else ""
-                      rows.append(f"| `{path}` | {status} | {shown} |")
+                      # Only the difference at the place of a changed picture counts.
+                      red = status == "changed" and entry.get("diff") == diff_path(path)
+                      drawn += red
+                      rows.append(f"| `{path}` | {status} | {shown} | {'in red' if red else ''} |")
           # A language whose report is missing failed to render; the other one still
           # gets its report, named by its language.
           which = f"{languages[read[0]]} " if read and missing else ""
@@ -156,14 +169,17 @@ jobs:
                   f"Rendered from the Paperless mock with its frozen story for {sha}: {len(rows)} of "
                   f"{len(rows) + unchanged} {which}pictures look different from the committed ones.",
                   "",
-                  "| Picture | Change | Pixels changed |",
-                  "| --- | --- | ---: |",
+                  "| Picture | Change | Pixels changed | Difference |",
+                  "| --- | --- | ---: | --- |",
                   *rows,
                   "",
               ]
               if links:
                   shown = " · ".join(f"[{languages[code]}]({link})" for code, link in sorted(links.items()))
-                  lines.append(f"The pictures before and after, with every changed pixel in red: {shown}.")
+                  if drawn:
+                      lines.append(f"The pictures before and after, and the changed pixels of each one marked in red: {shown}.")
+                  else:
+                      lines.append(f"The pictures before and after: {shown}.")
               lines.append(
                   "This check only reports. When the change is intended, the screenshot bot "
                   "renews the pictures after the merge, in a pull request that merges itself."

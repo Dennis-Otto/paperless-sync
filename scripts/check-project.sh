@@ -1144,7 +1144,7 @@ echo "tests/e2e/coverage.mjs reports the lines, branches and functions of each s
 node --test --test-reporter=dot tests/e2e/frozen.test.mjs
 echo "tests/e2e/frozen.mjs shows the moments of the story, an example secret and files that changed a few seconds ago in every picture."
 node --test --test-reporter=dot tests/e2e/compare.test.mjs
-echo "tests/e2e/compare.mjs draws the changed pixels in red, and the visual check renders on the paths of .github/screenshots-paths.txt."
+echo "tests/e2e/compare.mjs puts the changed pixels in red that keep drew of every picture into the artifact, visual-comment.yml says which pictures have them, and the visual check renders on the paths of .github/screenshots-paths.txt."
 node scripts/check-l10n.mjs
 
 # And the check finds what it must in broken copies of each catalog, in German and in French,
