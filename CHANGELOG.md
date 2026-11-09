@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.8.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.7.0...v1.8.0) (2026-11-09)
+
+
+### Features
+
+* **i18n:** speak Dutch and formal German, like Paperless Unified Search ([#399](https://github.com/Dennis-Otto/paperless-sync/issues/399)) ([62b5fe0](https://github.com/Dennis-Otto/paperless-sync/commit/62b5fe0849ca6df496418531103ebcf52e20209b))
+
 ## [1.7.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.1...v1.7.0) (2026-11-08)
 
 ### Features
