@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.8.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.7.0...v1.8.0) (2026-11-09)
+
+### Features
+
+- **Paperless Sync speaks Dutch and formal German:** on a Nextcloud set to Nederlands (`nl`), the settings, their messages, the connection checklist, the notes in Files, *Send to Paperless*, the Activity stream and the notifications are in Dutch, in the words that Nextcloud and Paperless-ngx use there, such as *Bestanden*, *Archief* and *labels*. A new installation on such a Nextcloud proposes Dutch folders, such as `Documenten/Paperless`, `Archief` and `Mislukte imports`; an installation in use keeps the folders that it has. The App Store shows the summary and the description in Dutch. On a Nextcloud set to *Deutsch (Förmlich: Sie)* (`de_DE`), the app now addresses its readers with *Sie*: the settings page spoke with *du* before, and the e-mails of the Activity stream and the push notifications came in English. Its folders keep their German names, so no archive moves. The texts were drafted with the help of an AI and checked against the English and German ones; native speakers are welcome to improve them, as [Translate Paperless Sync](https://github.com/Dennis-Otto/paperless-sync/blob/main/docs/development.md#translate-paperless-sync) shows.
+
 ## [1.7.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.6.1...v1.7.0) (2026-11-08)
 
 ### Features
