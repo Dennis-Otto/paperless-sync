@@ -65,9 +65,9 @@ E2E_ACCESSIBILITY="${E2E_ACCESSIBILITY:-1}"
 # on the newest version. Its table is in the log, and with E2E_ARTIFACTS its reports are in
 # the folder coverage there, also when the run passes.
 E2E_COVERAGE="${E2E_COVERAGE:-0}"
-# E2E_LANGUAGES=1 checks the settings with Nextcloud in French at the end of the run (french.mjs);
-# run-all.sh sets it for the run on the newest version alone, as Nextcloud loads a catalog of an
-# app the same way in every version.
+# E2E_LANGUAGES=1 checks the settings in every language of l10n/ at the end of the run
+# (languages.mjs), first with Nextcloud in French; run-all.sh sets it for the run on the newest
+# version alone, as Nextcloud loads a catalog of an app the same way in every version.
 E2E_LANGUAGES="${E2E_LANGUAGES:-${E2E_ACCESSIBILITY}}"
 # E2E_ONLY names scenarios of the list SCENARIOS below: E2E_ONLY="files flow" sets up Nextcloud
 # and runs them with what they need, and the checks in the browser of their names. E2E_BROWSER
@@ -284,8 +284,8 @@ mock_state() {
 # connects again with the token, and checks what the page says about unsaved changes,
 # results and errors, also in German. files.mjs checks the actions of the app in the
 # menu of Files for a member of the group of the setting and for another user, and flow.mjs
-# the form of a rule of "Send to Paperless" in the settings of Flow, while french.mjs, at the
-# end of the run, checks the settings with Nextcloud in French. The files
+# the form of a rule of "Send to Paperless" in the settings of Flow, while languages.mjs, at the
+# end of the run, checks the settings in every language of the app. The files
 # of the checks reach the browser through standard input, so that npm leaves nothing in
 # the checkout. Each check runs, also after one that failed, so that one run names every
 # page that broke, and the browser fails at the end. With E2E_ARTIFACTS, each window records
@@ -329,15 +329,19 @@ BROWSER_CHECKS='
 	fi
 '
 browser_checks() {
-	local checks="$1" coverage="$2" floor="${3:-}" status=0
+	local checks="$1" coverage="$2" floor="${3:-}" status=0 catalogs=() catalog
+	# The catalogs of the app, which languages.mjs reads, by their path in the repository.
+	for catalog in "${REPOSITORY_ROOT}"/l10n/*.json; do
+		catalogs+=("l10n/${catalog##*/}")
+	done
 	if [[ -n "${PLAYWRIGHT_PULL}" ]] && ! wait "${PLAYWRIGHT_PULL}"; then
 		echo "The image of Playwright didn't download in the background; docker run tries again."
 	fi
 	PLAYWRIGHT_PULL=""
 	mkdir -p "${BROWSER_ARTIFACTS}"
 	# Git Bash on Windows would turn the paths of the container into paths of Windows.
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs french.mjs language.mjs coverage.mjs coverage-floor.json \
-		-C "${REPOSITORY_ROOT}" l10n/fr.json \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs languages.mjs language.mjs coverage.mjs coverage-floor.json \
+		-C "${REPOSITORY_ROOT}" "${catalogs[@]}" \
 		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \
 			--env NPM_CONFIG_UPDATE_NOTIFIER=false \
@@ -351,7 +355,7 @@ browser_checks() {
 			--env "E2E_COVERAGE=${coverage}" \
 			--env "E2E_COVERAGE_FLOOR=${floor}" \
 			--env "E2E_CHECKS=${checks}" \
-			--env E2E_CATALOG=/tmp/browser/l10n/fr.json \
+			--env E2E_CATALOGS=/tmp/browser/l10n \
 			"${PLAYWRIGHT_IMAGE}" \
 			sh -c "${BROWSER_CHECKS}" \
 		| tar -C "${BROWSER_ARTIFACTS}" -xf - || status=$?
@@ -841,11 +845,11 @@ SCENARIOS=(
 	'failing-mirror: unreachable'
 	'per-user: conflicts'
 	'shared: per-user'
-	'french: connection'
+	'languages: connection'
 )
 # The checks in the browser of the scenario browser, in the order of a full run, with the
-# scenarios that leave what each needs. french.mjs is the scenario french of its own, as it takes
-# away what the others read.
+# scenarios that leave what each needs. languages.mjs is the scenario languages of its own, as it
+# takes away what the others read.
 BROWSER_SCRIPTS=(
 	'accessibility: export files flow'
 	'keyboard: export'
@@ -2249,16 +2253,17 @@ print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if 
 }
 
 # Nextcloud in French, as a new installation sees it: its default language, an administrator
-# without a language of their own, and none of the names that the steps above stored. Last,
-# because it takes these names away and leaves the installation in French.
-scenario_french() {
+# without a language of their own, and none of the names that the steps above stored; then the
+# administrator in every other language of l10n/. Last, because it takes these names away and
+# leaves Nextcloud in French, with an administrator in the last language of CATALOGS.
+scenario_languages() {
 	occ config:system:set default_language --value=fr >/dev/null
 	occ user:setting --delete e2e-admin core lang >/dev/null
 	for name in base_path archive_folder inbox_folder error_folder deleted_folder empty_correspondent empty_document_type empty_date untitled; do
 		occ config:app:delete paperless_sync "${name}" >/dev/null
 	done
-	browser_checks french 0
-	echo "The settings in French pass after ${SECONDS} s."
+	browser_checks languages 0
+	echo "The settings in every language pass after ${SECONDS} s."
 }
 
 declare -A NEEDS=() BROWSER_NEEDS=()
@@ -2361,7 +2366,7 @@ plan_scenarios() {
 		done
 	fi
 	if [[ "${E2E_LANGUAGES}" != 1 ]]; then
-		unset 'wanted[french]'
+		unset 'wanted[languages]'
 	fi
 	# What a scenario needs comes before it in the list, so one pass from the end of the list also
 	# finds what those need.
@@ -2416,7 +2421,7 @@ if [[ "${E2E_UPGRADE}" == "1" ]]; then
 fi
 "${COMPOSE[@]}" down --volumes --remove-orphans --timeout 1 >/dev/null 2>&1 || true
 empty_data_folder
-if [[ " ${PLAN[*]} " == *" browser "* || " ${PLAN[*]} " == *" french "* ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
+if [[ " ${PLAN[*]} " == *" browser "* || " ${PLAN[*]} " == *" languages "* ]] && ! "${DOCKER_BIN}" image inspect "${PLAYWRIGHT_IMAGE}" >/dev/null 2>&1; then
 	"${DOCKER_BIN}" pull --quiet "${PLAYWRIGHT_IMAGE}" >/dev/null &
 	PLAYWRIGHT_PULL=$!
 fi
@@ -2524,6 +2529,6 @@ if [[ "${E2E_ACCESSIBILITY}" == "1" ]]; then
 	checks="${checks}, accessibility, the settings in the browser"
 fi
 if [[ "${E2E_LANGUAGES}" == "1" ]]; then
-	checks="${checks}, the settings and the folders in French"
+	checks="${checks}, the settings in every language of the app and the folders in French"
 fi
 echo "Docker E2E passed on ${DATABASE_NAME} with ${STORAGE_NAME}: ${checks}, a run without Paperless that keeps the token out of the log, a URL changed past the settings page that does not get the token, and a failing mirror that notifies the administrators, shows in the setup checks and the status API, and clears after a success."
