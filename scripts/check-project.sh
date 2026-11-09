@@ -405,6 +405,63 @@ if [[ "$started" != 5 || "$most" != 2 ]]; then
 fi
 echo "tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names."
 
+printf '\n== %s\n' "The download of the last release for the upgrade"
+# GitHub's downloads without a token, from the page of a release, failed for hours on 8
+# November 2026, and the upgrade failed without a word about why (#384). The CI downloads the
+# last release through the API with a token (.github/download.sh, the blueprint's decision
+# 0133) and hands it to tests/e2e/packages.sh in E2E_RELEASE_FILE, which takes it without a
+# download of its own. On a machine without it, when GitHub fails, tests/e2e/run-all.sh keeps
+# what packages.sh said where tests/e2e/failure.py names it as the first error. A curl in
+# place of the real one records that it ran and fails as GitHub did, and a script in place of
+# run.sh gets the packages for the upgrade.
+download_folder="$(mktemp -d)"
+mkdir "$download_folder/bin"
+cat >"$download_folder/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$DOWNLOAD_FOLDER/arguments"
+echo 'curl: (22) The requested URL returned error: 503' >&2
+exit 22
+EOF
+cat >"$download_folder/run.sh" <<'EOF'
+#!/usr/bin/env bash
+[[ "$E2E_UPGRADE" == 1 && -f "$E2E_RELEASE_PACKAGE" && -f "$E2E_PACKAGE" ]]
+EOF
+chmod +x "$download_folder/bin/curl" "$download_folder/run.sh"
+git archive --format=tar.gz --prefix=paperless_sync/ --output="$download_folder/release.tar.gz" HEAD appinfo/info.xml
+download_variables=(GITHUB_STEP_SUMMARY='' PATH="$download_folder/bin:$PATH" DOWNLOAD_FOLDER="$download_folder"
+  E2E_RUN_SCRIPT="$download_folder/run.sh" E2E_VERSIONS=none E2E_VARIANTS=pgsql+upgrade)
+if ! env "${download_variables[@]}" E2E_RELEASE_FILE="$download_folder/release.tar.gz" bash tests/e2e/run-all.sh >"$download_folder/log" 2>&1 ||
+  ! grep -qE '^The end-to-end tests pass against Nextcloud [0-9]+ on PostgreSQL, upgraded from [0-9]+\.[0-9]+\.[0-9]+\.$' "$download_folder/log"; then
+  cat "$download_folder/log"
+  echo "With the last release in E2E_RELEASE_FILE, tests/e2e/run-all.sh should upgrade from it to the package of the commit."
+  exit 1
+fi
+if [[ -e "$download_folder/arguments" ]]; then
+  echo "tests/e2e/packages.sh downloads the last release with curl although E2E_RELEASE_FILE names the one that the job downloaded."
+  exit 1
+fi
+if env "${download_variables[@]}" E2E_ARTIFACTS="$download_folder/artifacts" bash tests/e2e/run-all.sh >"$download_folder/log" 2>&1; then
+  cat "$download_folder/log"
+  echo "tests/e2e/run-all.sh passes the upgrade although GitHub doesn't deliver the last release."
+  exit 1
+fi
+download_title="$(cat "$download_folder/artifacts/package-release/title.txt" 2>/dev/null || true)"
+if [[ "$download_title" != "The package of the last release, which the upgrade starts from" ]] ||
+  ! grep -q '^curl: (22) The requested URL returned error: 503$' "$download_folder/artifacts/package-release/run.log"; then
+  cat "$download_folder/log"
+  echo "tests/e2e/run-all.sh should keep the output of packages.sh, with the error of curl, and its title in package-release of E2E_ARTIFACTS when GitHub doesn't deliver the last release."
+  exit 1
+fi
+if [[ -n "$python" ]]; then
+  download_error="$("$python" -B tests/e2e/failure.py "$download_folder/artifacts")"
+  if [[ "$download_error" != *"**The package of the last release, which the upgrade starts from**: \`GitHub didn't deliver the package of the last release: "*"run it again later"* ]]; then
+    echo "tests/e2e/failure.py should name that GitHub didn't deliver the last release as the first error, not: $download_error"
+    exit 1
+  fi
+fi
+rm -rf "$download_folder"
+echo "tests/e2e/packages.sh takes the last release that the job downloaded, and when GitHub doesn't deliver it otherwise, failure.py names that as the first error."
+
 printf '\n== %s\n' "The scenarios of the end-to-end tests"
 # tests/e2e/run.sh runs the scenarios of its list, so a function that the list leaves out would
 # never run, and nothing would fail. Each start of the script compares both, and E2E_PLAN=1 ends

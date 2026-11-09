@@ -14,7 +14,12 @@
 # Each of the first two prints the path of its package; info prints the version of a
 # package and the major versions of Nextcloud from its min-version to its max-version.
 # The release is paperless_sync.tar.gz of the latest release of E2E_RELEASE_REPOSITORY, by
-# default Dennis-Otto/paperless-sync, signed as the App Store has it. The package of the commit is krankerl's, as build-release.yml builds
+# default Dennis-Otto/paperless-sync, signed as the App Store has it. E2E_RELEASE_FILE, when
+# set, is that package already downloaded: the CI downloads it in a step of its own through
+# the API with a token, checked by GitHub's digest (.github/download.sh), since GitHub's
+# downloads without a token failed for hours on 8 November 2026 (#384, the blueprint's
+# decision 0133). Without it, as on your machine, curl downloads it from the page of the
+# release. The package of the commit is krankerl's, as build-release.yml builds
 # it, when krankerl is installed, as in the CI. Without krankerl, it holds the runtime
 # files of HEAD that scripts/check-package.sh names, which is what krankerl packs: that
 # script checks it in every pull request. Both take HEAD, not the working tree, so commit
@@ -53,12 +58,25 @@ case "${KIND}" in
 	release)
 		mkdir -p "${DIR}/release"
 		package="${DIR}/release/${APP_ID}.tar.gz"
-		repository="${E2E_RELEASE_REPOSITORY:-Dennis-Otto/paperless-sync}"
-		# Into a file, never into a pipe: Scorecard counts a download that a program reads
-		# from a pipe as code that runs without a pinned hash.
-		curl --fail --location --silent --show-error --retry 5 --retry-all-errors \
-			--connect-timeout 15 --max-time 300 --output "${package}" \
-			"https://github.com/${repository}/releases/latest/download/${APP_ID}.tar.gz"
+		if [[ -n "${E2E_RELEASE_FILE:-}" ]]; then
+			if [[ ! -f "${E2E_RELEASE_FILE}" ]]; then
+				echo "E2E_RELEASE_FILE names ${E2E_RELEASE_FILE}, which doesn't exist." >&2
+				exit 1
+			fi
+			echo "The package of the last release is ${E2E_RELEASE_FILE}, which the job downloaded." >&2
+			cp "${E2E_RELEASE_FILE}" "${package}"
+		else
+			repository="${E2E_RELEASE_REPOSITORY:-Dennis-Otto/paperless-sync}"
+			url="https://github.com/${repository}/releases/latest/download/${APP_ID}.tar.gz"
+			echo "Downloading the package of the last release, ${url}." >&2
+			# Into a file, never into a pipe: Scorecard counts a download that a program reads
+			# from a pipe as code that runs without a pinned hash.
+			if ! curl --fail --location --silent --show-error --retry 5 --retry-all-errors \
+				--connect-timeout 15 --max-time 120 --output "${package}" "${url}"; then
+				echo "GitHub didn't deliver the package of the last release: with 502, 503 or 504 above, GitHub has an outage, which ends by itself, so run it again later; with 404, the release has no ${APP_ID}.tar.gz." >&2
+				exit 1
+			fi
+		fi
 		;;
 	commit)
 		mkdir -p "${DIR}/commit"

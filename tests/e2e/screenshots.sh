@@ -85,6 +85,20 @@ take_pictures() {
 	occ nextcloud php occ config:system:set default_locale --value="${locale}" >/dev/null
 	# The owner of the archive starts with empty files, without the examples of Nextcloud.
 	occ nextcloud php occ config:system:set skeletondirectory --value='' >/dev/null
+	# Files shows how much space the files of the user take, "17 KB used", and Nextcloud keeps
+	# that number in its memory cache, APCu in the image, for five minutes of the clock
+	# (OC_Helper::getStorageInfo). A page that loads within them shows the size of an earlier
+	# moment of the story, and whether it does depends on how fast the runner is: the last
+	# picture of trash.gif said 17 KB on one run and 19 KB on the next. Without the cache, each
+	# page shows the size at its own moment of the story, on every run. The image names the cache
+	# in config/apcu.config.php, which wins over config.php, and each occ config:system:set before
+	# has copied it into config.php as well.
+	occ nextcloud rm -f config/apcu.config.php
+	occ nextcloud php occ config:system:delete memcache.local >/dev/null
+	if occ nextcloud php occ config:system:get memcache.local >/dev/null 2>&1; then
+		echo "Nextcloud still keeps a memory cache, memcache.local, so Files could show the size of the files at an earlier moment of the story." >&2
+		exit 1
+	fi
 	occ --env "OC_PASS=${PASSWORD}" nextcloud php occ user:add --password-from-env --display-name=Paperless "${TARGET_USER}" >/dev/null
 	# The users speak the language itself, not the variant that the browser asks for: Chromium
 	# sends de-DE, and without a language of its own a user would get the formal l10n/de_DE.json,
