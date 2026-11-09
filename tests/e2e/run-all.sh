@@ -209,7 +209,7 @@ if [[ "${E2E_PLAN:-0}" == "1" ]]; then
 fi
 # A package of the upgrade from packages.sh, release or commit, whose path it prints. Its
 # messages go to the log of the job as they come, and into a log of their own: when it fails,
-# such as when GitHub doesn't deliver the last release in five minutes, E2E_ARTIFACTS gets
+# such as when GitHub doesn't deliver the last release, E2E_ARTIFACTS gets
 # that log in a folder package-release or package-commit, as of a run that failed, so that
 # failure.py names its error and the artifact of the job keeps it.
 package() {

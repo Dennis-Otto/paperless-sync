@@ -406,64 +406,43 @@ fi
 echo "tests/e2e/run-all.sh starts every run, and no more at once than E2E_PARALLEL names."
 
 printf '\n== %s\n' "The download of the last release for the upgrade"
-# GitHub answered the download of the last release with 503 and 504 for longer than the half
-# minute in which curl's five attempts gave up, and the upgrade failed without a word about why
-# (#384). tests/e2e/packages.sh asks GitHub again for five minutes, and when GitHub still fails,
-# tests/e2e/run-all.sh keeps what it said where tests/e2e/failure.py names it as the first
-# error. A curl in place of the real one records how packages.sh asks and fails as GitHub did,
-# or, with DOWNLOAD_DELIVERS=1, delivers a release that holds the appinfo/info.xml of HEAD, which
-# a script in place of run.sh then gets for the upgrade, with the package of the commit.
+# GitHub's downloads without a token, from the page of a release, failed for hours on 8
+# November 2026, and the upgrade failed without a word about why (#384). The CI downloads the
+# last release through the API with a token (.github/download.sh, the blueprint's decision
+# 0133) and hands it to tests/e2e/packages.sh in E2E_RELEASE_FILE, which takes it without a
+# download of its own. On a machine without it, when GitHub fails, tests/e2e/run-all.sh keeps
+# what packages.sh said where tests/e2e/failure.py names it as the first error. A curl in
+# place of the real one records that it ran and fails as GitHub did, and a script in place of
+# run.sh gets the packages for the upgrade.
 download_folder="$(mktemp -d)"
 mkdir "$download_folder/bin"
 cat >"$download_folder/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" >"$DOWNLOAD_FOLDER/arguments"
-if [[ "${DOWNLOAD_DELIVERS:-0}" != 1 ]]; then
-  echo 'curl: (22) The requested URL returned error: 503' >&2
-  exit 22
-fi
-while (($# > 1)); do
-  [[ "$1" != --output ]] || output="$2"
-  shift
-done
-git archive --format=tar.gz --prefix=paperless_sync/ --output="$output" HEAD appinfo/info.xml
+echo 'curl: (22) The requested URL returned error: 503' >&2
+exit 22
 EOF
 cat >"$download_folder/run.sh" <<'EOF'
 #!/usr/bin/env bash
 [[ "$E2E_UPGRADE" == 1 && -f "$E2E_RELEASE_PACKAGE" && -f "$E2E_PACKAGE" ]]
 EOF
 chmod +x "$download_folder/bin/curl" "$download_folder/run.sh"
+git archive --format=tar.gz --prefix=paperless_sync/ --output="$download_folder/release.tar.gz" HEAD appinfo/info.xml
 download_variables=(GITHUB_STEP_SUMMARY='' PATH="$download_folder/bin:$PATH" DOWNLOAD_FOLDER="$download_folder"
   E2E_RUN_SCRIPT="$download_folder/run.sh" E2E_VERSIONS=none E2E_VARIANTS=pgsql+upgrade)
-if ! env "${download_variables[@]}" DOWNLOAD_DELIVERS=1 bash tests/e2e/run-all.sh >"$download_folder/log" 2>&1 ||
+if ! env "${download_variables[@]}" E2E_RELEASE_FILE="$download_folder/release.tar.gz" bash tests/e2e/run-all.sh >"$download_folder/log" 2>&1 ||
   ! grep -qE '^The end-to-end tests pass against Nextcloud [0-9]+ on PostgreSQL, upgraded from [0-9]+\.[0-9]+\.[0-9]+\.$' "$download_folder/log"; then
   cat "$download_folder/log"
-  echo "With the last release that GitHub delivers, tests/e2e/run-all.sh should upgrade from it to the package of the commit."
+  echo "With the last release in E2E_RELEASE_FILE, tests/e2e/run-all.sh should upgrade from it to the package of the commit."
+  exit 1
+fi
+if [[ -e "$download_folder/arguments" ]]; then
+  echo "tests/e2e/packages.sh downloads the last release with curl although E2E_RELEASE_FILE names the one that the job downloaded."
   exit 1
 fi
 if env "${download_variables[@]}" E2E_ARTIFACTS="$download_folder/artifacts" bash tests/e2e/run-all.sh >"$download_folder/log" 2>&1; then
   cat "$download_folder/log"
   echo "tests/e2e/run-all.sh passes the upgrade although GitHub doesn't deliver the last release."
-  exit 1
-fi
-mapfile -t download_arguments < <(tr -d '\r' <"$download_folder/arguments")
-# The value that follows an option of curl, 0 without the option.
-curl_option() {
-  local index
-  for index in "${!download_arguments[@]}"; do
-    if [[ "${download_arguments[index]}" == "$1" ]]; then
-      echo "${download_arguments[index + 1]}"
-      return
-    fi
-  done
-  echo 0
-}
-download_retries="$(curl_option --retry)"
-download_delay="$(curl_option --retry-delay)"
-download_window="$(curl_option --retry-max-time)"
-if ((download_window < 300 || download_retries * download_delay < download_window)) ||
-  [[ " ${download_arguments[*]} " != *" --retry-all-errors "* ]]; then
-  echo "tests/e2e/packages.sh downloads the last release with curl ${download_arguments[*]}: it should ask again after every error (--retry-all-errors) for at least five minutes (--retry-max-time 300), with as many attempts (--retry) as their pauses (--retry-delay) fill."
   exit 1
 fi
 download_title="$(cat "$download_folder/artifacts/package-release/title.txt" 2>/dev/null || true)"
@@ -475,13 +454,13 @@ if [[ "$download_title" != "The package of the last release, which the upgrade s
 fi
 if [[ -n "$python" ]]; then
   download_error="$("$python" -B tests/e2e/failure.py "$download_folder/artifacts")"
-  if [[ "$download_error" != *"**The package of the last release, which the upgrade starts from**: \`GitHub didn't deliver the package of the last release in five minutes: "*"run the job again"* ]]; then
+  if [[ "$download_error" != *"**The package of the last release, which the upgrade starts from**: \`GitHub didn't deliver the package of the last release: "*"run it again later"* ]]; then
     echo "tests/e2e/failure.py should name that GitHub didn't deliver the last release as the first error, not: $download_error"
     exit 1
   fi
 fi
 rm -rf "$download_folder"
-echo "tests/e2e/packages.sh asks GitHub again for five minutes for the last release, and when GitHub still fails, failure.py names that as the first error."
+echo "tests/e2e/packages.sh takes the last release that the job downloaded, and when GitHub doesn't deliver it otherwise, failure.py names that as the first error."
 
 printf '\n== %s\n' "The scenarios of the end-to-end tests"
 # tests/e2e/run.sh runs the scenarios of its list, so a function that the list leaves out would
