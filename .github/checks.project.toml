@@ -355,7 +355,7 @@ fix `tests/e2e/thumbnail.mjs` or its test in
 `tests/e2e/thumbnail.test.mjs` until `node --test tests/e2e/thumbnail.test.mjs` passes,
 look for a text of the German pictures as `l10n/de.json` translates it, with `L.t(…)`
 in `tests/e2e/screenshots.mjs`, give a new catalog its line in `LANGUAGES` of
-`tests/e2e/language.mjs`, a plural its missing form in `l10n/<code>.json`, and a mark words of
+`tests/e2e/language.mjs`, a plural its missing form in the catalog of its language, such as `l10n/fr.json`, and a mark words of
 its own or another mark in `MARKS` of `tests/e2e/language.mjs`, until `node --test tests/e2e/language.test.mjs` passes,
 render a new animation with `bash tests/e2e/screenshots.sh`, or show less of a scroll or of a page
 that changes as a whole, until `node --test tests/e2e/screenshots.test.mjs` passes,
