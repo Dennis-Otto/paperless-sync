@@ -159,8 +159,10 @@ test to it, without breaking the versions that `appinfo/info.xml` supports. Leav
 `max-version` as it is: the upstream bot raises it once Nextcloud releases the version.
 When the coming Nextcloud itself is broken, wait for its next build; the canary closes the
 issue once the tests pass again. When the first error says that the server of Nextcloud
-didn't deliver a file in any of its attempts, the server had an outage: run the canary again
-later."""
+didn't deliver a file in any of its attempts after a timeout or a 502, 503 or 504, the server
+had an outage: run the canary again later. After a 404, Nextcloud has moved the file: change
+its address in `DOWNLOADS` or the calls of `fetch` in `tests/e2e/canary.sh`, and the section
+*The coming Nextcloud* of `tests/e2e/README.md`."""
 commands = [
   "bash tests/e2e/canary.sh",
   "KEEP_E2E=1 bash tests/e2e/canary.sh  # keeps the coming Nextcloud running after a failure",

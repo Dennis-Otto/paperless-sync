@@ -525,9 +525,19 @@ if [[ "$canary_title" != "The coming Nextcloud, which the canary couldn't downlo
   echo "tests/e2e/canary.sh should keep the error of curl and its title in coming of E2E_ARTIFACTS when the server of Nextcloud doesn't deliver the coming Nextcloud."
   exit 1
 fi
+canary_url="https://download.nextcloud.com/server/prereleases/"
+# failure.py cuts a first error after 300 characters: the line of the longest address, the
+# signature of a prerelease, has to fit, or the issue loses the hint about a 404.
+canary_line="$(grep -m 1 "^Nextcloud's server didn't deliver " "$canary_folder/artifacts/coming/run.log")"
+canary_longest="https://download.nextcloud.com/server/prereleases/nextcloud-100.0.10rc10.tar.bz2.asc"
+canary_length=$((${#canary_line} - ${#canary_url} + ${#canary_longest}))
+if ((canary_length > 300)); then
+  echo "tests/e2e/canary.sh names a failed download in a line of $canary_length characters for $canary_longest, which failure.py cuts after 300: shorten it."
+  exit 1
+fi
 if [[ -n "$python" ]]; then
   canary_error="$("$python" -B tests/e2e/failure.py "$canary_folder/artifacts")"
-  if [[ "$canary_error" != *"**The coming Nextcloud, which the canary couldn't download**: \`download.nextcloud.com didn't deliver https://download.nextcloud.com/server/prereleases/ in any of up to six attempts: "*"run the canary again later"* ]]; then
+  if [[ "$canary_error" != *"**The coming Nextcloud, which the canary couldn't download**: \`Nextcloud's server didn't deliver https://download.nextcloud.com/server/prereleases/ in up to six attempts: "*"run the canary again later; a 404 means Nextcloud moved the file."* ]]; then
     echo "tests/e2e/failure.py should name that the server of Nextcloud didn't deliver the coming Nextcloud as the first error, not: $canary_error"
     exit 1
   fi

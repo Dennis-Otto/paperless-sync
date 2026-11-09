@@ -56,9 +56,9 @@ fetch() {
 		--output "$2" "$1" 2>"${TMP_DIR}/curl.log"; then
 		return 0
 	fi
-	local host="${1#*://}"
-	host="${host%%/*}"
-	echo "${host} didn't deliver $1 in any of up to six attempts: with a timeout or 502, 503 or 504 above, the server of Nextcloud has an outage, which ends by itself, so run the canary again later; with 404, Nextcloud has moved the file." >>"${TMP_DIR}/curl.log"
+	# failure.py cuts a first error after 300 characters, so the line stays short enough for
+	# the longest address, that of the signature of a prerelease.
+	echo "Nextcloud's server didn't deliver $1 in up to six attempts: a timeout or 502, 503 or 504 is an outage, run the canary again later; a 404 means Nextcloud moved the file." >>"${TMP_DIR}/curl.log"
 	cat "${TMP_DIR}/curl.log" >&2
 	if [[ -n "${E2E_ARTIFACTS:-}" ]]; then
 		mkdir -p "${E2E_ARTIFACTS}/coming"
