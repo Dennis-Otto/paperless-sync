@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.9.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.8.0...v1.9.0) (2026-11-10)
+
+
+### Features
+
+* the admin sets per user which tags of Paperless they may see ([#427](https://github.com/Dennis-Otto/paperless-sync/issues/427)) ([bb4c573](https://github.com/Dennis-Otto/paperless-sync/commit/bb4c573ec52e049e1f0206a3e515e3ed25f335fa))
+
 ## [1.8.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.7.0...v1.8.0) (2026-11-09)
 
 ### Features
