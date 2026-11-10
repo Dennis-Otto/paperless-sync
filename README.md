@@ -116,6 +116,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 ### Archive
 
 - A folder tree in the files of the configured Nextcloud user, or [of each user, with the documents that they own in Paperless](#per-user-ownership) and, if you choose, [those that it shares with them](#documents-that-paperless-shares), by correspondent, document type and year, from a [path template](#path-template-variables) that you can change, with base, archive, inbox, error and deleted folders of your choice
+- [Tags that a user may see](#tags-that-a-user-may-see): the administrator gives some users only the documents with their tags of Paperless, in an archive of their own, also when the target user gets every document, and Paperless Unified Search shows them the same
 - Variables with the names that Paperless-ngx uses for its own file names, such as the archive serial number, the owner, the tags, the name of the month and custom fields, and a preview under the template that shows where the newest documents go while you type, before you save
 - Optionally, each document [goes where its storage path files it in Paperless](#storage-paths-of-paperless), so the folders of your storage paths are those of the archive too
 - The archive PDF of each document, or its original file
@@ -479,6 +480,19 @@ Paperless has permissions of its own: the owner of a document can let other user
 - **What it needs.** The account of the token also needs *View* for Groups, and *View* for UI Settings, which every setup gives it and which names its ID: without either, a run fails before a copy changes. Only this option asks Paperless for the permissions of the documents, which costs Paperless more work for each document.
 
 The connection checklist shows who also gets how many documents from the archive of whom, and who may view documents of others without getting a copy; it reads every document for that, once for each test.
+
+#### Tags that a user may see
+
+Not everyone in a household should see every document. With **Tags that a user may see** in *1 · Connection and ownership*, the administrator gives some users of Nextcloud the tags of Paperless whose documents they may see, one user on each line, such as `katja = Katja, Household` ([decision 0038](https://dennis-otto.github.io/paperless-sync/decisions/0038-each-user-may-see-the-documents-with-their-tags.html)). It works with every choice of *Who gets the documents*.
+
+- **No line, every document, as before.** A user without a line, or with a line without tags, sees what they saw before, and so does the target user, who always gets every document: a save refuses a line for the target user, a user twice and a user that Nextcloud doesn't have.
+- **A line, only the documents with one of its tags.** Such a user gets every document that has at least one of their tags, whatever the case of the names, in an archive of their own below the same base folder of their files, without an inbox, unless they also get the documents of their user of Paperless; whoever owns the document in Paperless or may view it. They get no other document: not one that their user of Paperless owns or may view without one of the tags, which the target user then takes, as one whose owner has no user of Nextcloud. The tags of the archive, *Excluded tags* and *Only mirror documents with these tags*, still leave a document out.
+- **A copy of their own.** Each copy counts against the quota of its user, with their own shares, versions and search, as the copies of [Documents that Paperless shares](#documents-that-paperless-shares) do.
+- **A copy follows the tags.** A tag added to a document in Paperless gives it to the users with that tag with the next run, or within seconds with the webhook. A document that loses the last of their tags, a tag taken from their line, or their whole line takes their copy away with the next run, into their trash bin; a run keeps reaching the archive of a user whose line is gone until every copy has left.
+- **A tag that Paperless doesn't have stops the runs.** After a typo or a rename in Paperless, a run would take away the copies of the documents that a user may see, so it stops first and names the tag.
+- **Paperless Unified Search shows them the same.** It reads the same lines, and shows such a user only the documents with one of their tags, in the search, on the dashboard and in its notifications. Without Paperless Sync, Unified Search has no lines, and shows every user what it showed before.
+
+A dry-run lists each change with its user, so run one after a change of the lines: the dry-run of unsaved lines asks for a save first, as they decide whose archives a run reads.
 
 ### Folder names
 

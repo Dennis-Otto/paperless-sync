@@ -97,7 +97,7 @@ final class FolderInfo {
 		$folders = [];
 		try {
 			foreach (self::paths($config) as $kind => $path) {
-				if ($userId === $config->targetUser || $config->perUser()) {
+				if ($userId === $config->targetUser || $config->perUser() || UserTags::of($config)->restricts($userId)) {
 					$id = $this->storage->findFileId($userId, $path);
 					if ($id !== null) {
 						$folders[] = ['kind' => $kind, 'id' => $id, 'path' => $path];

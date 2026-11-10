@@ -248,6 +248,14 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				</label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-ownership-hint"><?php p($l->t('With "Each user", every user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files, and the files of their inbox become theirs in Paperless. The target user gets the documents without an owner and those whose owner has no user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of its own, and the connection checklist shows who gets which. The account of the token needs to see the documents of every user.')); ?> <?php p($l->t('With "or may view", each also gets a copy of every document that their user of Paperless may view, by itself or through a group, which counts against their quota, and loses it when Paperless takes the permission away; the account of the token also needs View for Groups.')); ?> <?php $help('per-user-ownership', $l->t('Per-user ownership')); ?></p>
+			<!-- The tags of Paperless that some users of Nextcloud may see, in every choice of who gets the documents. -->
+			<div class="paperless-sync-grid">
+				<label class="paperless-sync-field paperless-sync-field--wide">
+					<span><?php p($l->t('Tags that a user may see')); ?></span>
+					<textarea data-setting="user_tags" rows="2" placeholder="katja = Katja, Household" autocapitalize="none" spellcheck="false" aria-describedby="paperless-sync-user-tags-hint"><?php p($config->userTags); ?></textarea>
+				</label>
+			</div>
+			<p class="settings-hint" id="paperless-sync-user-tags-hint"><?php p($l->t('One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.')); ?> <?php $help('tags-that-a-user-may-see', $l->t('Tags that a user may see')); ?></p>
 			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving, testing or disconnecting may ask for your password.')); ?></p>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {

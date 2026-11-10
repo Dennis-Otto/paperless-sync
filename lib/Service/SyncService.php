@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>}
+ * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>, userTags: UserTags}
  */
 final class SyncService {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -76,10 +76,12 @@ final class SyncService {
 		$report = new SyncReport($dryRun, $this->now(), unsavedSettings: $settings !== null);
 		$this->status->started($dryRun);
 		$config = null;
+		$separate = false;
 		try {
 			[$config, $connection] = $settings === null
 				? $this->configService->snapshot()
 				: [$settings, $this->configService->connection($settings)];
+			$separate = $this->separateArchives($config);
 			if (!$config->complete()) {
 				throw new InvalidSettingException('Paperless Sync is not completely configured.');
 			}
@@ -93,7 +95,7 @@ final class SyncService {
 				$this->configService->keepDefaultNames();
 				$this->storage->prepare($config);
 			}
-			if ($config->perUser()) {
+			if ($separate) {
 				$this->syncUsers($paperless, $config, $report, $author);
 			} else {
 				if ($config->inboxEnabled) {
@@ -114,8 +116,8 @@ final class SyncService {
 			throw $exception;
 		} finally {
 			// The activity stream of the target user shows what the run changed, also when it failed
-			// after its first changes; in per-user ownership, each user's shows what changed for them.
-			if ($config !== null && !$config->perUser()) {
+			// after its first changes; with the archive of each user, each user's shows what changed for them.
+			if ($config !== null && !$separate) {
 				$this->activity->publish($config, $report, $author);
 			}
 			// The administrators hear of a mirror that keeps failing, and the target user of the
@@ -147,6 +149,7 @@ final class SyncService {
 		// turned them off ends without an error in the log, and without taking the lock.
 		[$config, $connection] = $this->configService->snapshot();
 		$this->requireDocumentRuns($config);
+		$separate = $this->separateArchives($config);
 		$this->lock();
 		$report = new SyncReport(false, $this->now());
 		try {
@@ -158,7 +161,7 @@ final class SyncService {
 			// the report without a change says so (WebhookService::result()).
 			$paperless = $this->clients->connect($connection);
 			$document = $paperless->document($documentId, $config->writeMetadata, $config->sharedDocuments());
-			if ($document !== null && $config->perUser()) {
+			if ($document !== null && $separate) {
 				$this->syncUsers($paperless, $config->withBatchSize(1), $report, '', $document);
 			} elseif ($document !== null) {
 				$this->syncExports($paperless, $config->withBatchSize(1), $report, $document);
@@ -171,7 +174,7 @@ final class SyncService {
 			$this->logger->error('Paperless synchronization of document {document} failed', ['document' => $documentId, 'exception' => $exception]);
 			throw $exception;
 		} finally {
-			if (!$config->perUser()) {
+			if (!$separate) {
 				$this->activity->publish($config, $report);
 			}
 			$this->lockingProvider->releaseLock(AppConstants::LOCK_PATH, ILockingProvider::LOCK_EXCLUSIVE);
@@ -219,8 +222,8 @@ final class SyncService {
 			if ($config->targetUser === '') {
 				throw new InvalidSettingException('Paperless Sync is not completely configured.');
 			}
-			// In per-user ownership, the copies of every user whose archive has any.
-			$users = $config->perUser() ? array_values(array_unique([$config->targetUser, ...$this->state->exportOwners()])) : [$config->targetUser];
+			// With the archive of each user, the copies of every user whose archive has any.
+			$users = $this->separateArchives($config) ? array_values(array_unique([$config->targetUser, ...$this->state->exportOwners()])) : [$config->targetUser];
 			$forgotten = [];
 			foreach ($users as $user) {
 				$entries = $documentIds === null
@@ -304,6 +307,8 @@ final class SyncService {
 		[$users, $customFields, $writesMetadata] = $this->templateLists($paperless, $config, $writesMetadata ? $report : null, $users, $storagePathList['templates']);
 		$storagePaths = $this->pathTemplate->storagePaths($config, $storagePathList['names'], $storagePathList['templates'], $customFields);
 		$filter = new ExportFilter($config, $tags);
+		$userTags = UserTags::of($config);
+		$userTags->requireKnown($tags['names']);
 		$report->activeDocuments = count($documentScan->documents);
 		$report->trashedDocuments = count($trashScan->documents);
 		$this->noticeOfUnsupportedStoragePaths($report, $storagePaths->unsupported(array_values(array_filter(
@@ -325,6 +330,7 @@ final class SyncService {
 				? fn (SyncConfig $archive, SyncReport $archiveReport, string $archiveRoot): ?MetadataSidecars => $this->sidecars($archive, $archiveReport, $archiveRoot, $correspondents, $documentTypes, $storagePaths->names, $tags['names'], $customFields)
 				: null,
 			'tagNames' => $tags['names'],
+			'userTags' => $userTags,
 		];
 	}
 
@@ -390,20 +396,30 @@ final class SyncService {
 	 * folder, is an error of the run, and the documents that it would get stay where their copies
 	 * are until a run reaches it. So does a document whose owner Paperless didn't list.
 	 *
+	 * A user with tags gets every document with one of their tags, also in single ownership, in
+	 * which the target user gets every document: an archive without an inbox, unless they get the
+	 * documents of their user of Paperless too. The run also reaches the archives that the tags
+	 * filled before, so that the copies of a user leave once their line has gone.
+	 *
 	 * @param array<string, mixed>|null $document the document of a run of one document, which reaches only the archives that get it or have a copy of it
 	 */
 	private function syncUsers(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, string $author, ?array $document = null): void {
-		[$owners, $users] = $this->owners($paperless, $config);
+		[$owners, $users] = $config->perUser() ? $this->owners($paperless, $config) : [new Owners($config->targetUser, [], single: true), null];
 		$getting = $owners->users();
+		$tagged = UserTags::of($config)->users();
+		$receiving = array_values(array_unique([...$getting, ...$tagged]));
+		// Per-user ownership reaches every archive with copies, single ownership those that the tags filled.
+		$former = $config->perUser() ? $this->state->exportOwners() : array_intersect($this->state->exportOwners(), $this->configService->tagArchives());
 		$documentId = $document !== null && is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
-		$readers = $document !== null ? self::archivesOf($owners, $config, $document)['users'] : [];
+		// The tags of the document decide whether a user with tags gets it, which the run reads later.
+		$readers = $document !== null ? [...self::archivesOf($owners, $config, $document)['users'], ...$tagged] : [];
 		/** @var array<string, SyncConfig> $archives the archives that the run reaches, by the IDs of their users */
 		$archives = [];
 		/** @var array<string, SyncReport> $reports */
 		$reports = [];
 		try {
-			foreach ([...$getting, ...array_diff($this->state->exportOwners(), $getting)] as $user) {
-				$gets = in_array($user, $getting, true);
+			foreach ([...$receiving, ...array_diff($former, $receiving)] as $user) {
+				$gets = in_array($user, $receiving, true);
 				// A user who is gone took their files along, and a run of one document reaches only
 				// the archives that get it or have a copy of it.
 				if ((!$gets && !$this->ownerMapping->exists($user))
@@ -411,7 +427,7 @@ final class SyncService {
 					continue;
 				}
 				$reports[$user] = new SyncReport($report->dryRun, $report->startedAt);
-				$archive = $config->withTargetUser($user);
+				$archive = $config->withTargetUser($user, in_array($user, $getting, true));
 				try {
 					// The run tested and prepared the folders of the target user already.
 					if ($user !== $config->targetUser) {
@@ -436,6 +452,9 @@ final class SyncService {
 					$report->error(new RunError('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'));
 				} else {
 					$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports, $held);
+					if ($document === null && !$report->dryRun) {
+						$this->keepTagArchives($config, $tagged);
+					}
 				}
 			}
 		} finally {
@@ -474,7 +493,7 @@ final class SyncService {
 			$route = match (true) {
 				$documentId <= 0 => ['users' => [$config->targetUser], 'known' => true],
 				is_numeric($document['owner'] ?? null) && (int)$document['owner'] === $held => ['users' => [], 'known' => false],
-				default => self::archivesOf($owners, $config, $document),
+				default => self::withTags(self::archivesOf($owners, $config, $document), $read['userTags'], $config->targetUser, $document, $read['tagNames']),
 			};
 			if ($route['users'] !== [] && !$route['known']) {
 				++$unknown;
@@ -577,12 +596,64 @@ final class SyncService {
 	/**
 	 * The user of Nextcloud whose archive gets a document, as Owners::userOf() says, or null when
 	 * Paperless named no owner field at all, so that the run holds the document rather than give it
-	 * to the target user.
+	 * to the target user; in single ownership, the target user, whoever owns it.
 	 *
 	 * @param array<string, mixed> $document
 	 */
 	private static function ownerOf(Owners $owners, array $document): ?string {
-		return array_key_exists('owner', $document) ? $owners->userOf($document['owner']) : null;
+		return $owners->single || array_key_exists('owner', $document) ? $owners->userOf($document['owner'] ?? null) : null;
+	}
+
+	/**
+	 * The archives of a document with the tags of the users: a user with tags gets it when it has
+	 * one of their tags, whoever owns it or may view it, and else not, also when they own it, so
+	 * that the target user, who has no tags, takes it then, as one whose owner has no user of
+	 * Nextcloud. A document that the run holds stays where its copies are.
+	 *
+	 * @param array{users: list<string>, known: bool} $route
+	 * @param array<string, mixed> $document
+	 * @param array<string, string> $tagNames the names of the tags of Paperless, by their IDs
+	 * @return array{users: list<string>, known: bool}
+	 */
+	private static function withTags(array $route, UserTags $tags, string $targetUser, array $document, array $tagNames): array {
+		if ($route['users'] === []) {
+			return $route;
+		}
+		$users = array_filter($route['users'], static fn (string $user): bool => !$tags->restricts($user));
+		if (!$tags->allows($route['users'][0], $document, $tagNames)) {
+			$users[] = $targetUser;
+		}
+		foreach ($tags->users() as $user) {
+			if ($tags->allows($user, $document, $tagNames)) {
+				$users[] = $user;
+			}
+		}
+
+		return ['users' => array_values(array_unique($users)), 'known' => $route['known']];
+	}
+
+	/**
+	 * Keeps the users whose archives the tags filled, after a run that reached every archive: those
+	 * with tags now, and in single ownership also those whose copies are still there, such as when
+	 * Nextcloud couldn't reach their archive, so that a later run takes them. Per-user ownership
+	 * reaches every archive with copies anyway.
+	 *
+	 * @param list<string> $tagged the users with tags
+	 */
+	private function keepTagArchives(SyncConfig $config, array $tagged): void {
+		$before = $this->configService->tagArchives();
+		$kept = array_values(array_unique($config->perUser() ? $tagged : [...$tagged, ...array_intersect($before, $this->state->exportOwners())]));
+		if ($kept !== $before) {
+			$this->configService->keepTagArchives($kept);
+		}
+	}
+
+	/**
+	 * Whether a run goes through the archive of each user: in per-user ownership, and with users
+	 * who get the documents with their tags, or got them, until their copies are gone.
+	 */
+	private function separateArchives(SyncConfig $config): bool {
+		return $config->perUser() || UserTags::of($config)->users() !== [] || $this->configService->tagArchives() !== [];
 	}
 
 	/**

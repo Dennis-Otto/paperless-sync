@@ -121,6 +121,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 ### Archiv
 
 - Ein Ordnerbaum in den Dateien des eingestellten Nextcloud-Benutzers, oder [jedes Benutzers, mit den Dokumenten, die ihm in Paperless gehören](#eigentum-je-benutzer) und, wenn du es wählst, [denen, die Paperless mit ihm teilt](#dokumente-die-paperless-teilt), nach Korrespondent, Dokumenttyp und Jahr, aus einer [Pfadvorlage](#variablen-der-pfadvorlage), die du ändern kannst, mit Basis-, Archiv-, Eingangs-, Fehler- und Gelöscht-Ordnern deiner Wahl
+- [Tags, die ein Benutzer sehen darf](#tags-die-ein-benutzer-sehen-darf): Der Administrator gibt einigen Benutzern nur die Dokumente mit ihren Tags von Paperless, in einem eigenen Archiv, auch wenn der Zielbenutzer jedes Dokument erhält, und Paperless Unified Search zeigt ihnen dasselbe
 - Variablen mit den Namen, die Paperless-ngx für seine eigenen Dateinamen verwendet, etwa die Archivseriennummer, der Eigentümer, die Tags, der Name des Monats und benutzerdefinierte Felder, und eine Vorschau unter der Vorlage, die schon beim Tippen zeigt, wohin die neuesten Dokumente kommen, bevor du speicherst
 - Auf Wunsch kommt jedes Dokument [dorthin, wo sein Speicherpfad es in Paperless ablegt](#speicherpfade-von-paperless), also sind die Ordner deiner Speicherpfade auch die des Archivs
 - Das Archiv-PDF jedes Dokuments oder seine Originaldatei
@@ -494,6 +495,21 @@ Paperless hat eigene Berechtigungen: Der Eigentümer eines Dokuments kann andere
 - **Was es braucht.** Das Konto des Tokens braucht auch *Anzeigen* für Gruppen und *Anzeigen* für UI-Einstellungen, das jede Einrichtung ihm gibt und das seine ID nennt: Ohne eines davon schlägt ein Lauf fehl, bevor sich eine Kopie ändert. Nur diese Option fragt Paperless nach den Berechtigungen der Dokumente, was Paperless für jedes Dokument mehr Arbeit macht.
 
 Die Verbindungs-Checkliste zeigt, wer auch wie viele Dokumente aus dem Archiv von wem erhält und wer Dokumente anderer ansehen darf, ohne eine Kopie zu erhalten; dafür liest sie bei jedem Test einmal alle Dokumente.
+
+<a id="tags-that-a-user-may-see"></a>
+
+#### Tags, die ein Benutzer sehen darf
+
+Nicht jeder in einem Haushalt soll jedes Dokument sehen. Mit **Tags, die ein Benutzer sehen darf** in *1 · Verbindung und Eigentümer* gibt der Administrator einigen Benutzern von Nextcloud die Tags von Paperless, deren Dokumente sie sehen dürfen, einen Benutzer pro Zeile, etwa `katja = Katja, Haushalt` ([Entscheidung 0038](https://dennis-otto.github.io/paperless-sync/decisions/0038-each-user-may-see-the-documents-with-their-tags.html)). Das geht mit jeder Wahl von *Wer die Dokumente erhält*.
+
+- **Keine Zeile, jedes Dokument, wie bisher.** Ein Benutzer ohne Zeile, oder mit einer Zeile ohne Tags, sieht, was er bisher sah, ebenso der Zielbenutzer, der immer jedes Dokument erhält: Das Speichern lehnt eine Zeile für den Zielbenutzer ab, einen Benutzer zweimal und einen Benutzer, den Nextcloud nicht hat.
+- **Eine Zeile, nur die Dokumente mit einem ihrer Tags.** Ein solcher Benutzer erhält jedes Dokument, das mindestens einen seiner Tags hat, unabhängig von der Groß- und Kleinschreibung der Namen, in einem eigenen Archiv unter demselben Basisordner seiner Dateien, ohne Eingang, außer er erhält auch die Dokumente seines Benutzers von Paperless; gleich, wem das Dokument in Paperless gehört oder wer es ansehen darf. Andere Dokumente erhält er nicht: auch keines, das seinem Benutzer von Paperless gehört oder das dieser ansehen darf, ohne einen der Tags, das dann der Zielbenutzer erhält, wie eines, dessen Eigentümer keinen Benutzer von Nextcloud hat. Die Tags des Archivs, *Ausgeschlossene Tags* und *Nur Dokumente mit diesen Tags spiegeln*, lassen ein Dokument weiterhin aus.
+- **Eine eigene Kopie.** Jede Kopie zählt zum Kontingent ihres Benutzers, mit eigenen Freigaben, Versionen und eigener Suche, wie die Kopien der [Dokumente, die Paperless teilt](#documents-that-paperless-shares).
+- **Eine Kopie folgt den Tags.** Ein Tag, den ein Dokument in Paperless erhält, gibt es mit dem nächsten Lauf den Benutzern mit diesem Tag, mit dem Webhook innerhalb von Sekunden. Verliert ein Dokument den letzten ihrer Tags, verschwindet ein Tag aus ihrer Zeile oder ihre ganze Zeile, nimmt der nächste Lauf ihre Kopie weg, in ihren Papierkorb; ein Lauf erreicht das Archiv eines Benutzers, dessen Zeile weg ist, bis jede Kopie gegangen ist.
+- **Ein Tag, den Paperless nicht hat, hält die Läufe an.** Nach einem Tippfehler oder einer Umbenennung in Paperless würde ein Lauf die Kopien der Dokumente wegnehmen, die ein Benutzer sehen darf, also hält er vorher an und nennt den Tag.
+- **Paperless Unified Search zeigt ihnen dasselbe.** Es liest dieselben Zeilen und zeigt einem solchen Benutzer nur die Dokumente mit einem seiner Tags, in der Suche, im Dashboard und in seinen Benachrichtigungen. Ohne Paperless Sync hat Unified Search keine Zeilen und zeigt jedem Benutzer, was es bisher zeigte.
+
+Ein Testlauf listet jede Änderung mit ihrem Benutzer, starte also nach einer Änderung der Zeilen einen: Der Testlauf ungespeicherter Zeilen verlangt zuerst ein Speichern, denn sie entscheiden, wessen Archive ein Lauf liest.
 
 ### Ordnernamen
 

@@ -722,7 +722,14 @@
 		"_The last run of Paperless Sync completed with errors: %s_::_The last %n runs of Paperless Sync completed with errors, the last one with: %s_": [
 			"De laatste run van Paperless Sync is met fouten geëindigd: %s",
 			"De laatste %n runs van Paperless Sync zijn met fouten geëindigd, de laatste met: %s"
-		]
+		],
+		"Tags that a user may see": "Labels die een gebruiker mag zien",
+		"One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.": "Eén per regel: de gebruikers-ID van Nextcloud, een isgelijkteken en de labels van Paperless, gescheiden door komma’s. Zo’n gebruiker krijgt elk document met minstens één van zijn labels in een eigen archief, van wie het ook is, dat meetelt voor zijn quotum, en geen ander document; Paperless Unified Search toont hem hetzelfde. Een gebruiker zonder regel ziet wat hij nu ziet, en de doelgebruiker krijgt altijd elk document.",
+		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "“Labels die een gebruiker mag zien”, regel %s: schrijf de gebruikers-ID van Nextcloud, een isgelijkteken en de labels van Paperless, gescheiden door komma’s, zoals katja = Katja, Household.",
+		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "“Labels die een gebruiker mag zien”, regel %1$s: Nextcloud heeft geen gebruiker met de ID %2$s.",
+		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "“Labels die een gebruiker mag zien”, regel %1$s: de gebruiker %2$s heeft al een regel.",
+		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "“Labels die een gebruiker mag zien”, regel %1$s: %2$s is de doelgebruiker, die elk document krijgt.",
+		"Paperless has no tag named %s, which \"Tags that a user may see\" names; a run would take from a user the copies of the documents that they may see.": "Paperless heeft geen label met de naam %s, dat “Labels die een gebruiker mag zien” noemt; een run zou een gebruiker de kopieën afnemen van de documenten die hij mag zien."
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

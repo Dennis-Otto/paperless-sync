@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-11-01
 - Amends [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md): besides the owner, a new option gives a document to every mapped user who may view it in Paperless
+- Amended by [0038](0038-each-user-may-see-the-documents-with-their-tags.md): for a user with tags, the tags decide which documents they get
 
 ## Context
 

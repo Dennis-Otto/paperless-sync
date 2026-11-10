@@ -126,6 +126,18 @@ final class FolderInfoTest extends TestCase {
 		], $this->folderInfo->of('alice')['folders']);
 	}
 
+	/** A user with tags has the archive of their own files, which the runs look after, also in single ownership. */
+	public function testAUserWithTagsHasTheArchiveOfTheirOwnFiles(): void {
+		$this->usersOfNextcloud[] = 'alice';
+		$this->configService->save(['user_tags' => 'alice = Household'] + self::validSettings());
+		$this->storage->writeText('alice', self::ARCHIVE . '/file.pdf', '%PDF');
+
+		self::assertSame([
+			['kind' => FolderInfo::ARCHIVE, 'id' => $this->storage->findFileId('alice', self::ARCHIVE), 'path' => self::ARCHIVE],
+		], $this->folderInfo->of('alice')['folders']);
+		self::assertSame([], $this->folderInfo->of('bob')['folders']);
+	}
+
 	/** An archive that no run writes is no mirror, and an inbox that no run reads sends nothing. */
 	public function testAModuleThatIsOffHasNoNoteAndTheFailedImportsStay(): void {
 		$this->foldersOf(self::TARGET);

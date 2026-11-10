@@ -110,7 +110,7 @@ LOCK = threading.Lock()
 STATE = {}
 SCENARIOS = {
     "active", "renamed", "tagged", "excluded", "trash", "incomplete", "restored", "conflict", "vanished", "empty", "archive", "names",
-    "per-user", "storage-path", "storage-path-logic",
+    "per-user", "storage-path", "storage-path-logic", "user-tags",
 }
 # The storage paths of Paperless in the scenarios storage-path and storage-path-logic, in which P123
 # has the first or the second: one with a template that the app follows, and one with logic of
@@ -476,6 +476,9 @@ def scenario_documents():
             letter["owner"] = owner
             sent.append(letter)
         return [document(), other, *sent], []
+    if scenario == "user-tags":
+        # The tags that a user may see: P123 with the tag insurance, and P124 without a tag.
+        return [document(tags=[11]), statement()], []
     raise ValueError(f"Unknown scenario: {scenario}")
 
 

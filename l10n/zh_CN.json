@@ -687,7 +687,14 @@
 			"归档无法遵循 Paperless 的保存路径 {names}：其模板使用了 Jinja 逻辑、过滤器或路径模板不认识的变量，或 Paperless 中没有的自定义字段，或应用的账户看不到它，因此其文档会放到归档路径模板指定的位置。"
 		],
 		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless 未列出其用户，而归档所遵循的保存路径中的 {{ owner_username }} 需要用户列表；API 令牌所属的用户需要查看用户的权限：%s",
-		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自定义字段，而归档所遵循的保存路径使用了自定义字段；API 令牌所属的用户需要查看自定义字段的权限：%s"
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自定义字段，而归档所遵循的保存路径使用了自定义字段；API 令牌所属的用户需要查看自定义字段的权限：%s",
+		"Tags that a user may see": "用户可查看的标签",
+		"One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.": "每行一个：Nextcloud 用户 ID、等号和以逗号分隔的 Paperless 标签。这样的用户会在自己的归档中获得至少带有其一个标签的每个文档，无论文档归谁所有，这些副本计入其配额，且不会获得其他文档；Paperless Unified Search 向其显示的内容相同。没有对应行的用户看到的内容与现在相同，目标用户始终获得每个文档。",
+		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "“用户可查看的标签”第 %s 行：请写入 Nextcloud 用户 ID、等号和以逗号分隔的 Paperless 标签，例如 katja = Katja, Household。",
+		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "“用户可查看的标签”第 %1$s 行：Nextcloud 中没有 ID 为 %2$s 的用户。",
+		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "“用户可查看的标签”第 %1$s 行：用户 %2$s 已有一行。",
+		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "“用户可查看的标签”第 %1$s 行：%2$s 是目标用户，会获得每个文档。",
+		"Paperless has no tag named %s, which \"Tags that a user may see\" names; a run would take from a user the copies of the documents that they may see.": "Paperless 中没有名为 %s 的标签，但“用户可查看的标签”中列出了它；运行会拿走用户可查看的文档的副本。"
 	},
 	"pluralForm": "nplurals=1; plural=0;"
 }

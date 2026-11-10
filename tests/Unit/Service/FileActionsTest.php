@@ -213,6 +213,15 @@ final class FileActionsTest extends TestCase {
 		self::assertSame(1, $this->send([$other])['queued']);
 	}
 
+	/** The archive of a user with tags is the app's as well, in single ownership too, so a click on a copy there is refused. */
+	public function testTheArchiveOfAUserWithTagsIsTheFolderOfTheApp(): void {
+		$this->usersOfNextcloud[] = self::SENDER;
+		$this->configService->save(['send_group' => 'scanners', 'batch_size' => 3, 'user_tags' => self::SENDER . ' = Household'] + self::validSettings());
+		$copy = $this->file('Documents/Paperless/Archive/2026/letter [P1].pdf');
+
+		self::assertSame(FileActions::REFUSED_APP_FOLDER, $this->send([$copy])['refused']);
+	}
+
 	/** A rule of Flow skips the files of the inbox of a user in per-user ownership, which the run of their inbox uploads already. */
 	public function testARuleSkipsTheFilesOfTheInboxOfAUserInPerUserOwnership(): void {
 		$this->configService->save(['send_group' => 'scanners', 'batch_size' => 3, 'ownership' => SyncConfig::PER_USER] + self::validSettings());

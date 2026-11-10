@@ -47,20 +47,9 @@ final class ExportFilter {
 		}
 	}
 
-	/**
-	 * @param array<string, mixed> $document
-	 * @psalm-suppress MixedAssignment
-	 */
+	/** @param array<string, mixed> $document */
 	public function excludes(array $document): bool {
-		$documentTags = [];
-		$rawTags = $document['tags'] ?? null;
-		foreach (is_array($rawTags) ? $rawTags : [] as $tag) {
-			if (is_scalar($tag)) {
-				$documentTags[] = (string)$tag;
-			} elseif (is_array($tag) && isset($tag['id']) && is_scalar($tag['id'])) {
-				$documentTags[] = (string)$tag['id'];
-			}
-		}
+		$documentTags = self::tagIds($document);
 		if ($this->config->skipInbox && array_intersect($documentTags, $this->tags['inbox']) !== []) {
 			return true;
 		}
@@ -75,6 +64,27 @@ final class ExportFilter {
 		}
 
 		return $this->includedNames !== [] && array_intersect($names, $this->includedNames) === [];
+	}
+
+	/**
+	 * The IDs of the tags of a document, as Paperless lists them, by their IDs or as objects with one.
+	 *
+	 * @param array<string, mixed> $document
+	 * @return list<string>
+	 * @psalm-suppress MixedAssignment
+	 */
+	public static function tagIds(array $document): array {
+		$ids = [];
+		$rawTags = $document['tags'] ?? null;
+		foreach (is_array($rawTags) ? $rawTags : [] as $tag) {
+			if (is_scalar($tag)) {
+				$ids[] = (string)$tag;
+			} elseif (is_array($tag) && isset($tag['id']) && is_scalar($tag['id'])) {
+				$ids[] = (string)$tag['id'];
+			}
+		}
+
+		return $ids;
 	}
 
 	/**

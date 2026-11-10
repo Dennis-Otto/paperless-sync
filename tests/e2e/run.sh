@@ -845,6 +845,7 @@ SCENARIOS=(
 	'failing-mirror: unreachable'
 	'per-user: conflicts'
 	'shared: per-user'
+	'user-tags: shared'
 	'languages: connection'
 )
 # The checks in the browser of the scenario browser, in the order of a full run, with the
@@ -2250,6 +2251,28 @@ print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if 
 	mock_state > "${TMP_DIR}/mock-shared-scans.json"
 	assert_json mock-shared-scans "${TMP_DIR}/mock-shared-scans.json"
 	save_settings "${TMP_DIR}/single-settings.json" ownership=single
+}
+
+# The tags that a user may see, in single ownership: e2e-other, whose line names the tag insurance
+# of P123 in another case, gets a copy of P123 beside the target user, and loses P124, which their
+# archive kept from the scenario shared, as they may see no document without one of their tags;
+# once their line is gone, the next run takes P123 from their files as well, into their trash bin.
+scenario_user_tags() {
+	control /control/scenario/user-tags
+	save_settings "${TMP_DIR}/user-tags-settings.json" 'user_tags=E2E-Other = Insurance'
+	trash_names e2e-other > "${TMP_DIR}/trash-before-user-tags.txt"
+	sync_run false "${TMP_DIR}/user-tags.json"
+	# The run exports P123 alone into the files of e2e-other, and nothing else of theirs.
+	per_user_files export "${TMP_DIR}/user-tags.json" | grep '^e2e-other ' > "${TMP_DIR}/user-tags-exports.txt"
+	printf 'e2e-other %s\n' "${INITIAL_PATH}" | cmp - "${TMP_DIR}/user-tags-exports.txt"
+	assert_dav_file e2e-other "${INITIAL_PATH}" 'Synthetic Paperless archive document'
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document'
+	assert_dav_missing e2e-other "${STATEMENT_PATH}"
+	save_settings "${TMP_DIR}/user-tags-removed-settings.json" 'user_tags='
+	sync_run false "${TMP_DIR}/user-tags-removed.json"
+	assert_dav_missing e2e-other "${INITIAL_PATH}"
+	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document'
+	assert_trashed e2e-other '2026-08-26 - Monthly invoice [P123].pdf' "${TMP_DIR}/trash-before-user-tags.txt"
 }
 
 # Nextcloud in French, as a new installation sees it: its default language, an administrator

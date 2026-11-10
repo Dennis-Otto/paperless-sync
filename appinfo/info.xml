@@ -19,6 +19,7 @@ Paperless Sync mirrors finalized Paperless-ngx documents into a readable Nextclo
 - Builds the folders from correspondent, document type, date, title, and document ID, with a path template that shows where the newest documents go while you type, or follows the storage paths of Paperless
 - Exports archive PDFs or original files, and moves or renames a copy when its metadata changes in Paperless: it stays the same file, with its shares, comments, and versions
 - Gives each Nextcloud user the documents they own in Paperless, and if you choose those that it shares with them, through the one connection of the administrator (optional per-user ownership)
+- Lets the administrator give some users only the documents with their tags of Paperless, in an archive of their own, while everyone else sees what they saw before
 - Waits for documents in the Paperless inbox until they are finalized, leaves out those with a tag that you exclude, or mirrors only the documents with the tags that you choose
 - Shows the tags of Paperless as Nextcloud tags on the copies, so that Files filters and searches the archive by them
 - Writes metadata next to the archive if you like: a JSON sidecar for each document, with its tags, notes, and custom fields, and an index.csv of the whole archive
@@ -66,6 +67,7 @@ Paperless Sync spiegelt fertig bearbeitete Paperless-ngx-Dokumente in eine lesba
 - Erstellt die Ordner aus Korrespondent, Dokumenttyp, Datum, Titel und Dokument-ID, mit einer Pfadvorlage, die schon beim Tippen zeigt, wohin die neuesten Dokumente kommen, oder folgt den Speicherpfaden von Paperless
 - Exportiert Archiv-PDFs oder Originaldateien und verschiebt oder benennt eine Kopie um, wenn sich ihre Metadaten in Paperless ändern: Sie bleibt dieselbe Datei, mit ihren Freigaben, Kommentaren und Versionen
 - Gibt jedem Nextcloud-Benutzer die Dokumente, die ihm in Paperless gehören, und auf Wunsch die, die Paperless mit ihm teilt, über die eine Verbindung des Administrators (optionales Eigentum je Benutzer)
+- Lässt den Administrator einigen Benutzern nur die Dokumente mit ihren Tags von Paperless geben, in einem eigenen Archiv, während alle anderen sehen, was sie bisher sahen
 - Lässt Dokumente im Paperless-Posteingang warten, bis sie fertig sind, lässt die mit einem ausgeschlossenen Tag weg oder spiegelt nur die Dokumente mit den Tags, die du wählst
 - Zeigt die Tags von Paperless als Nextcloud-Tags an den Kopien, sodass Dateien das Archiv nach ihnen filtert und durchsucht
 - Schreibt auf Wunsch Metadaten neben das Archiv: eine JSON-Datei je Dokument, mit seinen Tags, Notizen und benutzerdefinierten Feldern, und eine index.csv des ganzen Archivs
@@ -115,6 +117,7 @@ Paperless Sync refleja los documentos finalizados de Paperless-ngx en una estruc
 - Crea las carpetas a partir del interlocutor, el tipo de documento, la fecha, el título y el ID del documento, con una plantilla de ruta que muestra mientras escribes adónde van los documentos más recientes, o sigue las rutas de almacenamiento de Paperless
 - Exporta los PDF de archivo o los ficheros originales, y mueve o cambia el nombre de una copia cuando cambian sus metadatos en Paperless: sigue siendo el mismo fichero, con sus recursos compartidos, comentarios y versiones
 - Da a cada usuario de Nextcloud los documentos que posee en Paperless y, si quieres, los que comparte con él, mediante la única conexión del administrador (propiedad por usuario opcional)
+- Permite al administrador dar a algunos usuarios solo los documentos con sus etiquetas de Paperless, en un archivo propio, mientras los demás ven lo que veían antes
 - Espera a que los documentos de la bandeja de entrada de Paperless estén finalizados, deja fuera los que tienen una etiqueta que excluyes o refleja solo los documentos con las etiquetas que eliges
 - Muestra las etiquetas de Paperless como etiquetas de Nextcloud en las copias, para que Archivos filtre y busque el archivo por ellas
 - Escribe, si quieres, metadatos junto al archivo: un fichero JSON por documento, con sus etiquetas, notas y campos personalizados, y un index.csv de todo el archivo
@@ -164,6 +167,7 @@ Paperless Sync reflète les documents finalisés de Paperless-ngx dans une arbor
 - Construit les dossiers à partir du correspondant, du type de document, de la date, du titre et de l’identifiant du document, avec un modèle de chemin qui montre pendant la saisie où vont les documents les plus récents, ou suit les chemins de stockage de Paperless
 - Exporte les PDF d’archive ou les fichiers originaux, et déplace ou renomme une copie quand ses métadonnées changent dans Paperless : elle reste le même fichier, avec ses partages, ses commentaires et ses versions
 - Donne à chaque utilisateur de Nextcloud les documents qu’il possède dans Paperless et, si vous le souhaitez, ceux que Paperless partage avec lui, par l’unique connexion de l’administrateur (propriété par utilisateur facultative)
+- Permet à l’administrateur de ne donner à certains utilisateurs que les documents portant leurs étiquettes de Paperless, dans une archive à eux, tandis que les autres voient ce qu’ils voyaient avant
 - Fait attendre les documents de la boîte de réception de Paperless jusqu’à leur finalisation, laisse de côté ceux qui portent une étiquette que vous excluez, ou ne reflète que les documents portant les étiquettes de votre choix
 - Affiche les étiquettes de Paperless comme étiquettes de Nextcloud sur les copies, pour que Fichiers filtre et recherche l’archive par elles
 - Écrit, si vous le souhaitez, les métadonnées à côté de l’archive : un fichier JSON par document, avec ses étiquettes, ses notes et ses champs personnalisés, et un index.csv de toute l’archive
@@ -213,6 +217,7 @@ Paperless Sync 将 Paperless-ngx 中已定稿的文档镜像到 Nextcloud 中清
 - 根据往来方、文档类型、日期、标题和文档 ID 构建文件夹，路径模板会在您输入时显示最新文档的去向；也可以沿用 Paperless 的保存路径
 - 导出归档 PDF 或原始文件；Paperless 中的元数据变化时移动或重命名副本，副本仍是同一个文件，其共享、评论和版本都会保留
 - 通过管理员的同一个连接，为每个 Nextcloud 用户提供其在 Paperless 中拥有的文档，并可选择同时提供 Paperless 与其共享的文档（可选的按用户分配所有权）
+- 管理员可让某些用户只获得带有其 Paperless 标签的文档，放在其自己的归档中，其他人看到的内容与以前相同
 - Paperless 收件箱中的文档会等到定稿后再镜像；带有您所排除标签的文档不会镜像，也可以仅镜像带有您所选标签的文档
 - 将 Paperless 标签显示为副本上的 Nextcloud 标签，便于在“文件”中按标签筛选和搜索归档
 - 可选：在归档旁写入元数据，每个文档一个 JSON 文件，包含其标签、备注和自定义字段，并为整个归档生成一个 index.csv
@@ -262,6 +267,7 @@ Paperless Sync 將 Paperless-ngx 中已定稿的文件鏡像到 Nextcloud 中清
 - 依關聯方、文件類型、日期、標題和文件 ID 建立資料夾，路徑範本會在您輸入時顯示最新文件的去向；也可以沿用 Paperless 的儲存路徑
 - 匯出封存 PDF 或原始檔；Paperless 中的中繼資料變更時移動或重新命名副本，副本仍是同一個檔案，其分享、留言和版本都會保留
 - 透過管理員的同一個連線，為每個 Nextcloud 使用者提供其在 Paperless 中擁有的文件，並可選擇同時提供 Paperless 與其分享的文件（選用的按使用者分配所有權）
+- 管理員可讓某些使用者只取得帶有其 Paperless 標籤的文件，放在其自己的封存中，其他人看到的內容與以前相同
 - Paperless 收件匣中的文件會等到定稿後再鏡像；帶有您所排除標籤的文件不會鏡像，也可以僅鏡像帶有您所選標籤的文件
 - 將 Paperless 標籤顯示為副本上的 Nextcloud 標籤，方便在「檔案」中依標籤篩選和搜尋封存
 - 選用：在封存旁寫入中繼資料，每份文件一個 JSON 檔，包含其標籤、備註和自訂欄位，並為整個封存產生一個 index.csv
@@ -311,6 +317,7 @@ Paperless Sync spiegelt afgeronde Paperless-ngx-documenten naar een leesbare map
 - Bouwt de mappen op uit correspondent, documenttype, datum, titel en document-ID, met een padsjabloon dat tijdens het typen toont waar de nieuwste documenten terechtkomen, of volgt de opslagpaden van Paperless
 - Exporteert archief-pdf's of originele bestanden, en verplaatst of hernoemt een kopie wanneer de metadata in Paperless verandert: het blijft hetzelfde bestand, met zijn delingen, reacties en versies
 - Geeft elke Nextcloud-gebruiker de documenten die hij in Paperless bezit, en desgewenst ook die welke Paperless met hem deelt, via de ene verbinding van de beheerder (optioneel eigendom per gebruiker)
+- Laat de beheerder sommige gebruikers alleen de documenten met hun labels van Paperless geven, in een eigen archief, terwijl alle anderen zien wat ze eerder zagen
 - Wacht met documenten in de inbox van Paperless tot ze afgerond zijn, laat documenten met een uitgesloten label weg, of spiegelt alleen de documenten met de labels die je kiest
 - Toont de labels van Paperless als Nextcloud-labels op de kopieën, zodat Bestanden het archief erop filtert en doorzoekt
 - Schrijft desgewenst metadata naast het archief: een JSON-bestand per document, met zijn labels, notities en aangepaste velden, en een index.csv van het hele archief
