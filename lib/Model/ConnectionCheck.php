@@ -41,6 +41,10 @@ final class ConnectionCheck {
 	public const FOLDER = 'folder';
 	/** Which user of Nextcloud gets the documents of each user of Paperless, in per-user ownership. */
 	public const OWNERS = 'owners';
+	/** Whether Paperless has every tag that the lines of "Tags that a user may see" name. */
+	public const USER_TAGS = 'user_tags';
+	/** Whether a share of the target user shows a user with tags more than their tags. */
+	public const TAG_SHARES = 'tag_shares';
 
 	/**
 	 * @param self::PASSED|self::FAILED|self::WARNING $status
@@ -137,6 +141,8 @@ final class ConnectionCheck {
 			self::INBOX_TAGS => $l10n->t('Tags of the inbox'),
 			self::FOLDER => $l10n->t('Nextcloud folder'),
 			self::OWNERS => $l10n->t('Users of Paperless'),
+			self::USER_TAGS => $l10n->t('Tags that a user may see'),
+			self::TAG_SHARES => $l10n->t('Shares of the archive'),
 			default => $this->id,
 		};
 	}

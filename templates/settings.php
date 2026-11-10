@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, tagSharesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -103,6 +103,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-tags-url="<?php p($_['tagsUrl']); ?>"
 	data-users-url="<?php p($_['usersUrl']); ?>"
 	data-groups-url="<?php p($_['groupsUrl']); ?>"
+	data-tag-shares-url="<?php p($_['tagSharesUrl']); ?>"
 	data-webhook-url="<?php p($_['webhookStateUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
@@ -248,6 +249,54 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				</label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-ownership-hint"><?php p($l->t('With "Each user", every user of Nextcloud gets the documents that their user of Paperless owns, in the same folders below the base folder of their own files, and the files of their inbox become theirs in Paperless. The target user gets the documents without an owner and those whose owner has no user of Nextcloud, so that none is lost; the documents of two users of Paperless for one user of Nextcloud stay where they are until each has a user of its own, and the connection checklist shows who gets which. The account of the token needs to see the documents of every user.')); ?> <?php p($l->t('With "or may view", each also gets a copy of every document that their user of Paperless may view, by itself or through a group, which counts against their quota, and loses it when Paperless takes the permission away; the account of the token also needs View for Groups.')); ?> <?php $help('per-user-ownership', $l->t('Per-user ownership')); ?></p>
+			<!-- The tags of Paperless that some users of Nextcloud may see, in every choice of who gets the documents: a row for each user, which js/settings.js writes into the hidden setting as one line each, user = Tag, Tag. -->
+			<div class="paperless-sync-field paperless-sync-field--wide paperless-sync-user-tags">
+				<span id="paperless-sync-user-tags-label" class="paperless-sync-label"><?php p($l->t('Tags that a user may see')); ?></span>
+				<textarea data-setting="user_tags" hidden><?php p($config->userTags); ?></textarea>
+				<table id="paperless-sync-user-tags-table" class="paperless-sync-user-tags-table" aria-labelledby="paperless-sync-user-tags-label" aria-describedby="paperless-sync-user-tags-hint" hidden>
+					<thead>
+						<tr>
+							<th scope="col"><?php p($l->t('User of Nextcloud')); ?></th>
+							<th scope="col"><?php p($l->t('Tags of Paperless')); ?></th>
+							<th scope="col"><span class="paperless-sync-visually-hidden"><?php p($l->t('Remove this user')); ?></span></th>
+						</tr>
+					</thead>
+					<tbody id="paperless-sync-user-tags-rows"></tbody>
+				</table>
+				<template id="paperless-sync-user-tags-row">
+					<tr data-user-tags-row>
+						<td>
+							<div class="paperless-sync-combobox">
+								<input data-row-user type="text" role="combobox" aria-label="<?php p($l->t('User of Nextcloud')); ?>" aria-autocomplete="list" aria-expanded="false" autocomplete="off" autocapitalize="none" spellcheck="false">
+								<ul data-row-user-options class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Users of Nextcloud')); ?>" hidden></ul>
+							</div>
+							<p data-row-user-problem class="paperless-sync-field-hint" aria-live="polite"></p>
+						</td>
+						<td>
+							<div class="paperless-sync-tags" data-row-tags>
+								<input data-tags type="hidden" value="">
+								<ul data-part="list" class="paperless-sync-chips" aria-label="<?php p($l->t('Tags of Paperless')); ?>" hidden></ul>
+								<div class="paperless-sync-combobox">
+									<input type="text" placeholder="<?php p($l->t('Add a tag')); ?>" role="combobox" aria-label="<?php p($l->t('Tags of Paperless')); ?>" aria-autocomplete="list" aria-expanded="false" autocomplete="off" spellcheck="false">
+									<ul data-part="options" class="paperless-sync-options" role="listbox" aria-label="<?php p($l->t('Tags of Paperless')); ?>" hidden></ul>
+								</div>
+								<p data-part="status" class="paperless-sync-field-hint" aria-live="polite"></p>
+								<span data-part="announcement" class="paperless-sync-visually-hidden" aria-live="polite"></span>
+							</div>
+						</td>
+						<td><button data-row-remove type="button"><?php p($l->t('Remove this user')); ?></button></td>
+					</tr>
+				</template>
+				<div><button id="paperless-sync-user-tags-add" type="button" aria-describedby="paperless-sync-user-tags-hint"><?php p($l->t('Add a user')); ?></button></div>
+			</div>
+			<p class="settings-hint" id="paperless-sync-user-tags-hint"><?php p($l->t('A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.')); ?> <?php $help('tags-that-a-user-may-see', $l->t('Tags that a user may see')); ?></p>
+			<!-- The shares of the target user that still show a user with tags every document in them, which only a click removes. -->
+			<div id="paperless-sync-user-tags-shares" class="paperless-sync-user-tags-shares" hidden>
+				<p id="paperless-sync-user-tags-shares-text"><?php p($l->t('These shares of the target user show a user with tags every document in them, whatever their tags:')); ?></p>
+				<ul id="paperless-sync-user-tags-share-list" aria-labelledby="paperless-sync-user-tags-shares-text"></ul>
+				<button id="paperless-sync-user-tags-remove-shares" type="button" aria-describedby="paperless-sync-user-tags-shares-text"><?php p($l->t('Remove these shares')); ?></button>
+			</div>
+			<p id="paperless-sync-user-tags-shares-status" class="paperless-sync-field-hint" aria-live="polite"></p>
 			<p class="settings-hint" id="paperless-sync-token-hint"><?php p($l->t('Use a dedicated Paperless account. Grant document upload permission only when inbox import is enabled. The token is stored server-side and is never returned to the browser.')); ?> <?php p($l->t('A new Paperless URL needs the token again, and saving, testing or disconnecting may ask for your password.')); ?></p>
 			<div class="paperless-sync-switches">
 				<label><input data-setting="paperless_local_network" type="checkbox" aria-describedby="paperless-sync-local-network-hint" <?php if ($config->paperlessLocalNetwork) {

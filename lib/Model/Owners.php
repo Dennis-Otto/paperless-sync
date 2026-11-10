@@ -51,6 +51,7 @@ final class Owners {
 	 * @param list<string> $unmatched the users of Paperless that the table names but Paperless doesn't have
 	 * @param array<int, list<int>> $groups the IDs of the users of each group of Paperless, by its ID, when the run reads who may view a document
 	 * @param int|null $account the ID of the account of the app, which is no viewer, when the run reads who may view a document
+	 * @param bool $single whether the target user gets every document, whoever owns it, as in single ownership with users who get the documents with their tags
 	 */
 	public function __construct(
 		public readonly string $fallback,
@@ -58,6 +59,7 @@ final class Owners {
 		public readonly array $unmatched = [],
 		private array $groups = [],
 		private ?int $account = null,
+		public readonly bool $single = false,
 	) {
 		foreach ($routes as $id => $route) {
 			if ($route['user'] !== null) {
@@ -73,7 +75,7 @@ final class Owners {
 	 * another user of Paperless has as well, whose document the run holds.
 	 */
 	public function userOf(mixed $owner): ?string {
-		if ($owner === null) {
+		if ($owner === null || $this->single) {
 			return $this->fallback;
 		}
 		$id = is_int($owner) || (is_string($owner) && ctype_digit($owner)) ? (int)$owner : 0;

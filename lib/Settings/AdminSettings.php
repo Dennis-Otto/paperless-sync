@@ -84,6 +84,8 @@ final class AdminSettings implements IDelegatedSettings {
 			// groups, from routes of the app: those of Nextcloud answer only its administrators.
 			'usersUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.directory.users'),
 			'groupsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.directory.groups'),
+			// The shares that show a user with tags more than their tags, and their removal.
+			'tagSharesUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.tagshares.shares'),
 		]);
 	}
 

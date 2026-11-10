@@ -34,6 +34,8 @@ final class ConfigService {
 	public const MAXIMUM_INTERVAL_MINUTES = 1440;
 
 	private const TOKEN_IDENTIFIER = AppConstants::APP_ID . '.api-token';
+	/** The users whose archives the tags filled, see tagArchives(); no setting. */
+	private const TAG_ARCHIVES_KEY = 'tag_archives';
 
 	private const DEFAULTS = [
 		'paperless_url' => '',
@@ -68,6 +70,7 @@ final class ConfigService {
 		'user_map' => '',
 		'user_group' => '',
 		'follow_storage_paths' => false,
+		'user_tags' => '',
 	];
 
 	/**
@@ -247,6 +250,11 @@ final class ConfigService {
 				OwnerMapping::parse(is_scalar($value) ? (string)$value : '', false),
 			)),
 			'user_group' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
+			// The tags of a user decide which archives a run reaches, and what each gets.
+			'user_tags' => static fn (mixed $value): string => implode("\n", array_map(
+				static fn (array $line): string => mb_strtolower($line['user']) . ' = ' . mb_strtolower(implode(', ', $line['tags'])),
+				array_values(array_filter(UserTags::parse(is_scalar($value) ? (string)$value : '', false), static fn (array $line): bool => $line['tags'] !== [])),
+			)),
 		];
 		foreach ($same as $key => $normalize) {
 			if (array_key_exists($key, $settings) && $normalize($settings[$key]) !== $normalize($saved[$key])) {
@@ -276,7 +284,7 @@ final class ConfigService {
 			'inbox_create_tags' => 'inboxCreateTags', 'conflict_mode' => 'conflictMode', 'webhook_immediate' => 'webhookImmediate',
 			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup', 'nextcloud_tags' => 'nextcloudTags',
 			'ownership' => 'ownership', 'user_map' => 'userMap', 'user_group' => 'userGroup', 'follow_storage_paths' => 'followStoragePaths',
-			'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
+			'user_tags' => 'userTags', 'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
 			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
 		];
 
@@ -504,6 +512,7 @@ final class ConfigService {
 		if ($values['ownership'] !== SyncConfig::SINGLE && $values['user_group'] !== '' && !$this->groupManager->groupExists($values['user_group'])) {
 			throw new InvalidSettingException('Nextcloud group %s does not exist.', [$values['user_group']], 'user_group');
 		}
+		$values['user_tags'] = $this->normalizeUserTags((string)$values['user_tags'], $values['target_user']);
 		// The numbers, by the labels of the settings page, which their messages name.
 		$values['sync_interval_minutes'] = self::within((int)$values['sync_interval_minutes'], self::MINIMUM_INTERVAL_MINUTES, self::MAXIMUM_INTERVAL_MINUTES)
 			?? throw new InvalidSettingException('"Interval in minutes" must be between %1$s and %2$s.', [(string)self::MINIMUM_INTERVAL_MINUTES, (string)self::MAXIMUM_INTERVAL_MINUTES], 'sync_interval_minutes');
@@ -551,6 +560,57 @@ final class ConfigService {
 		return implode("\n", $lines);
 	}
 
+	/**
+	 * The tags that some users of Nextcloud may see, one line for each as user = Tag, Tag, with the
+	 * ID of each user as Nextcloud spells it and each tag once, whatever its case, as Paperless
+	 * Unified Search reads them too. A line without tags means every document, as no line does, so
+	 * it goes. A user twice, a user that doesn't exist, whom someone could create later under that
+	 * name, and the target user, who gets every document, are refused with their line.
+	 *
+	 * @throws InvalidSettingException for a line that is no such line, a user twice, an unknown user or the target user
+	 */
+	private function normalizeUserTags(string $value, string $targetUser): string {
+		$lines = [];
+		$seen = [];
+		foreach (UserTags::parse($value) as $line) {
+			$user = $this->userManager->get($line['user']);
+			if ($user === null) {
+				throw new InvalidSettingException('"Tags that a user may see", line %1$s: Nextcloud has no user with the ID %2$s.', [(string)$line['line'], $line['user']], 'user_tags');
+			}
+			$uid = $user->getUID();
+			if (isset($seen[mb_strtolower($uid)])) {
+				throw new InvalidSettingException('"Tags that a user may see", line %1$s: the user %2$s has a line already.', [(string)$line['line'], $uid], 'user_tags');
+			}
+			$seen[mb_strtolower($uid)] = true;
+			if (mb_strtolower($uid) === mb_strtolower($targetUser)) {
+				throw new InvalidSettingException('"Tags that a user may see", line %1$s: %2$s is the target user, who gets every document.', [(string)$line['line'], $uid], 'user_tags');
+			}
+			if ($line['tags'] !== []) {
+				$lines[] = $uid . ' = ' . implode(', ', $line['tags']);
+			}
+		}
+
+		return implode("\n", $lines);
+	}
+
+	/**
+	 * The users whose archives the tags of the settings filled: a run reaches them until their
+	 * copies are gone, also once their line is, which a run of single ownership would not, as it
+	 * reads the state of the target user and of the users with tags alone.
+	 *
+	 * @return list<string>
+	 */
+	public function tagArchives(): array {
+		$value = $this->appConfig->getValueString(AppConstants::APP_ID, self::TAG_ARCHIVES_KEY, '', lazy: true);
+
+		return array_values(array_filter(explode("\n", $value), static fn (string $user): bool => $user !== ''));
+	}
+
+	/** @param list<string> $users the users whose archives the tags filled */
+	public function keepTagArchives(array $users): void {
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::TAG_ARCHIVES_KEY, implode("\n", $users), lazy: true);
+	}
+
 	/** The value when it is from $minimum to $maximum, or else null. */
 	private static function within(int $value, int $minimum, int $maximum): ?int {
 		return $value >= $minimum && $value <= $maximum ? $value : null;
@@ -576,7 +636,7 @@ final class ConfigService {
 			(string)$values['inbox_tags'], (bool)$values['inbox_create_tags'], (bool)$values['webhook_immediate'],
 			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
 			(bool)$values['nextcloud_tags'], (string)$values['ownership'], (string)$values['user_map'],
-			(string)$values['user_group'], (bool)$values['follow_storage_paths'],
+			(string)$values['user_group'], (bool)$values['follow_storage_paths'], (string)$values['user_tags'],
 		);
 	}
 }

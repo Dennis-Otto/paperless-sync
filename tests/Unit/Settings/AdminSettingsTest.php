@@ -76,6 +76,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);
 		self::assertSame('/route/paperless_sync.directory.users', $parameters['usersUrl'], 'The users come from a route of the app, which a delegated group may ask too.');
 		self::assertSame('/route/paperless_sync.directory.groups', $parameters['groupsUrl'], 'So do the groups.');
+		self::assertSame('/route/paperless_sync.tagshares.shares', $parameters['tagSharesUrl'], 'And the shares past the tags of a user.');
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
 		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);
@@ -212,7 +213,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(17, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, each warning of the setup checks, the setup of the account of the app, per-user ownership, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(18, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, each warning of the setup checks, the setup of the account of the app, per-user ownership, the tags that a user may see, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);

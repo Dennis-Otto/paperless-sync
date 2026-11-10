@@ -723,7 +723,35 @@ OC.L10N.register(
 			"Das Archiv kann den Speicherpfaden {names} von Paperless nicht folgen, die Logik von Jinja, einen Filter oder eine Variable verwenden, die die Pfadvorlage nicht kennt, oder ein benutzerdefiniertes Feld, das Paperless nicht hat, oder die das Konto der App nicht sieht; ihre Dokumente kommen deshalb dorthin, wo die Archiv-Pfadvorlage sie ablegt."
 		],
 		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless hat seine Benutzer nicht aufgelistet, die ein Speicherpfad, dem das Archiv folgt, für {{ owner_username }} braucht; der Benutzer des API-Tokens braucht die Berechtigung, Benutzer anzuzeigen: %s",
-		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless hat seine benutzerdefinierten Felder nicht aufgelistet, die ein Speicherpfad verwendet, dem das Archiv folgt; der Benutzer des API-Tokens braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen: %s"
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless hat seine benutzerdefinierten Felder nicht aufgelistet, die ein Speicherpfad verwendet, dem das Archiv folgt; der Benutzer des API-Tokens braucht die Berechtigung, benutzerdefinierte Felder anzuzeigen: %s",
+		"Tags that a user may see": "Tags, die ein Benutzer sehen darf",
+		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "„Tags, die ein Benutzer sehen darf“, Zeile %s: Schreibe die Benutzer-ID von Nextcloud, ein Gleichheitszeichen und die Tags von Paperless, durch Kommas getrennt, etwa katja = Katja, Household.",
+		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "„Tags, die ein Benutzer sehen darf“, Zeile %1$s: Nextcloud hat keinen Benutzer mit der ID %2$s.",
+		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "„Tags, die ein Benutzer sehen darf“, Zeile %1$s: Der Benutzer %2$s hat schon eine Zeile.",
+		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "„Tags, die ein Benutzer sehen darf“, Zeile %1$s: %2$s ist der Zielbenutzer, der jedes Dokument erhält.",
+		"{path}, shared with the group {group}: {users}": "{path}, geteilt mit der Gruppe {group}: {users}",
+		"{path}, shared with {users}": "{path}, geteilt mit {users}",
+		"Remove this user": "Diesen Benutzer entfernen",
+		"Add a user": "Benutzer hinzufügen",
+		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Ein Benutzer in dieser Tabelle erhält jedes Dokument mit mindestens einem seiner Tags in einem eigenen Archiv, gleich, wem es gehört, das zu seinem Kontingent zählt, und kein anderes Dokument; Paperless Unified Search zeigt ihm dasselbe. Ein Benutzer ohne Tags oder nicht in der Tabelle sieht, was er heute sieht, und der Zielbenutzer erhält immer jedes Dokument.",
+		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Diese Freigaben des Zielbenutzers zeigen einem Benutzer mit Tags jedes Dokument darin, gleich, welche Tags es hat:",
+		"Remove these shares": "Diese Freigaben entfernen",
+		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud hat die Freigaben von %1$s nicht aufgelistet: %2$s",
+		"Nextcloud did not remove the shares: %s": "Nextcloud hat die Freigaben nicht entfernt: %s",
+		"Shares of the archive": "Freigaben des Archivs",
+		"Paperless has every tag that \"Tags that a user may see\" names.": "Paperless hat jeden Tag, den „Tags, die ein Benutzer sehen darf“ nennt.",
+		"The runs need them to give the users with tags their documents.": "Die Läufe brauchen sie, um den Benutzern mit Tags ihre Dokumente zu geben.",
+		"Paperless has no tag of these names, which \"Tags that a user may see\" names: %s.": "Paperless hat keinen Tag mit diesen Namen, die „Tags, die ein Benutzer sehen darf“ nennt: %s.",
+		"The runs leave the archive of such a user as it is until the line or Paperless names the tag: correct the line, or create the tag in Paperless.": "Die Läufe lassen das Archiv eines solchen Benutzers, wie es ist, bis die Zeile oder Paperless den Tag nennt: Korrigiere die Zeile oder lege den Tag in Paperless an.",
+		"Archive of %1$s: Paperless has no tag named %2$s, which \"Tags that a user may see\" names for them, so their copies stay as they are until the line or Paperless names the tag.": "Archiv von %1$s: Paperless hat keinen Tag namens %2$s, den „Tags, die ein Benutzer sehen darf“ für diesen Benutzer nennt, daher bleiben seine Kopien, wie sie sind, bis die Zeile oder Paperless den Tag nennt.",
+		"No share of %s shows a user with tags more than their tags.": "Keine Freigabe von %s zeigt einem Benutzer mit Tags mehr als seine Tags.",
+		"Check in Files that no share of the base folder reaches a user with tags.": "Prüfe in Dateien, dass keine Freigabe des Basisordners einen Benutzer mit Tags erreicht.",
+		"These shares of %1$s show a user with tags every document in them: %2$s.": "Diese Freigaben von %1$s zeigen einem Benutzer mit Tags jedes Dokument darin: %2$s.",
+		"Remove them under \"Tags that a user may see\", or in Files.": "Entferne sie unter „Tags, die ein Benutzer sehen darf“ oder in Dateien.",
+		"_Removed %n share._::_Removed %n shares._": [
+			"%n Freigabe entfernt.",
+			"%n Freigaben entfernt."
+		]
 	},
 	"nplurals=2; plural=(n != 1);"
 )

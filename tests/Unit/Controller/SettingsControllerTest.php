@@ -25,6 +25,7 @@ use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Service\SyncService;
+use OCA\PaperlessSync\Service\TagShares;
 use OCA\PaperlessSync\Service\UserTimeZones;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
@@ -43,10 +44,12 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\SubAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Config\IUserConfig;
+use OCP\IGroupManager;
 use OCP\IRequest;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use OCP\Security\ISecureRandom;
+use OCP\Share\IManager as IShareManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -1047,7 +1050,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->createStub(IRequest::class),
 			$configService,
 			$this->clients,
-			new ConnectionChecklist($this->clients, $this->storage, $this->ownerMapping(), $this->germanL10n()),
+			new ConnectionChecklist($this->clients, $this->storage, $this->ownerMapping(), $this->germanL10n(), new TagShares($this->createStub(IShareManager::class), $this->createStub(IGroupManager::class))),
 			$this->germanL10n(),
 			$sync,
 			$paths,

@@ -192,10 +192,11 @@ final class FileActions {
 	 * Whether the file or folder is in the folder of the app, which the runs look after: it is
 	 * there among the files of the target user, also when the user sees it through a share. In
 	 * per-user ownership, the runs look after the base folder of every user's files, with its
-	 * inbox, error folder and archive, so a file there among the user's own files is the app's too.
+	 * inbox, error folder and archive, so a file there among the user's own files is the app's too,
+	 * as it is for a user with tags, whose archive is there.
 	 */
 	private function inAppFolder(SyncConfig $config, string $userId, int $fileId, string $path): bool {
-		$paths = $userId === $config->targetUser || $config->perUser() ? [$path] : [];
+		$paths = $userId === $config->targetUser || $config->perUser() || UserTags::of($config)->restricts($userId) ? [$path] : [];
 		if ($userId !== $config->targetUser) {
 			$paths[] = $this->storage->nodeById($config->targetUser, $fileId)['path'] ?? null;
 		}

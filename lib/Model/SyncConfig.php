@@ -100,6 +100,12 @@ final class SyncConfig implements \JsonSerializable {
 		 * Paperless files it, when the app can render that template; the others follow $pathTemplate.
 		 */
 		public readonly bool $followStoragePaths = false,
+		/**
+		 * The tags of Paperless that some users of Nextcloud may see, one line for each as
+		 * user = Tag, Tag: such a user gets every document with one of their tags, in an archive of
+		 * their own, in every choice of $ownership, and no other; see UserTags.
+		 */
+		public readonly string $userTags = '',
 	) {
 	}
 
@@ -135,13 +141,15 @@ final class SyncConfig implements \JsonSerializable {
 	}
 
 	/**
-	 * The same settings for the archive of another user of Nextcloud, in per-user ownership: the
-	 * folders below the same base folder of that user, whose files, states, activity and time zone
-	 * a run then takes.
+	 * The same settings for the archive of another user of Nextcloud, in per-user ownership or for
+	 * a user with tags: the folders below the same base folder of that user, whose files, states,
+	 * activity and time zone a run then takes. Without $inbox, such as for a user who gets only the
+	 * documents with their tags, that user has no inbox.
 	 */
-	public function withTargetUser(string $targetUser): self {
+	public function withTargetUser(string $targetUser, bool $inbox = true): self {
 		$values = get_object_vars($this);
 		$values['targetUser'] = $targetUser;
+		$values['inboxEnabled'] = $this->inboxEnabled && $inbox;
 
 		return new self(...$values);
 	}

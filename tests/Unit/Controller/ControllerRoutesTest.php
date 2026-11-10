@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Controller\FolderInfoController;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Controller\StatusApiController;
 use OCA\PaperlessSync\Controller\SyncController;
+use OCA\PaperlessSync\Controller\TagSharesController;
 use OCA\PaperlessSync\Controller\WebhookController;
 use OCA\PaperlessSync\Settings\AdminSettings;
 use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
@@ -49,6 +50,8 @@ final class ControllerRoutesTest extends TestCase {
 			'users to pick' => [DirectoryController::class, 'users', 'GET', '/settings/users'],
 			'user of the field' => [DirectoryController::class, 'user', 'GET', '/settings/users/{id}'],
 			'groups to pick' => [DirectoryController::class, 'groups', 'GET', '/settings/groups'],
+			'shares past the tags of a user' => [TagSharesController::class, 'shares', 'GET', '/settings/user-tags/shares'],
+			'remove the shares past the tags' => [TagSharesController::class, 'remove', 'DELETE', '/settings/user-tags/shares'],
 			'sync run' => [SyncController::class, 'run', 'POST', '/sync/run'],
 			'sync status' => [SyncController::class, 'status', 'GET', '/sync/status'],
 			'webhook' => [WebhookController::class, 'receive', 'POST', '/api/v1/webhook'],
@@ -88,7 +91,7 @@ final class ControllerRoutesTest extends TestCase {
 	 */
 	public static function routesOfTheSettingsPage(): array {
 		$routes = [];
-		foreach ([SettingsController::class, SyncController::class, WebhookController::class, DirectoryController::class] as $controller) {
+		foreach ([SettingsController::class, SyncController::class, WebhookController::class, DirectoryController::class, TagSharesController::class] as $controller) {
 			foreach ((new ReflectionClass($controller))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
 				// The webhook itself is for a workflow of Paperless, not for the page.
 				if ($method->getAttributes(FrontpageRoute::class) !== [] && $method->getAttributes(PublicPage::class) === []) {
@@ -101,7 +104,7 @@ final class ControllerRoutesTest extends TestCase {
 	}
 
 	public function testTheRoutesOfTheSettingsPageAreAllFound(): void {
-		self::assertCount(14, self::routesOfTheSettingsPage());
+		self::assertCount(16, self::routesOfTheSettingsPage());
 	}
 
 	/**
@@ -135,6 +138,7 @@ final class ControllerRoutesTest extends TestCase {
 			SettingsController::class . '::account',
 			WebhookController::class . '::create',
 			WebhookController::class . '::remove',
+			TagSharesController::class . '::remove',
 		], $confirmed);
 	}
 

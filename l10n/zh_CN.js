@@ -688,7 +688,34 @@ OC.L10N.register(
 			"归档无法遵循 Paperless 的保存路径 {names}：其模板使用了 Jinja 逻辑、过滤器或路径模板不认识的变量，或 Paperless 中没有的自定义字段，或应用的账户看不到它，因此其文档会放到归档路径模板指定的位置。"
 		],
 		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless 未列出其用户，而归档所遵循的保存路径中的 {{ owner_username }} 需要用户列表；API 令牌所属的用户需要查看用户的权限：%s",
-		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自定义字段，而归档所遵循的保存路径使用了自定义字段；API 令牌所属的用户需要查看自定义字段的权限：%s"
+		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自定义字段，而归档所遵循的保存路径使用了自定义字段；API 令牌所属的用户需要查看自定义字段的权限：%s",
+		"Tags that a user may see": "用户可查看的标签",
+		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "“用户可查看的标签”第 %s 行：请写入 Nextcloud 用户 ID、等号和以逗号分隔的 Paperless 标签，例如 katja = Katja, Household。",
+		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "“用户可查看的标签”第 %1$s 行：Nextcloud 中没有 ID 为 %2$s 的用户。",
+		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "“用户可查看的标签”第 %1$s 行：用户 %2$s 已有一行。",
+		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "“用户可查看的标签”第 %1$s 行：%2$s 是目标用户，会获得每个文档。",
+		"{path}, shared with the group {group}: {users}": "{path}，已共享给群组 {group}：{users}",
+		"{path}, shared with {users}": "{path}，已共享给 {users}",
+		"Remove this user": "移除此用户",
+		"Add a user": "添加用户",
+		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "此表中的用户会在自己的归档中获得至少带有其一个标签的每个文档，无论文档归谁所有，这些副本计入其配额，且不会获得其他文档；Paperless Unified Search 向其显示的内容相同。没有标签或不在表中的用户看到的内容与现在相同，目标用户始终获得每个文档。",
+		"These shares of the target user show a user with tags every document in them, whatever their tags:": "目标用户的这些共享会向带标签的用户显示其中的每个文档，无论其标签如何：",
+		"Remove these shares": "移除这些共享",
+		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud 未列出 %1$s 的共享：%2$s",
+		"Nextcloud did not remove the shares: %s": "Nextcloud 未移除这些共享：%s",
+		"Shares of the archive": "归档的共享",
+		"Paperless has every tag that \"Tags that a user may see\" names.": "Paperless 拥有“用户可查看的标签”中列出的每个标签。",
+		"The runs need them to give the users with tags their documents.": "运行需要它们才能为带标签的用户提供其文档。",
+		"Paperless has no tag of these names, which \"Tags that a user may see\" names: %s.": "Paperless 中没有这些名称的标签，但“用户可查看的标签”中列出了它们：%s。",
+		"The runs leave the archive of such a user as it is until the line or Paperless names the tag: correct the line, or create the tag in Paperless.": "在该行或 Paperless 给出该标签之前，运行会保持此类用户的归档不变：请更正该行，或在 Paperless 中创建该标签。",
+		"Archive of %1$s: Paperless has no tag named %2$s, which \"Tags that a user may see\" names for them, so their copies stay as they are until the line or Paperless names the tag.": "%1$s 的归档：Paperless 中没有名为 %2$s 的标签，但“用户可查看的标签”为该用户列出了它，因此在该行或 Paperless 给出该标签之前，其副本保持不变。",
+		"No share of %s shows a user with tags more than their tags.": "%s 的共享均未向带标签的用户显示超出其标签的内容。",
+		"Check in Files that no share of the base folder reaches a user with tags.": "请在“文件”中检查基础文件夹的共享均未到达带标签的用户。",
+		"These shares of %1$s show a user with tags every document in them: %2$s.": "%1$s 的这些共享会向带标签的用户显示其中的每个文档：%2$s。",
+		"Remove them under \"Tags that a user may see\", or in Files.": "请在“用户可查看的标签”下或在“文件”中移除它们。",
+		"_Removed %n share._::_Removed %n shares._": [
+			"已移除 %n 个共享。"
+		]
 	},
 	"nplurals=1; plural=0;"
 )
