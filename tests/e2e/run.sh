@@ -2253,12 +2253,46 @@ print(next(quote(entry["path"]) for entry in json.load(sys.stdin)["entries"] if 
 	save_settings "${TMP_DIR}/single-settings.json" ownership=single
 }
 
+# The shares of the target user that show a user with tags more than their tags, as the settings
+# page lists them, or their removal with the IDs of a JSON body, as its button asks for it.
+tag_shares() {
+	method="$1"
+	output="$2"
+	data=()
+	if [[ -n "${3:-}" ]]; then
+		data=(--data "$3")
+	fi
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'Content-Type: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request "${method}" \
+		"${data[@]}" \
+		--output "${output}" \
+		"${BASE_URL}/apps/paperless_sync/settings/user-tags/shares"
+}
+
 # The tags that a user may see, in single ownership: e2e-other, whose line names the tag insurance
 # of P123 in another case, gets a copy of P123 beside the target user, and loses P124, which their
-# archive kept from the scenario shared, as they may see no document without one of their tags;
-# once their line is gone, the next run takes P123 from their files as well, into their trash bin.
+# archive kept from the scenario shared, as they may see no document without one of their tags.
+# A share of the base folder that the target user made by hand before still shows them P124: the
+# settings list it, and their removal of it, as the button of the page asks, leaves them only
+# their copy of P123. Once their line is gone, the next run takes P123 from their files as well,
+# into their trash bin.
 scenario_user_tags() {
 	control /control/scenario/user-tags
+	curl --fail-with-body --silent --show-error \
+		--user "sync-target:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--data-urlencode 'path=/Documents/Paperless' \
+		--data-urlencode 'shareType=0' \
+		--data-urlencode 'shareWith=e2e-other' \
+		--output "${TMP_DIR}/user-tags-share.json" \
+		"${BASE_URL}/ocs/v2.php/apps/files_sharing/api/v1/shares"
+	BASE_SHARE="ocinternal:$(host_python -c 'import json, sys; print(json.load(sys.stdin)["ocs"]["data"]["id"])' < "${TMP_DIR}/user-tags-share.json")"
 	save_settings "${TMP_DIR}/user-tags-settings.json" 'user_tags=E2E-Other = Insurance'
 	trash_names e2e-other > "${TMP_DIR}/trash-before-user-tags.txt"
 	sync_run false "${TMP_DIR}/user-tags.json"
@@ -2268,6 +2302,21 @@ scenario_user_tags() {
 	assert_dav_file e2e-other "${INITIAL_PATH}" 'Synthetic Paperless archive document'
 	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document'
 	assert_dav_missing e2e-other "${STATEMENT_PATH}"
+	# The share still shows them P124, so the settings list it, and its removal takes it away.
+	assert_dav_file e2e-other "${STATEMENT_PATH#Documents/}" 'Synthetic Paperless archive document'
+	tag_shares GET "${TMP_DIR}/user-tags-shares.json"
+	host_python -c '
+import json, sys
+shares = {share["id"]: share for share in json.load(open(sys.argv[1]))["shares"]}
+share = shares[sys.argv[2]]
+assert (share["path"], share["type"], share["users"]) == ("/Documents/Paperless", "user", ["e2e-other"]), share' "${TMP_DIR}/user-tags-shares.json" "${BASE_SHARE}"
+	tag_shares DELETE "${TMP_DIR}/user-tags-shares-removed.json" "{\"ids\": [\"${BASE_SHARE}\"]}"
+	host_python -c '
+import json, sys
+answer = json.load(open(sys.argv[1]))
+assert answer["removed"] == 1 and sys.argv[2] not in [share["id"] for share in answer["shares"]], answer' "${TMP_DIR}/user-tags-shares-removed.json" "${BASE_SHARE}"
+	assert_dav_missing e2e-other "${STATEMENT_PATH#Documents/}"
+	assert_dav_file e2e-other "${INITIAL_PATH}" 'Synthetic Paperless archive document'
 	save_settings "${TMP_DIR}/user-tags-removed-settings.json" 'user_tags='
 	sync_run false "${TMP_DIR}/user-tags-removed.json"
 	assert_dav_missing e2e-other "${INITIAL_PATH}"

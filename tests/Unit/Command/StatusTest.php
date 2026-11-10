@@ -13,8 +13,11 @@ use OCA\PaperlessSync\Command\Status;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\TagShares;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\IGroupManager;
+use OCP\Share\IManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -37,7 +40,7 @@ final class StatusTest extends TestCase {
 		$this->configService->save(['sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->clock = new TestClock();
 		$this->statusService = $this->statusService($this->clock);
-		$this->status = new Status($this->statusService, $this->configService, $this->clock);
+		$this->status = new Status($this->statusService, $this->configService, $this->clock, new TagShares($this->createStub(IManager::class), $this->createStub(IGroupManager::class)));
 		$this->command = new CommandTester($this->status);
 	}
 
@@ -125,7 +128,7 @@ final class StatusTest extends TestCase {
 		self::assertSame(Status::OK, $this->execute(['--output' => 'json']));
 
 		$status = json_decode($this->command->getDisplay(), true, 512, JSON_THROW_ON_ERROR);
-		self::assertSame($this->statusService->overview($this->configService->get()), $status);
+		self::assertSame($this->statusService->overview($this->configService->get()) + ['tagShares' => []], $status, 'With the shares that show a user with tags more than their tags, none here.');
 	}
 
 	/** @return iterable<string, array{string, int}> */

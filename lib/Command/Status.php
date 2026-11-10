@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Command;
 
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
+use OCA\PaperlessSync\Service\TagShares;
 use OCP\AppFramework\Utility\ITimeFactory;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -19,6 +20,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 /**
  * occ paperless_sync:status: the status of the last run, as the settings page shows it, for people
  * and, with --output=json, for scripts and monitoring; --exit-code tells how it ended by the code.
+ * It also names each share of the target user that shows a user with tags more than their tags,
+ * which the settings page removes on request (decision 0038).
  */
 final class Status extends Base {
 	/** The labels of the states, as the settings page shows them. */
@@ -39,6 +42,7 @@ final class Status extends Base {
 		private StatusService $statusService,
 		private ConfigService $configService,
 		private ITimeFactory $timeFactory,
+		private TagShares $tagShares,
 	) {
 		parent::__construct();
 	}
@@ -55,9 +59,11 @@ final class Status extends Base {
 		if ($format === null) {
 			return self::FAILED;
 		}
-		$status = $this->statusService->overview($this->configService->get());
+		$config = $this->configService->get();
+		$status = $this->statusService->overview($config);
+		$shares = $this->tagShares->find($config);
 		if ($format !== 'plain') {
-			$this->writeJson($output, $status, $format);
+			$this->writeJson($output, $status + ['tagShares' => $shares], $format);
 		} else {
 			$this->field($output, 'State', self::STATES[$status['state']] ?? $status['state']);
 			$this->field($output, 'Last started', self::time($status['lastStarted']));
@@ -74,6 +80,12 @@ final class Status extends Base {
 			if ($status['report'] !== []) {
 				$this->line($output, ($status['report']['dryRun'] ?? false) === true ? 'Report of the last dry-run:' : 'Report of the last run:');
 				$this->writeReport($output, $status['report']);
+			}
+			if ($shares !== []) {
+				$this->line($output, 'These shares of ' . $config->targetUser . ' show a user with tags every document in them; remove them under "Tags that a user may see" of the settings, or in Files:');
+				foreach ($shares as $share) {
+					$this->line($output, '  ' . TagShares::describe($share) . ' (share ' . $share['id'] . ')');
+				}
 			}
 		}
 		if ($input->getOption('exit-code') !== true) {

@@ -116,26 +116,25 @@ final class UserTags {
 	}
 
 	/**
-	 * A tag that Paperless doesn't have, after a typo or a rename in Paperless, would take from a
-	 * user the copies of the documents that they may see, so a run stops before a copy moves. The
-	 * lists of Paperless are complete, or PaperlessApiService fails the run, so a name that isn't
-	 * there is missing indeed.
+	 * The tags of each user that Paperless doesn't have, after a typo or a rename in Paperless. A
+	 * run leaves the archive of such a user as it is, as one that Nextcloud can't reach, as it would
+	 * otherwise take from them the copies of the documents that they may see; the target user and
+	 * every other user still get theirs. The lists of Paperless are complete, or PaperlessApiService
+	 * fails the run, so a name that isn't there is missing indeed.
 	 *
 	 * @param array<string, string> $tagNames the names of the tags of Paperless, by their IDs
-	 * @throws InvalidSettingException with the names that Paperless doesn't have
+	 * @return array<string, list<string>> the names that Paperless doesn't have, by the IDs of their users
 	 */
-	public function requireKnown(array $tagNames): void {
+	public function unknown(array $tagNames): array {
 		$known = array_map('mb_strtolower', array_values($tagNames));
 		$missing = [];
-		foreach ($this->tags as $tags) {
-			foreach ($tags as $name) {
-				if (!in_array(mb_strtolower($name), $known, true)) {
-					$missing[mb_strtolower($name)] ??= $name;
-				}
+		foreach ($this->tags as $user => $tags) {
+			$names = array_values(array_filter($tags, static fn (string $name): bool => !in_array(mb_strtolower($name), $known, true)));
+			if ($names !== []) {
+				$missing[$user] = $names;
 			}
 		}
-		if ($missing !== []) {
-			throw new InvalidSettingException('Paperless has no tag named %s, which "Tags that a user may see" names; a run would take from a user the copies of the documents that they may see.', ['"' . implode('", "', $missing) . '"'], self::SETTING);
-		}
+
+		return $missing;
 	}
 }

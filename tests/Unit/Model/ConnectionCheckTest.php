@@ -34,6 +34,8 @@ final class ConnectionCheckTest extends TestCase {
 			'upload' => [ConnectionCheck::UPLOAD, 'Hochladen aus dem Eingang'],
 			'tags of the inbox' => [ConnectionCheck::INBOX_TAGS, 'Tags des Eingangs'],
 			'folder' => [ConnectionCheck::FOLDER, 'Nextcloud-Ordner'],
+			'tags that a user may see' => [ConnectionCheck::USER_TAGS, 'Tags, die ein Benutzer sehen darf'],
+			'shares of the archive' => [ConnectionCheck::TAG_SHARES, 'Freigaben des Archivs'],
 			'a line that the page doesn\'t know' => ['webhooks', 'webhooks'],
 		];
 	}

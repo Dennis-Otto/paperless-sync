@@ -45,7 +45,7 @@ The scenario verifies:
 - target-user ownership and access isolation
 - per-user ownership: the connection checklist names who gets the documents of each user of Paperless and those without an owner; a run gives `e2e-owner` and `e2e-other`, the user of Nextcloud of the Paperless user `E2E-Other` whatever the case, the documents of their users of Paperless in their own files, which the other users don't get, and removes the copies that the target user had of them; a file of the inbox of `e2e-owner` becomes theirs in Paperless, through the owner of its document, and comes back into their archive
 - the documents that Paperless shares: the connection checklist says who also gets documents of whom; a document of `e2e-owner` that the group of the household may view reaches `e2e-other`, who is in the group, at the same path, and leaves their files, into their trash bin, once the permission is gone, as the dry run says first, while the copy of `e2e-owner` stays
-- the tags that a user may see, in single ownership: `e2e-other`, whose line names the tag of `P123` in another case, gets a copy of `P123` beside the target user and loses the document without the tag that their archive kept, and once their line is gone, the next run takes `P123` from their files as well, into their trash bin
+- the tags that a user may see, in single ownership: `e2e-other`, whose line names the tag of `P123` in another case, gets a copy of `P123` beside the target user and loses the document without the tag that their archive kept; a share of the archive that the target user made for them before still shows them that document, so the settings list it, and its removal there leaves them only their copy of `P123`; once their line is gone, the next run takes `P123` from their files as well, into their trash bin
 - background-job registration, status reporting, and clean application logs
 - the webhook of a workflow of Paperless, called from the container of the mock as Paperless calls it: refused with `401` without the secret, before and after its creation, with every such call counted by Nextcloud's brute-force protection and the count ended by the first call with the secret; with it, a new title moves the copy during the call, without a background job, also for the address of the document that Paperless-ngx 2.x sends; a document that Paperless doesn't show changes nothing, and a call without a document answers `400`; with *Mirror the document during the call* off, the document waits for its background job; no call changes the status of the last run, and the settings page shows the last call, never the secret
 - the background job as system cron starts it: once synchronization is enabled and the interval since the last run has passed, it runs, and started again at once, it waits
@@ -146,7 +146,7 @@ A run without either variable runs everything, which is what the CI does: `scrip
 | `failing-mirror` | a mirror that keeps failing and recovers: notifications, setup check and status API |
 | `per-user` | per-user ownership and the inbox of each user |
 | `shared` | the documents that Paperless shares through a group |
-| `user-tags` | the tags that a user may see, and their copies once their line is gone |
+| `user-tags` | the tags that a user may see, a share of the archive that shows them more, and their copies once their line is gone |
 | `languages` | the settings in every language of `l10n/`, first with Nextcloud in French, and `languages.mjs` |
 
 ## Every supported version at once

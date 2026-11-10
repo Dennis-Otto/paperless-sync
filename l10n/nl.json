@@ -724,12 +724,33 @@
 			"De laatste %n runs van Paperless Sync zijn met fouten geëindigd, de laatste met: %s"
 		],
 		"Tags that a user may see": "Labels die een gebruiker mag zien",
-		"One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.": "Eén per regel: de gebruikers-ID van Nextcloud, een isgelijkteken en de labels van Paperless, gescheiden door komma’s. Zo’n gebruiker krijgt elk document met minstens één van zijn labels in een eigen archief, van wie het ook is, dat meetelt voor zijn quotum, en geen ander document; Paperless Unified Search toont hem hetzelfde. Een gebruiker zonder regel ziet wat hij nu ziet, en de doelgebruiker krijgt altijd elk document.",
 		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "“Labels die een gebruiker mag zien”, regel %s: schrijf de gebruikers-ID van Nextcloud, een isgelijkteken en de labels van Paperless, gescheiden door komma’s, zoals katja = Katja, Household.",
 		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "“Labels die een gebruiker mag zien”, regel %1$s: Nextcloud heeft geen gebruiker met de ID %2$s.",
 		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "“Labels die een gebruiker mag zien”, regel %1$s: de gebruiker %2$s heeft al een regel.",
 		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "“Labels die een gebruiker mag zien”, regel %1$s: %2$s is de doelgebruiker, die elk document krijgt.",
-		"Paperless has no tag named %s, which \"Tags that a user may see\" names; a run would take from a user the copies of the documents that they may see.": "Paperless heeft geen label met de naam %s, dat “Labels die een gebruiker mag zien” noemt; een run zou een gebruiker de kopieën afnemen van de documenten die hij mag zien."
+		"{path}, shared with the group {group}: {users}": "{path}, gedeeld met de groep {group}: {users}",
+		"{path}, shared with {users}": "{path}, gedeeld met {users}",
+		"Remove this user": "Deze gebruiker verwijderen",
+		"Add a user": "Een gebruiker toevoegen",
+		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Een gebruiker in deze tabel krijgt elk document met minstens één van zijn labels in een eigen archief, van wie het ook is, dat meetelt voor zijn quotum, en geen ander document; Paperless Unified Search toont hem hetzelfde. Een gebruiker zonder labels, of niet in de tabel, ziet wat hij nu ziet, en de doelgebruiker krijgt altijd elk document.",
+		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Deze delingen van de doelgebruiker tonen een gebruiker met labels elk document erin, welke labels het ook heeft:",
+		"Remove these shares": "Deze delingen verwijderen",
+		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud heeft de delingen van %1$s niet opgesomd: %2$s",
+		"Nextcloud did not remove the shares: %s": "Nextcloud heeft de delingen niet verwijderd: %s",
+		"Shares of the archive": "Delingen van het archief",
+		"Paperless has every tag that \"Tags that a user may see\" names.": "Paperless heeft elk label dat “Labels die een gebruiker mag zien” noemt.",
+		"The runs need them to give the users with tags their documents.": "De runs hebben ze nodig om de gebruikers met labels hun documenten te geven.",
+		"Paperless has no tag of these names, which \"Tags that a user may see\" names: %s.": "Paperless heeft geen label met deze namen, die “Labels die een gebruiker mag zien” noemt: %s.",
+		"The runs leave the archive of such a user as it is until the line or Paperless names the tag: correct the line, or create the tag in Paperless.": "De runs laten het archief van zo’n gebruiker zoals het is tot de regel of Paperless het label noemt: corrigeer de regel, of maak het label aan in Paperless.",
+		"Archive of %1$s: Paperless has no tag named %2$s, which \"Tags that a user may see\" names for them, so their copies stay as they are until the line or Paperless names the tag.": "Archief van %1$s: Paperless heeft geen label met de naam %2$s, dat “Labels die een gebruiker mag zien” voor deze gebruiker noemt, dus blijven zijn kopieën zoals ze zijn tot de regel of Paperless het label noemt.",
+		"No share of %s shows a user with tags more than their tags.": "Geen deling van %s toont een gebruiker met labels meer dan zijn labels.",
+		"Check in Files that no share of the base folder reaches a user with tags.": "Controleer in Bestanden dat geen deling van de basismap een gebruiker met labels bereikt.",
+		"These shares of %1$s show a user with tags every document in them: %2$s.": "Deze delingen van %1$s tonen een gebruiker met labels elk document erin: %2$s.",
+		"Remove them under \"Tags that a user may see\", or in Files.": "Verwijder ze onder “Labels die een gebruiker mag zien”, of in Bestanden.",
+		"_Removed %n share._::_Removed %n shares._": [
+			"%n deling verwijderd.",
+			"%n delingen verwijderd."
+		]
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

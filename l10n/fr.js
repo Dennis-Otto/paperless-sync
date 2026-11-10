@@ -760,12 +760,34 @@ OC.L10N.register(
 		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless n’a pas listé ses utilisateurs, dont un chemin de stockage que l’archive suit a besoin pour {{ owner_username }} ; l’utilisateur du jeton d’API a besoin de la permission d’afficher les utilisateurs : %s",
 		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless n’a pas listé ses champs personnalisés, qu’utilise un chemin de stockage que l’archive suit ; l’utilisateur du jeton d’API a besoin de la permission d’afficher les champs personnalisés : %s",
 		"Tags that a user may see": "Étiquettes qu’un utilisateur peut voir",
-		"One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.": "Une par ligne : l’identifiant d’utilisateur de Nextcloud, un signe égal et les étiquettes de Paperless, séparées par des virgules. Un tel utilisateur reçoit chaque document portant au moins une de ses étiquettes dans une archive à lui, quel qu’en soit le propriétaire, qui compte dans son quota, et aucun autre document ; Paperless Unified Search lui montre la même chose. Un utilisateur sans ligne voit ce qu’il voit aujourd’hui, et l’utilisateur cible reçoit toujours chaque document.",
 		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "« Étiquettes qu’un utilisateur peut voir », ligne %s : écrivez l’identifiant d’utilisateur de Nextcloud, un signe égal et les étiquettes de Paperless, séparées par des virgules, comme katja = Katja, Household.",
 		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "« Étiquettes qu’un utilisateur peut voir », ligne %1$s : Nextcloud n’a aucun utilisateur avec l’identifiant %2$s.",
 		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "« Étiquettes qu’un utilisateur peut voir », ligne %1$s : l’utilisateur %2$s a déjà une ligne.",
 		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "« Étiquettes qu’un utilisateur peut voir », ligne %1$s : %2$s est l’utilisateur cible, qui reçoit chaque document.",
-		"Paperless has no tag named %s, which \"Tags that a user may see\" names; a run would take from a user the copies of the documents that they may see.": "Paperless n’a aucune étiquette nommée %s, que nomme « Étiquettes qu’un utilisateur peut voir » ; une exécution retirerait à un utilisateur les copies des documents qu’il peut voir."
+		"{path}, shared with the group {group}: {users}": "{path}, partagé avec le groupe {group} : {users}",
+		"{path}, shared with {users}": "{path}, partagé avec {users}",
+		"Remove this user": "Retirer cet utilisateur",
+		"Add a user": "Ajouter un utilisateur",
+		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Un utilisateur de ce tableau reçoit chaque document portant au moins une de ses étiquettes dans une archive à lui, quel qu’en soit le propriétaire, qui compte dans son quota, et aucun autre document ; Paperless Unified Search lui montre la même chose. Un utilisateur sans étiquettes, ou absent du tableau, voit ce qu’il voit aujourd’hui, et l’utilisateur cible reçoit toujours chaque document.",
+		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Ces partages de l’utilisateur cible montrent à un utilisateur avec des étiquettes chaque document qu’ils contiennent, quelles que soient ses étiquettes :",
+		"Remove these shares": "Retirer ces partages",
+		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud n’a pas listé les partages de %1$s : %2$s",
+		"Nextcloud did not remove the shares: %s": "Nextcloud n’a pas retiré les partages : %s",
+		"Shares of the archive": "Partages de l’archive",
+		"Paperless has every tag that \"Tags that a user may see\" names.": "Paperless a chaque étiquette que nomme « Étiquettes qu’un utilisateur peut voir ».",
+		"The runs need them to give the users with tags their documents.": "Les exécutions en ont besoin pour donner leurs documents aux utilisateurs avec des étiquettes.",
+		"Paperless has no tag of these names, which \"Tags that a user may see\" names: %s.": "Paperless n’a aucune étiquette de ces noms, que nomme « Étiquettes qu’un utilisateur peut voir » : %s.",
+		"The runs leave the archive of such a user as it is until the line or Paperless names the tag: correct the line, or create the tag in Paperless.": "Les exécutions laissent l’archive d’un tel utilisateur telle quelle jusqu’à ce que la ligne ou Paperless nomme l’étiquette : corrigez la ligne, ou créez l’étiquette dans Paperless.",
+		"Archive of %1$s: Paperless has no tag named %2$s, which \"Tags that a user may see\" names for them, so their copies stay as they are until the line or Paperless names the tag.": "Archive de %1$s : Paperless n’a aucune étiquette nommée %2$s, que « Étiquettes qu’un utilisateur peut voir » nomme pour cet utilisateur, donc ses copies restent telles quelles jusqu’à ce que la ligne ou Paperless nomme l’étiquette.",
+		"No share of %s shows a user with tags more than their tags.": "Aucun partage de %s ne montre à un utilisateur avec des étiquettes plus que ses étiquettes.",
+		"Check in Files that no share of the base folder reaches a user with tags.": "Vérifiez dans Fichiers qu’aucun partage du dossier de base n’atteint un utilisateur avec des étiquettes.",
+		"These shares of %1$s show a user with tags every document in them: %2$s.": "Ces partages de %1$s montrent à un utilisateur avec des étiquettes chaque document qu’ils contiennent : %2$s.",
+		"Remove them under \"Tags that a user may see\", or in Files.": "Retirez-les sous « Étiquettes qu’un utilisateur peut voir », ou dans Fichiers.",
+		"_Removed %n share._::_Removed %n shares._": [
+			"%n partage retiré.",
+			"%n partages retirés.",
+			"%n partages retirés."
+		]
 	},
 	"nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

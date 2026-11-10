@@ -300,6 +300,57 @@ try {
 	expect((await message.textContent()) === SAVED_UNTESTED && (await excludedTags()) === '', `Removing the tags again failed: ${await message.textContent()}`)
 	console.log('Settings: the excluded tags are picked from the tags of Paperless, a tag that Paperless doesn\'t have yet can be typed and is marked, and the save sends what is typed.')
 
+	// The tags that a user may see: a row for each user, with the users of Nextcloud and the tags of
+	// Paperless, which the page stores as one line each. A share of the archive that the target user
+	// made by hand would still show that user everything, so the page lists it after the save and
+	// removes it on a click, and no other share.
+	const userTags = () => page.locator('[data-setting="user_tags"]').inputValue()
+	const userTagsTable = page.locator('#paperless-sync-user-tags-table')
+	const tagRows = page.locator('#paperless-sync-user-tags-rows [data-user-tags-row]')
+	const sharesPanel = page.locator('#paperless-sync-user-tags-shares')
+	expect((await userTags()) === '' && await userTagsTable.isHidden(), `run.sh saves no tags that a user may see: ${await userTags()}`)
+	await page.locator('#paperless-sync-user-tags-add').click()
+	const rowUser = tagRows.first().locator('[data-row-user]')
+	expect(await tagRows.count() === 1 && await userTagsTable.isVisible() && await focused(rowUser), 'Add a user must add a row and move the focus to its user.')
+	await rowUser.fill('e2e-del')
+	await tagRows.first().locator('[data-row-user-options] [role="option"]', { hasText: DELEGATE }).click()
+	const rowTags = tagRows.first().locator('[data-row-tags] [role="combobox"]')
+	await rowTags.fill('insur')
+	await tagRows.first().locator('[data-row-tags] [role="option"]', { hasText: 'insurance' }).click()
+	await rowTags.fill('Drfat')
+	await rowTags.press('Enter')
+	expect((await userTags()) === `${DELEGATE} = insurance, Drfat` && await unsaved.isVisible(), `The row must write the user and the tags of Paperless: ${await userTags()}`)
+	expect((await tagRows.first().locator('.paperless-sync-chip--new').textContent()).includes('not in Paperless'), 'A tag that Paperless doesn\'t have must be marked in the row too.')
+	await tagRows.first().getByRole('button', { name: 'Remove Drfat' }).click()
+	expect((await userTags()) === `${DELEGATE} = insurance`, `The button of a tag must remove it from the row: ${await userTags()}`)
+	// The target user shares the base folder with the user, as one might have for the family.
+	const owner = await request.newContext({ baseURL: BASE_URL, httpCredentials: { username: 'sync-target', password: PASSWORD, send: 'always' } })
+	const shared = await owner.post('/ocs/v2.php/apps/files_sharing/api/v1/shares', {
+		headers: { 'OCS-APIRequest': 'true', Accept: 'application/json' },
+		form: { path: '/Documents/Paperless', shareType: '0', shareWith: DELEGATE },
+	})
+	expect(shared.ok(), `The share of the archive failed: ${shared.status()} ${await shared.text()}`)
+	const shareId = (await shared.json()).ocs.data.id
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED && (await userTags()) === `${DELEGATE} = insurance`, `The save of the row failed: ${await message.textContent()}`)
+	await sharesPanel.waitFor()
+	const listedShares = await page.locator('#paperless-sync-user-tags-share-list li').allTextContents()
+	expect(JSON.stringify(listedShares) === JSON.stringify([`/Documents/Paperless, shared with ${DELEGATE}`]), `The page must list the share that shows the user every document: ${JSON.stringify(listedShares)}`)
+	await page.locator('#paperless-sync-user-tags-remove-shares').click()
+	await sharesPanel.waitFor({ state: 'hidden' })
+	expect((await page.locator('#paperless-sync-user-tags-shares-status').textContent()) === 'Removed 1 share.', `The page must say what it removed: ${await page.locator('#paperless-sync-user-tags-shares-status').textContent()}`)
+	const gone = await owner.get(`/ocs/v2.php/apps/files_sharing/api/v1/shares/${shareId}`, { headers: { 'OCS-APIRequest': 'true', Accept: 'application/json' } })
+	expect(gone.status() === 404, `The share must be gone: ${gone.status()}`)
+	await owner.dispose()
+	// Removing the row is a change, and its save leaves the setting empty, as run.sh expects it.
+	await tagRows.first().getByRole('button', { name: 'Remove this user' }).click()
+	expect((await userTags()) === '' && await userTagsTable.isHidden() && await unsaved.isVisible() && await focused(page.locator('#paperless-sync-user-tags-add')), 'Remove this user must remove the row and leave the focus on Add a user.')
+	await save.click()
+	await settle()
+	expect((await message.textContent()) === SAVED_UNTESTED && (await userTags()) === '' && await unsaved.isHidden(), `Removing the row again failed: ${await message.textContent()}`)
+	console.log('Settings: the tags that a user may see are a row for each user, picked from the users of Nextcloud and the tags of Paperless, and a share of the archive with that user is listed and removed with one click.')
+
 	// The tags for every import come from the same tags of Paperless, picked with the keyboard.
 	const inboxTags = () => page.locator('[data-setting="inbox_tags"]').inputValue()
 	const inboxTagInput = page.locator('#paperless-sync-inbox-tags-input')

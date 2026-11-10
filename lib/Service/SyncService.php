@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>, userTags: UserTags}
+ * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>, userTags: UserTags, unknownTags: array<string, list<string>>}
  */
 final class SyncService {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -308,7 +308,6 @@ final class SyncService {
 		$storagePaths = $this->pathTemplate->storagePaths($config, $storagePathList['names'], $storagePathList['templates'], $customFields);
 		$filter = new ExportFilter($config, $tags);
 		$userTags = UserTags::of($config);
-		$userTags->requireKnown($tags['names']);
 		$report->activeDocuments = count($documentScan->documents);
 		$report->trashedDocuments = count($trashScan->documents);
 		$this->noticeOfUnsupportedStoragePaths($report, $storagePaths->unsupported(array_values(array_filter(
@@ -331,6 +330,7 @@ final class SyncService {
 				: null,
 			'tagNames' => $tags['names'],
 			'userTags' => $userTags,
+			'unknownTags' => $userTags->unknown($tags['names']),
 		];
 	}
 
@@ -451,6 +451,11 @@ final class SyncService {
 				if ($held === false) {
 					$report->error(new RunError('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'));
 				} else {
+					// The archives that the tags fill are kept before a copy moves, also by a run of one
+					// document or one that fails later, so that a later run reaches them once their line is gone.
+					if (!$report->dryRun) {
+						$this->addTagArchives($tagged);
+					}
 					$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports, $held);
 					if ($document === null && !$report->dryRun) {
 						$this->keepTagArchives($config, $tagged);
@@ -481,7 +486,13 @@ final class SyncService {
 	 * @param array<string, SyncReport> $reports
 	 */
 	private function exportArchives(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, array $read, Owners $owners, array $archives, array $reports, ?int $held): void {
-		/** @var array<int, array{users: list<string>, leaves: bool}> $routes the users of each document, none for one that the run holds, and whether its copy leaves every other archive */
+		// A user whose line names a tag that Paperless doesn't have keeps the copies that they have,
+		// as an archive that Nextcloud can't reach does, rather than lose those of a renamed tag.
+		foreach ($read['unknownTags'] as $user => $names) {
+			unset($archives[$user]);
+			($reports[$user] ?? $report)->error(new RunError('Archive of %1$s: Paperless has no tag named %2$s, which "Tags that a user may see" names for them, so their copies stay as they are until the line or Paperless names the tag.', [$user, '"' . implode('", "', $names) . '"']));
+		}
+		/** @var array<int, array{users: list<string>, leaves: bool, taken: bool}> $routes the users of each document, none for one that the run holds, whether its copy leaves every other archive, and whether an archive that the run reaches takes it */
 		$routes = [];
 		$mine = array_fill_keys(array_keys($archives), []);
 		$reached = array_keys($archives);
@@ -500,7 +511,8 @@ final class SyncService {
 			}
 			if ($documentId > 0) {
 				// A copy leaves an archive only once an archive that the run reaches takes the document.
-				$routes[$documentId] = ['users' => $route['users'], 'leaves' => $route['known'] && array_intersect($route['users'], $reached) !== []];
+				$taken = array_intersect($route['users'], $reached) !== [];
+				$routes[$documentId] = ['users' => $route['users'], 'leaves' => $route['known'] && $taken, 'taken' => $taken];
 			}
 			foreach ($route['users'] as $user) {
 				if (isset($archives[$user])) {
@@ -514,9 +526,11 @@ final class SyncService {
 		$missing = 0;
 		foreach ($archives as $user => $archive) {
 			$others = [];
+			// Only the tags decide for a user with tags, also for a document whose viewers Paperless didn't name.
+			$restricted = $read['userTags']->restricts($user);
 			foreach ($routes as $documentId => $route) {
 				if (!in_array($user, $route['users'], true)) {
-					$others[$documentId] = $route['leaves'];
+					$others[$documentId] = $restricted ? $route['taken'] : $route['leaves'];
 				}
 			}
 			$missing += $this->exportArchive($paperless, $archive, $reports[$user], $read, $mine[$user], $others);
@@ -643,6 +657,19 @@ final class SyncService {
 	private function keepTagArchives(SyncConfig $config, array $tagged): void {
 		$before = $this->configService->tagArchives();
 		$kept = array_values(array_unique($config->perUser() ? $tagged : [...$tagged, ...array_intersect($before, $this->state->exportOwners())]));
+		if ($kept !== $before) {
+			$this->configService->keepTagArchives($kept);
+		}
+	}
+
+	/**
+	 * Adds the users with tags to the archives that the tags filled, before a copy moves into one.
+	 *
+	 * @param list<string> $tagged the users with tags
+	 */
+	private function addTagArchives(array $tagged): void {
+		$before = $this->configService->tagArchives();
+		$kept = array_values(array_unique([...$before, ...$tagged]));
 		if ($kept !== $before) {
 			$this->configService->keepTagArchives($kept);
 		}

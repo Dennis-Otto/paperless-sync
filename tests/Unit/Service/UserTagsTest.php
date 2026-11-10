@@ -167,19 +167,64 @@ final class UserTagsTest extends TestCase {
 		self::assertSame([], $this->filesOf('Katja'));
 	}
 
-	/** A tag that Paperless doesn't have, after a typo or a rename, would take her copies, so the run stops before one moves. */
-	public function testARunStopsAtATagThatPaperlessDoesNotHave(): void {
+	/**
+	 * A tag that Paperless doesn't have, after a typo or a rename, would take her copies, so the run
+	 * leaves her archive as it is, with an error, while the target user and every other user with
+	 * tags get their documents.
+	 */
+	public function testATagThatPaperlessDoesNotHaveLeavesOnlyTheArchiveOfItsUser(): void {
+		$this->usersOfNextcloud[] = 'bob';
+		$this->save('Katja = Katja
+bob = Taxes');
 		$this->sync([$this->document(1, [self::TAG_KATJA])]);
-		$this->save('Katja = Katja, Housework, housework');
+		$this->save('Katja = Katja, Housework, housework
+bob = Taxes');
 
-		try {
-			$this->sync([$this->document(1, [self::TAG_KATJA])]);
-			self::fail('The run needs every tag of the lines.');
-		} catch (InvalidSettingException $exception) {
-			self::assertSame('Paperless has no tag named "Housework", which "Tags that a user may see" names; a run would take from a user the copies of the documents that they may see.', $exception->getMessage());
-			self::assertSame('user_tags', $exception->setting);
-		}
+		$report = $this->sync([$this->document(1, [self::TAG_KATJA]), $this->document(2, [self::TAG_TAXES])]);
+
 		self::assertSame([$this->path(1)], array_keys($this->filesOf('Katja')));
+		self::assertSame([$this->path(2)], array_keys($this->filesOf('bob')));
+		self::assertSame([$this->path(1), $this->path(2)], $this->sorted(array_keys($this->storage->files)));
+		self::assertSame(['[Katja] Archive of Katja: Paperless has no tag named "Housework", which "Tags that a user may see" names for them, so their copies stay as they are until the line or Paperless names the tag.'], $report->errorMessages);
+	}
+
+	/**
+	 * The run of one document, which the webhook asks for, keeps the archive that it fills, so that
+	 * a complete run reaches it once her line is gone, and takes her copy.
+	 */
+	public function testACopyOfTheRunOfOneDocumentLeavesOnceItsLineIsGone(): void {
+		$this->paperless->documents = [$this->document(5, [self::TAG_HOUSEHOLD])];
+		$this->paperless->contents[5] = '%PDF-content';
+		$this->service->syncDocument(5);
+		self::assertSame(['Katja'], $this->configService->tagArchives());
+		$this->save('');
+
+		$report = $this->sync([$this->document(5, [self::TAG_HOUSEHOLD])]);
+
+		self::assertSame([], $this->filesOf('Katja'));
+		self::assertSame(['[Katja] REMOVE REASSIGNED P5: ' . $this->path(5)], $report->actions);
+		self::assertSame([], $this->configService->tagArchives());
+	}
+
+	/**
+	 * With the documents that Paperless shares, a document whose viewers Paperless didn't name
+	 * still leaves the archive of a user with tags when it has none of them, as only the tags
+	 * decide for her; its owner keeps it.
+	 */
+	public function testOnlyTheTagsDecideForADocumentWithoutItsViewers(): void {
+		$this->paperless->accountId = 9;
+		$this->save('', SyncConfig::PER_USER_SHARED);
+		$this->sync([$this->document(1, [], self::ALICE, [self::KATJA])]);
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('Katja')));
+		$this->save(ownership: SyncConfig::PER_USER_SHARED);
+		$document = $this->document(1, [], self::ALICE);
+		unset($document['permissions']);
+
+		$report = $this->sync([$document]);
+
+		self::assertSame([], $this->filesOf('Katja'));
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('alice')));
+		self::assertContains('[Katja] REMOVE REASSIGNED P1: ' . $this->path(1), $report->actions);
 	}
 
 	/**

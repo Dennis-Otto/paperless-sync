@@ -548,6 +548,70 @@
 	color: var(--color-warning-text, var(--color-main-text));
 }
 
+/* The tags that a user may see: a row for each user, with the user, their tags and a button that
+   removes the row. */
+.paperless-sync-user-tags-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-weight: 400;
+}
+
+.paperless-sync-user-tags-table[hidden] {
+	display: none;
+}
+
+.paperless-sync-user-tags-table th {
+	padding: 4px 8px 4px 0;
+	color: var(--color-text-maxcontrast);
+	font-weight: 600;
+	text-align: start;
+}
+
+.paperless-sync-user-tags-table td {
+	padding: 6px 8px 6px 0;
+	border-top: 1px solid var(--color-border);
+	vertical-align: top;
+}
+
+.paperless-sync-user-tags-table td:first-child {
+	width: 30%;
+}
+
+.paperless-sync-user-tags-table td:last-child {
+	width: 1%;
+	white-space: nowrap;
+}
+
+.paperless-sync-user-tags-table input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.paperless-sync-user-tags-table .paperless-sync-tags {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+/* The shares that show a user with tags more than their tags, as a failure of the checklist. */
+.paperless-sync-user-tags-shares {
+	margin: 12px 0;
+	padding: 8px 12px;
+	border-inline-start: 4px solid var(--color-error);
+	background: var(--color-background-hover);
+}
+
+.paperless-sync-user-tags-shares[hidden] {
+	display: none;
+}
+
+.paperless-sync-user-tags-shares ul {
+	margin: 4px 0 8px;
+	padding-inline-start: 20px;
+	list-style: disc;
+	overflow-wrap: anywhere;
+}
+
 /* The names of a tag picker, each with a button that removes it. */
 .paperless-sync-chips {
 	display: flex;
@@ -1155,6 +1219,27 @@ a.paperless-sync-entry-file {
 }
 
 @media (max-width: 700px) {
+	/* Each row of the tags that a user may see takes the width of the phone, its cells one below the other. */
+	.paperless-sync-user-tags-table thead {
+		display: none;
+	}
+
+	.paperless-sync-user-tags-table tr,
+	.paperless-sync-user-tags-table td,
+	.paperless-sync-user-tags-table tbody {
+		display: block;
+		width: auto;
+	}
+
+	.paperless-sync-user-tags-table td:first-child,
+	.paperless-sync-user-tags-table td:last-child {
+		width: auto;
+	}
+
+	.paperless-sync-user-tags-table td + td {
+		border-top: none;
+	}
+
 	.paperless-sync-grid,
 	.paperless-sync-switches--inline {
 		grid-template-columns: 1fr;

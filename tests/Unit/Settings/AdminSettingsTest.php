@@ -76,6 +76,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);
 		self::assertSame('/route/paperless_sync.directory.users', $parameters['usersUrl'], 'The users come from a route of the app, which a delegated group may ask too.');
 		self::assertSame('/route/paperless_sync.directory.groups', $parameters['groupsUrl'], 'So do the groups.');
+		self::assertSame('/route/paperless_sync.tagshares.shares', $parameters['tagSharesUrl'], 'And the shares past the tags of a user.');
 		self::assertSame($parameters['config'], $this->initialState['config'], 'The page compares the form with the stored configuration.');
 		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);

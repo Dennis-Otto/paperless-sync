@@ -351,7 +351,7 @@
 			}).observe(actions)
 		}
 		// The settings that the connection checklist depends on: a change of one outdates its lines.
-		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group']
+		const checkedSettings = ['paperless_url', 'paperless_local_network', 'target_user', 'base_path', 'export_enabled', 'inbox_enabled', 'inbox_folder_tags', 'inbox_tags', 'inbox_create_tags', 'send_group', 'ownership', 'user_map', 'user_group', 'user_tags']
 		// While a run is queued or active, the page asks for its status: after a change of the state
 		// three times every second, so that a run that a worker of Nextcloud starts at once shows at
 		// once, then every five seconds, and after five minutes in the same state every thirty
@@ -481,6 +481,7 @@
 				savedSettings = JSON.stringify(settings(copy))
 			} else {
 				fill(root, config)
+				showUserTags()
 				savedSettings = JSON.stringify(settings())
 			}
 			if (!tokenChanged) {
@@ -499,6 +500,7 @@
 				picker.show()
 			})
 			checkTargetUser()
+			refreshShares()
 			updateForm()
 		}
 
@@ -594,6 +596,9 @@
 		// The visible control of a setting, which the page moves the focus to: the field of a tag
 		// picker for its hidden setting.
 		function control(setting) {
+			if (setting === userTagsSetting) {
+				return userTagRows.length > 0 ? userTagRows[0].user : addUserTags
+			}
 			const picker = setting.type === 'hidden' ? setting.closest('[data-tag-picker]') : null
 			return picker === null ? setting : picker.querySelector('[role="combobox"]')
 		}
@@ -1905,7 +1910,8 @@
 		// The setting itself is the hidden input, with the names separated by commas, as the server
 		// stores them; a change of it is an input event of the form, as a change of any other setting.
 		function tagPicker(container) {
-			const setting = container.querySelector('[data-setting]')
+			// The hidden setting, or the hidden tags of a row of the tags that a user may see.
+			const setting = container.querySelector('[data-setting], [data-tags]')
 			const input = container.querySelector('[role="combobox"]')
 			const prefix = input.id.replace(/-input$/, '')
 			const part = function(name) {
@@ -2078,6 +2084,165 @@
 
 		root.querySelectorAll('[data-tag-picker]').forEach(function(container) {
 			tagPickers.push(tagPicker(container))
+		})
+
+		// The tags that a user may see, as a table: a row for each user, with a field that offers the
+		// users of Nextcloud and a tag picker of the tags of Paperless. The setting itself is the
+		// hidden field, with a line for each row, user = Tag, Tag, as the server stores it and
+		// Paperless Unified Search reads it; a change of a row is a change of the setting.
+		const userTagsSetting = root.querySelector('[data-setting="user_tags"]')
+		const userTagsTable = element('user-tags-table')
+		const userTagsBody = element('user-tags-rows')
+		const userTagsRow = element('user-tags-row')
+		const addUserTags = element('user-tags-add')
+		let userTagRows = []
+		let userTagRowCount = 0
+
+		function writeUserTags() {
+			userTagsSetting.value = userTagRows.map(function(row) {
+				return { user: row.user.value.trim(), tags: splitTags(row.tags.value) }
+			}).filter(function(line) {
+				return line.user !== '' || line.tags.length > 0
+			}).map(function(line) {
+				return line.user + ' = ' + line.tags.join(', ')
+			}).join('\n')
+			userTagsSetting.dispatchEvent(new Event('input', { bubbles: true }))
+		}
+
+		// The users of Nextcloud for the field of a row, with the problem of a search below it.
+		async function searchRowUsers(text, problem) {
+			try {
+				const query = new URLSearchParams({ search: text })
+				const answer = await request(root.dataset.usersUrl + '?' + query, 'GET')
+				setText(problem, '')
+				return answer.users.map(function(user) {
+					const name = user.displayname.trim() !== '' ? user.displayname : user.id
+					return { value: user.id, label: name, note: name === user.id ? '' : user.id }
+				})
+			} catch (error) {
+				setText(problem, translate('Could not search the users of Nextcloud: {error}', { error: error.message }))
+				return []
+			}
+		}
+
+		function addUserTagsRow(user, tags) {
+			const id = 'paperless-sync-user-tags-' + (++userTagRowCount)
+			const row = userTagsRow.content.firstElementChild.cloneNode(true)
+			const userInput = row.querySelector('[data-row-user]')
+			const userOptions = row.querySelector('[data-row-user-options]')
+			const problem = row.querySelector('[data-row-user-problem]')
+			userInput.id = id + '-user'
+			userOptions.id = id + '-user-options'
+			problem.id = id + '-user-problem'
+			userInput.setAttribute('aria-controls', userOptions.id)
+			userInput.setAttribute('aria-describedby', problem.id)
+			userInput.value = user
+			const tagsContainer = row.querySelector('[data-row-tags]')
+			const tagsInput = tagsContainer.querySelector('[role="combobox"]')
+			tagsInput.id = id + '-tags-input'
+			tagsContainer.querySelectorAll('[data-part]').forEach(function(part) {
+				part.id = id + '-tags-' + part.dataset.part
+			})
+			tagsInput.setAttribute('aria-controls', id + '-tags-options')
+			tagsInput.setAttribute('aria-describedby', id + '-tags-status')
+			const tagsSetting = tagsContainer.querySelector('[data-tags]')
+			tagsSetting.value = tags
+			userTagsBody.append(row)
+			const picker = tagPicker(tagsContainer)
+			tagPickers.push(picker)
+			picker.show()
+			combobox(userInput, userOptions, function(text) {
+				return searchRowUsers(text, problem)
+			}, function(option) {
+				userInput.value = option.value
+				writeUserTags()
+			})
+			const entry = { user: userInput, tags: tagsSetting, picker }
+			row.querySelector('[data-row-remove]').addEventListener('click', function() {
+				tagPickers.splice(tagPickers.indexOf(picker), 1)
+				userTagRows = userTagRows.filter(function(other) {
+					return other !== entry
+				})
+				row.remove()
+				userTagsTable.hidden = userTagRows.length === 0
+				writeUserTags()
+				addUserTags.focus()
+			})
+			// A change of the user, or of the tags, which the tag picker reports as an input event of
+			// its hidden field; the typing in its own field adds no tag yet.
+			row.addEventListener('input', function(event) {
+				if (event.target !== tagsInput) {
+					writeUserTags()
+				}
+			})
+			userTagRows.push(entry)
+			userTagsTable.hidden = false
+			return entry
+		}
+
+		// Draws the rows of the setting anew, as after a save.
+		function showUserTags() {
+			userTagRows.forEach(function(row) {
+				tagPickers.splice(tagPickers.indexOf(row.picker), 1)
+			})
+			userTagRows = []
+			userTagsBody.replaceChildren()
+			userTagsSetting.value.split(/\r?\n/).forEach(function(text) {
+				const at = text.indexOf('=')
+				if (text.trim() !== '') {
+					addUserTagsRow(at < 0 ? text.trim() : text.slice(0, at).trim(), at < 0 ? '' : splitTags(text.slice(at + 1)).join(', '))
+				}
+			})
+			userTagsTable.hidden = userTagRows.length === 0
+		}
+
+		addUserTags.addEventListener('click', function() {
+			addUserTagsRow('', '').user.focus()
+		})
+
+		// The shares of the target user that show a user with tags more than their tags, for the
+		// saved settings, which only a click removes, with the password confirmed.
+		const sharesPanel = element('user-tags-shares')
+		const sharesList = element('user-tags-share-list')
+		const removeShares = element('user-tags-remove-shares')
+		const sharesStatus = element('user-tags-shares-status')
+		let shownShares = []
+
+		function showShares(shares) {
+			shownShares = shares
+			sharesPanel.hidden = shares.length === 0
+			sharesList.replaceChildren(...shares.map(function(share) {
+				const item = document.createElement('li')
+				item.textContent = share.type === 'group'
+					? translate('{path}, shared with the group {group}: {users}', { path: share.path, group: share.with, users: share.users.join(', ') })
+					: translate('{path}, shared with {users}', { path: share.path, users: share.users.join(', ') })
+				return item
+			}))
+		}
+
+		async function refreshShares() {
+			try {
+				showShares((await request(root.dataset.tagSharesUrl, 'GET')).shares)
+			} catch (error) {
+				setText(sharesStatus, error.message)
+			}
+		}
+
+		removeShares.addEventListener('click', async function() {
+			removeShares.disabled = true
+			try {
+				const answer = await request(root.dataset.tagSharesUrl, 'DELETE', {
+					ids: shownShares.map(function(share) {
+						return share.id
+					}),
+				})
+				showShares(answer.shares)
+				setText(sharesStatus, translatePlural('Removed %n share.', 'Removed %n shares.', answer.removed))
+			} catch (error) {
+				setText(sharesStatus, error.message)
+			} finally {
+				removeShares.disabled = false
+			}
 		})
 
 		// Adds the names that are typed in a tag picker but not yet added, before the settings of the
@@ -2316,6 +2481,7 @@
 			tokenConfigured = !token.required
 			savedUrl = normalizeUrl(paperlessUrl.defaultValue)
 			savedTargetUser = root.querySelector('[data-setting="target_user"]').defaultValue
+			showUserTags()
 			savedSettings = JSON.stringify(settings())
 			if (tokenConfigured) {
 				loadTags()

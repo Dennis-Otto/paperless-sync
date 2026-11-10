@@ -690,12 +690,32 @@ OC.L10N.register(
 		"Paperless did not list its users, which a storage path that the archive follows needs for {{ owner_username }}; the user of the API token needs the permission to view users: %s": "Paperless 未列出其使用者，而封存所遵循的儲存路徑中的 {{ owner_username }} 需要使用者清單；API Token 所屬的使用者需要檢視使用者的權限：%s",
 		"Paperless did not list its custom fields, which a storage path that the archive follows uses; the user of the API token needs the permission to view custom fields: %s": "Paperless 未列出其自訂欄位，而封存所遵循的儲存路徑使用了自訂欄位；API Token 所屬的使用者需要檢視自訂欄位的權限：%s",
 		"Tags that a user may see": "使用者可檢視的標籤",
-		"One on each line: the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas. Such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without a line sees what they see today, and the target user always gets every document.": "每行一個：Nextcloud 使用者 ID、等號和以逗號分隔的 Paperless 標籤。這樣的使用者會在自己的封存中取得至少帶有其一個標籤的每個文件，無論文件歸誰所有，這些副本計入其配額，且不會取得其他文件；Paperless Unified Search 向其顯示的內容相同。沒有對應行的使用者看到的內容與現在相同，目標使用者始終取得每個文件。",
 		"\"Tags that a user may see\", line %s: write the user ID of Nextcloud, an equals sign and the tags of Paperless, separated by commas, such as katja = Katja, Household.": "「使用者可檢視的標籤」第 %s 行：請寫入 Nextcloud 使用者 ID、等號和以逗號分隔的 Paperless 標籤，例如 katja = Katja, Household。",
 		"\"Tags that a user may see\", line %1$s: Nextcloud has no user with the ID %2$s.": "「使用者可檢視的標籤」第 %1$s 行：Nextcloud 中沒有 ID 為 %2$s 的使用者。",
 		"\"Tags that a user may see\", line %1$s: the user %2$s has a line already.": "「使用者可檢視的標籤」第 %1$s 行：使用者 %2$s 已有一行。",
 		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "「使用者可檢視的標籤」第 %1$s 行：%2$s 是目標使用者，會取得每個文件。",
-		"Paperless has no tag named %s, which \"Tags that a user may see\" names; a run would take from a user the copies of the documents that they may see.": "Paperless 中沒有名為 %s 的標籤，但「使用者可檢視的標籤」中列出了它；執行會拿走使用者可檢視的文件的副本。"
+		"{path}, shared with the group {group}: {users}": "{path}，已分享給群組 {group}：{users}",
+		"{path}, shared with {users}": "{path}，已分享給 {users}",
+		"Remove this user": "移除此使用者",
+		"Add a user": "新增使用者",
+		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "此表中的使用者會在自己的封存中取得至少帶有其一個標籤的每個文件，無論文件歸誰所有，這些副本計入其配額，且不會取得其他文件；Paperless Unified Search 向其顯示的內容相同。沒有標籤或不在表中的使用者看到的內容與現在相同，目標使用者始終取得每個文件。",
+		"These shares of the target user show a user with tags every document in them, whatever their tags:": "目標使用者的這些分享會向帶標籤的使用者顯示其中的每個文件，無論其標籤為何：",
+		"Remove these shares": "移除這些分享",
+		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud 未列出 %1$s 的分享：%2$s",
+		"Nextcloud did not remove the shares: %s": "Nextcloud 未移除這些分享：%s",
+		"Shares of the archive": "封存的分享",
+		"Paperless has every tag that \"Tags that a user may see\" names.": "Paperless 擁有「使用者可檢視的標籤」中列出的每個標籤。",
+		"The runs need them to give the users with tags their documents.": "執行需要它們才能為帶標籤的使用者提供其文件。",
+		"Paperless has no tag of these names, which \"Tags that a user may see\" names: %s.": "Paperless 中沒有這些名稱的標籤，但「使用者可檢視的標籤」中列出了它們：%s。",
+		"The runs leave the archive of such a user as it is until the line or Paperless names the tag: correct the line, or create the tag in Paperless.": "在該行或 Paperless 給出該標籤之前，執行會保持此類使用者的封存不變：請更正該行，或在 Paperless 中建立該標籤。",
+		"Archive of %1$s: Paperless has no tag named %2$s, which \"Tags that a user may see\" names for them, so their copies stay as they are until the line or Paperless names the tag.": "%1$s 的封存：Paperless 中沒有名為 %2$s 的標籤，但「使用者可檢視的標籤」為該使用者列出了它，因此在該行或 Paperless 給出該標籤之前，其副本保持不變。",
+		"No share of %s shows a user with tags more than their tags.": "%s 的分享均未向帶標籤的使用者顯示超出其標籤的內容。",
+		"Check in Files that no share of the base folder reaches a user with tags.": "請在「檔案」中檢查基礎資料夾的分享均未到達帶標籤的使用者。",
+		"These shares of %1$s show a user with tags every document in them: %2$s.": "%1$s 的這些分享會向帶標籤的使用者顯示其中的每個文件：%2$s。",
+		"Remove them under \"Tags that a user may see\", or in Files.": "請在「使用者可檢視的標籤」下或在「檔案」中移除它們。",
+		"_Removed %n share._::_Removed %n shares._": [
+			"已移除 %n 個分享。"
+		]
 	},
 	"nplurals=1; plural=0;"
 )
