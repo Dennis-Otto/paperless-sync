@@ -6,10 +6,9 @@ All notable changes to this project are documented in this file.
 
 ## [1.9.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.8.0...v1.9.0) (2026-11-10)
 
-
 ### Features
 
-* the admin sets per user which tags of Paperless they may see ([#427](https://github.com/Dennis-Otto/paperless-sync/issues/427)) ([bb4c573](https://github.com/Dennis-Otto/paperless-sync/commit/bb4c573ec52e049e1f0206a3e515e3ed25f335fa))
+- The administrator can set for each user which tags of Paperless they may see, in the table *Tags that a user may see*: such a user gets every document with at least one of their tags in an archive of their own, whoever owns it, and no other document, also with *The target user, all of them*, while the target user and every user without a line keep seeing what they saw before. A document that gains or loses one of the tags reaches or leaves their archive with the next run or the webhook, and Paperless Unified Search reads the same table (#426). The settings page, the connection checklist and `occ paperless_sync:status` name a share of the archive that would still show such a user every document, and the page removes it with one click.
 
 ## [1.8.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.7.0...v1.8.0) (2026-11-09)
 
