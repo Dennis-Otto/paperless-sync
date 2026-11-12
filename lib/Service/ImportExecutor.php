@@ -166,6 +166,9 @@ final class ImportExecutor {
 		$path = $action->path;
 		try {
 			$known = $this->paperless->findDocument($this->fingerprint($path));
+			if ($known !== null && $this->owner !== null && !$this->ours($known)) {
+				$known = null;
+			}
 		} catch (\Throwable $exception) {
 			// Without the answer, the upload might create the document a second time, so the file
 			// waits, as for a failed upload.
@@ -250,9 +253,37 @@ final class ImportExecutor {
 	}
 
 	/**
+	 * In per-user ownership, whether a document with the content of a file of the inbox is this
+	 * inbox's: owned by its user of Paperless, or by the account of the app, which owns an upload
+	 * until a run gives it its owner, as after an upload whose answer never came; such a document
+	 * gets its owner now. The account sees the documents of every user, so a document of another
+	 * user, or one that it doesn't show, is not: the file goes up as its own document, and never
+	 * leaves the inbox for a document that its user can't see.
+	 */
+	private function ours(int $document): bool {
+		$found = $this->paperless->document($document);
+		if ($found === null || !is_numeric($found['owner'] ?? null)) {
+			return false;
+		}
+		$owner = (int)$found['owner'];
+		if ($owner === $this->owner) {
+			return true;
+		}
+		if ($owner !== $this->paperless->accountId()) {
+			return false;
+		}
+		if (!$this->dryRun) {
+			$this->paperless->setOwner($document, (int)$this->owner);
+		}
+
+		return true;
+	}
+
+	/**
 	 * Paperless has a document with the content of a file of the inbox, so the file ends as one
 	 * that it imported, without an upload: it leaves the inbox, or stays there as imported, as the
-	 * settings say. The document stays as it is, also its owner, as it may be someone else's.
+	 * settings say. The document stays as it is: in per-user ownership ours() made sure that it is
+	 * this inbox's, and otherwise every document is the account's.
 	 */
 	private function known(Upload $action, int $document): void {
 		$path = $action->path;

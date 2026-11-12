@@ -165,13 +165,102 @@ final class ImportExecutorTest extends TestCase {
 	public function testAKeptFileThatPaperlessHasAlreadyStaysAsImported(): void {
 		$this->arrange(false, ['deleteInboxAfterSuccess' => false], 3);
 		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 3];
 
 		$this->executor->apply(self::upload());
 
 		self::assertSame([], $this->paperless->uploadAttempts);
 		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
 		self::assertSame(['status' => 'success', 'etag' => hash('sha256', self::CONTENT), 'file_id' => self::FILE_ID, 'last_error' => null], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'file_id', 'status', 'last_error'])));
-		self::assertSame([], $this->paperless->ownerChanges, 'The document may be someone else\'s, so its owner stays.');
+		self::assertSame([], $this->paperless->ownerChanges, 'The document is the inbox\'s already, so its owner stays.');
+	}
+
+	/**
+	 * In per-user ownership, the account of the app sees the documents of every user, so a document
+	 * with the content of the file that isn't the inbox's gives the file no reason to leave the
+	 * inbox: it goes up as the document of the inbox's user.
+	 *
+	 * @return array<string, array{array<string, mixed>|null}>
+	 */
+	public static function documentsThatAreNotTheInboxs(): array {
+		return [
+			'a document of another user' => [['id' => 9, 'owner' => 4]],
+			'a document without an owner' => [['id' => 9, 'owner' => null]],
+			'a document that Paperless does not show' => [null],
+		];
+	}
+
+	/** @param array<string, mixed>|null $document */
+	#[DataProvider('documentsThatAreNotTheInboxs')]
+	public function testAFileWhoseContentIsAnotherUsersDocumentIsUploaded(?array $document): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		if ($document !== null) {
+			$this->paperless->documents[] = $document;
+		}
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE], 'The file stays until the upload is imported.');
+		self::assertSame(['IMPORT: ' . self::FILE], $this->report->actions);
+		self::assertSame('pending', $this->state->imports[self::FILE]['status']);
+		self::assertSame([], $this->paperless->ownerChanges, 'The other user keeps the document.');
+	}
+
+	/**
+	 * In per-user ownership, a document of the account of the app, as after an upload whose answer
+	 * never came, is the inbox's: the file ends as imported, and the document gets its owner; a
+	 * dry-run gives none.
+	 */
+	public function testAFileWhoseUploadTheAccountOwnsEndsAsImportedAndItsDocumentGetsItsOwner(): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+
+		$this->executor->apply(self::upload(attempts: 1));
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame([[9, 3]], $this->paperless->ownerChanges);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
+
+		$this->arrange(true, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+	}
+
+	/** Without the owner of the document that Paperless has, or without the new owner, the file waits, as for a failed upload. */
+	public function testAFileWaitsWhenPaperlessCannotSayWhoseDocumentItHas(): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documentException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+		self::assertArrayHasKey(self::FILE, $this->storage->files);
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 3 the owner of the document 9: HTTP 403.');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+		self::assertArrayHasKey(self::FILE, $this->storage->files);
 	}
 
 	/** A dry-run reports a file that Paperless has as the run does, and changes nothing. */
