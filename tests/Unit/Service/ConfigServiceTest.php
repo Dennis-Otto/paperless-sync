@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCP\DB\Exception as DatabaseException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -567,7 +568,7 @@ final class ConfigServiceTest extends TestCase {
 		$config = $this->service->reset();
 
 		self::assertNull($this->credential);
-		self::assertSame(array_replace($stored, ['sync_enabled' => false]), $this->settings);
+		self::assertSame(array_replace($stored, ['sync_enabled' => false, 'token_url' => '']), $this->settings, 'Without the URL of the token, which settings() reads.');
 		self::assertFalse($config->tokenConfigured);
 		self::assertFalse($config->enabled);
 		self::assertSame('https://paperless.example.test', $config->paperlessUrl);
@@ -580,7 +581,7 @@ final class ConfigServiceTest extends TestCase {
 	public function testDisconnectWithoutSettingsKeepsTheDefaults(): void {
 		$config = $this->service->reset();
 
-		self::assertSame(['sync_enabled' => false, 'paperless_local_network' => false], $this->settings);
+		self::assertSame(['token_url' => '', 'sync_enabled' => false, 'paperless_local_network' => false], $this->settings);
 		self::assertSame($this->configService()->get()->jsonSerialize(), $config->jsonSerialize());
 		self::assertSame('', $config->paperlessUrl);
 		self::assertFalse($config->tokenConfigured);
@@ -695,5 +696,157 @@ final class ConfigServiceTest extends TestCase {
 
 	public function testUppercaseSchemeIsAccepted(): void {
 		self::assertSame('HTTPS://paperless.example.test', $this->service->normalizeUrl('HTTPS://paperless.example.test/'));
+	}
+
+	/**
+	 * After a restore or a move of Nextcloud with another secret in config.php, the credentials
+	 * store can't decrypt the token, and throws: the token counts as none, the settings stay as they
+	 * are, and the log says why and what to do (#460).
+	 */
+	public function testATokenThatCanNotBeDecryptedCountsAsNone(): void {
+		$this->service->save(self::validSettings() + ['enabled' => true, 'batch_size' => 20], 'secret-token');
+		$this->credentialsUnreadable = true;
+
+		$config = $this->service->get();
+
+		self::assertFalse($config->tokenConfigured);
+		self::assertFalse($config->complete(), 'A run doesn\'t start without a token.');
+		self::assertSame(['https://paperless.example.test', 'paperless', true, 20], [$config->paperlessUrl, $config->targetUser, $config->enabled, $config->batchSize]);
+		self::assertSame('', $this->service->getToken());
+		[$snapshot, $connection] = $this->service->snapshot();
+		self::assertFalse($snapshot->tokenConfigured);
+		self::assertSame('', $connection->token());
+		self::assertSame('', $this->service->connection($config)->token());
+		self::assertTrue($this->service->tokenUnreadable());
+		self::assertContains('Paperless Sync could not read its stored Paperless API token, as after a restore or a move of Nextcloud with another secret (HMAC does not match.). Enter the token again in its settings.', $this->loggedWarnings);
+	}
+
+	/** A token that can't be decrypted has to be entered again, as none, also for the same URL. */
+	public function testATokenThatCanNotBeDecryptedHasToBeEnteredAgain(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->credentialsUnreadable = true;
+
+		try {
+			$this->service->save(self::validSettings());
+			self::fail('A save without the token must be refused.');
+		} catch (InvalidSettingException $exception) {
+			self::assertSame('A Paperless API token is required.', $exception->getMessage());
+		}
+		$config = $this->service->save(self::validSettings(), 'new-token');
+
+		self::assertTrue($config->tokenConfigured, 'The store encrypts the new token with the secret of this Nextcloud.');
+		self::assertFalse($this->service->tokenUnreadable());
+		self::assertSame('new-token', $this->service->getToken());
+	}
+
+	/** An update from a version before 0.11.1 goes on with a token that can't be decrypted, as with none. */
+	public function testAnUnboundTokenThatCanNotBeDecryptedIsNone(): void {
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		$this->credential = 'old-token';
+		$this->credentialsUnreadable = true;
+
+		self::assertFalse($this->service->bindUnboundToken());
+		self::assertSame('old-token', $this->credential, 'The token stays, for a restore of the right secret.');
+	}
+
+	/** A store that holds no token, or one it can read, is no store with a token that it can't read. */
+	public function testATokenThatIsMissingOrReadableIsNotUnreadable(): void {
+		self::assertFalse($this->service->tokenUnreadable());
+
+		$this->service->save(self::validSettings(), 'secret-token');
+
+		self::assertFalse($this->service->tokenUnreadable());
+		self::assertSame([], $this->loggedWarnings);
+	}
+
+	/** A token that can't be decrypted is logged once a request, not with every read of the settings. */
+	public function testATokenThatCanNotBeDecryptedIsLoggedOnce(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->credentialsUnreadable = true;
+
+		$this->service->get();
+		$this->service->get();
+		$this->service->snapshot();
+
+		self::assertCount(1, $this->loggedWarnings);
+	}
+
+	/**
+	 * A failure of the database is no token that can't be decrypted: it goes on as it is, instead of
+	 * sending the administrator to enter the token again.
+	 */
+	public function testAFailureOfTheDatabaseIsNoUnreadableToken(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$failure = new DatabaseException('The database is gone.');
+		$this->credentialsFailure = $failure;
+
+		foreach ([fn (): mixed => $this->service->get(), fn (): mixed => $this->service->tokenUnreadable()] as $read) {
+			try {
+				$read();
+				self::fail('A failure of the database must go on.');
+			} catch (DatabaseException $exception) {
+				self::assertSame($failure, $exception);
+			}
+		}
+		self::assertSame([], $this->loggedWarnings);
+	}
+
+	/**
+	 * Files reads the settings with every load, for every user: settings() gives them as get() does,
+	 * but without a read, and a decryption, of the token.
+	 */
+	public function testSettingsDoNotReadTheToken(): void {
+		$this->service->save(self::validSettings() + ['batch_size' => 20], 'secret-token');
+		$this->credentialReads = 0;
+
+		$config = $this->service->settings();
+
+		self::assertSame(0, $this->credentialReads);
+		self::assertSame($this->service->get()->jsonSerialize(), $config->jsonSerialize());
+		self::assertTrue($config->tokenConfigured);
+		self::assertTrue($config->complete());
+	}
+
+	/** As in get(), the token counts only for the URL that it was stored with, and not after a disconnect. */
+	public function testSettingsNameTheTokenOnlyForItsUrl(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->settings['paperless_url'] = 'https://other.example.test';
+
+		self::assertFalse($this->service->settings()->tokenConfigured, 'Another URL, as occ may set it, gets no token.');
+
+		$this->settings['paperless_url'] = 'https://paperless.example.test';
+		self::assertTrue($this->service->settings()->tokenConfigured);
+		$this->service->reset();
+		self::assertFalse($this->service->settings()->tokenConfigured);
+	}
+
+	/**
+	 * An installation of an earlier version stored the token without its URL in the app
+	 * configuration: settings() reads the store once, and the record of what it found after that.
+	 */
+	public function testSettingsOfAnEarlierVersionReadTheTokenOnce(): void {
+		$this->settings = ['paperless_url' => 'https://paperless.example.test', 'target_user' => 'paperless'];
+		$this->credential = ['url' => 'https://paperless.example.test', 'token' => 'secret-token'];
+
+		self::assertTrue($this->service->settings()->tokenConfigured);
+		self::assertTrue($this->service->settings()->tokenConfigured);
+
+		self::assertSame(1, $this->credentialReads);
+		self::assertSame('https://paperless.example.test', $this->settings['token_url']);
+		self::assertArrayHasKey('token_url', $this->lazyKeys, 'Nextcloud loads it only when the app asks for it.');
+	}
+
+	/** Such an installation with a token that can't be decrypted reads it as none, once, and goes on. */
+	public function testSettingsOfAnEarlierVersionWithATokenThatCanNotBeDecrypted(): void {
+		$this->settings = ['paperless_url' => 'https://paperless.example.test', 'target_user' => 'paperless'];
+		$this->credential = ['url' => 'https://paperless.example.test', 'token' => 'secret-token'];
+		$this->credentialsUnreadable = true;
+
+		self::assertFalse($this->service->settings()->tokenConfigured);
+		self::assertFalse($this->service->settings()->tokenConfigured);
+
+		self::assertSame(1, $this->credentialReads);
+		self::assertCount(1, $this->loggedWarnings);
+		self::assertSame('', $this->settings['token_url']);
 	}
 }

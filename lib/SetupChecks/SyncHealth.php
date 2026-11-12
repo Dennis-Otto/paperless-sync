@@ -22,7 +22,8 @@ use OCP\SetupCheck\SetupResult;
  * Says under Administration → Overview and on the settings page whether the mirror works, from
  * the health that StatusService keeps: an error when the last run failed, a warning when it
  * completed with errors or when no run succeeded for longer than StatusService::staleAfter(), and
- * a note with the way to the settings while the app is installed but not set up.
+ * a note with the way to the settings while the app is installed but not set up, and a warning
+ * when its stored token can't be read.
  */
 final class SyncHealth implements ISetupCheck {
 	/** The most characters of the error that the result names. */
@@ -47,7 +48,15 @@ final class SyncHealth implements ISetupCheck {
 	}
 
 	public function run(): SetupResult {
-		$config = $this->configService->get();
+		// A token that the credentials store can't decrypt counts as none, and the settings say so
+		// with this warning on top, instead of leading through the first steps again.
+		if ($this->configService->tokenUnreadable()) {
+			return SetupResult::warning(
+				$this->l10n->t('Paperless Sync cannot read its stored API token of Paperless, as after a restore or a move of Nextcloud with another secret. Enter the token again in its settings, and create a new secret for the webhook if it had one.'),
+				$this->urlGenerator->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => AppConstants::APP_ID]),
+			);
+		}
+		$config = $this->configService->settings();
 		$health = $this->status->health($config);
 		$failures = $this->status->failures();
 		$error = mb_substr($failures['error'], 0, self::ERROR_LIMIT);

@@ -56,7 +56,8 @@ final class FolderInfo {
 	 * @return array{folders: list<Folder>, lastSuccess: int, nextRun: int|null, dismissed: list<Kind>}
 	 */
 	public function of(string $userId): array {
-		$config = $this->configService->get();
+		// Files asks with every load of a folder: the settings come without a read of the token.
+		$config = $this->configService->settings();
 		$folders = $this->folders($config, $userId);
 		if ($folders === []) {
 			return ['folders' => [], 'lastSuccess' => 0, 'nextRun' => null, 'dismissed' => []];

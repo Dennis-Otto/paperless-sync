@@ -117,6 +117,36 @@ final class LoadAdditionalScriptsListenerTest extends TestCase {
 		self::assertSame([], self::initScripts());
 	}
 
+	/**
+	 * Files loads for every user, so it reads the settings without the token: a token that the
+	 * credentials store can't decrypt, as after a restore of Nextcloud with another secret, leaves
+	 * Files working (#460).
+	 */
+	public function testFilesNeitherReadsTheTokenNorFailsOnOneThatCanNotBeDecrypted(): void {
+		$this->credentialReads = 0;
+		$this->credentialsUnreadable = true;
+
+		$this->listener->handle(new Event());
+
+		self::assertSame(0, $this->credentialReads);
+		self::assertSame(['files' => ['send' => true, 'paperlessUrl' => 'https://paperless.example.test']], $this->states, '"Send to Paperless" answers itself that the app is not connected.');
+		self::assertContains('paperless_sync/js/files', self::initScripts());
+	}
+
+	/**
+	 * After the update from a version that recorded no URL of the token, the first load of Files
+	 * reads the token once: one that can't be decrypted counts as none, and Files goes on.
+	 */
+	public function testAfterAnUpdateATokenThatCanNotBeDecryptedCountsAsNone(): void {
+		unset($this->settings['token_url'], $this->lazyKeys['token_url']);
+		$this->credentialsUnreadable = true;
+
+		$this->listener->handle(new Event());
+
+		self::assertSame(['files' => ['send' => false, 'paperlessUrl' => 'https://paperless.example.test']], $this->states, 'Open in Paperless stays, Send to Paperless needs the token.');
+		self::assertCount(1, $this->loggedWarnings);
+	}
+
 	/** A page without a user, such as a public share, gets nothing. */
 	public function testAPageWithoutAUserGetsNothing(): void {
 		$this->user = null;

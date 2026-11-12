@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Service\WebhookService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryWebhook;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\DB\Exception as DatabaseException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -123,6 +124,40 @@ final class WebhookServiceTest extends TestCase {
 		$this->settings['webhook_last_call'] = $json;
 
 		self::assertNull($this->webhook->state()['lastCall']);
+	}
+
+	/**
+	 * After a restore or a move of Nextcloud with another secret in config.php, the credentials
+	 * store can't decrypt the secret, and throws: the webhook counts as off, refuses every call, and
+	 * the settings page offers a new secret, which works at once (#460).
+	 */
+	public function testASecretThatCanNotBeDecryptedIsNone(): void {
+		$this->webhook->create();
+		$this->webhookSecretUnreadable = true;
+
+		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $this->webhook->state());
+		self::assertFalse($this->webhook->verify('Bearer ' . self::SECRET));
+		self::assertContains('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret (HMAC does not match.). Create a new secret in its settings.', $this->loggedWarnings);
+
+		$secret = $this->webhook->create();
+
+		self::assertTrue($this->webhook->state()['configured']);
+		self::assertTrue($this->webhook->verify('Bearer ' . $secret));
+	}
+
+	/** A failure of the database is no secret that can't be decrypted: it goes on as it is. */
+	public function testAFailureOfTheDatabaseIsNoUnreadableSecret(): void {
+		$this->webhook->create();
+		$failure = new DatabaseException('The database is gone.');
+		$this->webhookStoreFailure = $failure;
+
+		try {
+			$this->webhook->verify('Bearer ' . self::SECRET);
+			self::fail('A failure of the database must go on.');
+		} catch (DatabaseException $exception) {
+			self::assertSame($failure, $exception);
+		}
+		self::assertSame([], $this->loggedWarnings);
 	}
 
 	public function testADamagedSecretOpensNothing(): void {

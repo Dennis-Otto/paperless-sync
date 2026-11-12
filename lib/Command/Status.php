@@ -64,9 +64,14 @@ final class Status extends Base {
 		$config = $this->configService->get();
 		$status = $this->statusService->overview($config);
 		$shares = $this->tagShares->find($config);
+		// A token that the credentials store can't decrypt, as after a restore with another secret.
+		$tokenUnreadable = $this->configService->tokenUnreadable();
 		if ($format !== 'plain') {
-			$this->writeJson($output, $status + ['tagShares' => $shares], $format);
+			$this->writeJson($output, $status + ['tagShares' => $shares, 'tokenUnreadable' => $tokenUnreadable], $format);
 		} else {
+			if ($tokenUnreadable) {
+				$this->line($output, 'The stored API token of Paperless can not be read, as after a restore or a move of Nextcloud with another secret: enter it again in the settings.');
+			}
 			$this->field($output, 'State', self::STATES[$status['state']] ?? $status['state']);
 			$this->field($output, 'Last started', self::time($status['lastStarted']));
 			$this->field($output, 'Last finished', self::time($status['lastEnded']));

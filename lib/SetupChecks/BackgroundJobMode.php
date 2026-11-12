@@ -39,7 +39,7 @@ final class BackgroundJobMode implements ISetupCheck {
 	}
 
 	public function run(): SetupResult {
-		if (!$this->configService->get()->enabled) {
+		if (!$this->configService->settings()->enabled) {
 			return SetupResult::success($this->l10n->t('Scheduled runs of Paperless Sync are off.'));
 		}
 		// Nextcloud keeps the mode as the background jobs settings and occ background:cron write it.

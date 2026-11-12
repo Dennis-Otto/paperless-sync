@@ -65,6 +65,7 @@ OC.L10N.register(
 		"Step done: {step}.": "Schritt erledigt: {step}.",
 		"Next step: {step}.": "Nächster Schritt: {step}.",
 		"Every step is done.": "Jeder Schritt ist erledigt.",
+		"Paperless Sync cannot read its stored API token of Paperless, as after a restore or a move of Nextcloud with another secret. Enter the token again in its settings, and create a new secret for the webhook if it had one.": "Paperless Sync kann sein gespeichertes API-Token von Paperless nicht lesen, wie nach einer Wiederherstellung oder einem Umzug von Nextcloud mit einem anderen Geheimnis. Gib das Token in seinen Einstellungen erneut ein, und erstelle ein neues Geheimnis für den Webhook, wenn er eines hatte.",
 		"Paperless Sync is installed but not set up yet. Its settings lead through the first steps.": "Paperless Sync ist installiert, aber noch nicht eingerichtet. Seine Einstellungen führen durch die ersten Schritte.",
 		"A dry-run counts the documents in Paperless; then this step says how long the first synchronization takes.": "Ein Testlauf zählt die Dokumente in Paperless; dann sagt dieser Schritt, wie lange die erste Synchronisation dauert.",
 		"The last dry-run found no document to mirror; the first run takes about one interval.": "Der letzte Testlauf hat kein Dokument zum Spiegeln gefunden; der erste Lauf dauert etwa ein Intervall.",

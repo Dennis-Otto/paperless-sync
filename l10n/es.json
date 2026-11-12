@@ -71,6 +71,7 @@
 		"Step done: {step}.": "Paso hecho: {step}.",
 		"Next step: {step}.": "Siguiente paso: {step}.",
 		"Every step is done.": "Todos los pasos están hechos.",
+		"Paperless Sync cannot read its stored API token of Paperless, as after a restore or a move of Nextcloud with another secret. Enter the token again in its settings, and create a new secret for the webhook if it had one.": "Paperless Sync no puede leer su token de API de Paperless guardado, como tras una restauración o un traslado de Nextcloud con otro secreto. Introduce el token de nuevo en sus ajustes y crea un nuevo secreto para el webhook si tenía uno.",
 		"Paperless Sync is installed but not set up yet. Its settings lead through the first steps.": "Paperless Sync está instalado, pero aún no configurado. Sus ajustes guían por los primeros pasos.",
 		"A dry-run counts the documents in Paperless; then this step says how long the first synchronization takes.": "Una simulación cuenta los documentos en Paperless; después, este paso indica cuánto tarda la primera sincronización.",
 		"The last dry-run found no document to mirror; the first run takes about one interval.": "La última simulación no encontró ningún documento que reflejar; la primera ejecución tarda aproximadamente un intervalo.",
