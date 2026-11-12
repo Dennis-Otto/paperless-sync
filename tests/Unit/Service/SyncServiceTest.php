@@ -752,6 +752,7 @@ final class SyncServiceTest extends TestCase {
 		$this->exportDocument();
 		$files = $this->storage->files;
 		$exports = $this->state->exports;
+		$this->usersOfNextcloud[] = 'archivist';
 		$this->configService->save(['target_user' => 'archivist']);
 		$this->storage->calls = [];
 

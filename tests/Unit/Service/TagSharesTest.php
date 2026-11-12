@@ -244,6 +244,21 @@ final class TagSharesTest extends TestCase {
 	}
 
 	/**
+	 * A target user saved in another case, which Nextcloud finds whatever the case, is the same user:
+	 * the check asks Nextcloud for the shares of the ID as it spells it, which the shares and the
+	 * paths of their files name, so it finds them and names the user as Nextcloud does (#461).
+	 */
+	public function testATargetUserInAnotherCaseFindsTheShares(): void {
+		$config = $this->configService->save(['target_user' => 'PaperLess', 'user_tags' => 'Katja = Katja'] + self::validSettings(), 'test-token');
+		$this->share(1, IShare::TYPE_USER, 'Documents/Paperless/Archive', 'Katja');
+
+		self::assertSame(['ocinternal:1'], array_column($this->tagShares->find($config), 'id'));
+		$failed = $this->tagShares->check($config);
+		self::assertNotNull($failed);
+		self::assertSame([ConnectionCheck::FAILED, ['paperless', '/Documents/Paperless/Archive → Katja']], [$failed->status, $failed->parameters]);
+	}
+
+	/**
 	 * The checklist names a tag that Paperless doesn't have, and the shares, beside its other lines;
 	 * a failure of the list of tags is a note.
 	 */

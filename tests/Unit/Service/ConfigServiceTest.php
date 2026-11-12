@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
+use OCA\PaperlessSync\Service\UnsavedSettingException;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -133,6 +134,78 @@ final class ConfigServiceTest extends TestCase {
 
 		self::assertSame('paperless', $this->service->targetUser());
 		self::assertSame(0, $this->credentialReads);
+	}
+
+	/**
+	 * Nextcloud finds a user whatever the case of the ID, but its activities, notifications and
+	 * shares name the user by the ID as it spells it, so the target user is saved so, as the users
+	 * of the tables are (#461).
+	 */
+	public function testTheTargetUserIsSavedAsNextcloudSpellsTheId(): void {
+		$this->usersOfNextcloud[] = 'dennis';
+
+		$config = $this->service->save(['target_user' => ' Dennis '] + self::validSettings(), 'secret-token');
+
+		self::assertSame(['dennis', 'dennis'], [$config->targetUser, $this->settings['target_user']]);
+		self::assertSame('dennis', $this->service->validate(['target_user' => 'DENNIS'])->targetUser, 'A check of unsaved settings takes the same ID.');
+	}
+
+	/**
+	 * A save refuses a new target user that Nextcloud doesn't have, but keeps the saved one when it
+	 * is gone since, so that a schedule can always be paused; the test of the connection names it.
+	 */
+	public function testASavedTargetUserThatIsGoneSinceDoesNotKeepTheScheduleFromAPause(): void {
+		$this->service->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		// As occ may store it, with the spaces that a save takes away.
+		$this->settings['target_user'] = ' paperless ';
+		$this->usersOfNextcloud = ['admin'];
+
+		$paused = $this->service->save(['enabled' => false]);
+
+		self::assertSame([false, 'paperless'], [$paused->enabled, $this->settings['target_user']]);
+		$this->expectException(InvalidSettingException::class);
+		$this->expectExceptionMessage('Nextcloud user Paperless does not exist.');
+		$this->service->save(['target_user' => 'Paperless']);
+	}
+
+	/**
+	 * A dry-run takes the saved target user, which it compares by the ID as Nextcloud spells it: the
+	 * same user in another case, as an earlier version stored it or the page sends it, is no other.
+	 */
+	public function testADryRunTakesTheSavedTargetUserInAnyCase(): void {
+		$this->usersOfNextcloud[] = 'dennis';
+		$this->service->save(['target_user' => 'dennis'] + self::validSettings(), 'secret-token');
+		// As an earlier version stored it.
+		$this->settings['target_user'] = 'Dennis';
+
+		self::assertSame('dennis', $this->service->validateForDryRun(['target_user' => 'dennis'])->targetUser);
+		self::assertSame('dennis', $this->service->validateForDryRun(['target_user' => 'DENNIS '])->targetUser);
+		try {
+			$this->service->validateForDryRun(['target_user' => 'admin']);
+			self::fail('A dry-run must not read the files of another user.');
+		} catch (UnsavedSettingException $exception) {
+			self::assertSame('target_user', $exception->setting);
+		}
+	}
+
+	/**
+	 * The step of the update stores a target user that an earlier version stored as it was typed
+	 * with the ID as Nextcloud spells it, once; one that Nextcloud doesn't have stays as it is.
+	 */
+	public function testATargetUserOfAnEarlierVersionIsSpelledAsNextcloudSpellsIt(): void {
+		self::assertNull($this->service->spellTargetUser(), 'Nothing to store without a target user.');
+		self::assertSame([], $this->settings);
+
+		$this->usersOfNextcloud[] = 'dennis';
+		$this->settings['target_user'] = ' Dennis ';
+		self::assertSame('dennis', $this->service->spellTargetUser());
+		self::assertSame('dennis', $this->settings['target_user']);
+		self::assertArrayHasKey('target_user', $this->lazyKeys, 'The settings are lazy, as a save stores them.');
+		self::assertNull($this->service->spellTargetUser(), 'Once is enough.');
+
+		$this->settings['target_user'] = 'Gone';
+		self::assertNull($this->service->spellTargetUser());
+		self::assertSame('Gone', $this->settings['target_user']);
 	}
 
 	/** A saved name stays when the default language of Nextcloud changes. */
@@ -648,6 +721,8 @@ final class ConfigServiceTest extends TestCase {
 			'URL with a query' => [['paperless_url' => 'https://paperless.example.test/?page=1'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
 			'URL with a fragment' => [['paperless_url' => 'https://paperless.example.test/#top'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
 			'no target user' => [['target_user' => '  '], 'A Nextcloud target user is required.', 'target_user', 'Ein Nextcloud-Zielbenutzer ist erforderlich.'],
+			// A user whom someone creates later under the ID must not get every document unasked.
+			'a target user that does not exist' => [['target_user' => 'nobody'], 'Nextcloud user nobody does not exist.', 'target_user', 'Den Nextcloud-Benutzer nobody gibt es nicht.'],
 			'base path leaving the user folder' => [['base_path' => 'Dokumente/../..'], 'Folder paths must be relative and must not contain empty, . or .. components.', '', 'Ordnerpfade müssen relativ sein und dürfen keine leeren Teile, . oder .. enthalten.'],
 			'no base path' => [['base_path' => ' / '], 'A relative folder path is required.', '', 'Ein relativer Ordnerpfad ist erforderlich.'],
 			'nested folder name' => [['archive_folder' => 'Archiv/2026'], 'Folder names must contain exactly one path component.', '', 'Ordnernamen müssen aus genau einem Pfadteil bestehen.'],
