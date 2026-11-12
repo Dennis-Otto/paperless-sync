@@ -9,10 +9,10 @@ Releases follow the [repository blueprint](https://github.com/Dennis-Otto/repo-b
 
 ## The release pull request
 
-Every pull request that changes something for users describes it under `## Unreleased` in `CHANGELOG.md`. The release bot (`.github/workflows/release.yml`) keeps a pull request titled `chore: release x.y.z` up to date with `main`:
+Every pull request that changes something for users describes it in a file of its own in `changelog.d/`, named after its branch without the type, such as `changelog.d/dark-mode.md` for the branch `feat/dark-mode` ([CONTRIBUTING.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md#the-changelog)). A file of its own conflicts with no other pull request, where an entry under `## Unreleased` in `CHANGELOG.md` conflicts with each one that adds another at the same place. The release bot (`.github/workflows/release.yml`) keeps a pull request titled `chore: release x.y.z` up to date with `main`:
 
 - **The version** follows from the titles of the pull requests merged since the last release: `fix` makes a patch, `feat` a minor and `!` or `BREAKING CHANGE` a major version. Every merge decides it anew. A line `Release-As: x.y.z` in the description of a pull request sets it explicitly.
-- **The changelog:** the text of *Unreleased* becomes the section of the release; without one, the section lists the pull requests.
+- **The changelog:** the entries of the fragments in `changelog.d/`, and those that someone wrote under *Unreleased* after all, become the section of the release, each kind of change below one heading, and the release pull request deletes the fragments; without such entries, the section lists the pull requests.
 - **The files of the version:** `appinfo/info.xml` (`<version>`, and the addresses of the screenshots and of their small thumbnails between `x-release-please-start-version` and `x-release-please-end`), `version.txt` and `.release-please-manifest.json`. The release bot writes the version into the first address of each line only, so each address of a screenshot has a line of its own, the two joined by an XML comment that the App Store and Nextcloud leave out; `tests/Unit/AppInfo/ScreenshotsTest.php` fails when a release would leave an address at the old tag.
 
 The pull request needs the same required checks as every other one. Its Docker end-to-end tests pass at once, as a release changes nothing of the app but its version: they ran against every supported Nextcloud version in the pull requests of its changes and with every push to `main` ([decision 0005](decisions/0005-end-to-end-tests-where-they-can-fail.md)). A release of dependency updates alone merges itself; every other release waits for the maintainer to merge it.
@@ -23,7 +23,7 @@ Merging the release pull request creates the release as a draft, with its tag, a
 
 1. krankerl builds the package of the tagged commit; `scripts/check-package.sh` checks that it holds [exactly the runtime files of that commit](#what-the-package-holds).
 2. The package is signed with the app's certificate (`occ integrity:sign-app`) and checked again, and a detached SHA-512 signature is made and verified with the public key of the certificate.
-3. The release gets the package `paperless_sync.tar.gz`, its signature `paperless_sync.tar.gz.sig`, an SPDX SBOM, and the signed build provenance of every asset (`provenance.sigstore.json` and `provenance.intoto.jsonl`).
+3. The release gets the package `paperless_sync.tar.gz`, its signature `paperless_sync.tar.gz.sig`, the SBOM of the package as SPDX (`paperless-sync.spdx.json`) and as CycloneDX (`paperless-sync.cdx.json`), the licenses of its third-party components (`THIRD_PARTY_NOTICES.md`), the OpenVEX document `paperless-sync.openvex.json` when `osv-scanner.toml` accepts an advisory, and the signed build provenance of every asset (`provenance.sigstore.json` and `provenance.intoto.jsonl`). [SECURITY.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SECURITY.md#verify-a-release) shows how to check them.
 4. The complete release is published; GitHub keeps it immutable from then on.
 5. The same package is submitted to the Nextcloud App Store.
 6. The release verification (`.github/workflows/verify-release.yml`) checks the release as its users can: every attestation, the SBOM, the immutability, the signed commit, and the version in the App Store. It checks the latest release every week as well.
@@ -46,14 +46,20 @@ A package fails the check, with one line for each difference, when it
 - lacks its signature after signing, or holds one before it;
 - or holds PHP or JavaScript that doesn't parse.
 
-After signing, the check compares `appinfo/info.xml` with the checkout instead of the commit. A beta, such as `1.3.0-beta.2`, tags `main`, whose `info.xml` still holds the version of the last release, as release-please writes the next one only in its pull request. The App Store takes the version of a release from the `info.xml` of its package, so the release build writes the version of the beta into the `info.xml` of the package before it signs it, and into the checkout ([a beta](https://github.com/Dennis-Otto/repo-blueprint/blob/main/docs/kinds/nextcloud-app.md#a-beta) in the blueprint). A signed package whose `info.xml` differs from that of the checkout still fails, with `changed: paperless_sync/appinfo/info.xml`; the unsigned package, which krankerl builds from the commit before that, is compared with the commit.
+After signing, the check compares `appinfo/info.xml` with the checkout instead of the commit, which accepts the version of a prerelease, though Paperless Sync publishes none. A beta, such as `1.3.0-beta.2`, tags `main`, whose `info.xml` still holds the version of the last release, as release-please writes the next one only in its pull request. The App Store takes the version of a release from the `info.xml` of its package, so the release build writes the version of the beta into the `info.xml` of the package before it signs it, and into the checkout ([a beta](https://github.com/Dennis-Otto/repo-blueprint/blob/main/docs/kinds/nextcloud-app.md#a-beta) in the blueprint). A signed package whose `info.xml` differs from that of the checkout still fails, with `changed: paperless_sync/appinfo/info.xml`; the unsigned package, which krankerl builds from the commit before that, is compared with the commit.
 
 The CI runs the same check on the package of every pull request, so a change that breaks the package fails there and not in a release. A new folder that the app needs at runtime belongs in `RUNTIME_PATHS` of `scripts/check-package.sh`, and `.nextcloudignore` must not list it; a path that the app no longer has leaves `RUNTIME_PATHS`, and the check names it until then. `tests/package/test_check_package.sh` tests the check with packages that it must reject.
 
 ## Secrets and recovery
 
-The `release` environment allows only `main`. It holds `APP_PRIVATE_KEY` (the key of the app's certificate), `APPSTORE_TOKEN` and `RELEASE_AUTOMATION_PRIVATE_KEY` (the release app, whose client ID is the repository variable `RELEASE_AUTOMATION_CLIENT_ID`). Every token is short-lived and scoped to what its job needs.
+Each secret of a release lives in an environment of its own, which only `main` may use, so that a job reaches the one secret that it needs and no other:
+
+- The environment `signing` holds `APP_PRIVATE_KEY`, the key of the app's certificate. Only the build of a release (`.github/workflows/build-release.yml`) and the job of *Register the app* that signs the app id enter it.
+- The environment `appstore` holds `APPSTORE_TOKEN`, the token of the Nextcloud App Store. Only the delivery of a release to the App Store and the registration of the app enter it.
+- The environment `release` holds `RELEASE_AUTOMATION_PRIVATE_KEY`, the key of the release app, whose client ID is the repository variable `RELEASE_AUTOMATION_CLIENT_ID`. When a settings app administers the repository, the environment holds its key `SETTINGS_APP_PRIVATE_KEY` as well, whose client ID is the variable `SETTINGS_APP_CLIENT_ID`. The release bot and the other bots enter it for their tokens.
+
+Every token is short-lived and scoped to what its job needs. To recover a lost secret, set it again in its environment under *Settings → Environments*: a secret in another environment is one that no job of the release reads. `scripts/check-project.sh` checks that each environment of this list is one that a workflow enters with the secrets that the list names, and that the list names every environment of the workflows of a release.
 
 If a job fails, re-run the failed jobs of the Release workflow: a draft is completed, and the App Store accepts the same version again without a second release. A published release is never replaced.
 
-Registering the app in the App Store, needed once and again only for a new certificate, is the manual workflow *Register app in Nextcloud App Store*.
+Registering the app in the App Store, needed once and again only for a new certificate, is the manual workflow *Register the app*.
