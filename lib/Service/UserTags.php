@@ -29,7 +29,7 @@ final class UserTags {
 	private const SETTING = 'user_tags';
 
 	/**
-	 * @param array<string, list<string>> $tags the names of the tags that each user with a line may see, by the IDs of the users, as the line writes them
+	 * @param array<array-key, list<string>> $tags the names of the tags that each user with a line may see, by the IDs of the users, as the line writes them, which PHP turns into numbers when they are digits
 	 */
 	private function __construct(
 		private array $tags,
@@ -123,7 +123,7 @@ final class UserTags {
 	 * fails the run, so a name that isn't there is missing indeed.
 	 *
 	 * @param array<string, string> $tagNames the names of the tags of Paperless, by their IDs
-	 * @return array<string, list<string>> the names that Paperless doesn't have, by the IDs of their users
+	 * @return array<array-key, list<string>> the names that Paperless doesn't have, by the IDs of their users, which PHP turns into numbers when they are digits
 	 */
 	public function unknown(array $tagNames): array {
 		$known = array_map('mb_strtolower', array_values($tagNames));

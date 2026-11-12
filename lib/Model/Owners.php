@@ -42,7 +42,7 @@ final class Owners {
 	/** Another user of Paperless has the same user of Nextcloud, so neither gets it, and the run holds their documents. */
 	public const SHARED = 'shared';
 
-	/** @var array<string, int> the user of Paperless of each user of Nextcloud that has one */
+	/** @var array<array-key, int> the user of Paperless of each user of Nextcloud that has one, by the ID of the user, which PHP turns into a number when it is digits */
 	private array $paperlessUsers = [];
 
 	/**
@@ -118,7 +118,8 @@ final class Owners {
 	 * @return list<string>
 	 */
 	public function users(): array {
-		$users = array_keys($this->paperlessUsers);
+		// An ID of digits, which Nextcloud allows, is a number as a key, and every caller takes a string.
+		$users = array_map('strval', array_keys($this->paperlessUsers));
 		$users = array_values(array_filter($users, fn (string $user): bool => $user !== $this->fallback));
 		sort($users, SORT_STRING);
 
