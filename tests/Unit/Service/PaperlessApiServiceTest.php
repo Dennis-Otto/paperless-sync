@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\PaperlessConnection;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Service\FileVersions;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
@@ -24,6 +25,7 @@ use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PaperlessVersionException;
+use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\UnsizedStream;
 use OCP\Http\Client\IClient;
@@ -42,6 +44,7 @@ use UnexpectedValueException;
  * The Paperless-ngx client against recorded HTTP exchanges.
  */
 final class PaperlessApiServiceTest extends TestCase {
+	use GermanTranslations;
 	use InMemoryConfiguration;
 
 	private const URL = 'https://paperless.example.test';
@@ -1596,6 +1599,154 @@ final class PaperlessApiServiceTest extends TestCase {
 		}
 	}
 
+	/**
+	 * The failures of a request that the table "Messages and their fixes" of the troubleshooting
+	 * page explains, as Nextcloud's HTTP client throws them: an answer with an error with its
+	 * status as the code, and an error of cURL with the code 0 (#447).
+	 *
+	 * @return array<string, array{string, int, string, string}> the operation, the code, the message of the HTTP client and the explanation in English
+	 */
+	public static function explainedFailures(): array {
+		return [
+			'a token that Paperless refuses' => [
+				'documents',
+				401,
+				"Client error: `GET https://paperless.example.test/api/documents/?page=1` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
+				'Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.',
+			],
+			'a permission that the account lacks' => [
+				'tags',
+				403,
+				'Client error: `GET https://paperless.example.test/api/tags/` resulted in a `403 Forbidden` response',
+				'Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click "Test connection" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.',
+			],
+			'a document that went away during the run' => [
+				'downloadDocument',
+				404,
+				'Client error: `GET https://paperless.example.test/api/documents/123/download/?original=true` resulted in a `404 Not Found` response: {"detail": "Not found"}',
+				'Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.',
+			],
+			'a URL without the path of Paperless' => [
+				'documents',
+				404,
+				'Client error: `GET https://paperless.example.test/api/documents/` resulted in a `404 Not Found` response',
+				'Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.',
+			],
+			'an error of Paperless' => [
+				'documents',
+				500,
+				'Server error: `GET https://paperless.example.test/api/documents/` resulted in a `500 Internal Server Error` response',
+				'Paperless, or the proxy in front of it, failed with HTTP 500. Check that Paperless runs, and the log of Paperless or of the proxy.',
+			],
+			'a proxy without a Paperless behind it' => [
+				'tags',
+				502,
+				'Server error: `GET https://paperless.example.test/api/tags/` resulted in a `502 Bad Gateway` response',
+				'Paperless, or the proxy in front of it, failed with HTTP 502. Check that Paperless runs, and the log of Paperless or of the proxy.',
+			],
+			'a name without an address' => [
+				'documents',
+				0,
+				'cURL error 6: Could not resolve host: paperless.example.test (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://paperless.example.test/api/documents/',
+				'Nextcloud could not resolve the name of Paperless (cURL error 6). Enter the URL under which the Nextcloud server, not your browser, reaches Paperless.',
+			],
+			'a port where nothing answers' => [
+				'documents',
+				0,
+				'cURL error 7: Failed to connect to paperless.example.test port 443 after 0 ms: Could not connect to server',
+				'Nothing answered at the address of Paperless (cURL error 7). Check the URL with its port, that Paperless runs, and that no firewall or Docker network stands between Nextcloud and Paperless.',
+			],
+			'a Paperless that answers too late' => [
+				'downloadDocument',
+				0,
+				'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+				'Paperless did not answer in time (cURL error 28). Check that Paperless runs and is not overloaded, and that no proxy in front of it holds the request back.',
+			],
+			'HTTPS at a port of HTTP' => [
+				'documents',
+				0,
+				'cURL error 35: OpenSSL/3.0.13: error:0A00010B:SSL routines::wrong version number',
+				'Nextcloud could not set up a secure connection to Paperless (cURL error 35). If the URL starts with https:// at a port that speaks plain HTTP, use http:// or the port of HTTPS.',
+			],
+			'a certificate that Nextcloud does not trust' => [
+				'documents',
+				0,
+				'cURL error 60: SSL certificate problem: self-signed certificate',
+				'Nextcloud does not trust the certificate of Paperless (cURL error 60). Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.',
+			],
+		];
+	}
+
+	/**
+	 * A failed request of a run says what happened and what to do, in English for the log of the
+	 * status and in German for a German settings page, and keeps the message of the HTTP client,
+	 * without the query, as its detail; the exception keeps that message for the log (#447).
+	 */
+	#[DataProvider('explainedFailures')]
+	public function testFailedRequestSaysWhatHappenedAndWhatToDo(string $operation, int $code, string $failure, string $explanation): void {
+		$this->responses[] = static function () use ($failure, $code): array {
+			throw new RuntimeException($failure, $code);
+		};
+
+		try {
+			$this->call($operation);
+			self::fail('A request that failed must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			$detail = $exception->getMessage();
+			self::assertStringNotContainsString('?', $detail, 'The detail leaves out the query of the URL.');
+			$error = RunError::of($exception);
+			self::assertSame("{$explanation} Details: {$detail}", $error->message());
+			$german = $error->translated($this->germanL10n());
+			self::assertStringStartsNotWith($explanation, $german, 'A German settings page shows the explanation in German.');
+			self::assertStringEndsWith(" Details: {$detail}", $german, 'The message of the HTTP client stays as it came.');
+			self::assertSame($error->message(), RunError::stored(json_decode(json_encode($error, JSON_THROW_ON_ERROR), true))?->message(), 'The status keeps the error as it is.');
+		}
+	}
+
+	/** An exception may keep its code as a string, as PDOException does; the status counts as a number. */
+	public function testFailedRequestWithItsStatusAsAStringIsExplainedToo(): void {
+		$this->responses[] = static function (): array {
+			throw new class('Client error: `GET https://paperless.example.test/api/documents/` resulted in a `401 Unauthorized` response') extends RuntimeException {
+				/** @var int|string */
+				protected $code = '401';
+			};
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A request that failed must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertStringStartsWith('Paperless refused the API token (HTTP 401).', RunError::of($exception)->message());
+		}
+	}
+
+	/** A failure that the table doesn't explain, such as another error of cURL or a refused value, stays as it came. */
+	#[DataProvider('unexplainedFailures')]
+	public function testFailedRequestThatTheAppDoesNotKnowStaysAsItCame(int $code, string $failure): void {
+		$this->responses[] = static function () use ($failure, $code): array {
+			throw new RuntimeException($failure, $code);
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A request that failed must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			$error = RunError::of($exception);
+			self::assertFalse($error->translatable);
+			self::assertSame($failure, $error->message());
+		}
+	}
+
+	/** @return array<string, array{int, string}> */
+	public static function unexplainedFailures(): array {
+		return [
+			'another error of cURL' => [0, 'cURL error 52: Empty reply from server'],
+			'a value that Paperless refuses' => [400, 'Client error: `GET https://paperless.example.test/api/documents/` resulted in a `400 Bad Request` response'],
+			'a status beyond the errors of a server' => [600, 'Unknown status 600'],
+			'an exception without its status' => [0, 'Client error: `GET https://paperless.example.test/api/documents/` resulted in a `401 Unauthorized` response'],
+		];
+	}
+
 	/** @return array<string, array{string, bool}> every operation that sends the token, with the setting off and on */
 	public static function requestsInTheLocalNetwork(): array {
 		$cases = [];
@@ -1687,6 +1838,17 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		$this->expectException(PaperlessVersionException::class);
 		$this->service->documents();
+	}
+
+	/** The status of a run names the Paperless that the app needs in the language of the reader (#447). */
+	public function testRefusedApiVersionIsExplainedInTheLanguageOfTheReader(): void {
+		$error = RunError::of(new PaperlessVersionException());
+
+		self::assertSame(self::VERSION_REQUIRED, $error->message());
+		self::assertSame(
+			'Paperless stellt Version 9 seiner API nicht bereit, die Paperless Sync verwendet (HTTP 406 Not Acceptable). Paperless Sync braucht Paperless-ngx 2.16 oder neuer; bei einem neueren Paperless-ngx aktualisiere Paperless Sync.',
+			$error->translated($this->germanL10n()),
+		);
 	}
 
 	/** An error that comes back as an answer, as to an upload, whose body has the reason. */
@@ -1810,6 +1972,11 @@ final class PaperlessApiServiceTest extends TestCase {
 		} catch (PaperlessRequestException $exception) {
 			self::assertNotInstanceOf(PaperlessLocalNetworkException::class, $exception);
 			self::assertSame('No DNS record found for paperless.example.test', $exception->getMessage());
+			self::assertSame(
+				'Nextcloud could not resolve the name of Paperless (cURL error 6). Enter the URL under which the Nextcloud server, not your browser, reaches Paperless. Details: No DNS record found for paperless.example.test',
+				RunError::of($exception)->message(),
+				'A run explains it as cURL does its error 6 (#447).',
+			);
 		}
 	}
 

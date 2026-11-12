@@ -234,18 +234,22 @@ final class StatusService {
 	/**
 	 * A run that failed leaves the end of the last completed run as it is, and keeps the report of
 	 * what it did before it failed. A failure without a report, which can't tell whether it was a
-	 * dry-run, counts for the schedule, as every run did before.
+	 * dry-run, counts for the schedule, as every run did before. The status, its API and the
+	 * notification keep the error in the words of the app, such as what to do about a token that
+	 * Paperless refused (#447), and the settings page translates its record; the log keeps the
+	 * message of the exception.
 	 */
 	public function failed(\Throwable $exception, ?SyncReport $report = null): void {
+		$error = RunError::of($exception);
 		$now = $this->timeFactory->getTime();
 		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_ENDED, $now, lazy: true);
 		if ($report === null || !$report->dryRun) {
 			$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_SYNC_ENDED, $now, lazy: true);
-			$this->unsuccessful(true, $report === null ? 0 : $report->errors, $exception->getMessage());
+			$this->unsuccessful(true, $report === null ? 0 : $report->errors, $error->message());
 		}
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'failed', lazy: true);
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($exception->getMessage(), 0, self::LINE_LENGTH), lazy: true);
-		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, json_encode(RunError::of($exception)->shortened(self::LINE_LENGTH), JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR, mb_substr($error->message(), 0, self::LINE_LENGTH), lazy: true);
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_ERROR_RECORD, json_encode($error->shortened(self::LINE_LENGTH), JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE), lazy: true);
 		if ($report !== null) {
 			$this->keep($report);
 		}

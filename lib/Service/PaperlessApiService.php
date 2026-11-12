@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
+use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\AppFramework\Http;
 use OCP\Http\Client\IClient;
@@ -1350,7 +1351,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			// the setting, it looks the name up only in the DNS, so a name of the hosts file of the
 			// server needs the setting; with it, the name has no address at all.
 			if ($localNetwork) {
-				throw new PaperlessRequestException($message);
+				throw new PaperlessRequestException($message, self::withDetail(self::unresolvedName(), $message));
 			}
 			$host = preg_match('/^No DNS record found for (\S+)/', $message, $match) === 1 ? $match[1] : (string)parse_url($url, PHP_URL_HOST);
 			throw new PaperlessLocalNetworkException($host, true);
@@ -1359,7 +1360,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			if ($exception->getCode() === Http::STATUS_NOT_ACCEPTABLE) {
 				throw new PaperlessVersionException();
 			}
-			throw new PaperlessRequestException($this->failureMessage($exception->getMessage(), $token));
+			$message = $this->failureMessage($exception->getMessage(), $token);
+			throw new PaperlessRequestException($message, self::explained($exception->getCode(), $path, $message));
 		}
 		if ($response->getStatusCode() === Http::STATUS_NOT_ACCEPTABLE) {
 			throw new PaperlessVersionException();
@@ -1394,6 +1396,44 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 
 		return (string)parse_url($url, PHP_URL_HOST);
+	}
+
+	/**
+	 * What a failed request means and what to do, in the words of the app, with the message of the
+	 * HTTP client as its detail, for the status, the report and the notifications of a run (#447):
+	 * an answer with an error, whose status Nextcloud's HTTP client throws as the code of its
+	 * exception, or an error of cURL, which its message names, as the table "Messages and their
+	 * fixes" of docs/troubleshooting.md explains them. Null for any other failure, which stays as it
+	 * came. A 404 for a document means that it went away during the run, any other one a wrong URL.
+	 */
+	private static function explained(int|string $code, string $path, string $message): ?RunError {
+		$status = (int)$code;
+		$curl = preg_match('/\bcURL error (\d+):/', $message, $match) === 1 ? (int)$match[1] : 0;
+		$explanation = match (true) {
+			$status === Http::STATUS_UNAUTHORIZED => new RunError('Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.'),
+			$status === Http::STATUS_FORBIDDEN => new RunError('Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click "Test connection" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.'),
+			$status === Http::STATUS_NOT_FOUND && preg_match('~^/?api/documents/\d+/~', $path) === 1 => new RunError('Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.'),
+			$status === Http::STATUS_NOT_FOUND => new RunError('Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.'),
+			$status >= 500 && $status < 600 => new RunError('Paperless, or the proxy in front of it, failed with HTTP %s. Check that Paperless runs, and the log of Paperless or of the proxy.', [(string)$status]),
+			$curl === 6 => self::unresolvedName(),
+			$curl === 7 => new RunError('Nothing answered at the address of Paperless (cURL error 7). Check the URL with its port, that Paperless runs, and that no firewall or Docker network stands between Nextcloud and Paperless.'),
+			$curl === 28 => new RunError('Paperless did not answer in time (cURL error 28). Check that Paperless runs and is not overloaded, and that no proxy in front of it holds the request back.'),
+			$curl === 35 => new RunError('Nextcloud could not set up a secure connection to Paperless (cURL error 35). If the URL starts with https:// at a port that speaks plain HTTP, use http:// or the port of HTTPS.'),
+			$curl === 60 => new RunError('Nextcloud does not trust the certificate of Paperless (cURL error 60). Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.'),
+			default => null,
+		};
+
+		return $explanation === null ? null : self::withDetail($explanation, $message);
+	}
+
+	/** The explanation of a name of Paperless that has no address, which cURL names with its error 6. */
+	private static function unresolvedName(): RunError {
+		return new RunError('Nextcloud could not resolve the name of Paperless (cURL error 6). Enter the URL under which the Nextcloud server, not your browser, reaches Paperless.');
+	}
+
+	/** An explanation with the message of the HTTP client, which tells an administrator which request failed. */
+	private static function withDetail(RunError $explanation, string $message): RunError {
+		return new RunError('%1$s Details: %2$s', [$explanation, $message]);
 	}
 
 	/**

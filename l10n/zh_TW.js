@@ -723,7 +723,20 @@ OC.L10N.register(
 		"These shares of %1$s show a user with tags every document in them: %2$s. These may too, as Nextcloud does not name who is in them: %3$s.": "%1$s 的這些分享會向帶標籤的使用者顯示其中的每個文件：%2$s。以下分享也可能如此，因為 Nextcloud 未列出其中有哪些成員：%3$s。",
 		"_Removed %n share._::_Removed %n shares._": [
 			"已移除 %n 個分享。"
-		]
+		],
+		"%1$s Details: %2$s": "%1$s 詳細資訊：%2$s",
+		"Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.": "Paperless 拒絕了該 API Token（HTTP 401）。請在 Paperless 中從帳號選單的「我的設定檔」裡重新複製 Token，將其填入 Paperless Sync 的設定，並確認該帳號已啟用。",
+		"Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click \"Test connection\" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.": "Paperless 拒絕了該請求（HTTP 403）：API Token 的帳號缺少相應權限。請在 Paperless Sync 的設定中點選「測試連線」：其檢查清單會列出需要在 Paperless 中授予該帳號的權限。",
+		"Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.": "Paperless 中已沒有此文件（HTTP 404）：它在本次執行期間被刪除，或者 API Token 的帳號已無權檢視它。無需任何操作：下一次執行會跟進此變更。",
+		"Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.": "Paperless 找不到該請求的位址（HTTP 404）。請檢查 Paperless 的 URL：如果 Paperless 在某個路徑下執行（例如 https://example.com/paperless），URL 中需要包含該路徑。",
+		"Paperless, or the proxy in front of it, failed with HTTP %s. Check that Paperless runs, and the log of Paperless or of the proxy.": "Paperless 或其前端代理伺服器以 HTTP %s 失敗。請確認 Paperless 正在執行，並檢查 Paperless 的事件記錄或代理伺服器的記錄檔。",
+		"Nextcloud could not resolve the name of Paperless (cURL error 6). Enter the URL under which the Nextcloud server, not your browser, reaches Paperless.": "Nextcloud 無法解析 Paperless 的名稱（cURL 錯誤 6）。請填寫 Nextcloud 伺服器（而不是您的瀏覽器）存取 Paperless 所用的 URL。",
+		"Nothing answered at the address of Paperless (cURL error 7). Check the URL with its port, that Paperless runs, and that no firewall or Docker network stands between Nextcloud and Paperless.": "Paperless 的位址沒有任何回應（cURL 錯誤 7）。請檢查 URL 及其連接埠、Paperless 是否正在執行，以及 Nextcloud 與 Paperless 之間是否有防火牆或 Docker 網路阻隔。",
+		"Paperless did not answer in time (cURL error 28). Check that Paperless runs and is not overloaded, and that no proxy in front of it holds the request back.": "Paperless 未能及時回應（cURL 錯誤 28）。請確認 Paperless 正在執行且未超載，並確認其前端沒有代理伺服器攔住該請求。",
+		"Nextcloud could not set up a secure connection to Paperless (cURL error 35). If the URL starts with https:// at a port that speaks plain HTTP, use http:// or the port of HTTPS.": "Nextcloud 無法與 Paperless 建立安全連線（cURL 錯誤 35）。如果 URL 以 https:// 開頭，而連接埠使用的是一般 HTTP，請改用 http:// 或 HTTPS 的連接埠。",
+		"Nextcloud does not trust the certificate of Paperless (cURL error 60). Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.": "Nextcloud 不信任 Paperless 的憑證（cURL 錯誤 60）。請使用公開憑證授權單位簽發的憑證，或使用 occ security:certificates:import 匯入您自己的憑證。",
+		"Paperless does not serve version %1$s of its API, which Paperless Sync uses (HTTP 406 Not Acceptable). Paperless Sync needs Paperless-ngx %2$s or newer; with a newer Paperless-ngx, update Paperless Sync.": "Paperless 不提供 Paperless Sync 所使用的 API 版本 %1$s（HTTP 406 Not Acceptable）。Paperless Sync 需要 Paperless-ngx %2$s 或更高版本；如果 Paperless-ngx 的版本更新，請更新 Paperless Sync。",
+		"Messages and their fixes": "訊息及其解決方法"
 	},
 	"nplurals=1; plural=0;"
 )

@@ -264,6 +264,21 @@
 	overflow-wrap: anywhere;
 }
 
+/* The link to the table of the messages and their fixes, below the errors (#447). */
+.paperless-sync-errors-help {
+	margin: 8px 0 0;
+}
+
+.paperless-sync-errors-help a {
+	color: var(--color-main-text);
+	text-decoration: underline;
+}
+
+.paperless-sync-errors-help a:focus-visible {
+	outline: 2px solid var(--color-main-text);
+	outline-offset: 2px;
+}
+
 .paperless-sync-card {
 	/* The heading of a card stacks its title and its description when the card is narrow. */
 	container-type: inline-size;
