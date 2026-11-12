@@ -54,6 +54,8 @@ final class SharedDocumentsTest extends TestCase {
 	private const ERIN = 5;
 	private const ACCOUNT = 9;
 	private const HOUSEHOLD = 8;
+	/** The user of Paperless of the user of Nextcloud whose ID is digits. */
+	private const NUMERIC = 6;
 
 	private TestClock $clock;
 	private TestPaperlessClient $paperless;
@@ -118,6 +120,29 @@ final class SharedDocumentsTest extends TestCase {
 		self::assertSame([], $report->errorMessages);
 		self::assertSame([true], $this->paperless->permissionsAsked, 'The run reads the permissions once for all of them.');
 		self::assertSame(['users', 'groups'], array_values(array_unique($this->paperless->listsRead)));
+	}
+
+	/**
+	 * A user of Nextcloud whose ID is digits, which Nextcloud allows and LDAP often gives, gets the
+	 * documents that their user of Paperless owns or may view, and keeps their own in the next run,
+	 * while the copy of a document that they may no longer view leaves, as for any other ID.
+	 */
+	public function testAUserWhoseIdIsDigitsGetsTheDocumentsThatTheyMayView(): void {
+		$this->usersOfNextcloud[] = '1001';
+		$this->paperless->users[(string)self::NUMERIC] = '1001';
+
+		$first = $this->sync([$this->document(1, self::ALICE, [self::NUMERIC]), $this->document(2, self::NUMERIC, [self::ALICE])]);
+
+		self::assertSame([], $first->errorMessages);
+		self::assertEqualsCanonicalizing([$this->path(1), $this->path(2)], array_keys($this->filesOf('1001')));
+		self::assertEqualsCanonicalizing([$this->path(1), $this->path(2)], array_keys($this->filesOf('alice')));
+		self::assertSame(2, $first->users['1001']['exported']);
+
+		$second = $this->sync([$this->document(1, self::ALICE), $this->document(2, self::NUMERIC, [self::ALICE])]);
+
+		self::assertSame([], $second->errorMessages);
+		self::assertSame(['[1001] REMOVE REASSIGNED P1: ' . $this->path(1)], $second->actions);
+		self::assertSame([$this->path(2)], array_keys($this->filesOf('1001')));
 	}
 
 	/** A group of Paperless names its users, and a user of Paperless without a user of Nextcloud gets no copy, nor does the target user in its place. */

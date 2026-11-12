@@ -27,7 +27,7 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
- * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>, userTags: UserTags, unknownTags: array<string, list<string>>}
+ * @psalm-type ExportRead = array{documents: list<array<string, mixed>>, trash: list<array<string, mixed>>|null, complete: bool, pathOf: \Closure(array<string, mixed>): string, filter: ExportFilter, versions: FileVersions, sidecars: (\Closure(SyncConfig, SyncReport, string): ?MetadataSidecars)|null, tagNames: array<string, string>, userTags: UserTags, unknownTags: array<array-key, list<string>>}
  */
 final class SyncService {
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -413,9 +413,11 @@ final class SyncService {
 		$documentId = $document !== null && is_numeric($document['id'] ?? null) ? (int)$document['id'] : 0;
 		// The tags of the document decide whether a user with tags gets it, which the run reads later.
 		$readers = $document !== null ? [...self::archivesOf($owners, $config, $document)['users'], ...$tagged] : [];
-		/** @var array<string, SyncConfig> $archives the archives that the run reaches, by the IDs of their users */
+		// PHP turns the ID of a user into a number as a key when it is digits, as Nextcloud allows,
+		// so a key of $archives and $reports is a string again before the run passes it on.
+		/** @var array<array-key, SyncConfig> $archives the archives that the run reaches, by the IDs of their users */
 		$archives = [];
-		/** @var array<string, SyncReport> $reports */
+		/** @var array<array-key, SyncReport> $reports */
 		$reports = [];
 		try {
 			foreach ([...$receiving, ...array_diff($former, $receiving)] as $user) {
@@ -443,7 +445,7 @@ final class SyncService {
 			}
 			if ($document === null && $config->inboxEnabled) {
 				foreach (array_intersect_key($archives, array_flip($getting)) as $user => $archive) {
-					$this->syncInbox($paperless, $archive, $reports[$user], $owners->paperlessUserOf($user));
+					$this->syncInbox($paperless, $archive, $reports[$user], $owners->paperlessUserOf((string)$user));
 				}
 			}
 			if ($config->exportEnabled) {
@@ -463,7 +465,8 @@ final class SyncService {
 				}
 			}
 		} finally {
-			foreach ($reports as $user => $userReport) {
+			foreach ($reports as $key => $userReport) {
+				$user = (string)$key;
 				$archive = $config->withTargetUser($user);
 				$this->activity->publish($archive, $userReport, $author);
 				$this->notifications->publishImports($archive, $userReport);
@@ -482,15 +485,15 @@ final class SyncService {
 	 * says how many there are.
 	 *
 	 * @param ExportRead $read
-	 * @param array<string, SyncConfig> $archives
-	 * @param array<string, SyncReport> $reports
+	 * @param array<array-key, SyncConfig> $archives the archives that the run reaches, by the IDs of their users, which PHP turns into numbers when they are digits
+	 * @param array<array-key, SyncReport> $reports
 	 */
 	private function exportArchives(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, array $read, Owners $owners, array $archives, array $reports, ?int $held): void {
 		// A user whose line names a tag that Paperless doesn't have keeps the copies that they have,
 		// as an archive that Nextcloud can't reach does, rather than lose those of a renamed tag.
 		foreach ($read['unknownTags'] as $user => $names) {
 			unset($archives[$user]);
-			($reports[$user] ?? $report)->error(new RunError('Archive of %1$s: Paperless has no tag named %2$s, which "Tags that a user may see" names for them, so their copies stay as they are until the line or Paperless names the tag.', [$user, '"' . implode('", "', $names) . '"']));
+			($reports[$user] ?? $report)->error(new RunError('Archive of %1$s: Paperless has no tag named %2$s, which "Tags that a user may see" names for them, so their copies stay as they are until the line or Paperless names the tag.', [(string)$user, '"' . implode('", "', $names) . '"']));
 		}
 		/** @var array<int, array{users: list<string>, leaves: bool, taken: bool}> $routes the users of each document, none for one that the run holds, whether its copy leaves every other archive, and whether an archive that the run reaches takes it */
 		$routes = [];
@@ -524,7 +527,8 @@ final class SyncService {
 			$report->error(new RunError('Paperless did not say who may view %s documents, so only their owners get them, and their copies stay in every archive that has them. Check that no proxy changes the answers of Paperless.', [(string)$unknown]));
 		}
 		$missing = 0;
-		foreach ($archives as $user => $archive) {
+		foreach ($archives as $key => $archive) {
+			$user = (string)$key;
 			$others = [];
 			// Only the tags decide for a user with tags, also for a document whose viewers Paperless didn't name.
 			$restricted = $read['userTags']->restricts($user);

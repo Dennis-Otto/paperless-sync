@@ -265,6 +265,23 @@ final class OwnerMappingTest extends TestCase {
 		self::assertSame(['alice', 'bob'], array_column($storage->calls, 1));
 	}
 
+	/**
+	 * The checklist tests the base folder of a user whose ID is digits, which Nextcloud allows and
+	 * LDAP often gives, as that of any other user, without a warning when Nextcloud can store
+	 * their files.
+	 */
+	public function testTheChecklistTestsTheFolderOfAUserWhoseIdIsDigits(): void {
+		$this->usersOfNextcloud[] = '1001';
+		$paperless = new TestPaperlessClient();
+		$paperless->users = ['1' => 'alice', '2' => '1001'];
+		$storage = new TestStorage();
+
+		$checks = $this->ownerMapping()->checks($this->config(), $paperless, $storage);
+
+		self::assertSame([], array_values(array_filter($checks, static fn (ConnectionCheck $check): bool => $check->id === ConnectionCheck::FOLDER)));
+		self::assertSame(['1001', 'alice'], array_column($storage->calls, 1));
+	}
+
 	/** Each test of a folder may take a while, so the checklist tests those of the first users. */
 	public function testTheChecklistTestsTheFoldersOfTheFirstUsers(): void {
 		$paperless = new TestPaperlessClient();
