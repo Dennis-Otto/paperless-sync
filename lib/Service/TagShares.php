@@ -261,8 +261,10 @@ final class TagShares {
 
 	/** The name of the Team, the conversation or the board of a share, as Nextcloud shows it, or its ID. */
 	private static function named(IShare $share, string $with): string {
-		$name = $share->getSharedWithDisplayName() ?? '';
+		// Its docblock says string, but a share of Nextcloud without a name answers null.
+		/** @var string|null $name */
+		$name = $share->getSharedWithDisplayName();
 
-		return $name !== '' ? $name : $with;
+		return $name !== null && $name !== '' ? $name : $with;
 	}
 }
