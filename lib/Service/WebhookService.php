@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use Exception;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -16,6 +17,7 @@ use OCP\IAppConfig;
 use OCP\IURLGenerator;
 use OCP\Security\ICredentialsManager;
 use OCP\Security\ISecureRandom;
+use Psr\Log\LoggerInterface;
 
 /**
  * The webhook through which a workflow of Paperless-ngx names a document that it added or changed,
@@ -47,6 +49,7 @@ final class WebhookService {
 		private ITimeFactory $timeFactory,
 		private IAppConfig $appConfig,
 		private IURLGenerator $urlGenerator,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -154,10 +157,26 @@ final class WebhookService {
 		return ['at' => $at, 'document' => $document, 'result' => $result, 'message' => $message];
 	}
 
-	/** @return array{hash: string, created: int}|null */
+	/**
+	 * The hash of the secret and when it was created, null without one. A secret that the store can't
+	 * decrypt, as after a restore or a move of Nextcloud with another secret in config.php, counts as
+	 * none: the settings page offers to create one, and a call of the webhook is refused.
+	 *
+	 * @return array{hash: string, created: int}|null
+	 */
 	private function stored(): ?array {
-		/** @psalm-suppress MixedAssignment */
-		$stored = $this->credentialsManager->retrieve('', self::SECRET_IDENTIFIER);
+		try {
+			/** @psalm-suppress MixedAssignment */
+			$stored = $this->credentialsManager->retrieve('', self::SECRET_IDENTIFIER);
+		} catch (Exception $exception) {
+			$this->logger->warning('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret ({error}). Create a new secret in its settings.', [
+				'app' => AppConstants::APP_ID,
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+
+			return null;
+		}
 		if (!is_array($stored)) {
 			return null;
 		}

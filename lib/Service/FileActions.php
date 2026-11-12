@@ -69,10 +69,12 @@ final class FileActions {
 	 * What the menu of Files offers the user: whether they may send files to Paperless, and the
 	 * address of Paperless that "Open in Paperless" opens, '' when the app has none.
 	 *
+	 * Files asks with every load, for every user: the settings come without a read of the token.
+	 *
 	 * @return array{send: bool, paperlessUrl: string}
 	 */
 	public function offers(string $userId): array {
-		$config = $this->configService->get();
+		$config = $this->configService->settings();
 
 		return ['send' => $this->maySend($config, $userId), 'paperlessUrl' => $config->paperlessUrl];
 	}

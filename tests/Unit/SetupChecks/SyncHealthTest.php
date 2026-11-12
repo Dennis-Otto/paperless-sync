@@ -65,6 +65,18 @@ final class SyncHealthTest extends TestCase {
 		self::assertResult(SetupResult::INFO, 'Paperless Sync ist installiert, aber noch nicht eingerichtet. Seine Einstellungen führen durch die ersten Schritte.', self::SETTINGS, $this->check->run());
 	}
 
+	/**
+	 * A token that the credentials store can't decrypt, as after a restore or a move of Nextcloud
+	 * with another secret, is a warning that leads to the settings, not a failure of the check, nor
+	 * the note of a new installation (#460).
+	 */
+	public function testATokenThatCanNotBeDecryptedWarnsAndLeadsToTheSettings(): void {
+		$this->status->failed(new RuntimeException('Paperless is down.'));
+		$this->credentialsUnreadable = true;
+
+		self::assertResult(SetupResult::WARNING, 'Paperless Sync kann sein gespeichertes API-Token von Paperless nicht lesen, wie nach einer Wiederherstellung oder einem Umzug von Nextcloud mit einem anderen Geheimnis. Gib das Token in seinen Einstellungen erneut ein, und erstelle ein neues Geheimnis für den Webhook, wenn er eines hatte.', self::SETTINGS, $this->check->run());
+	}
+
 	public function testScheduledRunsThatAreOffAreFine(): void {
 		$this->configService()->save(['enabled' => false] + self::validSettings(), 'secret-token');
 

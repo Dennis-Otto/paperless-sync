@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use Exception;
 use OCA\PaperlessSync\Cron\SavedSettings;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
@@ -28,6 +29,7 @@ use OCP\L10N\IFactory;
 use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use PHPUnit\Framework\MockObject\MockObject;
+use Psr\Log\LoggerInterface;
 
 /**
  * Nextcloud's app configuration, system configuration and credentials store, kept in the
@@ -53,6 +55,13 @@ trait InMemoryConfiguration {
 	private mixed $credential = null;
 	/** How often the credentials store was read, for code that must not read the token. */
 	private int $credentialReads = 0;
+	/**
+	 * Whether the credentials store can't decrypt what it holds, as after a restore or a move of
+	 * Nextcloud with another secret in config.php: it throws then, as Nextcloud's does.
+	 */
+	private bool $credentialsUnreadable = false;
+	/** @var list<string> the warnings that the app logged, each with its values in place */
+	private array $loggedWarnings = [];
 	/** The default language of Nextcloud, which the names of the folders of a new installation follow. */
 	private string $defaultLanguage = 'en';
 	/** The forced language of Nextcloud, false when none is set, as config.php holds it. */
@@ -72,7 +81,20 @@ trait InMemoryConfiguration {
 	}
 
 	private function configService(?PathTemplateService $paths = null, ?ICredentialsManager $credentials = null): ConfigService {
-		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud(), $this->usersOfNextcloud());
+		return new ConfigService($this->appConfig(), $credentials ?? $this->credentialsManager(), $paths ?? new PathTemplateService(), $this->l10nFactory(), $this->systemConfig(), $this->groupsOfNextcloud(), $this->usersOfNextcloud(), $this->recordingLogger());
+	}
+
+	/** A log that keeps the warnings in $loggedWarnings. */
+	private function recordingLogger(): LoggerInterface {
+		$logger = $this->createStub(LoggerInterface::class);
+		$logger->method('warning')->willReturnCallback(function (string|\Stringable $message, array $context = []): void {
+			$this->loggedWarnings[] = strtr((string)$message, array_combine(
+				array_map(static fn (string|int $key): string => '{' . $key . '}', array_keys($context)),
+				array_map(static fn (mixed $value): string => is_scalar($value) ? (string)$value : get_debug_type($value), $context),
+			));
+		});
+
+		return $logger;
 	}
 
 	/**
@@ -266,15 +288,22 @@ trait InMemoryConfiguration {
 		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(function (): mixed {
 			++$this->credentialReads;
+			if ($this->credentialsUnreadable) {
+				// As Nextcloud's Crypto::decrypt() for a value that another secret encrypted.
+				throw new Exception('HMAC does not match.');
+			}
 
 			return $this->credential;
 		});
 		$credentials->method('store')->willReturnCallback(function (string $userId, string $identifier, mixed $value): void {
 			/** @psalm-suppress MixedAssignment */
 			$this->credential = json_decode(json_encode($value, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
+			// Encrypted with the secret of this Nextcloud.
+			$this->credentialsUnreadable = false;
 		});
 		$credentials->method('delete')->willReturnCallback(function (): int {
 			$this->credential = null;
+			$this->credentialsUnreadable = false;
 			return 1;
 		});
 

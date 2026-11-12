@@ -125,6 +125,25 @@ final class WebhookServiceTest extends TestCase {
 		self::assertNull($this->webhook->state()['lastCall']);
 	}
 
+	/**
+	 * After a restore or a move of Nextcloud with another secret in config.php, the credentials
+	 * store can't decrypt the secret, and throws: the webhook counts as off, refuses every call, and
+	 * the settings page offers a new secret, which works at once (#460).
+	 */
+	public function testASecretThatCanNotBeDecryptedIsNone(): void {
+		$this->webhook->create();
+		$this->webhookSecretUnreadable = true;
+
+		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $this->webhook->state());
+		self::assertFalse($this->webhook->verify('Bearer ' . self::SECRET));
+		self::assertContains('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret (HMAC does not match.). Create a new secret in its settings.', $this->loggedWarnings);
+
+		$secret = $this->webhook->create();
+
+		self::assertTrue($this->webhook->state()['configured']);
+		self::assertTrue($this->webhook->verify('Bearer ' . $secret));
+	}
+
 	public function testADamagedSecretOpensNothing(): void {
 		$this->webhookCredentials['paperless_sync.webhook-secret'] = ['hash' => 'short', 'created' => TestClock::START];
 		self::assertFalse($this->webhook->verify('Bearer short'));

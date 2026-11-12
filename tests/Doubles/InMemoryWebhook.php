@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Doubles;
 
+use Exception;
 use OCA\PaperlessSync\Service\WebhookService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
@@ -23,6 +24,11 @@ use OCP\Security\ISecureRandom;
 trait InMemoryWebhook {
 	/** @var array<string, mixed> what the credentials store holds, by its identifier, as it gives it back: decoded from JSON */
 	private array $webhookCredentials = [];
+	/**
+	 * Whether the credentials store can't decrypt the secret, as after a restore or a move of
+	 * Nextcloud with another secret in config.php: it throws then, as Nextcloud's does.
+	 */
+	private bool $webhookSecretUnreadable = false;
 	/** @var list<string> the secrets that the next creations get */
 	private array $secrets = [self::SECRET, self::OTHER_SECRET];
 
@@ -34,10 +40,19 @@ trait InMemoryWebhook {
 
 	private function webhookService(ITimeFactory $clock): WebhookService {
 		$credentials = $this->createStub(ICredentialsManager::class);
-		$credentials->method('retrieve')->willReturnCallback(fn (string $userId, string $identifier): mixed => $this->webhookCredentials[$identifier] ?? null);
+		$credentials->method('retrieve')->willReturnCallback(function (string $userId, string $identifier): mixed {
+			if ($this->webhookSecretUnreadable) {
+				// As Nextcloud's Crypto::decrypt() for a value that another secret encrypted.
+				throw new Exception('HMAC does not match.');
+			}
+
+			return $this->webhookCredentials[$identifier] ?? null;
+		});
 		$credentials->method('store')->willReturnCallback(function (string $userId, string $identifier, mixed $value): void {
 			/** @psalm-suppress MixedAssignment */
 			$this->webhookCredentials[$identifier] = json_decode(json_encode($value, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
+			// Encrypted with the secret of this Nextcloud.
+			$this->webhookSecretUnreadable = false;
 		});
 		$credentials->method('delete')->willReturnCallback(function (string $userId, string $identifier): int {
 			$deleted = isset($this->webhookCredentials[$identifier]) ? 1 : 0;
@@ -56,6 +71,6 @@ trait InMemoryWebhook {
 		$urlGenerator = $this->createStub(IURLGenerator::class);
 		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route): string => $route === WebhookService::ROUTE ? self::WEBHOOK_URL : "https://cloud.example.test/{$route}");
 
-		return new WebhookService($credentials, $random, $clock, $this->appConfig(), $urlGenerator);
+		return new WebhookService($credentials, $random, $clock, $this->appConfig(), $urlGenerator, $this->recordingLogger());
 	}
 }
