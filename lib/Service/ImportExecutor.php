@@ -290,13 +290,15 @@ final class ImportExecutor {
 
 	/**
 	 * The import of a file of the inbox created no document, so it moves to the error folder, next to
-	 * a text that says why; its entry in the activity stream gives the reason alone.
+	 * a text that says why; its entry in the activity stream gives the reason alone. Neither the move
+	 * nor the text ever replaces a file there, whatever the conflict policy: one that appeared at its
+	 * free name since the plan is a conflict, and the next run finds another name.
 	 */
 	private function failed(ImportFailed $action): void {
 		$path = $action->context->path;
 		if (!$this->dryRun) {
-			$this->storage->move($this->config->targetUser, $path, $action->destination, $this->config->conflictMode);
-			$this->storage->writeText($this->config->targetUser, $action->destination . '.error.txt', $action->diagnostic);
+			$this->storage->move($this->config->targetUser, $path, $action->destination, 'skip');
+			$this->storage->writeText($this->config->targetUser, $action->destination . '.error.txt', $action->diagnostic, 'skip');
 			$this->state->deleteImport($this->config->targetUser, $path);
 			$this->prune($path);
 		}
