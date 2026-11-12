@@ -308,7 +308,11 @@ check misreads one of its samples. *Icon of the website*: `docs/images/app.svg` 
 *Versions in the README*: a badge or a version in the text names other versions than
 `appinfo/info.xml`. *Description of the app*: the repository, `mkdocs.yml` and
 `composer.json` describe the app in other words. *German documentation*: a German page
-has another outline than its English twin. *Area labels of pull requests*: a file of the
+has another outline than its English twin. *Environments of the release guide*: a line
+of *Secrets and recovery* in `docs/releases.md` names an environment that no workflow
+enters, or a secret that no job reads in that environment, or the list leaves out an
+environment that a workflow of a release enters, or a secret that it reads there; correct the
+list from the `environment:` and the `secrets.` of the jobs. *Area labels of pull requests*: a file of the
 app belongs to no area of `.github/labeler.yml`, or a rule names no file. *Explanations
 of the checks*: a check lacks its explanation in `.github/checks.project.toml`, or an
 explanation names a file that is gone. *Checks of the demo*: a test of `tests/e2e/test_demo.py`
