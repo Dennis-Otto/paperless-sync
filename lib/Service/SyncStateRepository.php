@@ -113,7 +113,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findImport($ownerUid, $path);
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
-			'etag', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
+			'etag', 'file_id', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -122,6 +122,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'path_hash' => hash('sha256', $path),
 				'path' => $path,
 				'etag' => '',
+				'file_id' => 0,
 				'task_id' => '',
 				'status' => 'pending',
 				'submitted_at' => $now,
@@ -143,6 +144,14 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 
 	public function deleteImport(string $ownerUid, string $path): void {
 		$this->delete(self::IMPORT_TABLE, ['owner_uid' => $ownerUid, 'path_hash' => hash('sha256', $path)]);
+	}
+
+	public function moveImport(string $ownerUid, string $from, string $to): void {
+		$this->update(
+			self::IMPORT_TABLE,
+			['path' => $to, 'path_hash' => hash('sha256', $to), 'updated_at' => $this->timeFactory->getTime()],
+			['owner_uid' => $ownerUid, 'path_hash' => hash('sha256', $from)],
+		);
 	}
 
 	/** @psalm-suppress MixedReturnTypeCoercion */

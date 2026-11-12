@@ -10,12 +10,14 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Service;
 
 use LogicException;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\Plan\ForgetImport;
 use OCA\PaperlessSync\Model\Plan\ImportAction;
 use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
 use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
+use OCA\PaperlessSync\Model\Plan\MoveImport;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
@@ -77,6 +79,10 @@ final class ImportExecutor {
 			++$this->report->skipped;
 		} elseif ($action instanceof SetAside) {
 			$this->setAside($action);
+		} elseif ($action instanceof MoveImport) {
+			if (!$this->dryRun) {
+				$this->state->moveImport($this->config->targetUser, $action->from, $action->to);
+			}
 		} elseif ($action instanceof ForgetImport) {
 			if (!$this->dryRun) {
 				$this->state->deleteImport($this->config->targetUser, $action->path);
@@ -149,24 +155,37 @@ final class ImportExecutor {
 		}
 	}
 
+	/**
+	 * Uploads a file of the inbox, unless Paperless has its content already: a file whose upload
+	 * Paperless received although its answer never came, or one that came back to the inbox, or
+	 * whose state an earlier version couldn't follow to a new path, ends as imported instead of
+	 * becoming a second document.
+	 */
 	private function upload(Upload $action): void {
 		$this->batch->take(SyncBatch::WRITE);
 		$path = $action->path;
+		try {
+			$known = $this->paperless->findDocument($this->fingerprint($path));
+			if ($known !== null && $this->owner !== null && !$this->ours($known)) {
+				$known = null;
+			}
+		} catch (\Throwable $exception) {
+			// Without the answer, the upload might create the document a second time, so the file
+			// waits, as for a failed upload.
+			$this->uploadWaits($action, $exception);
+			return;
+		}
+		if ($known !== null) {
+			$this->known($action, $known);
+			return;
+		}
 		$tags = ['ids' => [], 'names' => []];
 		if ($this->tags->enabled()) {
 			try {
 				$tags = $this->tags->forFolder($action->folder);
 			} catch (\Throwable $exception) {
-				// The file waits for its tags, as for a failed upload. Without the list of the tags, or
-				// without Paperless, every other file would fail the same way.
-				if ($this->dryRun) {
-					$this->report->error(new RunError('Import %1$s: %2$s', [$path, RunError::of($exception)]));
-				} else {
-					$this->retryUploadLater($action, $exception);
-				}
-				if ($this->tags->unavailable() || $exception instanceof PaperlessRequestException) {
-					$this->batch->stop();
-				}
+				// The file waits for its tags, as for a failed upload.
+				$this->uploadWaits($action, $exception);
 				return;
 			}
 		}
@@ -181,6 +200,7 @@ final class ImportExecutor {
 			$taskId = $this->paperless->uploadDocument($stream, $action->name, $tags['ids']);
 			$this->state->saveImport($this->config->targetUser, $path, [
 				'etag' => $action->etag,
+				'file_id' => $action->fileId,
 				'task_id' => $taskId,
 				'status' => 'pending',
 				'submitted_at' => $this->now(),
@@ -206,6 +226,99 @@ final class ImportExecutor {
 		}
 	}
 
+	/** The checksums of the content of a file of the inbox, by which Paperless finds a document that has it. */
+	private function fingerprint(string $path): DocumentFingerprint {
+		$stream = $this->storage->openRead($this->config->targetUser, $path);
+		try {
+			return DocumentFingerprint::of($stream);
+		} finally {
+			fclose($stream);
+		}
+	}
+
+	/**
+	 * The file waits for its next attempt, as after a failed upload; a dry-run reports why. Without
+	 * the list of the tags, or without Paperless, every other file would fail the same way, so the
+	 * run uploads no more.
+	 */
+	private function uploadWaits(Upload $action, \Throwable $exception): void {
+		if ($this->dryRun) {
+			$this->report->error(new RunError('Import %1$s: %2$s', [$action->path, RunError::of($exception)]));
+		} else {
+			$this->retryUploadLater($action, $exception);
+		}
+		if ($this->tags->unavailable() || $exception instanceof PaperlessRequestException) {
+			$this->batch->stop();
+		}
+	}
+
+	/**
+	 * In per-user ownership, whether a document with the content of a file of the inbox is this
+	 * inbox's: owned by its user of Paperless, or by the account of the app, which owns an upload
+	 * until a run gives it its owner, as after an upload whose answer never came; such a document
+	 * gets its owner now. The account sees the documents of every user, so a document of another
+	 * user, or one that it doesn't show, is not: the file goes up as its own document, and never
+	 * leaves the inbox for a document that its user can't see.
+	 */
+	private function ours(int $document): bool {
+		$found = $this->paperless->document($document);
+		if ($found === null || !is_numeric($found['owner'] ?? null)) {
+			return false;
+		}
+		$owner = (int)$found['owner'];
+		if ($owner === $this->owner) {
+			return true;
+		}
+		if ($owner !== $this->paperless->accountId()) {
+			return false;
+		}
+		if (!$this->dryRun) {
+			$this->paperless->setOwner($document, (int)$this->owner);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Paperless has a document with the content of a file of the inbox, so the file ends as one
+	 * that it imported, without an upload: it leaves the inbox, or stays there as imported, as the
+	 * settings say. The document stays as it is: in per-user ownership ours() made sure that it is
+	 * this inbox's, and otherwise every document is the account's.
+	 */
+	private function known(Upload $action, int $document): void {
+		$path = $action->path;
+		if (!$this->dryRun) {
+			try {
+				if ($this->config->deleteInboxAfterSuccess) {
+					$this->storage->delete($this->config->targetUser, $path);
+					$this->state->deleteImport($this->config->targetUser, $path);
+					$this->prune($path);
+				} else {
+					$this->state->saveImport($this->config->targetUser, $path, [
+						'etag' => $action->etag,
+						'file_id' => $action->fileId,
+						'task_id' => '',
+						'status' => 'success',
+						'submitted_at' => $this->now(),
+						'attempts' => 0,
+						'retry_at' => 0,
+						'last_error' => null,
+					]);
+				}
+			} catch (\Throwable $exception) {
+				$this->retryUploadLater($action, $exception);
+				return;
+			}
+			$this->logger->info('Paperless already has the content of the inbox file {path} as document {document}, so it was not uploaded again', [
+				'path' => $path,
+				'document' => $document,
+			]);
+		}
+		$this->report->uploadSucceeded($path, $document);
+		$this->report->importResult(SyncReport::IMPORTED, $path, $document);
+		++$this->report->importsSucceeded;
+	}
+
 	/**
 	 * Paperless would refuse the same file again, so it waits in the inbox until it changes. Only
 	 * this run reports and logs the reason; the runs until then skip the file quietly.
@@ -215,6 +328,7 @@ final class ImportExecutor {
 		$reason = SyncErrors::message($exception);
 		$this->state->saveImport($this->config->targetUser, $path, [
 			'etag' => $action->etag,
+			'file_id' => $action->fileId,
 			'task_id' => '',
 			'status' => 'rejected',
 			'submitted_at' => $this->now(),
@@ -237,7 +351,7 @@ final class ImportExecutor {
 		$error = SyncErrors::message($exception);
 		$attempts = $action->attempts + 1;
 		// The report translates the text that the app wrote, as in a dry-run; the state and the log keep it in English.
-		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error, RunError::of($exception));
+		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error, RunError::of($exception), $action->fileId);
 		// The first failure of a file is a warning, the ones after it only information.
 		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
 			'path' => $action->path,
@@ -332,9 +446,10 @@ final class ImportExecutor {
 	/**
 	 * Saves that a file of the inbox waits for its next upload, twice as long after each failure up
 	 * to a day, and reports why: the state keeps the English error, the report its record. The answer
-	 * is the wait in minutes.
+	 * is the wait in minutes. The ID of the file, when it is known, lets the state follow the file to
+	 * a new path; without one, the state keeps the ID that it has.
 	 */
-	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record): int {
+	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record, int $fileId = 0): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
 		$now = $this->now();
@@ -346,7 +461,7 @@ final class ImportExecutor {
 			'attempts' => $attempts,
 			'retry_at' => $now + $delay,
 			'last_error' => SyncErrors::stored($error),
-		]);
+		] + ($fileId > 0 ? ['file_id' => $fileId] : []));
 		$this->report->error(new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [$path, $record, (string)$attempts, (string)$minutes]), null, $path);
 
 		return $minutes;
