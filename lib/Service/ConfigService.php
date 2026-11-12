@@ -220,7 +220,6 @@ final class ConfigService {
 				$values[$key] = $settings[$key];
 			}
 		}
-		/** @var array<string, mixed> $normalized */
 		$normalized = $this->normalize($values, $savedTargetUser);
 		$token = $this->resolveToken($tokenCandidate, (string)$normalized['paperless_url']);
 
