@@ -44,3 +44,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0036](0036-more-languages-without-moving-an-archive.md) | Speak more languages from catalogs that a check holds complete, and let no catalog move an archive | accepted |
 | [0037](0037-name-the-scenarios-of-the-end-to-end-tests.md) | Name the scenarios of the end-to-end tests, each with what it needs | accepted |
 | [0038](0038-each-user-may-see-the-documents-with-their-tags.md) | Each user may see the documents with their tags, as the administrator sets them | accepted |
+| [0039](0039-a-file-of-the-inbox-goes-to-paperless-once.md) | A file of the inbox goes to Paperless once, whatever its path | accepted |

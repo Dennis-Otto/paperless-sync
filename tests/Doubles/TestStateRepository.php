@@ -102,6 +102,17 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 		unset($imports[$path]);
 	}
 
+	public function moveImport(string $ownerUid, string $from, string $to): void {
+		$imports = &$this->importsOf($ownerUid);
+		if (isset($imports[$to])) {
+			throw new LogicException("A state is at {$to} already.");
+		}
+		if (isset($imports[$from])) {
+			$imports[$to] = ['path' => $to] + $imports[$from];
+			unset($imports[$from]);
+		}
+	}
+
 	public function allSends(): array {
 		return array_values($this->sends);
 	}

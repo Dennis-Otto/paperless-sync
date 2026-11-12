@@ -2451,6 +2451,8 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
+		// The upload asked Paperless for the content of the file first.
+		$this->paperless->searches = [];
 		$this->paperless->tasks['task-1'] = $task;
 		$this->clock->advance(86400);
 		if ($changed) {
@@ -2580,6 +2582,8 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
+		// The upload asked Paperless for the content of the file first.
+		$this->paperless->searches = [];
 		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'listed' => false];
 		$this->clock->advance(86400);
 		$this->storage->readException = new RuntimeException('Synthetic read failure');
@@ -2595,6 +2599,8 @@ final class SyncServiceTest extends TestCase {
 		$path = 'Dokumente/Paperless/Eingang/police.pdf';
 		$this->storage->files[$path] = '%PDF-inbox';
 		$this->service->run();
+		// The upload asked Paperless for the content of the file first.
+		$this->paperless->searches = [];
 		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
 		// The last second of the day after the upload, which the clock holds: a second later, the
 		// tests above give up on the task.
@@ -3182,6 +3188,70 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(['path' => $path, 'error' => 'Paperless timed out', 'attempts' => 10, 'minutes' => 1440], $logs[9][1]);
 	}
 
+	/**
+	 * Paperless received an upload whose answer never came, as after a timeout: the next attempt
+	 * finds the document by the content of the file and makes no duplicate.
+	 */
+	public function testAnUploadThatPaperlessReceivedWithoutAnAnswerIsNotRepeated(): void {
+		$path = 'Dokumente/Paperless/Eingang/police.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->paperless->uploadException = new RuntimeException('Paperless timed out');
+		$this->service->run();
+		$this->paperless->uploadException = null;
+		$this->paperless->originals[hash('sha256', '%PDF-inbox')] = 456;
+		$this->clock->advance(900);
+
+		$report = $this->service->run();
+
+		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame(['IMPORT SUCCESS: ' . $path . ' -> P456'], $report->actions);
+		self::assertSame([0, 1], [$report->importsSubmitted, $report->importsSucceeded]);
+		self::assertArrayNotHasKey($path, $this->storage->files);
+		self::assertSame([], $this->state->imports);
+	}
+
+	/**
+	 * A file renamed or moved inside the inbox after its upload keeps its upload: the run ends it
+	 * at the new path when Paperless has imported it, and never uploads the file a second time.
+	 *
+	 * @return array<string, array{string, string, bool}>
+	 */
+	public static function renamedInboxFiles(): array {
+		return [
+			'a pending file, renamed' => ['police.pdf', 'Versicherung 2026.pdf', true],
+			'a pending file, moved into a folder for a tag' => ['police.pdf', 'Versicherung/police.pdf', true],
+			'a kept file in a renamed folder' => ['Alt/police.pdf', 'Neu/police.pdf', false],
+		];
+	}
+
+	#[DataProvider('renamedInboxFiles')]
+	public function testAFileRenamedInTheInboxIsNotUploadedAgain(string $from, string $to, bool $pending): void {
+		$this->configService->save(['delete_inbox_after_success' => $pending]);
+		$inbox = 'Dokumente/Paperless/Eingang/';
+		$this->storage->files[$inbox . $from] = '%PDF-inbox';
+		$this->service->run();
+		if (!$pending) {
+			$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 456];
+			$this->service->run();
+			self::assertSame('success', $this->state->imports[$inbox . $from]['status']);
+		}
+		$this->storage->move(TestStorage::USER, $inbox . $from, $inbox . $to, 'replace');
+		$this->paperless->tasks['task-1'] = ['status' => 'STARTED', 'message' => ''];
+
+		$waiting = $this->service->run();
+
+		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts, 'No second upload, which could make a duplicate.');
+		self::assertSame(0, $waiting->importsSubmitted);
+		self::assertSame([$inbox . $to], array_keys($this->state->imports), 'The state follows the file.');
+		if ($pending) {
+			$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 456];
+			$imported = $this->service->run();
+			self::assertSame(['IMPORT SUCCESS: ' . $inbox . $to . ' -> P456'], $imported->actions);
+			self::assertArrayNotHasKey($inbox . $to, $this->storage->files);
+		}
+		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts);
+	}
+
 	public function testRefusedFileForgetsItsEarlierAttempts(): void {
 		$path = 'Dokumente/Paperless/Eingang/notes.bin';
 		$this->storage->files[$path] = 'BIN-archive';
@@ -3203,7 +3273,7 @@ final class SyncServiceTest extends TestCase {
 
 		$this->service->run();
 
-		self::assertCount(2, $this->storage->openedStreams);
+		self::assertCount(4, $this->storage->openedStreams, 'Each file is read for its checksums, then for its upload.');
 		foreach ($this->storage->openedStreams as $stream) {
 			self::assertIsClosedResource($stream, 'A stream is closed also after a failed upload.');
 		}

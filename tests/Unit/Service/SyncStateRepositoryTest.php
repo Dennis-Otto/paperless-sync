@@ -163,8 +163,26 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(TestClock::START, $import['created_at']);
 		self::assertSame(0, $import['attempts']);
 		self::assertSame(0, $import['retry_at']);
+		self::assertSame(0, $import['file_id'], 'A file without an ID has none.');
 		self::assertNull($import['last_error']);
 		self::assertNull($this->repository->findImport('paperless', 'Eingang/other.pdf'));
+	}
+
+	/** The state of an upload follows its file to a new path, with the ID of the file, and the same file of another owner stays. */
+	public function testAnImportMovesToTheNewPathOfItsFile(): void {
+		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'task_id' => 'task-1', 'file_id' => 42]);
+		$this->repository->saveImport('someone-else', 'Eingang/police.pdf', ['task_id' => 'task-2']);
+		$this->clock->advance(60);
+
+		$this->repository->moveImport('paperless', 'Eingang/police.pdf', 'Eingang/Versicherung/police.pdf');
+
+		self::assertNull($this->repository->findImport('paperless', 'Eingang/police.pdf'));
+		$import = $this->repository->findImport('paperless', 'Eingang/Versicherung/police.pdf');
+		self::assertNotNull($import);
+		self::assertSame(['Eingang/Versicherung/police.pdf', hash('sha256', 'Eingang/Versicherung/police.pdf'), 'task-1', 42, TestClock::START + 60], [$import['path'], $import['path_hash'], $import['task_id'], $import['file_id'], $import['updated_at']]);
+		$other = $this->repository->findImport('someone-else', 'Eingang/police.pdf');
+		self::assertNotNull($other);
+		self::assertSame('task-2', $other['task_id']);
 	}
 
 	public function testFailedUploadRecordsItsAttemptsAndTheTimeOfTheNext(): void {

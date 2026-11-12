@@ -62,6 +62,9 @@ interface SyncStateRepositoryInterface {
 
 	public function deleteImport(string $ownerUid, string $path): void;
 
+	/** Moves the state of an upload to the new path of its file, at which no other state may be. */
+	public function moveImport(string $ownerUid, string $from, string $to): void;
+
 	/**
 	 * Every file that someone sent to Paperless from Files, or a rule of Flow, and whose import has
 	 * not ended yet, the oldest first: its user, the ID of the file, its path when it was sent, the
