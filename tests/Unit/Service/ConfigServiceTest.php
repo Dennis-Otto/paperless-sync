@@ -395,6 +395,54 @@ final class ConfigServiceTest extends TestCase {
 		self::assertFalse($this->service->validateForDryRun(['follow_storage_paths' => false])->followStoragePaths, 'A dry-run of the page takes its switch, as the path template.');
 	}
 
+	/**
+	 * Without an address in the browser, the links to Paperless take the Paperless URL, as before
+	 * the setting, also without a read of the token.
+	 */
+	public function testTheLinksTakeThePaperlessUrlUntilAnAddressInTheBrowserIsSaved(): void {
+		self::assertSame(['', ''], [$this->service->get()->linkUrl(), $this->service->configuredLinkUrl()]);
+
+		$config = $this->service->save(self::validSettings(), 'secret-token');
+
+		self::assertSame('', $config->paperlessPublicUrl);
+		self::assertSame('', $this->settings['paperless_public_url']);
+		self::assertSame('https://paperless.example.test', $config->linkUrl());
+		self::assertSame('https://paperless.example.test', $this->service->settings()->linkUrl());
+		self::assertSame('https://paperless.example.test', $this->service->configuredLinkUrl());
+	}
+
+	/**
+	 * With Paperless at a name that only the server knows, such as http://paperless:8000 in a
+	 * Docker network, the links take the address in the browser, while the requests and the token
+	 * stay with the Paperless URL (#446).
+	 */
+	public function testTheLinksTakeTheAddressInTheBrowser(): void {
+		$config = $this->service->save([
+			'paperless_url' => 'http://paperless:8000',
+			'paperless_local_network' => true,
+			'paperless_public_url' => ' https://paperless.example.com/ ',
+		] + self::validSettings(), 'secret-token');
+
+		self::assertSame('https://paperless.example.com', $config->paperlessPublicUrl);
+		self::assertSame('https://paperless.example.com', $this->settings['paperless_public_url']);
+		self::assertSame('https://paperless.example.com', $config->linkUrl());
+		self::assertSame('http://paperless:8000', $config->paperlessUrl);
+		self::assertSame(['url' => 'http://paperless:8000', 'token' => 'secret-token'], $this->credential);
+		self::assertSame('http://paperless:8000', $this->service->connection($config)->url);
+		self::assertSame('https://paperless.example.com', $this->service->configuredLinkUrl());
+		self::assertSame('http://paperless:8000', $this->service->configuredUrl());
+		self::assertSame('https://paperless.example.com', $this->service->settings()->linkUrl());
+		self::assertTrue($this->service->settings()->tokenConfigured, 'The address in the browser does not take the token away.');
+
+		// The address in the browser only changes links: a dry-run may try another one unsaved.
+		self::assertSame('https://dms.example.com', $this->service->validateForDryRun(['paperless_public_url' => 'https://dms.example.com/'])->linkUrl());
+
+		// Emptied again, the links take the Paperless URL.
+		$config = $this->service->save(['paperless_url' => 'http://paperless:8000', 'paperless_public_url' => ' '] + self::validSettings(), '');
+		self::assertSame('http://paperless:8000', $config->linkUrl());
+		self::assertSame('http://paperless:8000', $this->service->configuredLinkUrl());
+	}
+
 	/** The tags of Paperless reach Nextcloud only once an administrator turns them on. */
 	public function testTheTagsInNextcloudAreOffUntilTurnedOn(): void {
 		self::assertFalse($this->service->get()->nextcloudTags);
@@ -416,7 +464,7 @@ final class ConfigServiceTest extends TestCase {
 		$this->lazyReads = [];
 		$config = $this->service->get();
 		self::assertSame(['https://paperless.example.test', 'paperless', 20, false], [$config->paperlessUrl, $config->targetUser, $config->batchSize, $config->enabled]);
-		self::assertCount(42, $this->lazyReads, 'Every setting is read as a lazy one.');
+		self::assertCount(43, $this->lazyReads, 'Every setting is read as a lazy one.');
 		self::assertSame('https://paperless.example.test', $this->service->configuredUrl());
 	}
 
@@ -713,6 +761,7 @@ final class ConfigServiceTest extends TestCase {
 	public static function invalidSettings(): array {
 		$url = 'Die Paperless-Adresse darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.';
 		$interval = 'Der Wert von „Intervall in Minuten“ muss zwischen 5 und 1440 liegen.';
+		$publicUrl = 'Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.';
 
 		return [
 			'empty URL' => [['paperless_url' => ' '], 'Enter a valid Paperless URL.', 'paperless_url', 'Gib eine gültige Paperless-Adresse ein.'],
@@ -721,6 +770,13 @@ final class ConfigServiceTest extends TestCase {
 			'URL with credentials' => [['paperless_url' => 'https://user:secret@paperless.example.test'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
 			'URL with a query' => [['paperless_url' => 'https://paperless.example.test/?page=1'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
 			'URL with a fragment' => [['paperless_url' => 'https://paperless.example.test/#top'], 'The Paperless URL must not contain credentials, a query, or a fragment.', 'paperless_url', $url],
+			// The address in the browser becomes the target of links: an http(s) URL alone, never a script.
+			'address in the browser without scheme' => [['paperless_public_url' => 'paperless.example.com'], 'Enter a valid address of Paperless in the browser, or leave it empty.', 'paperless_public_url', 'Gib eine gültige Paperless-Adresse im Browser ein oder lass das Feld leer.'],
+			'address in the browser that runs a script' => [['paperless_public_url' => 'javascript:alert(1)'], 'Enter a valid address of Paperless in the browser, or leave it empty.', 'paperless_public_url', 'Gib eine gültige Paperless-Adresse im Browser ein oder lass das Feld leer.'],
+			'FTP address in the browser' => [['paperless_public_url' => 'ftp://paperless.example.com'], 'The address of Paperless in the browser must use HTTP or HTTPS.', 'paperless_public_url', 'Die Paperless-Adresse im Browser muss HTTP oder HTTPS verwenden.'],
+			'address in the browser with credentials' => [['paperless_public_url' => 'https://user:secret@paperless.example.com'], 'The address of Paperless in the browser must not contain credentials, a query, or a fragment.', 'paperless_public_url', $publicUrl],
+			'address in the browser with a query' => [['paperless_public_url' => 'https://paperless.example.com/?page=1'], 'The address of Paperless in the browser must not contain credentials, a query, or a fragment.', 'paperless_public_url', $publicUrl],
+			'address in the browser with a fragment' => [['paperless_public_url' => 'https://paperless.example.com/#top'], 'The address of Paperless in the browser must not contain credentials, a query, or a fragment.', 'paperless_public_url', $publicUrl],
 			'no target user' => [['target_user' => '  '], 'A Nextcloud target user is required.', 'target_user', 'Ein Nextcloud-Zielbenutzer ist erforderlich.'],
 			// A user whom someone creates later under the ID must not get every document unasked.
 			'a target user that does not exist' => [['target_user' => 'nobody'], 'Nextcloud user nobody does not exist.', 'target_user', 'Den Nextcloud-Benutzer nobody gibt es nicht.'],
@@ -771,6 +827,7 @@ final class ConfigServiceTest extends TestCase {
 
 	public function testUppercaseSchemeIsAccepted(): void {
 		self::assertSame('HTTPS://paperless.example.test', $this->service->normalizeUrl('HTTPS://paperless.example.test/'));
+		self::assertSame('HTTP://paperless.example.com', $this->service->save(['paperless_public_url' => 'HTTP://paperless.example.com/'] + self::validSettings(), 'secret-token')->paperlessPublicUrl);
 	}
 
 	/**

@@ -146,6 +146,33 @@ final class MetadataSidecarsTest extends TestCase {
 	}
 
 	/**
+	 * The url of a sidecar is the address of Paperless in the browser, not a name that only the
+	 * server knows (#446): a new address rewrites each sidecar and its row once, as another change
+	 * of their content does.
+	 */
+	public function testTheUrlIsTheAddressOfPaperlessInTheBrowser(): void {
+		$this->exports([123 => ['path' => self::PATH, 'state' => 'active']]);
+		$first = $this->sidecars();
+		$first->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$first->finish($this->states());
+		$this->storage->writes = [];
+
+		$this->config = $this->configService()->save(['write_metadata' => true, 'paperless_url' => 'http://paperless:8000', 'paperless_public_url' => 'https://paperless.example.com/'] + self::validSettings(), 'secret-token');
+		$moved = $this->sidecars();
+		$moved->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$moved->finish($this->states());
+		self::assertSame([[self::SIDECAR, 'updated'], [self::INDEX, 'updated']], $this->storage->writes);
+		self::assertStringContainsString('"url": "https://paperless.example.com/documents/123/details"', $this->storage->files[self::SIDECAR]);
+		self::assertStringContainsString(',https://paperless.example.com/documents/123/details,', $this->storage->files[self::INDEX]);
+
+		$this->storage->writes = [];
+		$again = $this->sidecars();
+		$again->describe(self::document(), 123, self::PATH, self::SHA256, false);
+		$again->finish($this->states());
+		self::assertSame([], $this->storage->writes, 'The sidecar has the address already.');
+	}
+
+	/**
 	 * A copy in the deleted folder keeps its sidecar, and its row follows it there, with the state
 	 * of its document; a copy that the run deleted, under the rules of deletion safety, takes its
 	 * sidecar and its row along.

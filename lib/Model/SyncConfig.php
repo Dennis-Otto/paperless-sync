@@ -106,7 +106,23 @@ final class SyncConfig implements \JsonSerializable {
 		 * their own, in every choice of $ownership, and no other; see UserTags.
 		 */
 		public readonly string $userTags = '',
+		/**
+		 * The address of Paperless that a browser opens, for the links to its documents, when it is
+		 * not $paperlessUrl, the one that Nextcloud reaches, such as https://paperless.example.com for
+		 * http://paperless:8000 in a Docker network; '' for $paperlessUrl. See linkUrl().
+		 */
+		public readonly string $paperlessPublicUrl = '',
 	) {
+	}
+
+	/**
+	 * The address of Paperless for the links that a browser opens, without a trailing slash: the
+	 * address in the browser, or else the Paperless URL, '' without either.
+	 */
+	public function linkUrl(): string {
+		$public = rtrim(trim($this->paperlessPublicUrl), '/');
+
+		return $public !== '' ? $public : rtrim(trim($this->paperlessUrl), '/');
 	}
 
 	/** Whether each user of Nextcloud gets the documents that their user of Paperless owns, also those that it may view or not. */

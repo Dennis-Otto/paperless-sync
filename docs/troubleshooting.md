@@ -144,7 +144,7 @@ The entries go to the target user alone, so another account, such as the adminis
 
 ### The link to a new document in Paperless doesn't open
 
-The link of an imported file in the Activity app, the notification of a file sent from Files and *Open in Paperless* in Files start with the saved Paperless URL, which is the address under which the Nextcloud server reaches Paperless. A name or an address that only the server knows, such as `http://paperless:8000` in a Docker network, leads the browser nowhere. Open the document in Paperless by its number instead, such as *P123*, or save a URL that both the server and the browsers reach, such as the public address of Paperless behind its reverse proxy.
+The link of an imported file in the Activity app, the notification of a file sent from Files, *Open in Paperless* in Files and the `url` of the metadata next to the archive start with the setting **Address of Paperless in the browser**, or, while it is empty, with the Paperless URL, the address under which the Nextcloud server reaches Paperless. A name or an address that only the server knows, such as `http://paperless:8000` in a Docker network, leads the browser nowhere: enter the address that browsers open, such as the public address of Paperless behind its reverse proxy, in **Address of Paperless in the browser** in *1 · Connection and ownership*, and save, as [the guide](guide.md#the-address-of-paperless-in-the-browser) describes. The requests of Nextcloud keep the Paperless URL. A notification that was sent before keeps its old link; open its document in Paperless by its number, such as *P123*.
 
 ### Documents of the trash come late
 

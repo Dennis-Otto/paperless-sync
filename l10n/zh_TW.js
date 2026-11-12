@@ -736,7 +736,13 @@ OC.L10N.register(
 		"Nextcloud could not set up a secure connection to Paperless (cURL error 35). If the URL starts with https:// at a port that speaks plain HTTP, use http:// or the port of HTTPS.": "Nextcloud 無法與 Paperless 建立安全連線（cURL 錯誤 35）。如果 URL 以 https:// 開頭，而連接埠使用的是一般 HTTP，請改用 http:// 或 HTTPS 的連接埠。",
 		"Nextcloud does not trust the certificate of Paperless (cURL error 60). Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.": "Nextcloud 不信任 Paperless 的憑證（cURL 錯誤 60）。請使用公開憑證授權單位簽發的憑證，或使用 occ security:certificates:import 匯入您自己的憑證。",
 		"Paperless does not serve version %1$s of its API, which Paperless Sync uses (HTTP 406 Not Acceptable). Paperless Sync needs Paperless-ngx %2$s or newer; with a newer Paperless-ngx, update Paperless Sync.": "Paperless 不提供 Paperless Sync 所使用的 API 版本 %1$s（HTTP 406 Not Acceptable）。Paperless Sync 需要 Paperless-ngx %2$s 或更高版本；如果 Paperless-ngx 的版本更新，請更新 Paperless Sync。",
-		"Messages and their fixes": "訊息及其解決方法"
+		"Messages and their fixes": "訊息及其解決方法",
+		"Address of Paperless in the browser": "瀏覽器中的 Paperless 位址",
+		"The Paperless URL": "Paperless URL",
+		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "如果瀏覽器透過 Paperless URL 連到 Paperless，請留空。如果 Nextcloud 透過只有伺服器知道的名稱或位址連到 Paperless，例如 Docker 網路中的 http://paperless:8000，請輸入瀏覽器開啟的位址，例如 https://paperless.example.com：檔案、通知、活動和中繼資料中連到 Paperless 的連結會使用它，而 Nextcloud 的請求仍然送往 Paperless URL。",
+		"Enter a valid address of Paperless in the browser, or leave it empty.": "請輸入有效的瀏覽器中的 Paperless 位址，或將其留空。",
+		"The address of Paperless in the browser must use HTTP or HTTPS.": "瀏覽器中的 Paperless 位址必須使用 HTTP 或 HTTPS。",
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。"
 	},
 	"nplurals=1; plural=0;"
 )
