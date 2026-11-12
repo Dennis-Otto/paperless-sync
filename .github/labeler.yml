@@ -36,6 +36,7 @@
           - css/settings.css
           - templates/settings.php
           - tests/Unit/Controller/SettingsController*
+          - tests/Unit/Model/SyncConfigTest.php
           - tests/Unit/Controller/DirectoryController*
           - tests/Unit/Controller/ControllerRoutesTest.php
           - tests/Unit/Settings/**
