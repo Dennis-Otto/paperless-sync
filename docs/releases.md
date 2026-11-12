@@ -54,7 +54,7 @@ The CI runs the same check on the package of every pull request, so a change tha
 
 Each secret of a release lives in an environment of its own, which only `main` may use, so that a job reaches the one secret that it needs and no other:
 
-- The environment `signing` holds `APP_PRIVATE_KEY`, the key of the app's certificate. Only the build of a release (`.github/workflows/build-release.yml`) and the job of *Register app in Nextcloud App Store* that signs the app id enter it.
+- The environment `signing` holds `APP_PRIVATE_KEY`, the key of the app's certificate. Only the build of a release (`.github/workflows/build-release.yml`) and the job of *Register the app* that signs the app id enter it.
 - The environment `appstore` holds `APPSTORE_TOKEN`, the token of the Nextcloud App Store. Only the delivery of a release to the App Store and the registration of the app enter it.
 - The environment `release` holds `RELEASE_AUTOMATION_PRIVATE_KEY`, the key of the release app, whose client ID is the repository variable `RELEASE_AUTOMATION_CLIENT_ID`. The release bot and the other bots enter it for their tokens.
 
@@ -62,4 +62,4 @@ Every token is short-lived and scoped to what its job needs. To recover a lost s
 
 If a job fails, re-run the failed jobs of the Release workflow: a draft is completed, and the App Store accepts the same version again without a second release. A published release is never replaced.
 
-Registering the app in the App Store, needed once and again only for a new certificate, is the manual workflow *Register app in Nextcloud App Store*.
+Registering the app in the App Store, needed once and again only for a new certificate, is the manual workflow *Register the app*.
