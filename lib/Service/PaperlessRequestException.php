@@ -31,7 +31,10 @@ class PaperlessRequestException extends RuntimeException implements Translatable
 	 * @param string $message the message of the failure, without the token and the queries of its URLs
 	 * @param ?RunError $error what happened and what to do, in the words of the app, or null for a failure that it can't explain
 	 */
-	public function __construct(string $message, private readonly ?RunError $error = null) {
+	public function __construct(
+		string $message,
+		private readonly ?RunError $error = null,
+	) {
 		parent::__construct($message);
 	}
 
