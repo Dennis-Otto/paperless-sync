@@ -267,14 +267,14 @@ final class ConfigService {
 	 */
 	public function validate(array $settings, #[\SensitiveParameter] string $tokenCandidate = ''): SyncConfig {
 		$values = $this->readValues();
+		$savedTargetUser = trim((string)$values['target_user']);
 		foreach (self::keys() as $key) {
 			if (array_key_exists($key, $settings)) {
 				/** @psalm-suppress MixedAssignment */
 				$values[$key] = $settings[$key];
 			}
 		}
-		/** @var array<string, mixed> $normalized */
-		$normalized = $this->normalize($values);
+		$normalized = $this->normalize($values, $savedTargetUser);
 		$token = $this->resolveToken($tokenCandidate, (string)$normalized['paperless_url']);
 
 		return $this->fromValues($normalized, $token !== '');
@@ -296,7 +296,9 @@ final class ConfigService {
 		$same = [
 			'paperless_url' => static fn (mixed $value): string => rtrim(trim(is_scalar($value) ? (string)$value : ''), '/'),
 			'paperless_local_network' => static fn (mixed $value): bool => filter_var($value, FILTER_VALIDATE_BOOLEAN),
-			'target_user' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
+			// The same user, whatever the case of the ID that the page sends, which a save stores as
+			// Nextcloud spells it, and an earlier version stored as it was typed.
+			'target_user' => fn (mixed $value): string => $this->spelledUserId(trim(is_scalar($value) ? (string)$value : '')),
 			// Who gets the documents decides whose files a run reads, as the target user does.
 			'ownership' => static fn (mixed $value): string => trim(is_scalar($value) ? (string)$value : ''),
 			'user_map' => static fn (mixed $value): string => implode("\n", array_map(
@@ -496,6 +498,30 @@ final class ConfigService {
 		return trim($this->appConfig->getValueString(AppConstants::APP_ID, 'target_user', '', lazy: true));
 	}
 
+	/**
+	 * Stores the target user with the ID as Nextcloud spells it, which a save does since this
+	 * version, for a target user that an earlier version stored as it was typed, such as Dennis for
+	 * the user dennis. A target user that Nextcloud doesn't have stays as it is, for the connection
+	 * checklist to name.
+	 *
+	 * @return string|null the ID as Nextcloud spells it, when the stored one differed, or else null
+	 */
+	public function spellTargetUser(): ?string {
+		$stored = $this->targetUser();
+		$spelled = $this->spelledUserId($stored);
+		if ($spelled === $stored) {
+			return null;
+		}
+		$this->appConfig->setValueString(AppConstants::APP_ID, 'target_user', $spelled, lazy: true);
+
+		return $spelled;
+	}
+
+	/** The ID of a user as Nextcloud spells it, or $userId as it is for a user that Nextcloud doesn't have. */
+	private function spelledUserId(string $userId): string {
+		return $this->userManager->get($userId)?->getUID() ?? $userId;
+	}
+
 	/** @return array<string, mixed> */
 	private function readValues(): array {
 		$values = [];
@@ -566,8 +592,12 @@ final class ConfigService {
 		return 'en';
 	}
 
-	/** @param array<string, mixed> $values @return array<string, mixed> */
-	private function normalize(array $values): array {
+	/**
+	 * @param array<string, mixed> $values
+	 * @param string $savedTargetUser the target user as it is saved, which may be gone since
+	 * @return array<string, mixed>
+	 */
+	private function normalize(array $values, string $savedTargetUser): array {
 		$values['paperless_url'] = $this->normalizeUrl((string)$values['paperless_url']);
 		// It lifts a protection of Nextcloud, so only a clear yes turns it on: true, as the settings
 		// page sends it, or 1, "1", "true", "on" or "yes", as a form sends it; "false" too is a no.
@@ -575,6 +605,18 @@ final class ConfigService {
 		$values['target_user'] = trim((string)$values['target_user']);
 		if ($values['target_user'] === '') {
 			throw new InvalidSettingException('A Nextcloud target user is required.', [], 'target_user');
+		}
+		// With the ID as Nextcloud spells it, as the users of the tables are: Nextcloud finds a user
+		// whatever the case of the ID, but its activities, notifications and shares name the user
+		// as it spells it, so that Dennis for dennis would lose them. A new user that doesn't exist,
+		// whom someone could create later under that name, would get every document; the saved one
+		// stays, also when it is gone since, so that a schedule can always be paused, and the test
+		// of the connection names it.
+		$targetUser = $this->userManager->get($values['target_user']);
+		if ($targetUser !== null) {
+			$values['target_user'] = $targetUser->getUID();
+		} elseif ($values['target_user'] !== $savedTargetUser) {
+			throw new InvalidSettingException('Nextcloud user %s does not exist.', [$values['target_user']], 'target_user');
 		}
 		$values['base_path'] = $this->pathTemplate->normalizeRelativePath((string)$values['base_path']);
 		foreach (['archive_folder', 'inbox_folder', 'error_folder', 'deleted_folder'] as $key) {
