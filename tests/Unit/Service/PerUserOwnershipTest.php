@@ -305,7 +305,7 @@ final class PerUserOwnershipTest extends TestCase {
 		$first = $this->sync([$this->document(1, self::NUMERIC), $this->document(2, self::ALICE)]);
 
 		self::assertSame([], $first->errorMessages);
-		self::assertSame([$this->path(1)], array_keys($this->filesOf('1001')));
+		self::assertSame([self::INBOX . '/scan.pdf', $this->path(1)], array_keys($this->filesOf('1001')), 'The upload stays in the inbox until Paperless has its document.');
 		self::assertSame([$this->path(2)], array_keys($this->filesOf('alice')));
 		self::assertSame([1, 1], [$first->users['1001']['exported'], $first->users['1001']['importsSubmitted']]);
 		self::assertContains('[1001] EXPORT P1: ' . $this->path(1), $first->actions);
