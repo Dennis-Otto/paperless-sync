@@ -12,8 +12,9 @@
 # step, with the rules of ESLint, the thumbnails of the screenshots of the App Store, the language of the pictures
 # of the documentation, their frozen story and the report of their visual check, and that
 # the German twins of the documentation, README.de.md and
-# docs/*.de.md, follow their English pages; the versions check covers README.de.md and
-# docs/index.de.md as well.
+# docs/*.de.md, follow their English pages, and that the environments of the release
+# guide hold the secrets that the workflows read in them; the versions check covers
+# README.de.md and docs/index.de.md as well.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -1044,6 +1045,142 @@ broken_twin docs/faq.md 'it ends where line' -e '/^### Wie deinstalliere ich Pap
 rm -rf "$twin_copy"
 trap - EXIT
 echo "The check of the German twins reports a heading that is gone, of another level, too many or gone among others, an English diagram, light or dark, an English snippet and a page that ends early."
+
+printf '\n== %s\n' "Environments of the release guide"
+# The section Secrets and recovery of docs/releases.md is what a maintainer follows to set
+# a secret again, and a secret in an environment that no job of the release enters is one
+# that the release never reads (#444). Each line "- The environment `NAME` holds ..." of
+# its list names an environment, and every name in capitals on it is a secret that a job
+# of a workflow reads in that environment, or a variable that a workflow reads. Every
+# environment that a workflow of a release enters has its line, with every secret that a
+# job reads there.
+#
+# The secrets that the jobs of the workflows read in an environment, one line "file
+# environment secret" for each: a job enters an environment with "environment: NAME" or
+# with "name: NAME" below "environment:", and reads a secret as secrets.NAME, but for
+# GITHUB_TOKEN, which every job has. A job that
+# calls a reusable workflow enters no environment, and the secrets that it hands on are
+# those of the environment of the job that it calls.
+environment_secrets() {
+  awk '
+    function flush(  count, names, i) {
+      count = split(secrets, names, " ")
+      for (i = 1; i <= count && environment != ""; i++) print file, environment, names[i]
+      environment = ""
+      secrets = ""
+      below = 0
+    }
+    function strip(name) {
+      gsub(/["\047]/, "", name)
+      return name
+    }
+    FNR == 1 { flush(); jobs = 0 }
+    /^jobs:/ { jobs = 1; next }
+    /^[^ #]/ { flush(); jobs = 0 }
+    !jobs { next }
+    /^  [A-Za-z0-9_-]+:[ \t]*$/ { flush(); file = FILENAME; next }
+    /^    environment:[ \t]*[^ \t#]/ { environment = strip($2); next }
+    /^    environment:/ { below = 1; next }
+    below && /^      name:/ { environment = strip($2); below = 0; next }
+    /^    [^ ]/ { below = 0 }
+    {
+      line = $0
+      while (match(line, /secrets\.[A-Z][A-Z0-9_]*/)) {
+        name = substr(line, RSTART + 8, RLENGTH - 8)
+        if (name != "GITHUB_TOKEN" && index(" " secrets " ", " " name " ") == 0) secrets = secrets " " name
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
+    END { flush() }
+  ' "$@"
+}
+
+# Compares the list of a page with the workflows of a folder, prints each difference and
+# fails when it finds one. The workflows of a release are release.yml, build-release.yml,
+# which builds and signs the package, and register-app.yml.
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+release_environments() {
+  local page="$1" workflows="$2" pairs variables list line environment name file problems=0
+  local -A lines=()
+  pairs="$(environment_secrets "$workflows"/*.yml)"
+  variables=" $(grep -ohE 'vars\.[A-Z][A-Z0-9_]*' "$workflows"/*.yml | sed 's/^vars\.//' | sort -u | tr '\n' ' ')"
+  list="$(awk '/^## / { inside = ($0 == "## Secrets and recovery") } inside && /^- The environment `/' "$page")"
+  if [[ -z "$list" ]]; then
+    echo "$page names no environment in its section Secrets and recovery, with a line such as \"- The environment \`release\` holds \`RELEASE_AUTOMATION_PRIVATE_KEY\`\"."
+    return 1
+  fi
+  while IFS= read -r line; do
+    environment="${line#- The environment \`}"
+    environment="${environment%%\`*}"
+    lines[$environment]="$line"
+    if ! awk -v environment="$environment" '$2 == environment { found = 1 } END { exit !found }' <<<"$pairs"; then
+      echo "$page names the environment $environment, which no job of $workflows enters with a secret."
+      problems=$((problems + 1))
+      continue
+    fi
+    while IFS= read -r name; do
+      [[ -n "$name" && "$variables" != *" $name "* ]] || continue
+      if ! awk -v environment="$environment" -v name="$name" '$2 == environment && $3 == name { found = 1 } END { exit !found }' <<<"$pairs"; then
+        echo "$page says that the environment $environment holds $name, but no job of $workflows reads secrets.$name in it; jobs read it in: $(awk -v name="$name" '$3 == name && !seen[$2]++ { printf "%s%s", separator, $2; separator = ", " }' <<<"$pairs")."
+        problems=$((problems + 1))
+      fi
+    done < <(grep -oE '`[A-Z][A-Z0-9_]+`' <<<"$line" | tr -d '`')
+  done <<<"$list"
+  while read -r file environment name; do
+    case "${file##*/}" in
+      release.yml | build-release.yml | register-app.yml) ;;
+      *) continue ;;
+    esac
+    if [[ -z "${lines[$environment]:-}" ]]; then
+      echo "$file enters the environment $environment for secrets.$name, which $page doesn't name; add a line \"- The environment \`$environment\` holds \`$name\`\"."
+      problems=$((problems + 1))
+    elif [[ "${lines[$environment]}" != *"\`$name\`"* ]]; then
+      echo "$file reads secrets.$name in the environment $environment, which the line of $page about it doesn't name."
+      problems=$((problems + 1))
+    fi
+  done <<<"$pairs"
+  ((problems == 0))
+}
+
+if ! release_environments docs/releases.md .github/workflows; then
+  echo "Correct the list of Secrets and recovery in docs/releases.md from the environment: and the secrets. of the jobs of .github/workflows."
+  exit 1
+fi
+echo "Each environment that docs/releases.md names holds the secrets that a workflow reads in it, and the page names every environment of a release with its secrets."
+
+# And the check finds what it must: a secret of another environment, as the guide said
+# before #444, an environment that no workflow enters, one of a release that the page
+# leaves out, a secret of a release that its line leaves out, a page without the list,
+# and a workflow of a release that moves its secret to another environment.
+release_copy="$(mktemp -d)"
+trap 'rm -rf "$release_copy"' EXIT
+cp -r .github/workflows "$release_copy/workflows"
+broken_release() {
+  local expected="$1" output
+  shift
+  sed "$@" docs/releases.md >"$release_copy/releases.md"
+  if output="$(release_environments "$release_copy/releases.md" "$release_copy/workflows")" || [[ "$output" != *"$expected"* ]]; then
+    echo "The check of the environments should report \"$expected\" for a broken copy of docs/releases.md, but says: ${output:-nothing}"
+    exit 1
+  fi
+}
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+broken_release 'says that the environment release holds APP_PRIVATE_KEY, but no job of' \
+  -e 's/^- The environment `release` holds `RELEASE_AUTOMATION_PRIVATE_KEY`/& and `APP_PRIVATE_KEY`/'
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+broken_release 'names the environment app-store, which no job of' -e 's/^- The environment `appstore`/- The environment `app-store`/'
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+broken_release 'enters the environment signing for secrets.APP_PRIVATE_KEY, which' -e '/^- The environment `signing`/d'
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+broken_release 'reads secrets.APPSTORE_TOKEN in the environment appstore, which the line of' \
+  -e '/^- The environment `appstore`/s/`APPSTORE_TOKEN`/the token/'
+# shellcheck disable=SC2016 # The backquotes of Markdown, which the shell must not expand.
+broken_release 'names no environment in its section Secrets and recovery' -e '/^- The environment `/d'
+sed -i 's/^      name: signing$/      name: keys/' "$release_copy/workflows/build-release.yml"
+broken_release 'build-release.yml enters the environment keys for secrets.APP_PRIVATE_KEY, which' -e ''
+rm -rf "$release_copy"
+trap - EXIT
+echo "The check of the environments reports a secret of another environment, an environment that no workflow enters, one that the page leaves out, a secret that a line leaves out, a page without the list, and a workflow of a release that moves its secret."
 
 printf '\n== %s\n' "Area labels of pull requests"
 # The labeler bot of .github/workflows/area-labels.yml gives a pull request the area
