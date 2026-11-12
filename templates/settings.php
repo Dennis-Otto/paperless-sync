@@ -292,7 +292,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 			<p class="settings-hint" id="paperless-sync-user-tags-hint"><?php p($l->t('A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.')); ?> <?php $help('tags-that-a-user-may-see', $l->t('Tags that a user may see')); ?></p>
 			<!-- The shares of the target user that still show a user with tags every document in them, which only a click removes. -->
 			<div id="paperless-sync-user-tags-shares" class="paperless-sync-user-tags-shares" hidden>
-				<p id="paperless-sync-user-tags-shares-text"><?php p($l->t('These shares of the target user show a user with tags every document in them, whatever their tags:')); ?></p>
+				<p id="paperless-sync-user-tags-shares-text"><?php p($l->t('These shares of the target user show, or may show, a user with tags every document in them, whatever their tags:')); ?></p>
 				<ul id="paperless-sync-user-tags-share-list" aria-labelledby="paperless-sync-user-tags-shares-text"></ul>
 				<button id="paperless-sync-user-tags-remove-shares" type="button" aria-describedby="paperless-sync-user-tags-shares-text"><?php p($l->t('Remove these shares')); ?></button>
 			</div>

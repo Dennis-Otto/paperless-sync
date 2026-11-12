@@ -703,7 +703,7 @@ OC.L10N.register(
 		"Remove this user": "移除此使用者",
 		"Add a user": "新增使用者",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "此表中的使用者會在自己的封存中取得至少帶有其一個標籤的每個文件，無論文件歸誰所有，這些副本計入其配額，且不會取得其他文件；Paperless Unified Search 向其顯示的內容相同。沒有標籤或不在表中的使用者看到的內容與現在相同，目標使用者始終取得每個文件。",
-		"These shares of the target user show a user with tags every document in them, whatever their tags:": "目標使用者的這些分享會向帶標籤的使用者顯示其中的每個文件，無論其標籤為何：",
+		"These shares of the target user show, or may show, a user with tags every document in them, whatever their tags:": "目標使用者的這些分享會（或可能會）向帶標籤的使用者顯示其中的每個文件，無論其標籤為何：",
 		"Remove these shares": "移除這些分享",
 		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud 未列出 %1$s 的分享：%2$s",
 		"Nextcloud did not remove the shares: %s": "Nextcloud 未移除這些分享：%s",

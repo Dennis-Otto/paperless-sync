@@ -737,7 +737,7 @@
 		"Remove this user": "Diesen Benutzer entfernen",
 		"Add a user": "Benutzer hinzufügen",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Ein Benutzer in dieser Tabelle erhält jedes Dokument mit mindestens einem seiner Tags in einem eigenen Archiv, gleich, wem es gehört, das zu seinem Kontingent zählt, und kein anderes Dokument; Paperless Unified Search zeigt ihm dasselbe. Ein Benutzer ohne Tags oder nicht in der Tabelle sieht, was er heute sieht, und der Zielbenutzer erhält immer jedes Dokument.",
-		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Diese Freigaben des Zielbenutzers zeigen einem Benutzer mit Tags jedes Dokument darin, gleich, welche Tags es hat:",
+		"These shares of the target user show, or may show, a user with tags every document in them, whatever their tags:": "Diese Freigaben des Zielbenutzers zeigen einem Benutzer mit Tags, gewiss oder womöglich, jedes Dokument darin, gleich, welche Tags es hat:",
 		"Remove these shares": "Diese Freigaben entfernen",
 		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud hat die Freigaben von %1$s nicht aufgelistet: %2$s",
 		"Nextcloud did not remove the shares: %s": "Nextcloud hat die Freigaben nicht entfernt: %s",

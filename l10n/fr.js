@@ -773,7 +773,7 @@ OC.L10N.register(
 		"Remove this user": "Retirer cet utilisateur",
 		"Add a user": "Ajouter un utilisateur",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Un utilisateur de ce tableau reçoit chaque document portant au moins une de ses étiquettes dans une archive à lui, quel qu’en soit le propriétaire, qui compte dans son quota, et aucun autre document ; Paperless Unified Search lui montre la même chose. Un utilisateur sans étiquettes, ou absent du tableau, voit ce qu’il voit aujourd’hui, et l’utilisateur cible reçoit toujours chaque document.",
-		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Ces partages de l’utilisateur cible montrent à un utilisateur avec des étiquettes chaque document qu’ils contiennent, quelles que soient ses étiquettes :",
+		"These shares of the target user show, or may show, a user with tags every document in them, whatever their tags:": "Ces partages de l’utilisateur cible montrent, ou peuvent montrer, à un utilisateur avec des étiquettes chaque document qu’ils contiennent, quelles que soient ses étiquettes :",
 		"Remove these shares": "Retirer ces partages",
 		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud n’a pas listé les partages de %1$s : %2$s",
 		"Nextcloud did not remove the shares: %s": "Nextcloud n’a pas retiré les partages : %s",

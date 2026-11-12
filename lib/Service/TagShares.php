@@ -203,7 +203,7 @@ final class TagShares {
 					continue;
 				}
 				$with = $share->getSharedWith();
-				$users = $this->reached($kind, $with, $tags->users());
+				$users = $this->reached($kind, $with, $tags->users(), $config->targetUser);
 				if ($users !== []) {
 					$shown = substr($path, strlen($home));
 					$found[] = [
@@ -226,37 +226,46 @@ final class TagShares {
 	}
 
 	/**
-	 * The users with tags whom a share of $kind with $with reaches, or null when Nextcloud doesn't
-	 * name its members: those of a conversation of Talk and of a board of Deck, and those of a Team
-	 * when Nextcloud fails to list the Teams of a user.
+	 * The users with tags whom a share of $kind with $with by $owner reaches, or null when Nextcloud
+	 * doesn't name its members: those of a conversation of Talk and of a board of Deck, and those of
+	 * a Team that it doesn't list or fails to.
 	 *
 	 * @param 'user'|'group'|'team'|'conversation'|'board' $kind
 	 * @param list<string> $users the users with tags
 	 * @return list<string>|null
 	 */
-	private function reached(string $kind, string $with, array $users): ?array {
+	private function reached(string $kind, string $with, array $users, string $owner): ?array {
 		return match ($kind) {
 			'user' => array_values(array_filter($users, static fn (string $user): bool => mb_strtolower($user) === mb_strtolower($with))),
 			'group' => array_values(array_filter($users, fn (string $user): bool => $this->groupManager->isInGroup($user, $with))),
-			'team' => $this->inTeam($with, $users),
+			'team' => $this->inTeam($with, $users, $owner),
 			'conversation', 'board' => null,
 		};
 	}
 
 	/**
 	 * The users of $users who are in the Team $team, as Nextcloud lists the Teams of each, or null
-	 * when it fails to: the share then counts as one that may reach them, as a failure of the Teams
-	 * must neither hide it nor break the check.
+	 * when it fails to or lists the Team for none of them nor for $owner, who shared with it: the
+	 * share then counts as one that may reach them. Nextcloud leaves a hidden Team and one of an app
+	 * out of every listing, though a share with it reaches its members, and a failure of the Teams
+	 * must neither hide a share nor break the check.
 	 *
 	 * @param list<string> $users
 	 * @return list<string>|null
 	 */
-	private function inTeam(string $team, array $users): ?array {
+	private function inTeam(string $team, array $users, string $owner): ?array {
 		try {
-			return array_values(array_filter($users, fn (string $user): bool => in_array($team, array_map(static fn (Team $of): string => $of->getId(), $this->teamManager->getTeamsForUser($user)), true)));
+			$reached = array_values(array_filter($users, fn (string $user): bool => $this->listsTeam($user, $team)));
+
+			return $reached !== [] || $this->listsTeam($owner, $team) ? $reached : null;
 		} catch (\Throwable) {
 			return null;
 		}
+	}
+
+	/** Whether Nextcloud lists the Team $team among the Teams of $user. */
+	private function listsTeam(string $user, string $team): bool {
+		return in_array($team, array_map(static fn (Team $of): string => $of->getId(), $this->teamManager->getTeamsForUser($user)), true);
 	}
 
 	/** The name of the Team, the conversation or the board of a share, as Nextcloud shows it, or its ID. */

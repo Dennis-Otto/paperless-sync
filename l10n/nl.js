@@ -738,7 +738,7 @@ OC.L10N.register(
 		"Remove this user": "Deze gebruiker verwijderen",
 		"Add a user": "Een gebruiker toevoegen",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "Een gebruiker in deze tabel krijgt elk document met minstens één van zijn labels in een eigen archief, van wie het ook is, dat meetelt voor zijn quotum, en geen ander document; Paperless Unified Search toont hem hetzelfde. Een gebruiker zonder labels, of niet in de tabel, ziet wat hij nu ziet, en de doelgebruiker krijgt altijd elk document.",
-		"These shares of the target user show a user with tags every document in them, whatever their tags:": "Deze delingen van de doelgebruiker tonen een gebruiker met labels elk document erin, welke labels het ook heeft:",
+		"These shares of the target user show, or may show, a user with tags every document in them, whatever their tags:": "Deze delingen van de doelgebruiker tonen, of kunnen tonen, een gebruiker met labels elk document erin, welke labels het ook heeft:",
 		"Remove these shares": "Deze delingen verwijderen",
 		"Nextcloud did not list the shares of %1$s: %2$s": "Nextcloud heeft de delingen van %1$s niet opgesomd: %2$s",
 		"Nextcloud did not remove the shares: %s": "Nextcloud heeft de delingen niet verwijderd: %s",

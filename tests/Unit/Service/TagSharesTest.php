@@ -39,7 +39,7 @@ use Symfony\Component\Console\Tester\CommandTester;
  * the page removes those that it listed, and no other share, on request. The target user is
  * paperless, with the base folder Documents/Paperless; Katja may see the tag Katja, and alice,
  * who is in the group family with Katja, may see everything. Both are in the Team of the family,
- * alice also in that of the club; the Teams, Talk and Deck are installed, unless a test takes them
+ * alice also in that of the club, and the target user is in both; the Teams, Talk and Deck are installed, unless a test takes them
  * away.
  */
 #[AllowMockObjectsWithoutExpectations]
@@ -53,7 +53,7 @@ final class TagSharesTest extends TestCase {
 	private ?\Throwable $listFailure = null;
 	private ?\Throwable $deleteFailure = null;
 	/** @var array<string, list<string>> the IDs of the Teams of each user */
-	private array $teamsOfUsers = ['Katja' => ['team-family'], 'alice' => ['team-family', 'team-club']];
+	private array $teamsOfUsers = ['paperless' => ['team-family', 'team-club'], 'Katja' => ['team-family'], 'alice' => ['team-family', 'team-club']];
 	private ?\Throwable $teamFailure = null;
 	/** @var list<int> the types of the shares of an app that is installed */
 	private array $providers = [IShare::TYPE_CIRCLE, IShare::TYPE_ROOM, IShare::TYPE_DECK];
@@ -151,6 +151,18 @@ final class TagSharesTest extends TestCase {
 		$shares = $this->tagShares->find($this->configService->get());
 		self::assertSame([['id' => 'ocinternal:1', 'path' => '/Documents/Paperless', 'type' => 'team', 'with' => 'Family', 'users' => [], 'known' => false]], $shares);
 		self::assertSame(['/Documents/Paperless → the members of the Team Family'], array_map(TagShares::describe(...), $shares));
+	}
+
+	/**
+	 * Nextcloud lists a hidden Team, or one that an app made, for none of its members, though a share
+	 * with it reaches them: such a share may reach a user with tags, rather than reach nobody.
+	 */
+	public function testAShareWithATeamThatNoListingNames(): void {
+		$this->share(1, IShare::TYPE_CIRCLE, 'Documents/Paperless', 'team-hidden', 'Hidden');
+
+		$shares = $this->tagShares->find($this->configService->get());
+		self::assertSame([['id' => 'ocinternal:1', 'path' => '/Documents/Paperless', 'type' => 'team', 'with' => 'Hidden', 'users' => [], 'known' => false]], $shares);
+		self::assertSame(['/Documents/Paperless → the members of the Team Hidden'], array_map(TagShares::describe(...), $shares));
 	}
 
 	/** Without the Teams, Talk and Deck, Nextcloud has none of their shares, and the check asks for none. */
