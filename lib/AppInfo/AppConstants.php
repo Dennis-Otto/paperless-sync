@@ -38,7 +38,12 @@ final class AppConstants {
 		return "{$guide}#{$anchor}";
 	}
 
-	/** The address of a part of the troubleshooting page in the language of the reader, as guide() has it. */
+	/**
+	 * The address of a part of the troubleshooting page in the language of the reader, as guide()
+	 * has it.
+	 *
+	 * @psalm-suppress PossiblyUnusedMethod templates/settings.php calls it, which Psalm doesn't read.
+	 */
 	public static function troubleshooting(string $language, string $anchor): string {
 		$page = self::german($language) ? self::GERMAN_TROUBLESHOOTING_URL : self::TROUBLESHOOTING_URL;
 
