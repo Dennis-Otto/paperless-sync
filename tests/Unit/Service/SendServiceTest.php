@@ -458,6 +458,17 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123);
 	}
 
+	/** The notification links to the address of Paperless in the browser, not to one that only the server knows (#446). */
+	public function testTheNotificationLinksToTheAddressOfPaperlessInTheBrowser(): void {
+		$this->configService->save(['send_group' => 'scanners', 'paperless_public_url' => 'https://paperless.example.com/'] + self::validSettings());
+		$id = $this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => 'Success. New document id 123 created', 'documentId' => 123];
+
+		$this->service->process();
+
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, url: 'https://paperless.example.com');
+	}
+
 	/** In per-user ownership, the document of a sent file becomes that of the user of Paperless of its sender. */
 	public function testTheDocumentOfASentFileGetsTheUserOfPaperlessOfItsSender(): void {
 		$this->usersOfNextcloud = ['paperless', 'alice'];
@@ -674,7 +685,7 @@ final class SendServiceTest extends TestCase {
 		return $send;
 	}
 
-	private function assertNotified(string $subject, int $id, string $path, ?int $document = null, string $reason = ''): void {
+	private function assertNotified(string $subject, int $id, string $path, ?int $document = null, string $reason = '', string $url = 'https://paperless.example.test'): void {
 		self::assertCount(1, $this->notifications);
 		$notification = $this->notifications[0];
 		self::assertInstanceOf(TestNotification::class, $notification);
@@ -682,7 +693,7 @@ final class SendServiceTest extends TestCase {
 		self::assertSame([
 			'file' => ['id' => $id, 'path' => $path],
 			'document' => $document,
-			'url' => 'https://paperless.example.test',
+			'url' => $url,
 			'reason' => $reason,
 		], $notification->getSubjectParameters());
 	}

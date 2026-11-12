@@ -224,7 +224,7 @@ final class MetadataSidecars {
 			'notes' => self::notes($document['notes'] ?? null),
 			'custom_fields' => $this->customFieldValues($document['custom_fields'] ?? null),
 			'file' => ['version' => $original ? 'original' : 'archive', 'sha256' => $sha256],
-			'url' => rtrim($this->config->paperlessUrl, '/') . '/documents/' . $documentId . '/details',
+			'url' => $this->config->linkUrl() . '/documents/' . $documentId . '/details',
 		];
 	}
 

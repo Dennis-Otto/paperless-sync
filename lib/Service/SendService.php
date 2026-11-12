@@ -298,6 +298,6 @@ final class SendService {
 			]);
 			return;
 		}
-		$this->notifications->sendEnded($userId, $fileId, $path, $subject, $documentId, $reason, $config->paperlessUrl);
+		$this->notifications->sendEnded($userId, $fileId, $path, $subject, $documentId, $reason, $config->linkUrl());
 	}
 }

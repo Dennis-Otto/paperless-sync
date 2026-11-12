@@ -64,6 +64,13 @@ final class FileActionsTest extends TestCase {
 		self::assertSame(['send' => false, 'paperlessUrl' => 'https://paperless.example.test'], $this->actions->offers('bob'));
 	}
 
+	/** "Open in Paperless" opens the address of Paperless in the browser, not a name that only the server knows (#446). */
+	public function testEveryoneOpensTheAddressOfPaperlessInTheBrowser(): void {
+		$this->configService->save(['send_group' => 'scanners', 'paperless_url' => 'http://paperless:8000', 'paperless_public_url' => 'https://paperless.example.com/'] + self::validSettings(), 'secret-token');
+
+		self::assertSame(['send' => true, 'paperlessUrl' => 'https://paperless.example.com'], $this->actions->offers(self::SENDER));
+	}
+
 	public function testNobodyMaySendWithoutAGroup(): void {
 		$this->configService->save(['send_group' => ''] + self::validSettings());
 

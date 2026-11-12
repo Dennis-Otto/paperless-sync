@@ -152,7 +152,7 @@ final class Provider implements IProvider {
 			return [$l->t('{file} was imported into Paperless'), $objects, $link];
 		}
 		$objects['document'] = ['type' => 'highlight', 'id' => (string)$document, 'name' => 'P' . $document];
-		$paperlessUrl = $this->configService->configuredUrl();
+		$paperlessUrl = $this->configService->configuredLinkUrl();
 		if ($paperlessUrl !== '') {
 			$link = "{$paperlessUrl}/documents/{$document}/details";
 			$objects['document']['link'] = $link;

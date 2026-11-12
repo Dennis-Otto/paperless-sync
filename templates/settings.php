@@ -305,6 +305,14 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				} ?>> <span><?php p($l->t('Paperless runs in my local network')); ?></span></label>
 			</div>
 			<p class="settings-hint" id="paperless-sync-local-network-hint"><?php p($l->t('Turn this on when Nextcloud reaches Paperless at an address of your network, such as http://paperless:8000 or http://192.168.1.20:8000, which Nextcloud blocks against server-side request forgery. It allows such an address only for the requests of this app to the Paperless URL above, not for other apps. Paperless can then also redirect these requests to other devices of your network, so turn it on only for a Paperless that you trust.')); ?></p>
+			<!-- The address that a browser opens for the links to Paperless, when the server reaches Paperless at another one. -->
+			<div class="paperless-sync-grid">
+				<label class="paperless-sync-field paperless-sync-field--wide">
+					<span><?php p($l->t('Address of Paperless in the browser')); ?></span>
+					<input id="paperless-sync-paperless-public-url" data-setting="paperless_public_url" type="url" value="<?php p($config->paperlessPublicUrl); ?>" placeholder="<?php p($l->t('The Paperless URL')); ?>" aria-describedby="paperless-sync-public-url-hint" autocapitalize="none" spellcheck="false">
+				</label>
+			</div>
+			<p class="settings-hint" id="paperless-sync-public-url-hint"><?php p($l->t('Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.')); ?> <?php $help('the-address-of-paperless-in-the-browser', $l->t('Address of Paperless in the browser')); ?></p>
 			<!-- The setup of the account of the app in Paperless, with the token of a superuser, which is never stored. Its fields are no settings: they have no data-setting. -->
 			<details id="paperless-sync-account" class="paperless-sync-account">
 				<summary><?php p($l->t('Create an account for the app in Paperless')); ?></summary>

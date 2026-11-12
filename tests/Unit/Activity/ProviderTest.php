@@ -224,6 +224,19 @@ final class ProviderTest extends TestCase {
 		self::assertSame(0, $this->credentialReads, 'Every reader of the stream renders the entry, so it needs the URL of Paperless alone, never its token.');
 	}
 
+	/** The link opens the address of Paperless in the browser, not a name that only the server knows (#446). */
+	public function testDocumentLinksToTheAddressOfPaperlessInTheBrowser(): void {
+		$this->settings['paperless_url'] = 'http://paperless:8000';
+		$this->settings['paperless_public_url'] = 'https://paperless.example.com/';
+		$this->credentialReads = 0;
+
+		$event = $this->parse('en', ActivityPublisher::SUBJECT_IMPORTED, ['file' => ['id' => 31, 'path' => 'Eingang/scan.pdf'], 'document' => 123]);
+
+		self::assertSame('https://paperless.example.com/documents/123/details', $event->getRichSubjectParameters()['document']['link']);
+		self::assertSame('https://paperless.example.com/documents/123/details', $event->getLink());
+		self::assertSame(0, $this->credentialReads);
+	}
+
 	public function testDocumentLinksToPaperlessOnlyWhileItsAddressIsKnown(): void {
 		$this->settings['paperless_url'] = '';
 

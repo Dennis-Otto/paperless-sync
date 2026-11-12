@@ -48,6 +48,7 @@ final class ConfigService {
 	private const DEFAULTS = [
 		'paperless_url' => '',
 		'paperless_local_network' => false,
+		'paperless_public_url' => '',
 		'enabled' => false,
 		'target_user' => '',
 		'path_template' => PathTemplateService::DEFAULT_TEMPLATE,
@@ -341,7 +342,7 @@ final class ConfigService {
 			'write_metadata' => 'writeMetadata', 'send_group' => 'sendGroup', 'nextcloud_tags' => 'nextcloudTags',
 			'ownership' => 'ownership', 'user_map' => 'userMap', 'user_group' => 'userGroup', 'follow_storage_paths' => 'followStoragePaths',
 			'user_tags' => 'userTags', 'empty_correspondent' => 'emptyCorrespondent', 'empty_document_type' => 'emptyDocumentType',
-			'empty_date' => 'emptyDate', 'untitled' => 'untitled',
+			'empty_date' => 'emptyDate', 'untitled' => 'untitled', 'paperless_public_url' => 'paperlessPublicUrl',
 		];
 
 		foreach ($mapping as $key => $property) {
@@ -389,6 +390,32 @@ final class ConfigService {
 		}
 		if (is_array($parts) && (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment']))) {
 			throw new InvalidSettingException('The Paperless URL must not contain credentials, a query, or a fragment.', [], 'paperless_url');
+		}
+
+		return $normalized;
+	}
+
+	/**
+	 * The address of Paperless in the browser, without a trailing slash, or '' for the Paperless URL.
+	 * Nextcloud never sends a request to it, so an address of the local network needs no permission;
+	 * but it becomes the target of links, so it is an http(s) URL as the Paperless URL is, never one
+	 * that runs a script, such as javascript:, and carries no credentials.
+	 */
+	private function normalizePublicUrl(string $url): string {
+		$normalized = rtrim(trim($url), '/');
+		if ($normalized === '') {
+			return '';
+		}
+		if (filter_var($normalized, FILTER_VALIDATE_URL) === false) {
+			throw new InvalidSettingException('Enter a valid address of Paperless in the browser, or leave it empty.', [], 'paperless_public_url');
+		}
+		$parts = parse_url($normalized);
+		$scheme = is_array($parts) && isset($parts['scheme']) ? strtolower($parts['scheme']) : '';
+		if (!in_array($scheme, ['http', 'https'], true)) {
+			throw new InvalidSettingException('The address of Paperless in the browser must use HTTP or HTTPS.', [], 'paperless_public_url');
+		}
+		if (is_array($parts) && (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment']))) {
+			throw new InvalidSettingException('The address of Paperless in the browser must not contain credentials, a query, or a fragment.', [], 'paperless_public_url');
 		}
 
 		return $normalized;
@@ -484,10 +511,21 @@ final class ConfigService {
 
 	/**
 	 * The configured Paperless URL alone, without a trailing slash. Unlike get(), it doesn't read the
-	 * token, which a link to Paperless, such as in the activity stream, doesn't need.
+	 * token, which neither the check of a token's URL nor configuredLinkUrl() needs.
 	 */
 	public function configuredUrl(): string {
 		return rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_url', '', lazy: true)), '/');
+	}
+
+	/**
+	 * The address of Paperless for the links that a browser opens, such as that of an import in the
+	 * activity stream, without a trailing slash: the address in the browser, or else the Paperless
+	 * URL, as SyncConfig::linkUrl() has it, also without a read of the token.
+	 */
+	public function configuredLinkUrl(): string {
+		$public = rtrim(trim($this->appConfig->getValueString(AppConstants::APP_ID, 'paperless_public_url', '', lazy: true)), '/');
+
+		return $public !== '' ? $public : $this->configuredUrl();
 	}
 
 	/**
@@ -602,6 +640,7 @@ final class ConfigService {
 		// It lifts a protection of Nextcloud, so only a clear yes turns it on: true, as the settings
 		// page sends it, or 1, "1", "true", "on" or "yes", as a form sends it; "false" too is a no.
 		$values['paperless_local_network'] = filter_var($values['paperless_local_network'], FILTER_VALIDATE_BOOLEAN);
+		$values['paperless_public_url'] = $this->normalizePublicUrl((string)$values['paperless_public_url']);
 		$values['target_user'] = trim((string)$values['target_user']);
 		if ($values['target_user'] === '') {
 			throw new InvalidSettingException('A Nextcloud target user is required.', [], 'target_user');
@@ -772,6 +811,7 @@ final class ConfigService {
 			(bool)$values['write_metadata'], (string)$values['send_group'], (string)$values['included_tags'],
 			(bool)$values['nextcloud_tags'], (string)$values['ownership'], (string)$values['user_map'],
 			(string)$values['user_group'], (bool)$values['follow_storage_paths'], (string)$values['user_tags'],
+			(string)$values['paperless_public_url'],
 		);
 	}
 }

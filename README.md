@@ -149,7 +149,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - A conflict policy for a file in the way: replace it, or skip it and report the conflict; the app's own copies are never in the way
 - No WebDAV credentials and no password of a Nextcloud user: the app writes through Nextcloud's filesystem API
 - The Paperless API token stays in Nextcloud's credentials manager, never reaches the browser and goes only to the address saved with it
-- A Paperless in your local network, such as `http://paperless:8000`, without turning off Nextcloud's protection against server-side request forgery for the whole server
+- A Paperless in your local network, such as `http://paperless:8000`, without turning off Nextcloud's protection against server-side request forgery for the whole server, with [its address in the browser](#the-address-of-paperless-in-the-browser) for the links to Paperless
 
 ### Operations
 
@@ -383,6 +383,12 @@ The setting also helps when the name of Paperless is set only in the hosts file 
 
 If you turned on `allow_local_remote_servers` for this app before, turn on the setting, save, and then turn the switch off again with `occ config:system:delete allow_local_remote_servers`. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#a-paperless-in-the-local-network) explains what the setting allows.
 
+#### The address of Paperless in the browser
+
+Every link to Paperless opens in a browser: *Open in Paperless* and *Open Paperless* in Files, the notification of a file sent from Files, the entry of an import in the Activity app, and the `url` of each sidecar and of each row of the index of the [metadata next to the archive](#metadata-next-to-the-archive). When Nextcloud reaches Paperless by a name or an address that only the server knows, such as `http://paperless:8000` in the network of Docker Compose, enter the address that browsers open in **Address of Paperless in the browser**, such as `https://paperless.example.com`, and save. The links then take it, while every request of Nextcloud still goes to the Paperless URL, inside the network, past the reverse proxy and its limits. Leave the field empty when browsers reach Paperless at the Paperless URL: the links take that one, as they did before the setting.
+
+The address is an HTTP or HTTPS URL, like the Paperless URL, without credentials, a query or a fragment. Nextcloud never sends a request to it, so it needs neither the token nor **Paperless runs in my local network**, and a dry-run may try another one without saving it. A new address reaches the sidecars with the next run, which writes each sidecar and its row once more; a notification that was sent before keeps the address that it was sent with.
+
 ### Saving, pausing and disconnecting
 
 Saving checks every setting first. When scheduled synchronization is on, or when you enter a token, it also runs the [connection checklist](#connection-checklist), and the button says **Test connection and save**. It refuses settings with which no run can work, such as a token that Paperless refuses or a base folder that the target user can't write, so that the schedule never runs with them. A permission that only one module lacks, such as the one for the tags, is saved with the settings, and the checklist names it, so that you can grant it in Paperless afterwards. With the schedule off and no new token, nothing reaches Paperless until you start a run, and the button says **Save** and stores the settings without the test; **Test connection** checks them then without saving:
@@ -425,6 +431,7 @@ Delegate the page only to people whom you trust with the files of every user and
 - **The files of every user.** They choose the target user or per-user ownership, and so where the archive is written, and they can turn on permanent deletion there. They also choose the inbox folder below the base folder of that user, whose files then go to Paperless and, as the settings say, leave the folder.
 - **The account of the app in Paperless.** Their dry-runs, runs and reports read Paperless with its token and name documents and files. They can replace the address and the token, and create the secret of the webhook.
 - **The network of the server.** They can turn on *Paperless runs in my local network* and point the app at any address there, so the server sends requests to devices that they may not reach themselves, and answers can land in the archive.
+- **The links to Paperless.** They choose the [address of Paperless in the browser](#the-address-of-paperless-in-the-browser), which every link to a document of Paperless opens, for every user: in Files, in notifications, in the activity and in the metadata next to the archive. It is an HTTP or HTTPS address and never runs a script, but it can lead to another site.
 - **The names of the accounts.** The fields of the target user and of the groups offer the account names and display names of every user and group of Nextcloud, without their e-mail addresses.
 
 Everything else stays with the administrators, whatever the group: the [notification of a failing mirror](#being-notified), unless `notification_group` names the group of the members, the setup checks of *Administration → Overview*, whose warnings the page shows them too, the status API, the rules of Flow and `occ`. A key of the configuration of the app can't be written past the page either, so each value passes the same checks as for an administrator. [The security design](https://dennis-otto.github.io/paperless-sync/security.html#delegated-settings) has the details.
@@ -959,7 +966,7 @@ The *Activity* app of Nextcloud tells the target user, or with [per-user ownersh
 </picture>
 
 - **A run that changed something** has one entry, which counts its changes and links its first five files: *Paperless Sync added or updated 6 documents and moved 1 document to _Deleted: a.pdf, b.pdf, c.pdf, d.pdf, e.pdf and 2 more*. A link leads to its file also after the file moved again. The entry opens the archive folder, whose *Activity* tab in *Files* lists the runs.
-- **A file of the inbox that Paperless imported** has an entry with a link to its new document in Paperless: *scan.pdf was imported into Paperless as P123*. The link starts with the saved Paperless URL, so it opens only where the browser reaches that address too, not for a name inside Docker such as `http://paperless:8000`.
+- **A file of the inbox that Paperless imported** has an entry with a link to its new document in Paperless: *scan.pdf was imported into Paperless as P123*. The link starts with the [address of Paperless in the browser](#the-address-of-paperless-in-the-browser), or with the Paperless URL while that is empty.
 - **A file that Paperless failed to import** has an entry with the reason of Paperless and a link to the file in the error folder, and **a file that Paperless refused** has one with the reason, once: the file stays in the inbox until it changes.
 
 A dry-run and a run without changes add no entry. The filter *Paperless Sync* in the navigation of the Activity app shows the entries alone, and in the personal settings under *Activity*, each user can have them sent by mail or as notifications as well, which is off until then. Nextcloud's own entries of the *Files* app don't tell this story: they leave out the files of a run by hand, and they show those of a scheduled run as changes of a *remote account*.
