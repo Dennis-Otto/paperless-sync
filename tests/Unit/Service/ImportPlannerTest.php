@@ -242,9 +242,10 @@ final class ImportPlannerTest extends TestCase {
 	}
 
 	/**
-	 * Names that lost their markers may meet in the error folder. Such a file takes the next free
-	 * number there, so that it replaces no other file and, with the conflict policy skip, ends
-	 * without a conflict.
+	 * Files of the same name meet in the error folder, when a scanner names every scan the same, or
+	 * when names lost their markers. Such a file takes the next free number there, so that it
+	 * replaces no other file, whatever the conflict policy, and, with the policy skip, ends without
+	 * a conflict.
 	 *
 	 * @return array<string, array{string, list<string>, string}>
 	 */
@@ -256,13 +257,15 @@ final class ImportPlannerTest extends TestCase {
 			'the number comes before the last extension' => ['Scan [P999].tar.pdf', ['Scan.tar.pdf'], 'Scan.tar (2).pdf'],
 			'a name without an extension' => ['Scan [P999]', ['Scan'], 'Scan (2)'],
 			'a name that takes the fallback' => ['[P999].pdf', ['Ohne Titel.pdf'], 'Ohne Titel (2).pdf'],
-			'a file without a marker stays at its path, where the conflict policy decides' => ['Scan.pdf', ['Scan.pdf'], 'Scan.pdf'],
+			'a file without a marker keeps a free name' => ['Scan.pdf', ['Andere.pdf'], 'Scan.pdf'],
+			'a file without a marker takes the next free number too' => ['Scan.pdf', ['Scan.pdf'], 'Scan (2).pdf'],
+			'a file without a marker after earlier failures of its name' => ['Scan_0001.pdf', ['Scan_0001.pdf', 'Scan_0001 (2).pdf'], 'Scan_0001 (3).pdf'],
 		];
 	}
 
 	/** @param list<string> $taken */
 	#[DataProvider('namesInTheErrorFolder')]
-	public function testANameThatLostItsMarkerTakesTheNextFreeNumber(string $name, array $taken, string $expected): void {
+	public function testAFailedFileTakesTheNextFreeNameInTheErrorFolder(string $name, array $taken, string $expected): void {
 		$path = self::INBOX . '/' . $name;
 		$this->storage->files[$path] = '%PDF-a';
 		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1'];
