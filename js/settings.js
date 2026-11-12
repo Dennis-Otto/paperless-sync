@@ -2200,22 +2200,40 @@
 			addUserTagsRow('', '').user.focus()
 		})
 
-		// The shares of the target user that show a user with tags more than their tags, for the
-		// saved settings, which only a click removes, with the password confirmed.
+		// The shares of the target user that show a user with tags more than their tags, or may, for
+		// the saved settings, which only a click removes, with the password confirmed.
 		const sharesPanel = element('user-tags-shares')
 		const sharesList = element('user-tags-share-list')
 		const removeShares = element('user-tags-remove-shares')
 		const sharesStatus = element('user-tags-shares-status')
 		let shownShares = []
 
+		// A share with a Team names the users with tags in it; one with a conversation of Talk or a
+		// board of Deck, and a Team whose members Nextcloud didn't list, says that it may reach one.
+		function shareText(share) {
+			const parameters = { path: share.path, name: share.with, users: share.users.join(', ') }
+			switch (share.type) {
+			case 'group':
+				return translate('{path}, shared with the group {group}: {users}', { ...parameters, group: share.with })
+			case 'team':
+				return share.known
+					? translate('{path}, shared with the Team {name}: {users}', parameters)
+					: translate('{path}, shared with the Team {name}, whose members Nextcloud does not name', parameters)
+			case 'conversation':
+				return translate('{path}, shared with the Talk conversation {name}, whose members Nextcloud does not name', parameters)
+			case 'board':
+				return translate('{path}, shared with the Deck board {name}, whose members Nextcloud does not name', parameters)
+			default:
+				return translate('{path}, shared with {users}', parameters)
+			}
+		}
+
 		function showShares(shares) {
 			shownShares = shares
 			sharesPanel.hidden = shares.length === 0
 			sharesList.replaceChildren(...shares.map(function(share) {
 				const item = document.createElement('li')
-				item.textContent = share.type === 'group'
-					? translate('{path}, shared with the group {group}: {users}', { path: share.path, group: share.with, users: share.users.join(', ') })
-					: translate('{path}, shared with {users}', { path: share.path, users: share.users.join(', ') })
+				item.textContent = shareText(share)
 				return item
 			}))
 		}

@@ -50,6 +50,7 @@ use OCP\Lock\ILockingProvider;
 use OCP\Security\ICredentialsManager;
 use OCP\Security\ISecureRandom;
 use OCP\Share\IManager as IShareManager;
+use OCP\Teams\ITeamManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -1050,7 +1051,7 @@ final class SettingsControllerTest extends TestCase {
 			$this->createStub(IRequest::class),
 			$configService,
 			$this->clients,
-			new ConnectionChecklist($this->clients, $this->storage, $this->ownerMapping(), $this->germanL10n(), new TagShares($this->createStub(IShareManager::class), $this->createStub(IGroupManager::class))),
+			new ConnectionChecklist($this->clients, $this->storage, $this->ownerMapping(), $this->germanL10n(), new TagShares($this->createStub(IShareManager::class), $this->createStub(IGroupManager::class), $this->createStub(ITeamManager::class))),
 			$this->germanL10n(),
 			$sync,
 			$paths,

@@ -21,7 +21,9 @@ use Symfony\Component\Console\Output\OutputInterface;
  * occ paperless_sync:status: the status of the last run, as the settings page shows it, for people
  * and, with --output=json, for scripts and monitoring; --exit-code tells how it ended by the code.
  * It also names each share of the target user that shows a user with tags more than their tags,
- * which the settings page removes on request (decision 0038).
+ * or may, which the settings page removes on request (decision 0038).
+ *
+ * @psalm-import-type TagShare from TagShares
  */
 final class Status extends Base {
 	/** The labels of the states, as the settings page shows them. */
@@ -81,12 +83,8 @@ final class Status extends Base {
 				$this->line($output, ($status['report']['dryRun'] ?? false) === true ? 'Report of the last dry-run:' : 'Report of the last run:');
 				$this->writeReport($output, $status['report']);
 			}
-			if ($shares !== []) {
-				$this->line($output, 'These shares of ' . $config->targetUser . ' show a user with tags every document in them; remove them under "Tags that a user may see" of the settings, or in Files:');
-				foreach ($shares as $share) {
-					$this->line($output, '  ' . TagShares::describe($share) . ' (share ' . $share['id'] . ')');
-				}
-			}
+			$this->writeShares($output, array_filter($shares, static fn (array $share): bool => $share['known']), 'These shares of ' . $config->targetUser . ' show a user with tags every document in them; remove them under "Tags that a user may see" of the settings, or in Files:');
+			$this->writeShares($output, array_filter($shares, static fn (array $share): bool => !$share['known']), 'These shares of ' . $config->targetUser . ' may show a user with tags every document in them, as Nextcloud does not name who is in them; check who is, and remove those that reach a user with tags under "Tags that a user may see" of the settings, or in Files:');
 		}
 		if ($input->getOption('exit-code') !== true) {
 			return self::OK;
@@ -97,6 +95,21 @@ final class Status extends Base {
 			'failed', 'interrupted' => self::FAILED,
 			default => self::OK,
 		};
+	}
+
+	/**
+	 * The shares under $heading, each with its ID, or nothing without one.
+	 *
+	 * @param array<array-key, TagShare> $shares
+	 */
+	private function writeShares(OutputInterface $output, array $shares, string $heading): void {
+		if ($shares === []) {
+			return;
+		}
+		$this->line($output, $heading);
+		foreach ($shares as $share) {
+			$this->line($output, '  ' . TagShares::describe($share) . ' (share ' . $share['id'] . ')');
+		}
 	}
 
 	private function field(OutputInterface $output, string $label, string $value): void {

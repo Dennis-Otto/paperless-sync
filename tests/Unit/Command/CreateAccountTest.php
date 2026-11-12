@@ -27,6 +27,7 @@ use OCP\IL10N;
 use OCP\L10N\IFactory;
 use OCP\Security\ISecureRandom;
 use OCP\Share\IManager as IShareManager;
+use OCP\Teams\ITeamManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -64,7 +65,7 @@ final class CreateAccountTest extends TestCase {
 		$factory->method('get')->willReturn($english);
 		$this->createAccount = new CreateAccount(
 			$configService,
-			new ConnectionChecklist($this->paperless, $this->storage, $this->ownerMapping(), $english, new TagShares($this->createStub(IShareManager::class), $this->createStub(IGroupManager::class))),
+			new ConnectionChecklist($this->paperless, $this->storage, $this->ownerMapping(), $english, new TagShares($this->createStub(IShareManager::class), $this->createStub(IGroupManager::class), $this->createStub(ITeamManager::class))),
 			new AccountPermissions(new PathTemplateService()),
 			new AccountSetup($this->paperless, $random),
 			$factory,

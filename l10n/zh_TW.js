@@ -696,6 +696,10 @@ OC.L10N.register(
 		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "「使用者可檢視的標籤」第 %1$s 行：%2$s 是目標使用者，會取得每個文件。",
 		"{path}, shared with the group {group}: {users}": "{path}，已分享給群組 {group}：{users}",
 		"{path}, shared with {users}": "{path}，已分享給 {users}",
+		"{path}, shared with the Team {name}: {users}": "{path}，已分享給團隊 {name}：{users}",
+		"{path}, shared with the Team {name}, whose members Nextcloud does not name": "{path}，已分享給團隊 {name}，Nextcloud 未列出其成員",
+		"{path}, shared with the Talk conversation {name}, whose members Nextcloud does not name": "{path}，已分享給 Talk 對話 {name}，Nextcloud 未列出其成員",
+		"{path}, shared with the Deck board {name}, whose members Nextcloud does not name": "{path}，已分享給 Deck 看板 {name}，Nextcloud 未列出其成員",
 		"Remove this user": "移除此使用者",
 		"Add a user": "新增使用者",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "此表中的使用者會在自己的封存中取得至少帶有其一個標籤的每個文件，無論文件歸誰所有，這些副本計入其配額，且不會取得其他文件；Paperless Unified Search 向其顯示的內容相同。沒有標籤或不在表中的使用者看到的內容與現在相同，目標使用者始終取得每個文件。",
@@ -713,6 +717,9 @@ OC.L10N.register(
 		"Check in Files that no share of the base folder reaches a user with tags.": "請在「檔案」中檢查基礎資料夾的分享均未到達帶標籤的使用者。",
 		"These shares of %1$s show a user with tags every document in them: %2$s.": "%1$s 的這些分享會向帶標籤的使用者顯示其中的每個文件：%2$s。",
 		"Remove them under \"Tags that a user may see\", or in Files.": "請在「使用者可檢視的標籤」下或在「檔案」中移除它們。",
+		"These shares of %1$s may show a user with tags every document in them, as Nextcloud does not name who is in them: %2$s.": "%1$s 的這些分享可能會向帶標籤的使用者顯示其中的每個文件，因為 Nextcloud 未列出其中有哪些成員：%2$s。",
+		"Check who is in them, and remove those that reach a user with tags under \"Tags that a user may see\", or in Files.": "請檢查其中有哪些成員，並在「使用者可檢視的標籤」下或在「檔案」中移除到達帶標籤使用者的分享。",
+		"These shares of %1$s show a user with tags every document in them: %2$s. These may too, as Nextcloud does not name who is in them: %3$s.": "%1$s 的這些分享會向帶標籤的使用者顯示其中的每個文件：%2$s。以下分享也可能如此，因為 Nextcloud 未列出其中有哪些成員：%3$s。",
 		"_Removed %n share._::_Removed %n shares._": [
 			"已移除 %n 個分享。"
 		]

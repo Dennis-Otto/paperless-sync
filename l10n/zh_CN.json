@@ -695,6 +695,10 @@
 		"\"Tags that a user may see\", line %1$s: %2$s is the target user, who gets every document.": "“用户可查看的标签”第 %1$s 行：%2$s 是目标用户，会获得每个文档。",
 		"{path}, shared with the group {group}: {users}": "{path}，已共享给群组 {group}：{users}",
 		"{path}, shared with {users}": "{path}，已共享给 {users}",
+		"{path}, shared with the Team {name}: {users}": "{path}，已共享给团队 {name}：{users}",
+		"{path}, shared with the Team {name}, whose members Nextcloud does not name": "{path}，已共享给团队 {name}，Nextcloud 未列出其成员",
+		"{path}, shared with the Talk conversation {name}, whose members Nextcloud does not name": "{path}，已共享给 Talk 对话 {name}，Nextcloud 未列出其成员",
+		"{path}, shared with the Deck board {name}, whose members Nextcloud does not name": "{path}，已共享给 Deck 看板 {name}，Nextcloud 未列出其成员",
 		"Remove this user": "移除此用户",
 		"Add a user": "添加用户",
 		"A user in this table gets every document with at least one of their tags in an archive of their own, whoever owns it, which counts against their quota, and no other document; Paperless Unified Search shows them the same. A user without tags, or not in the table, sees what they see today, and the target user always gets every document.": "此表中的用户会在自己的归档中获得至少带有其一个标签的每个文档，无论文档归谁所有，这些副本计入其配额，且不会获得其他文档；Paperless Unified Search 向其显示的内容相同。没有标签或不在表中的用户看到的内容与现在相同，目标用户始终获得每个文档。",
@@ -712,6 +716,9 @@
 		"Check in Files that no share of the base folder reaches a user with tags.": "请在“文件”中检查基础文件夹的共享均未到达带标签的用户。",
 		"These shares of %1$s show a user with tags every document in them: %2$s.": "%1$s 的这些共享会向带标签的用户显示其中的每个文档：%2$s。",
 		"Remove them under \"Tags that a user may see\", or in Files.": "请在“用户可查看的标签”下或在“文件”中移除它们。",
+		"These shares of %1$s may show a user with tags every document in them, as Nextcloud does not name who is in them: %2$s.": "%1$s 的这些共享可能会向带标签的用户显示其中的每个文档，因为 Nextcloud 未列出其中有哪些成员：%2$s。",
+		"Check who is in them, and remove those that reach a user with tags under \"Tags that a user may see\", or in Files.": "请检查其中有哪些成员，并在“用户可查看的标签”下或在“文件”中移除到达带标签用户的共享。",
+		"These shares of %1$s show a user with tags every document in them: %2$s. These may too, as Nextcloud does not name who is in them: %3$s.": "%1$s 的这些共享会向带标签的用户显示其中的每个文档：%2$s。以下共享也可能如此，因为 Nextcloud 未列出其中有哪些成员：%3$s。",
 		"_Removed %n share._::_Removed %n shares._": [
 			"已移除 %n 个共享。"
 		]

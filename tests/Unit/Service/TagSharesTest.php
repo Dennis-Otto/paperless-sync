@@ -27,6 +27,8 @@ use OCP\IL10N;
 use OCP\IRequest;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use OCP\Teams\ITeamManager;
+use OCP\Teams\Team;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -36,7 +38,9 @@ use Symfony\Component\Console\Tester\CommandTester;
  * document in it, whatever their tags: the checklist, the settings page and occ name each, and
  * the page removes those that it listed, and no other share, on request. The target user is
  * paperless, with the base folder Documents/Paperless; Katja may see the tag Katja, and alice,
- * who is in the group family with Katja, may see everything.
+ * who is in the group family with Katja, may see everything. Both are in the Team of the family,
+ * alice also in that of the club; the Teams, Talk and Deck are installed, unless a test takes them
+ * away.
  */
 #[AllowMockObjectsWithoutExpectations]
 final class TagSharesTest extends TestCase {
@@ -48,6 +52,11 @@ final class TagSharesTest extends TestCase {
 	private array $deleted = [];
 	private ?\Throwable $listFailure = null;
 	private ?\Throwable $deleteFailure = null;
+	/** @var array<string, list<string>> the IDs of the Teams of each user */
+	private array $teamsOfUsers = ['Katja' => ['team-family'], 'alice' => ['team-family', 'team-club']];
+	private ?\Throwable $teamFailure = null;
+	/** @var list<int> the types of the shares of an app that is installed */
+	private array $providers = [IShare::TYPE_CIRCLE, IShare::TYPE_ROOM, IShare::TYPE_DECK];
 	private ConfigService $configService;
 	private TagShares $tagShares;
 
@@ -58,8 +67,10 @@ final class TagSharesTest extends TestCase {
 		$this->configService = $this->configService();
 		$this->save('Katja = Katja');
 		$manager = $this->createStub(IManager::class);
+		$manager->method('shareProviderExists')->willReturnCallback(fn (int $type): bool => in_array($type, $this->providers, true));
 		$manager->method('getSharesBy')->willReturnCallback(function (string $user, int $type, ?Node $node, bool $reshares, int $limit): array {
 			self::assertSame(['paperless', null, true, -1], [$user, $node, $reshares, $limit]);
+			self::assertTrue(in_array($type, [IShare::TYPE_USER, IShare::TYPE_GROUP, ...$this->providers], true), 'Nextcloud fails to list the shares of an app that is missing.');
 			if ($this->listFailure !== null) {
 				throw $this->listFailure;
 			}
@@ -73,7 +84,15 @@ final class TagSharesTest extends TestCase {
 			$this->deleted[] = (string)$share->getFullId();
 			$this->shares = array_values(array_filter($this->shares, static fn (array $entry): bool => $entry['share'] !== $share));
 		});
-		$this->tagShares = new TagShares($manager, $this->groupsOfNextcloud());
+		$teams = $this->createStub(ITeamManager::class);
+		$teams->method('getTeamsForUser')->willReturnCallback(function (string $user): array {
+			if ($this->teamFailure !== null) {
+				throw $this->teamFailure;
+			}
+
+			return array_map(static fn (string $id): Team => new Team($id, 'Team ' . $id, null), $this->teamsOfUsers[$user] ?? []);
+		});
+		$this->tagShares = new TagShares($manager, $this->groupsOfNextcloud(), $teams);
 	}
 
 	/**
@@ -91,11 +110,65 @@ final class TagSharesTest extends TestCase {
 		$this->share(7, IShare::TYPE_USER, '', 'Katja');
 
 		self::assertSame([
-			['id' => 'ocinternal:7', 'path' => '/', 'type' => 'user', 'with' => 'Katja', 'users' => ['Katja']],
-			['id' => 'ocinternal:2', 'path' => '/Documents', 'type' => 'group', 'with' => 'family', 'users' => ['Katja']],
-			['id' => 'ocinternal:1', 'path' => '/Documents/Paperless/Archive', 'type' => 'user', 'with' => 'katja', 'users' => ['Katja']],
-			['id' => 'ocinternal:3', 'path' => '/Documents/Paperless/Archive/Energy Ltd/bill.pdf', 'type' => 'user', 'with' => 'Katja', 'users' => ['Katja']],
+			['id' => 'ocinternal:7', 'path' => '/', 'type' => 'user', 'with' => 'Katja', 'users' => ['Katja'], 'known' => true],
+			['id' => 'ocinternal:2', 'path' => '/Documents', 'type' => 'group', 'with' => 'family', 'users' => ['Katja'], 'known' => true],
+			['id' => 'ocinternal:1', 'path' => '/Documents/Paperless/Archive', 'type' => 'user', 'with' => 'katja', 'users' => ['Katja'], 'known' => true],
+			['id' => 'ocinternal:3', 'path' => '/Documents/Paperless/Archive/Energy Ltd/bill.pdf', 'type' => 'user', 'with' => 'Katja', 'users' => ['Katja'], 'known' => true],
 		], $this->tagShares->find($this->configService->get()));
+	}
+
+	/**
+	 * A share with a Team that Katja is in shows her more than her tags, as one with a group does;
+	 * one with a Team without a user with tags doesn't. Nextcloud doesn't name the members of a
+	 * conversation of Talk or a board of Deck, so a share with one may reach her: it counts, with
+	 * its name, or its ID without one (#455).
+	 */
+	public function testTheSharesWithATeamAConversationOrABoard(): void {
+		$this->share(1, IShare::TYPE_CIRCLE, 'Documents/Paperless', 'team-family', 'Family');
+		$this->share(2, IShare::TYPE_CIRCLE, 'Documents/Paperless', 'team-club', 'Club');
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless/Archive', 'k7x2p9qe', 'Household');
+		$this->share(4, IShare::TYPE_DECK, 'Documents', '12');
+		$this->share(5, IShare::TYPE_ROOM, 'Documents/Paperless Other', 'w3n8r1ta', 'Elsewhere');
+
+		$shares = $this->tagShares->find($this->configService->get());
+		self::assertSame([
+			['id' => 'ocinternal:4', 'path' => '/Documents', 'type' => 'board', 'with' => '12', 'users' => [], 'known' => false],
+			['id' => 'ocinternal:1', 'path' => '/Documents/Paperless', 'type' => 'team', 'with' => 'Family', 'users' => ['Katja'], 'known' => true],
+			['id' => 'ocinternal:3', 'path' => '/Documents/Paperless/Archive', 'type' => 'conversation', 'with' => 'Household', 'users' => [], 'known' => false],
+		], $shares);
+		self::assertSame([
+			'/Documents → the members of the Deck board 12',
+			'/Documents/Paperless → Katja (Team Family)',
+			'/Documents/Paperless/Archive → the members of the Talk conversation Household',
+		], array_map(TagShares::describe(...), $shares));
+	}
+
+	/** When Nextcloud fails to list the Teams of a user, a share with a Team may reach her, and the check goes on. */
+	public function testAShareWithATeamThatNextcloudDoesNotResolve(): void {
+		$this->share(1, IShare::TYPE_CIRCLE, 'Documents/Paperless', 'team-family', 'Family');
+		$this->teamFailure = new \RuntimeException('The Teams are gone.');
+
+		$shares = $this->tagShares->find($this->configService->get());
+		self::assertSame([['id' => 'ocinternal:1', 'path' => '/Documents/Paperless', 'type' => 'team', 'with' => 'Family', 'users' => [], 'known' => false]], $shares);
+		self::assertSame(['/Documents/Paperless → the members of the Team Family'], array_map(TagShares::describe(...), $shares));
+	}
+
+	/** Without the Teams, Talk and Deck, Nextcloud has none of their shares, and the check asks for none. */
+	public function testWithoutTheAppsOfTheSharesTheCheckAsksForNone(): void {
+		$this->share(1, IShare::TYPE_USER, 'Documents/Paperless', 'Katja');
+		$this->share(2, IShare::TYPE_CIRCLE, 'Documents/Paperless', 'team-family', 'Family');
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless', 'k7x2p9qe', 'Household');
+		$this->providers = [];
+
+		self::assertSame(['ocinternal:1'], array_column($this->tagShares->find($this->configService->get()), 'id'));
+	}
+
+	/** A removal takes a listed share that may reach a user with tags as well. */
+	public function testARemovalTakesAListedShareThatMayReachAUserWithTags(): void {
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless/Archive', 'k7x2p9qe', 'Household');
+
+		self::assertSame(1, $this->tagShares->remove($this->configService->get(), ['ocinternal:3']));
+		self::assertSame(['ocinternal:3'], $this->deleted);
 	}
 
 	/** Without a user with tags, no share shows anybody more than they may see, and nothing is asked. */
@@ -134,10 +207,28 @@ final class TagSharesTest extends TestCase {
 		self::assertSame('user_tags', $failed->setting);
 		self::assertFalse($failed->blocks(), 'The copies are right, so a save goes on.');
 
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless/Archive', 'k7x2p9qe', 'Household');
+		$both = $this->tagShares->check($config);
+		self::assertNotNull($both);
+		self::assertSame([ConnectionCheck::FAILED, 'These shares of %1$s show a user with tags every document in them: %2$s. These may too, as Nextcloud does not name who is in them: %3$s.'], [$both->status, $both->message]);
+		self::assertSame(['paperless', '/Documents → Katja (family); /Documents/Paperless/Archive → Katja', '/Documents/Paperless/Archive → the members of the Talk conversation Household'], $both->parameters);
+
 		$this->listFailure = new \RuntimeException('The database is gone.');
 		$warning = $this->tagShares->check($config);
 		self::assertNotNull($warning);
 		self::assertSame([ConnectionCheck::WARNING, ['paperless', 'The database is gone.']], [$warning->status, $warning->parameters]);
+	}
+
+	/** A share that may reach a user with tags, and none that surely does, is a warning in place of the pass (#455). */
+	public function testTheLineOfTheChecklistWarnsOfAShareThatMayReachAUserWithTags(): void {
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless/Archive', 'k7x2p9qe', 'Household');
+
+		$warning = $this->tagShares->check($this->configService->get());
+		self::assertNotNull($warning);
+		self::assertSame([ConnectionCheck::TAG_SHARES, ConnectionCheck::WARNING, 'These shares of %1$s may show a user with tags every document in them, as Nextcloud does not name who is in them: %2$s.'], [$warning->id, $warning->status, $warning->message]);
+		self::assertSame(['paperless', '/Documents/Paperless/Archive → the members of the Talk conversation Household'], $warning->parameters);
+		self::assertSame('user_tags', $warning->setting);
+		self::assertFalse($warning->blocks(), 'The copies are right, so a save goes on.');
 	}
 
 	/**
@@ -206,14 +297,18 @@ final class TagSharesTest extends TestCase {
 		$json = json_decode($command->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
 		self::assertIsArray($json);
 		self::assertSame('ocinternal:1', $json['tagShares'][0]['id']);
+
+		$this->share(3, IShare::TYPE_ROOM, 'Documents/Paperless/Archive', 'k7x2p9qe', 'Household');
+		$command->execute([]);
+		self::assertStringContainsString("  /Documents/Paperless/Archive → Katja (share ocinternal:1)\nThese shares of paperless may show a user with tags every document in them, as Nextcloud does not name who is in them; check who is, and remove those that reach a user with tags under \"Tags that a user may see\" of the settings, or in Files:\n  /Documents/Paperless/Archive → the members of the Talk conversation Household (share ocinternal:3)\n", $command->getDisplay());
 	}
 
 	private function save(string $userTags): SyncConfig {
 		return $this->configService->save(self::validSettings() + ['user_tags' => $userTags], 'test-token');
 	}
 
-	/** A share of the target user, of the path in their files, with a user or a group. */
-	private function share(int $id, int $type, string $path, string $with, bool $gone = false): void {
+	/** A share of the target user, of the path in their files, with a user, a group, a Team, a conversation or a board, by its name. */
+	private function share(int $id, int $type, string $path, string $with, ?string $name = null, bool $gone = false): void {
 		$node = $this->createStub(Node::class);
 		$node->method('getPath')->willReturn(rtrim('/paperless/files/' . $path, '/'));
 		$share = $this->createStub(IShare::class);
@@ -223,6 +318,7 @@ final class TagSharesTest extends TestCase {
 			$share->method('getNode')->willReturn($node);
 		}
 		$share->method('getSharedWith')->willReturn($with);
+		$share->method('getSharedWithDisplayName')->willReturn($name);
 		$share->method('getFullId')->willReturn('ocinternal:' . $id);
 		$this->shares[] = ['type' => $type, 'share' => $share];
 	}
