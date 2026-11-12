@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\InvalidSettingException;
+use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -594,6 +595,22 @@ final class StatusServiceTest extends TestCase {
 
 	public function testNoRunFailedBeforeTheFirstRun(): void {
 		self::assertSame(['runs' => 0, 'since' => 0, 'failed' => false, 'errors' => 0, 'error' => ''], $this->service->failures());
+	}
+
+	/**
+	 * A request that Paperless refused fails the run with what to do in the words of the app, for
+	 * the status API and the notification, and not with the bare message of the HTTP client,
+	 * which stays the detail and the message of the exception, for the log (#447).
+	 */
+	public function testARefusedRequestFailsTheRunWithWhatToDo(): void {
+		$failure = "Client error: `GET https://paperless.example.test/api/documents/` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}";
+		$explained = new RunError('%1$s Details: %2$s', [new RunError('Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.'), $failure]);
+
+		$this->service->failed(new PaperlessRequestException($failure, $explained));
+
+		self::assertSame($explained->message(), $this->service->failures()['error']);
+		self::assertSame($explained->message(), $this->service->overview($this->config(true))['error']);
+		self::assertStringStartsWith('Paperless refused the API token (HTTP 401). Copy a new token', $this->service->failures()['error']);
 	}
 
 	/**

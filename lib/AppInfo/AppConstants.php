@@ -20,6 +20,10 @@ final class AppConstants {
 	 * as the English one, such as #being-notified.
 	 */
 	public const GERMAN_GUIDE_URL = 'https://dennis-otto.github.io/paperless-sync/de/guide.html';
+	/** The troubleshooting page on the website, whose table of the messages the box of errors links to. */
+	public const TROUBLESHOOTING_URL = 'https://dennis-otto.github.io/paperless-sync/troubleshooting.html';
+	/** The German troubleshooting page, with the anchors of the English one, such as #messages-and-their-fixes. */
+	public const GERMAN_TROUBLESHOOTING_URL = 'https://dennis-otto.github.io/paperless-sync/de/troubleshooting.html';
 	/** The lock that a run holds, so that only one runs at a time, and that tells whether one is active. */
 	public const LOCK_PATH = self::APP_ID . '::synchronization';
 
@@ -29,8 +33,25 @@ final class AppConstants {
 	 * every other language, which the website has no translation of.
 	 */
 	public static function guide(string $language, string $anchor): string {
-		$guide = preg_match('/^de(?:_|$)/', $language) === 1 ? self::GERMAN_GUIDE_URL : self::GUIDE_URL;
+		$guide = self::german($language) ? self::GERMAN_GUIDE_URL : self::GUIDE_URL;
 
 		return "{$guide}#{$anchor}";
+	}
+
+	/**
+	 * The address of a part of the troubleshooting page in the language of the reader, as guide()
+	 * has it.
+	 *
+	 * @psalm-suppress PossiblyUnusedMethod templates/settings.php calls it, which Psalm doesn't read.
+	 */
+	public static function troubleshooting(string $language, string $anchor): string {
+		$page = self::german($language) ? self::GERMAN_TROUBLESHOOTING_URL : self::TROUBLESHOOTING_URL;
+
+		return "{$page}#{$anchor}";
+	}
+
+	/** Whether the website has the page in the language of the reader: German, also the formal de_DE. */
+	private static function german(string $language): bool {
+		return preg_match('/^de(?:_|$)/', $language) === 1;
 	}
 }

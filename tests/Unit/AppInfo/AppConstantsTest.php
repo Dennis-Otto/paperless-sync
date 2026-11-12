@@ -33,4 +33,13 @@ final class AppConstantsTest extends TestCase {
 	public function testTheGuideOpensInTheLanguageOfTheReader(string $language, string $expected): void {
 		self::assertSame($expected, AppConstants::guide($language, 'being-notified'));
 	}
+
+	/** The troubleshooting page opens in the same language as the guide, at the same anchor (#447). */
+	#[DataProvider('languages')]
+	public function testTheTroubleshootingPageOpensInTheLanguageOfTheReader(string $language, string $guide): void {
+		self::assertSame(
+			str_replace('/guide.html#being-notified', '/troubleshooting.html#messages-and-their-fixes', $guide),
+			AppConstants::troubleshooting($language, 'messages-and-their-fixes'),
+		);
+	}
 }

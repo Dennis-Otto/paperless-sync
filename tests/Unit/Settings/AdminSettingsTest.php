@@ -250,6 +250,22 @@ final class AdminSettingsTest extends TestCase {
 	}
 
 	/**
+	 * The box of the errors of a run links to the table of the messages and their fixes, which the
+	 * troubleshooting page has in English and in German under the same anchor (#447).
+	 */
+	public function testTheErrorsLinkToTheTableOfTheMessagesAndTheirFixes(): void {
+		$root = __DIR__ . '/../../..';
+		$template = file_get_contents("{$root}/templates/settings.php");
+		self::assertIsString($template);
+		self::assertSame(1, preg_match('/<div id="paperless-sync-errors".*?AppConstants::troubleshooting\(\$l->getLanguageCode\(\), \'([a-z0-9-]+)\'\).*?<\/div>/s', $template, $link), 'The box of the errors links to the troubleshooting page.');
+		self::assertSame('messages-and-their-fixes', $link[1]);
+
+		foreach (['docs/troubleshooting.md' => 'README.md', 'docs/troubleshooting.de.md' => 'README.de.md'] as $page => $readme) {
+			self::assertContains($link[1], self::anchorsOfTheGuide($root, $page, $readme), "{$page} has no part #{$link[1]}.");
+		}
+	}
+
+	/**
 	 * The anchors of a page of the guide with the parts of its README that it includes: those of
 	 * its headings and those of the elements with an id.
 	 *

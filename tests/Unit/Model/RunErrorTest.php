@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Service\FullStorageException;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\RunException;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -71,6 +72,8 @@ final class RunErrorTest extends TestCase {
 				'Nextcloud hat nicht genug freien Speicherplatz: Die Datei braucht 12 Bytes, und 11 sind frei.',
 			],
 			'an answer of Paperless' => [new \RuntimeException(' Paperless timed out '), 'Paperless timed out', 'Paperless timed out'],
+			'a failed request that the app does not explain' => [new PaperlessRequestException(' cURL error 52: Empty reply from server '), 'cURL error 52: Empty reply from server', 'cURL error 52: Empty reply from server'],
+			'a failed request without a message' => [new PaperlessRequestException(''), PaperlessRequestException::class, PaperlessRequestException::class],
 			'an exception without a message' => [new \LogicException(), 'LogicException', 'LogicException'],
 		];
 	}

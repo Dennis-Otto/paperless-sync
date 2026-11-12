@@ -187,6 +187,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>
 			<h3 id="paperless-sync-errors-title"></h3>
 			<ul id="paperless-sync-errors-list"></ul>
+			<p class="paperless-sync-errors-help"><a href="<?php p(AppConstants::troubleshooting($l->getLanguageCode(), 'messages-and-their-fixes')); ?>" target="_blank" rel="noreferrer noopener"><?php p($l->t('Messages and their fixes')); ?></a></p>
 		</div>
 	</div>
 
