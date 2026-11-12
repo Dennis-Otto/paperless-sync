@@ -54,6 +54,8 @@ final class PerUserOwnershipTest extends TestCase {
 	private const BOB = 2;
 	private const DAVE = 3;
 	private const ACCOUNT = 9;
+	/** The user of Paperless of the user of Nextcloud whose ID is digits. */
+	private const NUMERIC = 4;
 
 	private TestClock $clock;
 	private TestPaperlessClient $paperless;
@@ -288,6 +290,45 @@ final class PerUserOwnershipTest extends TestCase {
 		self::assertSame([[77, self::ALICE]], $this->paperless->ownerChanges, 'The document of the target user, who has no user of Paperless, keeps the account of the app as its owner.');
 		self::assertSame(2, $second->importsSucceeded);
 		self::assertSame([], $this->filesOf('alice'));
+	}
+
+	/**
+	 * A user of Nextcloud whose ID is digits, which Nextcloud allows and LDAP often gives, gets the
+	 * documents of their user of Paperless, with a report of their own, and the files of their inbox
+	 * get that user as their owner, as for any other ID.
+	 */
+	public function testAUserWhoseIdIsDigitsGetsTheirDocumentsAndTheirInbox(): void {
+		$this->usersOfNextcloud[] = '1001';
+		$this->paperless->users[(string)self::NUMERIC] = '1001';
+		$this->storage->filesOfOthers['1001'][self::INBOX . '/scan.pdf'] = '%PDF-1001';
+
+		$first = $this->sync([$this->document(1, self::NUMERIC), $this->document(2, self::ALICE)]);
+
+		self::assertSame([], $first->errorMessages);
+		self::assertSame([self::INBOX . '/scan.pdf', $this->path(1)], array_keys($this->filesOf('1001')), 'The upload stays in the inbox until Paperless has its document.');
+		self::assertSame([$this->path(2)], array_keys($this->filesOf('alice')));
+		self::assertSame([1, 1], [$first->users['1001']['exported'], $first->users['1001']['importsSubmitted']]);
+		self::assertContains('[1001] EXPORT P1: ' . $this->path(1), $first->actions);
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 77];
+
+		$second = $this->sync([$this->document(1, self::NUMERIC), $this->document(2, self::ALICE)]);
+
+		self::assertSame([], $second->errorMessages);
+		self::assertSame([[77, self::NUMERIC]], $this->paperless->ownerChanges);
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('1001')), 'The next run leaves their copy where it is.');
+	}
+
+	/** A target user whose ID is digits gets the documents without an owner, and each other user theirs. */
+	public function testATargetUserWhoseIdIsDigitsGetsTheDocumentsWithoutAnOwner(): void {
+		$this->usersOfNextcloud[] = '1000';
+		$this->configService->save(['target_user' => '1000'] + self::validSettings() + ['ownership' => SyncConfig::PER_USER]);
+
+		$report = $this->sync([$this->document(1, self::ALICE), $this->document(2, null)]);
+
+		self::assertSame([], $report->errorMessages);
+		self::assertSame([$this->path(2)], array_keys($this->filesOf('1000')));
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('alice')));
+		self::assertSame([1, 1], [$report->users['1000']['exported'], $report->users['alice']['exported']]);
 	}
 
 	/** While Paperless refuses the owner, the upload stays pending, and the next run gives the document its owner. */

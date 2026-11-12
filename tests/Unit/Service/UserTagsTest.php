@@ -189,6 +189,28 @@ bob = Taxes');
 	}
 
 	/**
+	 * A user of Nextcloud whose ID is digits, which Nextcloud allows and LDAP often gives, gets the
+	 * documents with their tags, and a tag that Paperless doesn't have leaves their archive as it
+	 * is, as for any other ID.
+	 */
+	public function testAUserWhoseIdIsDigitsGetsTheDocumentsWithTheirTags(): void {
+		$this->usersOfNextcloud[] = '1001';
+		$this->save('1001 = Household');
+
+		$first = $this->sync([$this->document(1, [self::TAG_HOUSEHOLD]), $this->document(2, [self::TAG_TAXES])]);
+
+		self::assertSame([], $first->errorMessages);
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('1001')));
+		self::assertSame([2, 1], [$first->users['paperless']['exported'], $first->users['1001']['exported']]);
+		$this->save('1001 = Household, Housework');
+
+		$second = $this->sync([$this->document(1, [self::TAG_TAXES]), $this->document(2, [self::TAG_TAXES])]);
+
+		self::assertSame([$this->path(1)], array_keys($this->filesOf('1001')), 'Their copy stays while Paperless has no such tag.');
+		self::assertSame(['[1001] Archive of 1001: Paperless has no tag named "Housework", which "Tags that a user may see" names for them, so their copies stay as they are until the line or Paperless names the tag.'], $second->errorMessages);
+	}
+
+	/**
 	 * The run of one document, which the webhook asks for, keeps the archive that it fills, so that
 	 * a complete run reaches it once her line is gone, and takes her copy.
 	 */

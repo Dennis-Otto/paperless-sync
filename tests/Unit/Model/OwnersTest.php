@@ -107,6 +107,22 @@ final class OwnersTest extends TestCase {
 		self::assertSame(['paperless', 'alice', 'zoe'], $owners->users());
 	}
 
+	/**
+	 * A user of Nextcloud whose ID is digits, which Nextcloud allows and LDAP often gives, comes as
+	 * a string like any other, also as the target user, though PHP keeps such an ID as a number
+	 * when it is a key.
+	 */
+	public function testListsAUserWhoseIdIsDigitsAsAString(): void {
+		$owners = new Owners('1000', [
+			1 => ['id' => 1, 'name' => 'alice', 'user' => 'alice', 'reason' => Owners::NAME, 'detail' => ''],
+			2 => ['id' => 2, 'name' => '1001', 'user' => '1001', 'reason' => Owners::NAME, 'detail' => ''],
+			3 => ['id' => 3, 'name' => 'admin', 'user' => '1000', 'reason' => Owners::TABLE, 'detail' => '1000'],
+		], []);
+
+		self::assertSame(['1000', '1001', 'alice'], $owners->users());
+		self::assertSame([2, 3], [$owners->paperlessUserOf('1001'), $owners->paperlessUserOf('1000')]);
+	}
+
 	public function testListsTheUsersOfPaperlessByTheirNames(): void {
 		self::assertSame(['admin', 'alice', 'Bob', 'carol', 'dave'], array_column($this->owners->routes(), 'name'));
 	}
