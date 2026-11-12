@@ -14,11 +14,13 @@ use OCA\PaperlessSync\Model\Plan\ImportAction;
 use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
+use OCA\PaperlessSync\Model\Plan\MoveImport;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
 use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
+use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ImportPlanner;
 use OCA\PaperlessSync\Service\SyncBatch;
 use OCA\PaperlessSync\Service\TargetFiles;
@@ -56,8 +58,8 @@ final class ImportPlannerTest extends TestCase {
 
 	/**
 	 * Each case has the files of the inbox, by their paths below it, the states of their uploads,
-	 * with 'changed' for a file that changed since its upload, the tasks of Paperless and the
-	 * settings.
+	 * with 'changed' for a file that changed since its upload and 'moved' for the path to which its
+	 * file was renamed or moved, the tasks of Paperless and the settings.
 	 *
 	 * @return array<string, array{array<string, mixed>, list<string>}>
 	 */
@@ -199,6 +201,38 @@ final class ImportPlannerTest extends TestCase {
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY, 'changed' => true]]],
 				['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'],
 			],
+			'a renamed file whose upload is pending goes on at its new path' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'moved' => 'b.pdf']], 'tasks' => ['task-1' => ['status' => 'SUCCESS', 'message' => '', 'documentId' => 7]]],
+				['move a.pdf -> b.pdf', 'succeeded b.pdf as P7'],
+			],
+			'a file moved into a folder while Paperless still imports it waits there, and goes to Paperless no second time' => [
+				['files' => ['Steuern/a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'moved' => 'Steuern/a.pdf']]],
+				['move a.pdf -> Steuern/a.pdf'],
+			],
+			'the kept files of a renamed folder stay imported' => [
+				['files' => ['Neu/a.pdf', 'Neu/b.pdf'], 'imports' => ['Alt/a.pdf' => ['status' => 'success', 'moved' => 'Neu/a.pdf'], 'Alt/b.pdf' => ['status' => 'success', 'moved' => 'Neu/b.pdf']]],
+				['move Alt/a.pdf -> Neu/a.pdf', 'unchanged', 'move Alt/b.pdf -> Neu/b.pdf', 'unchanged'],
+			],
+			'a renamed file that Paperless refused goes to Paperless again, as its new name may be one that Paperless takes' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'rejected', 'moved' => 'b.pdf']]],
+				['forget a.pdf', 'upload b.pdf'],
+			],
+			'a renamed file whose upload failed still waits for its next attempt' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'retry', 'retry_at' => TestClock::START + 60, 'moved' => 'b.pdf']]],
+				['move a.pdf -> b.pdf', 'skipped'],
+			],
+			'a renamed file that changed since its import goes to Paperless again' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'success', 'changed' => true, 'moved' => 'b.pdf']]],
+				['move a.pdf -> b.pdf', 'forget b.pdf', 'upload b.pdf'],
+			],
+			'a file with a state of its own keeps it, also when the state of a file that is gone names it' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'success', 'moved' => 'b.pdf'], 'b.pdf' => ['status' => 'success']]],
+				['forget a.pdf', 'unchanged'],
+			],
+			'a state without the ID of its file, from an earlier version, is forgotten, and the executor asks Paperless before the upload' => [
+				['files' => ['b.pdf'], 'imports' => ['a.pdf' => ['status' => 'success']]],
+				['forget a.pdf', 'upload b.pdf'],
+			],
 		];
 	}
 
@@ -218,10 +252,14 @@ final class ImportPlannerTest extends TestCase {
 		foreach ($imports as $file => $import) {
 			$path = self::INBOX . '/' . $file;
 			$changed = (bool)($import['changed'] ?? false);
-			unset($import['changed']);
+			$moved = (string)($import['moved'] ?? '');
+			unset($import['changed'], $import['moved']);
+			if ($moved !== '') {
+				$import['file_id'] = (int)$this->storage->findFileId(TestStorage::USER, self::INBOX . '/' . $moved);
+			}
 			$this->state->imports[$path] = $import + [
 				'path' => $path,
-				'etag' => hash('sha256', $changed ? 'before' : "%PDF-{$file}"),
+				'etag' => hash('sha256', $changed ? 'before' : '%PDF-' . ($moved !== '' ? $moved : $file)),
 				'task_id' => 'task-1',
 				'submitted_at' => TestClock::START,
 				'attempts' => 0,
@@ -326,6 +364,18 @@ final class ImportPlannerTest extends TestCase {
 		self::assertSame(3, $this->heartbeats);
 	}
 
+	/** An upload names the ID of its file, which its state keeps, so that the state follows the file when it is renamed. */
+	public function testAnUploadNamesTheIdOfItsFile(): void {
+		$this->storage->files[self::INBOX . '/a.pdf'] = '%PDF-a';
+		$id = $this->storage->findFileId(TestStorage::USER, self::INBOX . '/a.pdf');
+
+		$actions = iterator_to_array($this->planner()->plan(), false);
+
+		self::assertCount(1, $actions);
+		self::assertInstanceOf(Upload::class, $actions[0]);
+		self::assertSame($id, $actions[0]->fileId);
+	}
+
 	/** Only the inbox, and its folders when the settings say so, has files for Paperless. */
 	public function testReadsTheFilesOfTheInboxAlone(): void {
 		$this->storage->files[self::INBOX . '/Steuern/a.pdf'] = '%PDF-a';
@@ -345,10 +395,25 @@ final class ImportPlannerTest extends TestCase {
 	private function plan(array $settings = []): array {
 		$config = TestConfig::of($settings);
 		$batch = new SyncBatch($config->batchSize);
-		$planner = new ImportPlanner(
+		$lines = [];
+		foreach ($this->planner($config, $batch)->plan() as $action) {
+			$lines[] = self::describe($action);
+			if ($action instanceof Upload) {
+				$batch->take(SyncBatch::WRITE);
+			}
+		}
+
+		return $lines;
+	}
+
+	/** The planner of the inbox, with the settings and the batch of a test, or those of the tests. */
+	private function planner(?SyncConfig $config = null, ?SyncBatch $batch = null): ImportPlanner {
+		$config ??= TestConfig::of([]);
+
+		return new ImportPlanner(
 			$config,
 			$this->state,
-			$batch,
+			$batch ?? new SyncBatch($config->batchSize),
 			new TargetFiles($this->storage, TestStorage::USER),
 			$this->paperless,
 			$this->clock,
@@ -358,15 +423,6 @@ final class ImportPlannerTest extends TestCase {
 				++$this->heartbeats;
 			},
 		);
-		$lines = [];
-		foreach ($planner->plan() as $action) {
-			$lines[] = self::describe($action);
-			if ($action instanceof Upload) {
-				$batch->take(SyncBatch::WRITE);
-			}
-		}
-
-		return $lines;
 	}
 
 	private static function describe(ImportAction $action): string {
@@ -378,6 +434,7 @@ final class ImportPlannerTest extends TestCase {
 			$action instanceof Skipped => 'skipped',
 			$action instanceof SetAside => 'set aside ' . self::below($action->path) . " as {$action->kind}",
 			$action instanceof ForgetImport => 'forget ' . self::below($action->path),
+			$action instanceof MoveImport => 'move ' . self::below($action->from) . ' -> ' . self::below($action->to),
 			$action instanceof ImportSucceeded => 'succeeded ' . self::below($action->context->path)
 				. ($action->sameContent ? '' : ', changed since')
 				. ($action->document !== null ? " as P{$action->document}" : ''),

@@ -15,6 +15,7 @@ use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
 use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
+use OCA\PaperlessSync\Model\Plan\MoveImport;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
@@ -29,6 +30,9 @@ use OCP\AppFramework\Utility\ITimeFactory;
  * which stay aside for their type, however many of each there are. It reads Paperless, the inbox
  * and the states of the uploads, but it changes none of them: it reaches the inbox through
  * TargetFiles, which can't write, and ImportExecutor applies its plan, or reports it in a dry-run.
+ *
+ * The state of an upload follows its file by the ID of the file, when the file is renamed or moved
+ * inside the inbox, so that its upload goes on instead of starting again at the new path.
  *
  * The plan is lazy, as that of the export: it plans each upload once the executor has applied
  * the one before, so that it sees the batch as it stands, and after a failure that may pass, such
@@ -68,10 +72,23 @@ final class ImportPlanner {
 		/** @var array<string, int> $attempts the failed uploads of each file whose next attempt is due */
 		$attempts = [];
 		$now = $this->clock->getTime();
+		$imports = $this->state->allImports($this->config->targetUser);
+		$moved = $this->movedFiles($byPath, $imports);
 
-		foreach ($this->state->allImports($this->config->targetUser) as $pending) {
+		foreach ($imports as $pending) {
 			$path = (string)($pending['path'] ?? '');
 			$file = $byPath[$path] ?? null;
+			$fileId = (int)($pending['file_id'] ?? 0);
+			if ($file === null && isset($moved[$fileId]) && ($pending['status'] ?? '') !== 'rejected') {
+				// The file was renamed or moved inside the inbox, or one of its folders was: its upload
+				// goes on at its new path instead of starting again there. A file that Paperless refused
+				// gets a new chance, as with a change, since its new name may be one that Paperless takes.
+				yield new MoveImport($path, $moved[$fileId]);
+				$path = $moved[$fileId];
+				unset($moved[$fileId]);
+				$pending['path'] = $path;
+				$file = $byPath[$path];
+			}
 			if ($file === null) {
 				yield new ForgetImport($path);
 				continue;
@@ -121,8 +138,31 @@ final class ImportPlanner {
 				yield new Skipped();
 				continue;
 			}
-			yield new Upload($path, $file['name'], $file['etag'], $attempts[$path] ?? 0, $this->folderBelow($path));
+			yield new Upload($path, $file['name'], $file['etag'], $attempts[$path] ?? 0, $this->folderBelow($path), $file['id']);
 		}
+	}
+
+	/**
+	 * The files of the inbox that have no state of their own, by their file ID, at the path where
+	 * they are now: a file keeps its ID when it is renamed or moved inside its storage, so a state
+	 * whose path is gone finds its file here. A state that an earlier version saved has no file ID,
+	 * and neither has a file that came from another storage, such as an external one; the executor
+	 * asks Paperless for the content of such a file before it uploads it.
+	 *
+	 * @param array<string, array{path: string, name: string, etag: string, id: int}> $byPath
+	 * @param list<array<string, int|string|null>> $imports
+	 * @return array<int, string>
+	 */
+	private function movedFiles(array $byPath, array $imports): array {
+		$stated = array_flip(array_map(static fn (array $import): string => (string)($import['path'] ?? ''), $imports));
+		$moved = [];
+		foreach ($byPath as $path => $file) {
+			if ($file['id'] > 0 && !isset($stated[$path])) {
+				$moved[$file['id']] = $path;
+			}
+		}
+
+		return $moved;
 	}
 
 	/**

@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
 use OCA\PaperlessSync\Model\Plan\ImportContext;
 use OCA\PaperlessSync\Model\Plan\ImportFailed;
 use OCA\PaperlessSync\Model\Plan\ImportSucceeded;
+use OCA\PaperlessSync\Model\Plan\MoveImport;
 use OCA\PaperlessSync\Model\Plan\RetryUnfinished;
 use OCA\PaperlessSync\Model\Plan\SetAside;
 use OCA\PaperlessSync\Model\Plan\Skipped;
@@ -52,6 +53,8 @@ final class ImportExecutorTest extends TestCase {
 	private const ERROR = TestConfig::ERRORS . '/Steuern/a.pdf';
 	private const CONTENT = '%PDF-a';
 	private const VIDEO = TestConfig::INBOX . '/Aus Videos/film.mp4';
+	/** The ID of the file of the tests in Nextcloud. */
+	private const FILE_ID = 42;
 	/** The writes of the storage, which a dry-run never calls. */
 	private const WRITES = ['writeStream', 'writeText', 'move', 'delete', 'pruneEmptyParents'];
 
@@ -86,6 +89,7 @@ final class ImportExecutorTest extends TestCase {
 			'a skipped file' => [new Skipped(), []],
 			'a file set aside' => [new SetAside(self::VIDEO, 'film.mp4', 'video'), []],
 			'the state of a file that is gone' => [new ForgetImport(self::FILE), []],
+			'the state of a file that was renamed' => [new MoveImport(self::FILE, TestConfig::INBOX . '/Steuern/b.pdf'), []],
 			'an import that succeeded, whose file is deleted' => [new ImportSucceeded($context, 'etag', true, 7, true), []],
 			'an import that succeeded, whose file stays' => [new ImportSucceeded($context, 'etag', true, 7, true), ['deleteInboxAfterSuccess' => false]],
 			'an import of a file that changed since its upload' => [new ImportSucceeded($context, 'etag', false, 7, true), []],
@@ -121,8 +125,107 @@ final class ImportExecutorTest extends TestCase {
 
 		self::assertSame(['IMPORT: ' . self::FILE], $this->report->actions);
 		self::assertSame(['a.pdf' => self::CONTENT], $this->paperless->uploads);
-		self::assertSame(['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => $this->clock->time], array_intersect_key($this->state->imports[self::FILE], array_flip(['task_id', 'status', 'submitted_at'])));
+		self::assertSame(['file_id' => self::FILE_ID, 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => $this->clock->time], array_intersect_key($this->state->imports[self::FILE], array_flip(['file_id', 'task_id', 'status', 'submitted_at'])));
+		self::assertSame([hash('sha256', self::CONTENT)], $this->paperless->searches, 'The upload asks Paperless for the content first.');
 		self::assertSame([], array_filter($this->storage->openedStreams, 'is_resource'), 'The upload closes the file.');
+	}
+
+	/** The state of a file that was renamed or moved inside the inbox follows it to its new path. */
+	public function testTheStateOfARenamedFileFollowsIt(): void {
+		$to = TestConfig::INBOX . '/Steuern/b.pdf';
+
+		$this->executor->apply(new MoveImport(self::FILE, $to));
+
+		self::assertSame([$to => ['path' => $to, 'status' => 'pending']], $this->state->imports);
+		self::assertSame([], $this->report->actions);
+	}
+
+	/**
+	 * A file whose content Paperless has already, such as one whose upload Paperless received
+	 * although its answer never came, ends as imported without a second upload, which would make
+	 * a duplicate, and leaves the inbox as an imported file does.
+	 */
+	public function testAFileThatPaperlessHasAlreadyIsNotUploadedAgain(): void {
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->logger->expects(self::once())->method('info')->with('Paperless already has the content of the inbox file {path} as document {document}, so it was not uploaded again', ['path' => self::FILE, 'document' => 9]);
+
+		$this->executor->apply(self::upload(attempts: 1));
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+		self::assertSame([['outcome' => SyncReport::IMPORTED, 'path' => self::FILE, 'document' => 9, 'reason' => '']], $this->report->importResults());
+		self::assertSame([0, 1], [$this->report->importsSubmitted, $this->report->importsSucceeded]);
+		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
+		self::assertSame([], $this->state->imports);
+		self::assertSame([[self::FILE, TestConfig::INBOX]], $this->storage->prunes);
+		self::assertSame([], array_filter($this->storage->openedStreams, 'is_resource'), 'The look at the content closes the file.');
+	}
+
+	/** A kept file whose content Paperless has stays in the inbox as imported, and its document keeps its owner. */
+	public function testAKeptFileThatPaperlessHasAlreadyStaysAsImported(): void {
+		$this->arrange(false, ['deleteInboxAfterSuccess' => false], 3);
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+		self::assertSame(['etag' => hash('sha256', self::CONTENT), 'file_id' => self::FILE_ID, 'status' => 'success', 'last_error' => null], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'file_id', 'status', 'last_error'])));
+		self::assertSame([], $this->paperless->ownerChanges, 'The document may be someone else\'s, so its owner stays.');
+	}
+
+	/** A dry-run reports a file that Paperless has as the run does, and changes nothing. */
+	public function testADryRunReportsAFileThatPaperlessHasAlready(): void {
+		$this->arrange(true);
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+		self::assertSame([self::FILE => ['path' => self::FILE, 'status' => 'pending']], $this->state->imports);
+		self::assertSame([], $this->report->importResults());
+	}
+
+	/** Without the answer whether Paperless has the content, the file waits, and without Paperless, so do the others. */
+	public function testAFileWaitsWhenPaperlessCannotSayWhetherItHasItsContent(): void {
+		$this->paperless->findException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame(['status' => 'retry', 'file_id' => self::FILE_ID, 'attempts' => 1], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'file_id', 'attempts'])));
+		self::assertFalse($this->batch->stopped());
+
+		$this->arrange(false);
+		$this->paperless->findException = new PaperlessRequestException('Paperless could not be reached');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+		self::assertTrue($this->batch->stopped());
+
+		$this->arrange(true);
+		$this->paperless->findException = new PaperlessRequestException('Paperless could not be reached');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['ERROR: Import ' . self::FILE . ': Paperless could not be reached'], $this->report->actions, 'A dry-run schedules no next attempt.');
+		self::assertSame('pending', $this->state->imports[self::FILE]['status']);
+	}
+
+	/** A file that Paperless has, but that can't leave the inbox, tries again later. */
+	public function testAFileThatPaperlessHasAndThatCannotBeDeletedWaits(): void {
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->storage->deleteException = new RuntimeException('The file is locked');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertArrayHasKey(self::FILE, $this->storage->files);
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+		self::assertSame(['ERROR: Import ' . self::FILE . ': The file is locked (attempt 1, the next in 15 minutes)'], $this->report->actions);
+		self::assertSame(0, $this->report->importsSucceeded);
 	}
 
 	/** Paperless would refuse the same file again, so it waits until it changes, and the other uploads go on. */
@@ -151,7 +254,7 @@ final class ImportExecutorTest extends TestCase {
 		$this->executor->apply(self::upload());
 
 		self::assertSame(['ERROR: Import ' . self::FILE . ': Paperless is busy (attempt 1, the next in 15 minutes)'], $this->report->actions);
-		self::assertSame(['status' => 'retry', 'attempts' => 1, 'retry_at' => $this->clock->time + 900], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts', 'retry_at'])));
+		self::assertSame(['status' => 'retry', 'attempts' => 1, 'retry_at' => $this->clock->time + 900, 'file_id' => self::FILE_ID], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts', 'retry_at', 'file_id'])));
 		self::assertTrue($this->batch->stopped());
 	}
 
@@ -439,7 +542,7 @@ final class ImportExecutorTest extends TestCase {
 
 	/** The upload of the file of the tests, in the folder Steuern. */
 	private static function upload(int $attempts = 0): Upload {
-		return new Upload(self::FILE, 'a.pdf', hash('sha256', self::CONTENT), $attempts, 'Steuern');
+		return new Upload(self::FILE, 'a.pdf', hash('sha256', self::CONTENT), $attempts, 'Steuern', self::FILE_ID);
 	}
 
 	/**
