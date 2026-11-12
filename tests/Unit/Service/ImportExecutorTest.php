@@ -125,7 +125,7 @@ final class ImportExecutorTest extends TestCase {
 
 		self::assertSame(['IMPORT: ' . self::FILE], $this->report->actions);
 		self::assertSame(['a.pdf' => self::CONTENT], $this->paperless->uploads);
-		self::assertSame(['file_id' => self::FILE_ID, 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => $this->clock->time], array_intersect_key($this->state->imports[self::FILE], array_flip(['file_id', 'task_id', 'status', 'submitted_at'])));
+		self::assertSame(['status' => 'pending', 'file_id' => self::FILE_ID, 'task_id' => 'task-1', 'submitted_at' => $this->clock->time], array_intersect_key($this->state->imports[self::FILE], array_flip(['file_id', 'task_id', 'status', 'submitted_at'])));
 		self::assertSame([hash('sha256', self::CONTENT)], $this->paperless->searches, 'The upload asks Paperless for the content first.');
 		self::assertSame([], array_filter($this->storage->openedStreams, 'is_resource'), 'The upload closes the file.');
 	}
@@ -170,7 +170,7 @@ final class ImportExecutorTest extends TestCase {
 
 		self::assertSame([], $this->paperless->uploadAttempts);
 		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
-		self::assertSame(['etag' => hash('sha256', self::CONTENT), 'file_id' => self::FILE_ID, 'status' => 'success', 'last_error' => null], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'file_id', 'status', 'last_error'])));
+		self::assertSame(['status' => 'success', 'etag' => hash('sha256', self::CONTENT), 'file_id' => self::FILE_ID, 'last_error' => null], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'file_id', 'status', 'last_error'])));
 		self::assertSame([], $this->paperless->ownerChanges, 'The document may be someone else\'s, so its owner stays.');
 	}
 
@@ -194,7 +194,7 @@ final class ImportExecutorTest extends TestCase {
 		$this->executor->apply(self::upload());
 
 		self::assertSame([], $this->paperless->uploadAttempts);
-		self::assertSame(['status' => 'retry', 'file_id' => self::FILE_ID, 'attempts' => 1], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'file_id', 'attempts'])));
+		self::assertSame(['status' => 'retry', 'attempts' => 1, 'file_id' => self::FILE_ID], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'file_id', 'attempts'])));
 		self::assertFalse($this->batch->stopped());
 
 		$this->arrange(false);
