@@ -990,7 +990,7 @@ It answers, with the counts of `summary` shortened:
 {"ocs": {"meta": {"status": "ok", "statuscode": 200, "message": "OK"}, "data": {
   "healthy": false, "health": "failed", "enabled": true, "state": "failed",
   "lastStarted": 1787911200, "lastEnded": 1787911205, "lastSuccess": 1787900400, "nextRun": 1787912100,
-  "error": "Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active. Details: Client error: `GET https://paperless.example.com/api/documents/` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
+  "error": "Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active. Details: Client error: `GET https://paperless.example.com/api/documents/` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
   "failedRuns": 3, "failingSince": 1787909405,
   "summary": {"dryRun": false, "exported": 0, "errors": 0}, "users": [],
   "paperlessVersion": "", "paperlessApiVersion": ""}}}

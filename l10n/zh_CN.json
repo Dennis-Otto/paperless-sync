@@ -724,8 +724,8 @@
 			"已移除 %n 个共享。"
 		],
 		"%1$s Details: %2$s": "%1$s 详细信息：%2$s",
-		"Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.": "Paperless 拒绝了该 API 令牌（HTTP 401）。请在 Paperless 中从账号菜单的“帐户信息”里重新复制令牌，将其填入 Paperless Sync 的设置，并确认该账号已启用。",
-		"Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click \"Test connection\" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.": "Paperless 拒绝了该请求（HTTP 403）：API 令牌的账号缺少相应权限。请在 Paperless Sync 的设置中点击“测试连接”：其检查清单会列出需要在 Paperless 中授予该账号的权限。",
+		"Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.": "Paperless 拒绝了该 API 令牌（HTTP 401）。请从 Paperless 的“帐户信息”中复制新令牌，将其填入 Paperless Sync 的设置，并确认该账号已启用。",
+		"Paperless refused the request (HTTP 403): the account of the API token lacks a permission. Click \"Test connection\" in the settings of Paperless Sync: its checklist names it.": "Paperless 拒绝了该请求（HTTP 403）：API 令牌的账号缺少一项权限。请在 Paperless Sync 的设置中点击“测试连接”：其检查清单会列出该权限。",
 		"Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.": "Paperless 中已没有此文档（HTTP 404）：它在本次运行期间被删除，或者 API 令牌的账号已无权查看它。无需任何操作：下一次运行会跟进此变化。",
 		"Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.": "Paperless 找不到该请求的地址（HTTP 404）。请检查 Paperless 的 URL：如果 Paperless 运行在某个路径下（例如 https://example.com/paperless），URL 中需要包含该路径。",
 		"Paperless, or the proxy in front of it, failed with HTTP %s. Check that Paperless runs, and the log of Paperless or of the proxy.": "Paperless 或其前端代理以 HTTP %s 失败。请确认 Paperless 正在运行，并检查 Paperless 或代理的日志。",

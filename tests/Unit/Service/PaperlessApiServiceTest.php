@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\RunError;
+use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\FileVersions;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
@@ -1612,13 +1613,13 @@ final class PaperlessApiServiceTest extends TestCase {
 				'documents',
 				401,
 				"Client error: `GET https://paperless.example.test/api/documents/?page=1` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}",
-				'Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.',
+				'Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.',
 			],
 			'a permission that the account lacks' => [
 				'tags',
 				403,
 				'Client error: `GET https://paperless.example.test/api/tags/` resulted in a `403 Forbidden` response',
-				'Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click "Test connection" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.',
+				'Paperless refused the request (HTTP 403): the account of the API token lacks a permission. Click "Test connection" in the settings of Paperless Sync: its checklist names it.',
 			],
 			'a document that went away during the run' => [
 				'downloadDocument',
@@ -1696,6 +1697,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			self::assertStringNotContainsString('?', $detail, 'The detail leaves out the query of the URL.');
 			$error = RunError::of($exception);
 			self::assertSame("{$explanation} Details: {$detail}", $error->message());
+			self::assertLessThanOrEqual(NotificationPublisher::ERROR_LIMIT, mb_strlen($explanation), 'The notification of a failing row, which cuts the error at its limit, keeps the whole explanation.');
 			$german = $error->translated($this->germanL10n());
 			self::assertStringStartsNotWith($explanation, $german, 'A German settings page shows the explanation in German.');
 			self::assertStringEndsWith(" Details: {$detail}", $german, 'The message of the HTTP client stays as it came.');

@@ -725,8 +725,8 @@ OC.L10N.register(
 			"已移除 %n 個分享。"
 		],
 		"%1$s Details: %2$s": "%1$s 詳細資訊：%2$s",
-		"Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.": "Paperless 拒絕了該 API Token（HTTP 401）。請在 Paperless 中從帳號選單的「我的設定檔」裡重新複製 Token，將其填入 Paperless Sync 的設定，並確認該帳號已啟用。",
-		"Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click \"Test connection\" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.": "Paperless 拒絕了該請求（HTTP 403）：API Token 的帳號缺少相應權限。請在 Paperless Sync 的設定中點選「測試連線」：其檢查清單會列出需要在 Paperless 中授予該帳號的權限。",
+		"Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.": "Paperless 拒絕了該 API Token（HTTP 401）。請從 Paperless 的「我的設定檔」複製新的 Token，將其填入 Paperless Sync 的設定，並確認該帳號已啟用。",
+		"Paperless refused the request (HTTP 403): the account of the API token lacks a permission. Click \"Test connection\" in the settings of Paperless Sync: its checklist names it.": "Paperless 拒絕了該請求（HTTP 403）：API Token 的帳號缺少一項權限。請在 Paperless Sync 的設定中點選「測試連線」：其檢查清單會列出該權限。",
 		"Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.": "Paperless 中已沒有此文件（HTTP 404）：它在本次執行期間被刪除，或者 API Token 的帳號已無權檢視它。無需任何操作：下一次執行會跟進此變更。",
 		"Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.": "Paperless 找不到該請求的位址（HTTP 404）。請檢查 Paperless 的 URL：如果 Paperless 在某個路徑下執行（例如 https://example.com/paperless），URL 中需要包含該路徑。",
 		"Paperless, or the proxy in front of it, failed with HTTP %s. Check that Paperless runs, and the log of Paperless or of the proxy.": "Paperless 或其前端代理伺服器以 HTTP %s 失敗。請確認 Paperless 正在執行，並檢查 Paperless 的事件記錄或代理伺服器的記錄檔。",

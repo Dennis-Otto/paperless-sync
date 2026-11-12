@@ -604,13 +604,13 @@ final class StatusServiceTest extends TestCase {
 	 */
 	public function testARefusedRequestFailsTheRunWithWhatToDo(): void {
 		$failure = "Client error: `GET https://paperless.example.test/api/documents/` resulted in a `401 Unauthorized` response:\n{\"detail\":\"Invalid token.\"}";
-		$explained = new RunError('%1$s Details: %2$s', [new RunError('Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.'), $failure]);
+		$explained = new RunError('%1$s Details: %2$s', [new RunError('Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.'), $failure]);
 
 		$this->service->failed(new PaperlessRequestException($failure, $explained));
 
 		self::assertSame($explained->message(), $this->service->failures()['error']);
 		self::assertSame($explained->message(), $this->service->overview($this->config(true))['error']);
-		self::assertStringStartsWith('Paperless refused the API token (HTTP 401). Copy the token again', $this->service->failures()['error']);
+		self::assertStringStartsWith('Paperless refused the API token (HTTP 401). Copy a new token', $this->service->failures()['error']);
 	}
 
 	/**

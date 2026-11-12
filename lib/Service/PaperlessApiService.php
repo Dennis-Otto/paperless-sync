@@ -1410,8 +1410,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$status = (int)$code;
 		$curl = preg_match('/\bcURL error (\d+):/', $message, $match) === 1 ? (int)$match[1] : 0;
 		$explanation = match (true) {
-			$status === Http::STATUS_UNAUTHORIZED => new RunError('Paperless refused the API token (HTTP 401). Copy the token again from Paperless, under My Profile in the menu of its account, enter it in the settings of Paperless Sync, and check that the account is active.'),
-			$status === Http::STATUS_FORBIDDEN => new RunError('Paperless refused the request (HTTP 403): the account of the API token lacks a permission for it. Click "Test connection" in the settings of Paperless Sync: its checklist names the permission to give the account in Paperless.'),
+			$status === Http::STATUS_UNAUTHORIZED => new RunError('Paperless refused the API token (HTTP 401). Copy a new token from My Profile in Paperless, enter it in the settings of Paperless Sync, and check that the account is active.'),
+			$status === Http::STATUS_FORBIDDEN => new RunError('Paperless refused the request (HTTP 403): the account of the API token lacks a permission. Click "Test connection" in the settings of Paperless Sync: its checklist names it.'),
 			$status === Http::STATUS_NOT_FOUND && preg_match('~^/?api/documents/\d+/~', $path) === 1 => new RunError('Paperless no longer has this document (HTTP 404): it was deleted during the run, or the account of the API token may no longer view it. Nothing to do: the next run follows the change.'),
 			$status === Http::STATUS_NOT_FOUND => new RunError('Paperless did not find the address of the request (HTTP 404). Check the URL of Paperless: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path.'),
 			$status >= 500 && $status < 600 => new RunError('Paperless, or the proxy in front of it, failed with HTTP %s. Check that Paperless runs, and the log of Paperless or of the proxy.', [(string)$status]),
