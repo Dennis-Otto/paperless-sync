@@ -316,6 +316,20 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame([], $this->state->imports);
 	}
 
+	/** The text next to a failed file never replaces an .error.txt that appeared at its name since the plan. */
+	public function testTheReasonOfAFailedImportNeverReplacesAFileOfTheErrorFolder(): void {
+		$this->storage->files[self::ERROR . '.error.txt'] = "earlier
+";
+		$this->logger->expects(self::once())->method('warning')->with('Paperless Sync could not check the import of the inbox file {path}: {error}', self::anything());
+
+		$this->executor->apply(new ImportFailed(new ImportContext(self::FILE, []), self::ERROR, 'Broken PDF', "second
+"));
+
+		self::assertSame("earlier
+", $this->storage->files[self::ERROR . '.error.txt']);
+		self::assertSame('ERROR: Import task ' . self::FILE . ': conflict', $this->report->actions[0]);
+	}
+
 	/** The log says why a file moved to the error folder whose task Paperless still lists. */
 	public function testAnUnfinishedImportInTheErrorFolderIsLogged(): void {
 		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('it moves to the error folder, as Paperless may still import it'), [

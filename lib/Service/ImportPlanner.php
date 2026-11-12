@@ -223,7 +223,7 @@ final class ImportPlanner {
 	 * for the copy of that document, and show them its title and excerpt.
 	 *
 	 * A file meets another one there when a scanner names every scan the same, or when names lost
-	 * their markers, so it takes the next free number, as Nextcloud does, instead of replacing the
+	 * their markers, so it takes the next free number, where neither it nor its .error.txt exists, as Nextcloud does, instead of replacing the
 	 * other one or failing on a conflict. The conflict policy is for the copies of the archive, which
 	 * Paperless can write again; a file of the error folder is the only original of a document that
 	 * Paperless never created.
@@ -235,12 +235,28 @@ final class ImportPlanner {
 		$dot = strrpos($clean, '.');
 		$stem = $dot === false ? $clean : substr($clean, 0, $dot);
 		$extension = $dot === false ? '' : substr($clean, $dot);
-		for ($number = 2; isset($this->errorPaths[$destination]) || $this->files->exists($destination); ++$number) {
+		for ($number = 2; $this->errorPathTaken($destination); ++$number) {
 			$destination = Paths::join($folder, "{$stem} ({$number}){$extension}");
 		}
 		$this->errorPaths[$destination] = true;
+		$this->errorPaths[$destination . '.error.txt'] = true;
 
 		return $destination;
+	}
+
+	/**
+	 * Whether a name of the error folder is taken: by a file there, by a file that this plan already
+	 * sends there, or by the .error.txt that would go next to it, such as one that outlived its file
+	 * or a failed file of the inbox that bore that name.
+	 */
+	private function errorPathTaken(string $destination): bool {
+		foreach ([$destination, $destination . '.error.txt'] as $path) {
+			if (isset($this->errorPaths[$path]) || $this->files->exists($path)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/** The line of the .error.txt that names a file that lost a marker on its way to the error folder, or nothing for any other. */

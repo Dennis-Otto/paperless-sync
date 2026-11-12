@@ -260,6 +260,7 @@ final class ImportPlannerTest extends TestCase {
 			'a file without a marker keeps a free name' => ['Scan.pdf', ['Andere.pdf'], 'Scan.pdf'],
 			'a file without a marker takes the next free number too' => ['Scan.pdf', ['Scan.pdf'], 'Scan (2).pdf'],
 			'a file without a marker after earlier failures of its name' => ['Scan_0001.pdf', ['Scan_0001.pdf', 'Scan_0001 (2).pdf'], 'Scan_0001 (3).pdf'],
+			'the .error.txt of the name is taken' => ['Scan.pdf', ['Scan.pdf.error.txt'], 'Scan (2).pdf'],
 		];
 	}
 
