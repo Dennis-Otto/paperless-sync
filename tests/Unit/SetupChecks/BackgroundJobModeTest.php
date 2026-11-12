@@ -64,6 +64,16 @@ final class BackgroundJobModeTest extends TestCase {
 		self::assertSame(AppConstants::GERMAN_GUIDE_URL . '#being-notified', $result->getLinkToDoc());
 	}
 
+	/** The check reads the settings alone, never the token, which may fail to decrypt (#460). */
+	public function testTheCheckNeedsNoToken(): void {
+		$this->settings['backgroundjobs_mode'] = 'cron';
+		$this->credentialReads = 0;
+		$this->credentialsUnreadable = true;
+
+		self::assertSame(SetupResult::SUCCESS, $this->check->run()->getSeverity());
+		self::assertSame(0, $this->credentialReads);
+	}
+
 	public function testScheduledRunsThatAreOffNeedNoCron(): void {
 		$this->configService()->save(['enabled' => false] + self::validSettings(), 'secret-token');
 

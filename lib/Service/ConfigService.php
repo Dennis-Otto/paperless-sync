@@ -9,15 +9,18 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use Exception;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCP\DB\Exception as DatabaseException;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
 use OCP\IUserManager;
 use OCP\L10N\IFactory;
 use OCP\Security\ICredentialsManager;
+use Psr\Log\LoggerInterface;
 
 /**
  * The settings of the app, in the app configuration of Nextcloud, and the API token, in its
@@ -34,6 +37,11 @@ final class ConfigService {
 	public const MAXIMUM_INTERVAL_MINUTES = 1440;
 
 	private const TOKEN_IDENTIFIER = AppConstants::APP_ID . '.api-token';
+	/**
+	 * The URL that the token was stored with, '' after a disconnect, for settings(). No setting, and
+	 * no secret: the URL is a setting of its own.
+	 */
+	private const TOKEN_URL_KEY = 'token_url';
 	/** The users whose archives the tags filled, see tagArchives(); no setting. */
 	private const TAG_ARCHIVES_KEY = 'tag_archives';
 
@@ -92,6 +100,9 @@ final class ConfigService {
 		'untitled' => 'Untitled',
 	];
 
+	/** Whether this request already logged that the token can't be read: once is enough. */
+	private bool $unreadableLogged = false;
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -101,6 +112,7 @@ final class ConfigService {
 		private IConfig $config,
 		private IGroupManager $groupManager,
 		private IUserManager $userManager,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -121,6 +133,48 @@ final class ConfigService {
 
 	public function get(): SyncConfig {
 		return $this->fromValues($this->readValues(), $this->getToken() !== '');
+	}
+
+	/**
+	 * The saved settings, as get() has them, but without a read of the credentials store: whether a
+	 * token is configured comes from the URL that it was stored with, which each save and each
+	 * disconnect records. For what reads the settings with every load of Files, for every user, such
+	 * as its menu and its note, and for the setup checks: none of them needs the token, and none
+	 * should decrypt it, as the decryption fails after a restore or a move of Nextcloud with another
+	 * secret. Then this still names the token as configured, until it is entered again, while get(),
+	 * which the routes and the runs read, counts it as none: "Send to Paperless" stays in the menu
+	 * and answers that the app is not connected.
+	 *
+	 * An installation of an earlier version has no such record yet: the first call reads the store
+	 * once and records what it finds.
+	 */
+	public function settings(): SyncConfig {
+		$values = $this->readValues();
+		if (!$this->appConfig->hasKey(AppConstants::APP_ID, self::TOKEN_URL_KEY, null)) {
+			$this->rememberTokenUrl($this->storedToken()['url'] ?? '');
+		}
+		$tokenUrl = $this->appConfig->getValueString(AppConstants::APP_ID, self::TOKEN_URL_KEY, '', lazy: true);
+
+		return $this->fromValues($values, $tokenUrl !== '' && $tokenUrl === rtrim(trim((string)$values['paperless_url']), '/'));
+	}
+
+	/**
+	 * Whether the credentials store holds a token that it can't decrypt, as after a restore or a
+	 * move of Nextcloud with another secret in config.php, or with a damaged row: such a token counts
+	 * as none, and has to be entered again. The settings page and occ paperless_sync:status say so.
+	 * A failure of the database is no such token and goes on as it is: entering the token again
+	 * wouldn't help.
+	 */
+	public function tokenUnreadable(): bool {
+		try {
+			$this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		} catch (DatabaseException $exception) {
+			throw $exception;
+		} catch (Exception) {
+			return true;
+		}
+
+		return false;
 	}
 
 	/**
@@ -197,7 +251,7 @@ final class ConfigService {
 	 */
 	public function bindUnboundToken(): bool {
 		/** @psalm-suppress MixedAssignment */
-		$token = $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		$token = $this->retrieveToken();
 		if (!is_string($token) || trim($token) === '') {
 			return false;
 		}
@@ -315,6 +369,7 @@ final class ConfigService {
 	 */
 	public function reset(): SyncConfig {
 		$this->credentialsManager->delete('', self::TOKEN_IDENTIFIER);
+		$this->rememberTokenUrl('');
 		foreach (['enabled', 'paperless_local_network'] as $key) {
 			$this->appConfig->setValueBool(AppConstants::APP_ID, $this->storageKey($key), false, lazy: true);
 		}
@@ -342,12 +397,18 @@ final class ConfigService {
 	/** The token with the URL that it may go to, nothing else, in the store of Nextcloud, which encrypts it. */
 	private function storeToken(string $url, #[\SensitiveParameter] string $token): void {
 		$this->credentialsManager->store('', self::TOKEN_IDENTIFIER, ['url' => $url, 'token' => $token]);
+		$this->rememberTokenUrl($url);
 	}
 
-	/** @return array{url: string, token: string}|null the stored token and the URL that it was saved with */
+	/**
+	 * The stored token and the URL that it was saved with, null without one. A token that the store
+	 * can't decrypt counts as none, so that the app goes on as not connected instead of failing.
+	 *
+	 * @return array{url: string, token: string}|null
+	 */
 	private function storedToken(): ?array {
 		/** @psalm-suppress MixedAssignment */
-		$stored = $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		$stored = $this->retrieveToken();
 		if (!is_array($stored)) {
 			return null;
 		}
@@ -358,6 +419,38 @@ final class ConfigService {
 		}
 
 		return ['url' => $url, 'token' => $token];
+	}
+
+	/**
+	 * What the credentials store holds for the token, null when it holds nothing or can't decrypt
+	 * it: Nextcloud throws then, as for a value that another secret encrypted, which a restore or a
+	 * move of the instance with another config.php leaves behind. That is logged as a warning, with
+	 * the way out, once a request, and the token counts as none until it is entered again. A failure
+	 * of the database is no such value and goes on as it is.
+	 */
+	private function retrieveToken(): mixed {
+		try {
+			return $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		} catch (DatabaseException $exception) {
+			throw $exception;
+		} catch (Exception $exception) {
+			if ($this->unreadableLogged) {
+				return null;
+			}
+			$this->unreadableLogged = true;
+			$this->logger->warning('Paperless Sync could not read its stored Paperless API token, as after a restore or a move of Nextcloud with another secret ({error}). Enter the token again in its settings.', [
+				'app' => AppConstants::APP_ID,
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+
+			return null;
+		}
+	}
+
+	/** Records the URL that the token was stored with for settings(), '' for none. */
+	private function rememberTokenUrl(string $url): void {
+		$this->appConfig->setValueString(AppConstants::APP_ID, self::TOKEN_URL_KEY, $url, lazy: true);
 	}
 
 	/**

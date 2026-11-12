@@ -129,7 +129,26 @@ final class StatusTest extends TestCase {
 		self::assertSame(Status::OK, $this->execute(['--output' => 'json']));
 
 		$status = json_decode($this->command->getDisplay(), true, 512, JSON_THROW_ON_ERROR);
-		self::assertSame($this->statusService->overview($this->configService->get()) + ['tagShares' => []], $status, 'With the shares that show a user with tags more than their tags, none here.');
+		self::assertSame($this->statusService->overview($this->configService->get()) + ['tagShares' => [], 'tokenUnreadable' => false], $status, 'With the shares that show a user with tags more than their tags, none here.');
+	}
+
+	/**
+	 * A token that the credentials store can't decrypt, as after a restore or a move of Nextcloud
+	 * with another secret, says so first, and to a script in tokenUnreadable (#460).
+	 */
+	public function testATokenThatCanNotBeDecryptedIsNamed(): void {
+		$this->credentialsUnreadable = true;
+
+		self::assertSame(Status::OK, $this->execute([]));
+
+		self::assertStringStartsWith(
+			"The stored API token of Paperless can not be read, as after a restore or a move of Nextcloud with another secret: enter it again in the settings.\n"
+			. "State:               Never run\n",
+			$this->command->getDisplay(),
+		);
+
+		self::assertSame(Status::OK, $this->execute(['--output' => 'json']));
+		self::assertTrue(json_decode($this->command->getDisplay(), true, 512, JSON_THROW_ON_ERROR)['tokenUnreadable']);
 	}
 
 	/** @return iterable<string, array{string, int}> */

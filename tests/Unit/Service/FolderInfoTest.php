@@ -60,6 +60,19 @@ final class FolderInfoTest extends TestCase {
 		], $this->folderInfo->of(self::TARGET)['folders']);
 	}
 
+	/**
+	 * Files asks with every load of a folder, for every user: the note needs the settings, never the
+	 * token, which may fail to decrypt, as after a restore of Nextcloud with another secret (#460).
+	 */
+	public function testTheNoteNeedsNoToken(): void {
+		$this->foldersOf(self::TARGET);
+		$this->credentialReads = 0;
+		$this->credentialsUnreadable = true;
+
+		self::assertCount(3, $this->folderInfo->of(self::TARGET)['folders']);
+		self::assertSame(0, $this->credentialReads);
+	}
+
 	public function testAFolderThatIsNotThereHasNoNote(): void {
 		$this->storage->writeText(self::TARGET, self::INBOX . '/scan.pdf', '%PDF');
 

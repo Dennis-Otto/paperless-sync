@@ -166,6 +166,28 @@ final class AdminSettingsTest extends TestCase {
 		], $health);
 	}
 
+	/**
+	 * After a restore or a move of Nextcloud with another secret, the credentials store can't
+	 * decrypt the token, nor the secret of the webhook: the page still opens, asks for the token as
+	 * for none, and says on top why, so that the administrator can enter it again (#460).
+	 */
+	public function testThePageOpensAndAsksForATokenThatCanNotBeDecrypted(): void {
+		$this->configService()->save(['enabled' => true] + self::validSettings(), 'secret-token');
+		$this->webhookService(new TestClock())->create();
+		$this->settings['backgroundjobs_mode'] = 'cron';
+		$this->credentialsUnreadable = true;
+		$this->webhookSecretUnreadable = true;
+
+		$parameters = $this->adminSettings()->getForm()->getParams();
+
+		self::assertFalse($parameters['config']->tokenConfigured, 'The token field is required again.');
+		self::assertSame('https://paperless.example.test', $parameters['config']->paperlessUrl);
+		self::assertFalse($parameters['webhook']['configured'], 'The page offers a new secret.');
+		self::assertSame([
+			['severity' => 'warning', 'description' => 'Paperless Sync kann sein gespeichertes API-Token von Paperless nicht lesen, wie nach einer Wiederherstellung oder einem Umzug von Nextcloud mit einem anderen Geheimnis. Gib das Token in seinen Einstellungen erneut ein, und erstelle ein neues Geheimnis für den Webhook, wenn er eines hatte.'],
+		], $parameters['health']);
+	}
+
 	/** The page has the stored configuration without the token, which never reaches the browser. */
 	public function testThePageGetsTheConfigurationWithoutTheToken(): void {
 		$this->configService()->save(self::validSettings(), 'secret-token');

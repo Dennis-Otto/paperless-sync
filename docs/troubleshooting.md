@@ -96,6 +96,12 @@ Enter the URL as you open Paperless in the browser, with its sub-path if it has 
 - accept uploads as large as the files of the inbox, such as with `client_max_body_size` in nginx; the free plan of Cloudflare stops at 100 MB;
 - leave answers whole, also long ones: a scan reads the documents in pages of 1,000.
 
+### The stored token can't be read
+
+After a restore of Nextcloud from a backup, or a move to another server, with a `config.php` whose `secret` differs from the one before, Nextcloud can't decrypt what its credentials store holds: the API token of Paperless, and the secret of the webhook. A damaged row of its table `oc_storage_credentials` does the same. Paperless Sync then counts the token as none and goes on as an app that isn't connected: Files works for every user, the runs wait, and the settings open with a warning on top, which *Administration → Overview* shows as well. `occ paperless_sync:status` says so in its first line, and with `--output json` in `tokenUnreadable`; the [log](#read-the-log) has a warning with the message of Nextcloud, such as `HMAC does not match.`.
+
+**Fix:** enter the API token again in the section *Connection and ownership* and save: the store encrypts it with the secret of this Nextcloud. If the webhook had a secret, create a new one in *Changes within seconds* and enter it in the workflow of Paperless, as [A change in Paperless doesn't arrive within seconds](#a-change-in-paperless-doesnt-arrive-within-seconds) shows. When the restore took a `config.php` other than its own, the one with the `secret` of before makes everything readable again, also what other apps keep encrypted.
+
 ## Runs
 
 ### No run starts

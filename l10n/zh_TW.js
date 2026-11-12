@@ -670,6 +670,7 @@ OC.L10N.register(
 		"Scheduled runs of Paperless Sync are off.": "Paperless Sync 的排程執行已關閉。",
 		"Nextcloud runs its background jobs with cron, as the scheduled runs of Paperless Sync need.": "Nextcloud 使用 cron 執行其背景作業，這正是 Paperless Sync 的排程執行所需要的。",
 		"Nextcloud runs its background jobs with %s, which starts them only while someone uses Nextcloud, so the scheduled runs of Paperless Sync fall behind or stop halfway. Set the background jobs to cron in the basic settings and set up the cron job of the system.": "Nextcloud 使用 %s 執行其背景作業，這種方式只在有人使用 Nextcloud 時才會啟動它們，因此 Paperless Sync 的排程執行會延遲或中途停止。請在「基本設定」中將背景作業設為 cron，並設定系統的 cron 工作。",
+		"Paperless Sync cannot read its stored API token of Paperless, as after a restore or a move of Nextcloud with another secret. Enter the token again in its settings, and create a new secret for the webhook if it had one.": "Paperless Sync 無法讀取其已儲存的 Paperless API Token，例如在使用另一個金鑰還原或搬移 Nextcloud 之後。請在其設定中重新輸入 Token；如果 Webhook 之前有金鑰，請為其建立新的金鑰。",
 		"Paperless Sync is installed but not set up yet. Its settings lead through the first steps.": "Paperless Sync 已安裝，但尚未設定。其設定頁面會引導您完成最初的步驟。",
 		"Paperless Sync has not completed a run yet; the next background job starts one.": "Paperless Sync 尚未完成過任何執行；下一個背景作業會啟動一次執行。",
 		"The last successful run of Paperless Sync was %s. Check that the background jobs of Nextcloud run.": "Paperless Sync 上次成功執行是在 %s。請檢查 Nextcloud 的背景作業是否在執行。",
