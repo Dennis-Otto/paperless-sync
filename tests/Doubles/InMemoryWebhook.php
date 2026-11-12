@@ -29,6 +29,8 @@ trait InMemoryWebhook {
 	 * Nextcloud with another secret in config.php: it throws then, as Nextcloud's does.
 	 */
 	private bool $webhookSecretUnreadable = false;
+	/** What the credentials store throws besides, such as a failure of the database, null for nothing. */
+	private ?Exception $webhookStoreFailure = null;
 	/** @var list<string> the secrets that the next creations get */
 	private array $secrets = [self::SECRET, self::OTHER_SECRET];
 
@@ -41,6 +43,9 @@ trait InMemoryWebhook {
 	private function webhookService(ITimeFactory $clock): WebhookService {
 		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(function (string $userId, string $identifier): mixed {
+			if ($this->webhookStoreFailure !== null) {
+				throw $this->webhookStoreFailure;
+			}
 			if ($this->webhookSecretUnreadable) {
 				// As Nextcloud's Crypto::decrypt() for a value that another secret encrypted.
 				throw new Exception('HMAC does not match.');

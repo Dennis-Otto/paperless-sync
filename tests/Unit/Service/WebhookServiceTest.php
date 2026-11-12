@@ -14,6 +14,7 @@ use OCA\PaperlessSync\Service\WebhookService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryWebhook;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
+use OCP\DB\Exception as DatabaseException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -142,6 +143,21 @@ final class WebhookServiceTest extends TestCase {
 
 		self::assertTrue($this->webhook->state()['configured']);
 		self::assertTrue($this->webhook->verify('Bearer ' . $secret));
+	}
+
+	/** A failure of the database is no secret that can't be decrypted: it goes on as it is. */
+	public function testAFailureOfTheDatabaseIsNoUnreadableSecret(): void {
+		$this->webhook->create();
+		$failure = new DatabaseException('The database is gone.');
+		$this->webhookStoreFailure = $failure;
+
+		try {
+			$this->webhook->verify('Bearer ' . self::SECRET);
+			self::fail('A failure of the database must go on.');
+		} catch (DatabaseException $exception) {
+			self::assertSame($failure, $exception);
+		}
+		self::assertSame([], $this->loggedWarnings);
 	}
 
 	public function testADamagedSecretOpensNothing(): void {

@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\GermanTranslations;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCP\DB\Exception as DatabaseException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -755,6 +756,38 @@ final class ConfigServiceTest extends TestCase {
 		$this->service->save(self::validSettings(), 'secret-token');
 
 		self::assertFalse($this->service->tokenUnreadable());
+		self::assertSame([], $this->loggedWarnings);
+	}
+
+	/** A token that can't be decrypted is logged once a request, not with every read of the settings. */
+	public function testATokenThatCanNotBeDecryptedIsLoggedOnce(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$this->credentialsUnreadable = true;
+
+		$this->service->get();
+		$this->service->get();
+		$this->service->snapshot();
+
+		self::assertCount(1, $this->loggedWarnings);
+	}
+
+	/**
+	 * A failure of the database is no token that can't be decrypted: it goes on as it is, instead of
+	 * sending the administrator to enter the token again.
+	 */
+	public function testAFailureOfTheDatabaseIsNoUnreadableToken(): void {
+		$this->service->save(self::validSettings(), 'secret-token');
+		$failure = new DatabaseException('The database is gone.');
+		$this->credentialsFailure = $failure;
+
+		foreach ([fn (): mixed => $this->service->get(), fn (): mixed => $this->service->tokenUnreadable()] as $read) {
+			try {
+				$read();
+				self::fail('A failure of the database must go on.');
+			} catch (DatabaseException $exception) {
+				self::assertSame($failure, $exception);
+			}
+		}
 		self::assertSame([], $this->loggedWarnings);
 	}
 

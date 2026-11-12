@@ -60,6 +60,8 @@ trait InMemoryConfiguration {
 	 * Nextcloud with another secret in config.php: it throws then, as Nextcloud's does.
 	 */
 	private bool $credentialsUnreadable = false;
+	/** What the credentials store throws besides, such as a failure of the database, null for nothing. */
+	private ?Exception $credentialsFailure = null;
 	/** @var list<string> the warnings that the app logged, each with its values in place */
 	private array $loggedWarnings = [];
 	/** The default language of Nextcloud, which the names of the folders of a new installation follow. */
@@ -288,6 +290,9 @@ trait InMemoryConfiguration {
 		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(function (): mixed {
 			++$this->credentialReads;
+			if ($this->credentialsFailure !== null) {
+				throw $this->credentialsFailure;
+			}
 			if ($this->credentialsUnreadable) {
 				// As Nextcloud's Crypto::decrypt() for a value that another secret encrypted.
 				throw new Exception('HMAC does not match.');

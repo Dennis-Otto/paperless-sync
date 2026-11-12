@@ -13,6 +13,7 @@ use Exception;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\SyncConfig;
+use OCP\DB\Exception as DatabaseException;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IGroupManager;
@@ -99,6 +100,9 @@ final class ConfigService {
 		'untitled' => 'Untitled',
 	];
 
+	/** Whether this request already logged that the token can't be read: once is enough. */
+	private bool $unreadableLogged = false;
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -158,10 +162,14 @@ final class ConfigService {
 	 * Whether the credentials store holds a token that it can't decrypt, as after a restore or a
 	 * move of Nextcloud with another secret in config.php, or with a damaged row: such a token counts
 	 * as none, and has to be entered again. The settings page and occ paperless_sync:status say so.
+	 * A failure of the database is no such token and goes on as it is: entering the token again
+	 * wouldn't help.
 	 */
 	public function tokenUnreadable(): bool {
 		try {
 			$this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		} catch (DatabaseException $exception) {
+			throw $exception;
 		} catch (Exception) {
 			return true;
 		}
@@ -415,12 +423,19 @@ final class ConfigService {
 	 * What the credentials store holds for the token, null when it holds nothing or can't decrypt
 	 * it: Nextcloud throws then, as for a value that another secret encrypted, which a restore or a
 	 * move of the instance with another config.php leaves behind. That is logged as a warning, with
-	 * the way out, and the token counts as none until it is entered again.
+	 * the way out, once a request, and the token counts as none until it is entered again. A failure
+	 * of the database is no such value and goes on as it is.
 	 */
 	private function retrieveToken(): mixed {
 		try {
 			return $this->credentialsManager->retrieve('', self::TOKEN_IDENTIFIER);
+		} catch (DatabaseException $exception) {
+			throw $exception;
 		} catch (Exception $exception) {
+			if ($this->unreadableLogged) {
+				return null;
+			}
+			$this->unreadableLogged = true;
 			$this->logger->warning('Paperless Sync could not read its stored Paperless API token, as after a restore or a move of Nextcloud with another secret ({error}). Enter the token again in its settings.', [
 				'app' => AppConstants::APP_ID,
 				'error' => $exception->getMessage(),

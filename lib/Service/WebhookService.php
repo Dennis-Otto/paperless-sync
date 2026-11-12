@@ -13,6 +13,7 @@ use Exception;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\DB\Exception as DatabaseException;
 use OCP\IAppConfig;
 use OCP\IURLGenerator;
 use OCP\Security\ICredentialsManager;
@@ -168,6 +169,9 @@ final class WebhookService {
 		try {
 			/** @psalm-suppress MixedAssignment */
 			$stored = $this->credentialsManager->retrieve('', self::SECRET_IDENTIFIER);
+		} catch (DatabaseException $exception) {
+			// A failure of the database is no secret that can't be decrypted: a new one wouldn't help.
+			throw $exception;
 		} catch (Exception $exception) {
 			$this->logger->warning('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret ({error}). Create a new secret in its settings.', [
 				'app' => AppConstants::APP_ID,
