@@ -15,25 +15,48 @@ use OCP\Files\NotFoundException;
 use OCP\IGroupManager;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use OCP\Teams\ITeamManager;
+use OCP\Teams\Team;
 
 /**
  * The shares that show a user with tags more than their tags: a share of the target user, made by
  * hand in Files, of the base folder, of a folder or a file in it, or of a folder that holds it,
- * with that user or with a group that they are in. Such a share shows them every document that it
- * holds, whatever their tags, so the settings page, the connection checklist and occ
- * paperless_sync:status name each, and the settings page removes them on request, never by itself
- * (decision 0038). A link of a share names nobody, so it is no such share; the guide says so.
+ * with that user, with a group or a Team that they are in, or with a conversation of Talk or a
+ * board of Deck. Such a share shows them every document that it holds, whatever their tags, so the
+ * settings page, the connection checklist and occ paperless_sync:status name each, and the settings
+ * page removes them on request, never by itself (decision 0038). Nextcloud names the members of a
+ * group and of a Team, but not those of a conversation or a board, so such a share counts as one
+ * that may reach a user with tags, with known false and no users. A link of a share names nobody,
+ * and a share with another server or an email address reaches no user of this one, so neither is
+ * such a share; the guide says so.
  *
- * @psalm-type TagShare = array{id: string, path: string, type: 'user'|'group', with: string, users: list<string>}
+ * @psalm-type TagShare = array{id: string, path: string, type: 'user'|'group'|'team'|'conversation'|'board', with: string, users: list<string>, known: bool}
  */
 final class TagShares {
 	/** The setting that the line of the checklist names, whose part of the page shows the shares. */
 	private const SETTING = 'user_tags';
 
+	/**
+	 * The kinds of shares that reach a user of this Nextcloud, by their type: those with a user or
+	 * a group, and those with a Team, a conversation of Talk or a board of Deck, which exist only
+	 * while their app does.
+	 */
+	private const KINDS = [
+		IShare::TYPE_USER => 'user',
+		IShare::TYPE_GROUP => 'group',
+		IShare::TYPE_CIRCLE => 'team',
+		IShare::TYPE_ROOM => 'conversation',
+		IShare::TYPE_DECK => 'board',
+	];
+
+	/** The types whose shares come from an app that may be missing, whose shares the check then has none of. */
+	private const OF_AN_APP = [IShare::TYPE_CIRCLE, IShare::TYPE_ROOM, IShare::TYPE_DECK];
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IManager $shareManager,
 		private IGroupManager $groupManager,
+		private ITeamManager $teamManager,
 	) {
 	}
 
@@ -47,9 +70,9 @@ final class TagShares {
 	}
 
 	/**
-	 * Removes the shares of $ids that still show a user with tags more than their tags, and no
-	 * other share: an ID that names another share, or one that someone removed or changed since the
-	 * page listed it, changes nothing.
+	 * Removes the shares of $ids that still show a user with tags more than their tags, or may,
+	 * and no other share: an ID that names another share, or one that someone removed or changed
+	 * since the page listed it, changes nothing.
 	 *
 	 * @param list<string> $ids the IDs of the shares, as find() names them
 	 * @return int how many shares it removed
@@ -68,7 +91,8 @@ final class TagShares {
 
 	/**
 	 * The line of the connection checklist, once a user has tags: failed for each share that shows
-	 * one of them more than their tags, which a save goes on with, as the copies are right.
+	 * one of them more than their tags, which a save goes on with, as the copies are right, and a
+	 * warning for a share whose members Nextcloud doesn't name, which may.
 	 */
 	public function check(SyncConfig $config): ?ConnectionCheck {
 		if (UserTags::of($config)->users() === []) {
@@ -82,12 +106,38 @@ final class TagShares {
 		if ($shares === []) {
 			return ConnectionCheck::passed(ConnectionCheck::TAG_SHARES, 'No share of %s shows a user with tags more than their tags.', [$config->targetUser]);
 		}
+		$known = self::described(array_filter($shares, static fn (array $share): bool => $share['known']));
+		$unknown = self::described(array_filter($shares, static fn (array $share): bool => !$share['known']));
+		if ($known === '') {
+			return new ConnectionCheck(
+				ConnectionCheck::TAG_SHARES,
+				ConnectionCheck::WARNING,
+				'These shares of %1$s may show a user with tags every document in them, as Nextcloud does not name who is in them: %2$s.',
+				[$config->targetUser, $unknown],
+				'Check who is in them, and remove those that reach a user with tags under "Tags that a user may see", or in Files.',
+				[],
+				false,
+				self::SETTING,
+			);
+		}
+		if ($unknown !== '') {
+			return new ConnectionCheck(
+				ConnectionCheck::TAG_SHARES,
+				ConnectionCheck::FAILED,
+				'These shares of %1$s show a user with tags every document in them: %2$s. These may too, as Nextcloud does not name who is in them: %3$s.',
+				[$config->targetUser, $known, $unknown],
+				'Remove them under "Tags that a user may see", or in Files.',
+				[],
+				false,
+				self::SETTING,
+			);
+		}
 
 		return new ConnectionCheck(
 			ConnectionCheck::TAG_SHARES,
 			ConnectionCheck::FAILED,
 			'These shares of %1$s show a user with tags every document in them: %2$s.',
-			[$config->targetUser, implode('; ', array_map(self::describe(...), $shares))],
+			[$config->targetUser, $known],
 			'Remove them under "Tags that a user may see", or in Files.',
 			[],
 			false,
@@ -95,9 +145,27 @@ final class TagShares {
 		);
 	}
 
-	/** @param TagShare $share */
+	/**
+	 * A share in a line: its path, and the users with tags that it reaches, or whom it reaches when
+	 * Nextcloud doesn't name them.
+	 *
+	 * @param TagShare $share
+	 */
 	public static function describe(array $share): string {
-		return $share['path'] . ' → ' . implode(', ', $share['users']) . ($share['type'] === 'group' ? ' (' . $share['with'] . ')' : '');
+		$users = implode(', ', $share['users']);
+
+		return $share['path'] . ' → ' . match ($share['type']) {
+			'user' => $users,
+			'group' => $users . ' (' . $share['with'] . ')',
+			'team' => $share['known'] ? $users . ' (Team ' . $share['with'] . ')' : 'the members of the Team ' . $share['with'],
+			'conversation' => 'the members of the Talk conversation ' . $share['with'],
+			'board' => 'the members of the Deck board ' . $share['with'],
+		};
+	}
+
+	/** @param array<array-key, TagShare> $shares */
+	private static function described(array $shares): string {
+		return implode('; ', array_map(self::describe(...), $shares));
 	}
 
 	/**
@@ -119,7 +187,11 @@ final class TagShares {
 		$home = '/' . $config->targetUser . '/files';
 		$base = rtrim($home . '/' . trim($config->basePath, '/'), '/');
 		$found = [];
-		foreach ([IShare::TYPE_USER => 'user', IShare::TYPE_GROUP => 'group'] as $type => $kind) {
+		foreach (self::KINDS as $type => $kind) {
+			// Without Talk, say, Nextcloud has no shares with a conversation and fails to list them.
+			if (in_array($type, self::OF_AN_APP, true) && !$this->shareManager->shareProviderExists($type)) {
+				continue;
+			}
 			foreach ($this->shareManager->getSharesBy($config->targetUser, $type, null, true, -1) as $share) {
 				try {
 					$path = $share->getNode()->getPath();
@@ -131,13 +203,18 @@ final class TagShares {
 					continue;
 				}
 				$with = $share->getSharedWith();
-				$users = array_values(array_filter($tags->users(), fn (string $user): bool => $kind === 'user'
-					? mb_strtolower($user) === mb_strtolower($with)
-					: $this->groupManager->isInGroup($user, $with)));
+				$users = $this->reached($kind, $with, $tags->users(), $config->targetUser);
 				if ($users !== []) {
 					$shown = substr($path, strlen($home));
 					$found[] = [
-						'share' => ['id' => $share->getFullId(), 'path' => $shown === '' ? '/' : $shown, 'type' => $kind, 'with' => $with, 'users' => $users],
+						'share' => [
+							'id' => $share->getFullId(),
+							'path' => $shown === '' ? '/' : $shown,
+							'type' => $kind,
+							'with' => $kind === 'user' || $kind === 'group' ? $with : self::named($share, $with),
+							'users' => $users ?? [],
+							'known' => $users !== null,
+						],
 						'object' => $share,
 					];
 				}
@@ -146,5 +223,57 @@ final class TagShares {
 		usort($found, self::byPath(...));
 
 		return $found;
+	}
+
+	/**
+	 * The users with tags whom a share of $kind with $with by $owner reaches, or null when Nextcloud
+	 * doesn't name its members: those of a conversation of Talk and of a board of Deck, and those of
+	 * a Team that it doesn't list or fails to.
+	 *
+	 * @param 'user'|'group'|'team'|'conversation'|'board' $kind
+	 * @param list<string> $users the users with tags
+	 * @return list<string>|null
+	 */
+	private function reached(string $kind, string $with, array $users, string $owner): ?array {
+		return match ($kind) {
+			'user' => array_values(array_filter($users, static fn (string $user): bool => mb_strtolower($user) === mb_strtolower($with))),
+			'group' => array_values(array_filter($users, fn (string $user): bool => $this->groupManager->isInGroup($user, $with))),
+			'team' => $this->inTeam($with, $users, $owner),
+			'conversation', 'board' => null,
+		};
+	}
+
+	/**
+	 * The users of $users who are in the Team $team, as Nextcloud lists the Teams of each, or null
+	 * when it fails to or lists the Team for none of them nor for $owner, who shared with it: the
+	 * share then counts as one that may reach them. Nextcloud leaves a hidden Team and one of an app
+	 * out of every listing, though a share with it reaches its members, and a failure of the Teams
+	 * must neither hide a share nor break the check.
+	 *
+	 * @param list<string> $users
+	 * @return list<string>|null
+	 */
+	private function inTeam(string $team, array $users, string $owner): ?array {
+		try {
+			$reached = array_values(array_filter($users, fn (string $user): bool => $this->listsTeam($user, $team)));
+
+			return $reached !== [] || $this->listsTeam($owner, $team) ? $reached : null;
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
+	/** Whether Nextcloud lists the Team $team among the Teams of $user. */
+	private function listsTeam(string $user, string $team): bool {
+		return in_array($team, array_map(static fn (Team $of): string => $of->getId(), $this->teamManager->getTeamsForUser($user)), true);
+	}
+
+	/** The name of the Team, the conversation or the board of a share, as Nextcloud shows it, or its ID. */
+	private static function named(IShare $share, string $with): string {
+		// Its docblock says string, but a share of Nextcloud without a name answers null.
+		/** @var string|null $name */
+		$name = $share->getSharedWithDisplayName();
+
+		return $name !== null && $name !== '' ? $name : $with;
 	}
 }

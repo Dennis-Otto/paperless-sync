@@ -18,6 +18,7 @@ use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCP\IGroupManager;
 use OCP\Share\IManager;
+use OCP\Teams\ITeamManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -40,7 +41,7 @@ final class StatusTest extends TestCase {
 		$this->configService->save(['sync_interval_minutes' => 15] + self::validSettings(), 'secret-token');
 		$this->clock = new TestClock();
 		$this->statusService = $this->statusService($this->clock);
-		$this->status = new Status($this->statusService, $this->configService, $this->clock, new TagShares($this->createStub(IManager::class), $this->createStub(IGroupManager::class)));
+		$this->status = new Status($this->statusService, $this->configService, $this->clock, new TagShares($this->createStub(IManager::class), $this->createStub(IGroupManager::class), $this->createStub(ITeamManager::class)));
 		$this->command = new CommandTester($this->status);
 	}
 
