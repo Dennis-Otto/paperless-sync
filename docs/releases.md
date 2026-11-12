@@ -56,7 +56,7 @@ Each secret of a release lives in an environment of its own, which only `main` m
 
 - The environment `signing` holds `APP_PRIVATE_KEY`, the key of the app's certificate. Only the build of a release (`.github/workflows/build-release.yml`) and the job of *Register the app* that signs the app id enter it.
 - The environment `appstore` holds `APPSTORE_TOKEN`, the token of the Nextcloud App Store. Only the delivery of a release to the App Store and the registration of the app enter it.
-- The environment `release` holds `RELEASE_AUTOMATION_PRIVATE_KEY`, the key of the release app, whose client ID is the repository variable `RELEASE_AUTOMATION_CLIENT_ID`. The release bot and the other bots enter it for their tokens.
+- The environment `release` holds `RELEASE_AUTOMATION_PRIVATE_KEY`, the key of the release app, whose client ID is the repository variable `RELEASE_AUTOMATION_CLIENT_ID`. When a settings app administers the repository, the environment holds its key `SETTINGS_APP_PRIVATE_KEY` as well, whose client ID is the variable `SETTINGS_APP_CLIENT_ID`. The release bot and the other bots enter it for their tokens.
 
 Every token is short-lived and scoped to what its job needs. To recover a lost secret, set it again in its environment under *Settings → Environments*: a secret in another environment is one that no job of the release reads. `scripts/check-project.sh` checks that each environment of this list is one that a workflow enters with the secrets that the list names, and that the list names every environment of the workflows of a release.
 
