@@ -1060,9 +1060,11 @@ planned_issues() {
     grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+' | sort -u || true
 }
 closed_plans() {
-  local roadmap="$1" link state closed=0
+  local roadmap="$1" link state closed=0 ask=(gh)
+  # timeout keeps a hanging network from holding the hook; macOS has it only with coreutils.
+  if command -v timeout >/dev/null; then ask=(timeout 30 gh); fi
   while read -r link; do
-    if ! state="$(timeout 30 gh api "repos/${link#https://github.com/}" --jq .state </dev/null 2>/dev/null)"; then
+    if ! state="$("${ask[@]}" api "repos/${link#https://github.com/}" --jq .state </dev/null 2>/dev/null)"; then
       echo "GitHub didn't say whether $link, which $roadmap plans, is closed; the check leaves it out."
     elif [[ "$state" == closed ]]; then
       echo "$roadmap plans $link in The next twelve months, but the issue is closed: move what shipped to Done, with its link into the guide, drop what was given up, and say what is really planned."
