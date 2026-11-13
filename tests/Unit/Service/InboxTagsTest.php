@@ -65,7 +65,7 @@ final class InboxTagsTest extends TestCase {
 	public function testAFileInTheInboxItselfNeedsNoListOfTheTags(): void {
 		$tags = $this->tags(['inbox_folder_tags' => true]);
 
-		self::assertSame(['ids' => [], 'names' => []], $tags->forFolder(''));
+		self::assertSame(['ids' => [], 'names' => [], 'missing' => []], $tags->forFolder(''));
 		self::assertSame(0, $this->paperless->tagReads);
 	}
 
@@ -92,8 +92,8 @@ final class InboxTagsTest extends TestCase {
 	public function testANameWithoutATagIsReportedOnceAsItWasWrittenFirst(): void {
 		$tags = $this->tags(['inbox_folder_tags' => true]);
 
-		self::assertSame(['ids' => [], 'names' => []], $tags->forFolder('Steuer/2026'));
-		self::assertSame(['ids' => [], 'names' => []], $tags->forFolder('steuer'));
+		self::assertSame(['ids' => [], 'names' => [], 'missing' => ['Steuer', '2026']], $tags->forFolder('Steuer/2026'));
+		self::assertSame(['ids' => [], 'names' => [], 'missing' => ['steuer']], $tags->forFolder('steuer'));
 
 		self::assertSame(['Steuer', '2026'], $tags->unknown());
 	}

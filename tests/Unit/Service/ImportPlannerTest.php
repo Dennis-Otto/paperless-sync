@@ -157,6 +157,11 @@ final class ImportPlannerTest extends TestCase {
 				['files' => ['Steuern/a.pdf'], 'imports' => ['Steuern/a.pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
 				['failed Steuern/a.pdf -> Fehler/Steuern/a.pdf: Broken PDF'],
 			],
+			// The failure is that of the former content, which Paperless never had in its new form (#452).
+			'a task that failed for a file that changed since its upload' => [
+				['files' => ['Steuern/a.pdf'], 'imports' => ['Steuern/a.pdf' => ['status' => 'pending', 'changed' => true]], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
+				['failed Steuern/a.pdf -> Fehler/Steuern/a.pdf: Broken PDF, changed since'],
+			],
 			'a file that moves to the error folder leaves the marker of its name behind, as only a file can stand for a document' => [
 				['files' => ['Steuern [P7]/Scan [P999].pdf'], 'imports' => ['Steuern [P7]/Scan [P999].pdf' => ['status' => 'pending']], 'tasks' => ['task-1' => ['status' => 'FAILURE', 'message' => 'Broken PDF']]],
 				['failed Steuern [P7]/Scan [P999].pdf -> Fehler/Steuern [P7]/Scan.pdf: Broken PDF'],
@@ -444,7 +449,8 @@ final class ImportPlannerTest extends TestCase {
 				. ($action->document !== null ? " as P{$action->document}" : ''),
 			$action instanceof ImportFailed => 'failed ' . self::below($action->context->path) . ' -> '
 				. substr($action->destination, strlen('Dokumente/Paperless/')) . ": {$action->reason}"
-				. ($action->unfinished !== '' ? " ({$action->unfinished})" : ''),
+				. ($action->unfinished !== '' ? " ({$action->unfinished})" : '')
+				. ($action->changed ? ', changed since' : ''),
 			$action instanceof RetryUnfinished => 'retry ' . self::below($action->context->path) . " after {$action->attempts}: {$action->error}",
 			$action instanceof ImportCheckFailed => 'check failed ' . self::below($action->context->path) . ': ' . $action->exception->getMessage(),
 			default => $action::class,
