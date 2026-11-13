@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
 use OCA\PaperlessSync\Service\PathTemplateService;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
+use OCA\PaperlessSync\Tests\Doubles\StorageStreams;
 use OCA\PaperlessSync\Tests\Doubles\TestUserFilesystem;
 use OCP\Files\File;
 use OCP\Files\FileInfo;
@@ -48,8 +49,16 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $unreadable = [];
 	/** @var array<string, bool|null> the nodes that reach the user through a share, by absolute path: whether it allows downloads, null without attributes */
 	private array $shareDownload = [];
-	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete */
+	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete, and of the storage operations unlink and opendir */
 	private array $failures = [];
+	/** @var array<string, true> the .part files that Folder::newFile() created, which Nextcloud keeps out of its file cache, and whose nodes keep no permissions */
+	private array $withoutPermissions = [];
+	/** @var list<string> the absolute paths of every file that was removed through its storage, past the trash bin */
+	private array $unlinked = [];
+	/** Whether the storage refuses to create a file, as a read-only one. */
+	private bool $storageRefusesFiles = false;
+	/** Whether the storage takes no byte of a file that it created, as a full disk. */
+	private bool $storageRefusesWrites = false;
 	/** @var array<string, int> the file ID of every node, which Nextcloud keeps through moves and updates in place */
 	private array $fileIds = [];
 	private int $lastFileId = 0;
@@ -83,7 +92,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 		// Each user whose filesystem a change entered, with the number of lookups of the files of a
 		// user and of deleted nodes before.
 		$this->filesystem = new TestUserFilesystem(fn (string $userId): array => [$userId, $this->userFolderLookups, count($this->deleted)]);
-		$this->service = new NextcloudStorageService($rootFolder, $userManager, new PathTemplateService(), $this->filesystem);
+		$this->service = new NextcloudStorageService($rootFolder, $userManager, new PathTemplateService(), $this->filesystem, $this->appConfig(), $this->recordingLogger());
 	}
 
 	public function testWritableBaseFolderPassesTheTest(): void {
@@ -150,6 +159,96 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->service->prepare($this->configService()->validate($settings, 'token'));
 
 		self::assertSame([self::HOME, self::HOME . '/Dokumente', self::HOME . '/Dokumente/Paperless'], array_keys($this->nodes));
+	}
+
+	/**
+	 * The writes that failed on Nextcloud 33.0.11, 34.0.6, 35.0.3 and newer left their temporary
+	 * files, which Files doesn't show (#490). The first run removes them from the archive and the
+	 * errors, in every folder below them, through the storage, which lists them, and past the trash
+	 * bin; it leaves every other file alone, also one of a similar name, and the inbox, whose files
+	 * are the user's.
+	 */
+	public function testPrepareRemovesTheTemporaryFilesThatEarlierRunsLeftOnce(): void {
+		$base = self::HOME . '/Dokumente/Paperless';
+		foreach (['/Dokumente', '/Dokumente/Paperless', '/Dokumente/Paperless/Archiv', '/Dokumente/Paperless/Archiv/2026', '/Dokumente/Paperless/Eingang', '/Dokumente/Paperless/Fehler'] as $folder) {
+			$this->nodes[self::HOME . $folder] = null;
+		}
+		$leftovers = [
+			$base . '/Archiv/.a.pdf.paperless-0123456789abcdef.part',
+			$base . '/Archiv/2026/.2026-11-11 Example - Title [P46].pdf.paperless-ca86b84c4d096f66.part',
+			$base . '/Fehler/.b.pdf.error.txt.paperless-00112233445566ff.part',
+		];
+		$kept = [
+			$base . '/Archiv/2026/a.pdf' => '%PDF',
+			$base . '/Archiv/.notes.part' => 'not the app\'s',
+			$base . '/Archiv/a.pdf.paperless-0123456789abcdef.part' => 'not hidden',
+			$base . '/Archiv/.a.pdf.paperless-0123.part' => 'too short',
+			$base . '/Archiv/.a.pdf.paperless-0123456789ABCDEF.part' => 'not the app\'s hexadecimal',
+			$base . '/Eingang/.c.pdf.paperless-0123456789abcdef.part' => 'in the inbox',
+		];
+		foreach ($leftovers as $leftover) {
+			$this->nodes[$leftover] = 'partial';
+		}
+		$this->nodes += $kept;
+		// A folder with such a name is no temporary file.
+		$this->nodes[$base . '/Archiv/.d.paperless-0123456789abcdef.part'] = null;
+
+		$this->service->prepare($this->configService()->validate(self::validSettings(), 'token'));
+
+		foreach ($leftovers as $leftover) {
+			self::assertArrayNotHasKey($leftover, $this->nodes);
+		}
+		self::assertEqualsCanonicalizing($leftovers, $this->unlinked);
+		self::assertSame([], $this->deleted, 'The trash bin takes no temporary file.');
+		foreach ($kept as $path => $content) {
+			self::assertSame($content, $this->nodes[$path]);
+		}
+		self::assertArrayHasKey($base . '/Archiv/.d.paperless-0123456789abcdef.part', $this->nodes);
+		self::assertSame([], $this->loggedWarnings);
+
+		// The next runs leave the folders alone: the writes of this version remove their own.
+		$this->nodes[$base . '/Archiv/.e.pdf.paperless-0123456789abcdef.part'] = 'partial';
+		$this->service->prepare($this->configService()->validate(self::validSettings(), 'token'));
+
+		self::assertArrayHasKey($base . '/Archiv/.e.pdf.paperless-0123456789abcdef.part', $this->nodes);
+		self::assertCount(3, $this->unlinked);
+	}
+
+	public function testFolderWhoseTemporaryFilesCannotBeListedIsClearedByTheNextRun(): void {
+		$leftover = self::HOME . '/Dokumente/Paperless/Archiv/.a.pdf.paperless-0123456789abcdef.part';
+		$this->failures['opendir'] = new RuntimeException('The storage is not available');
+		$config = $this->configService()->validate(['inbox_enabled' => false] + self::validSettings(), 'token');
+
+		$this->service->prepare($config);
+		$this->nodes[$leftover] = 'partial';
+
+		self::assertSame(['Paperless Sync could not remove the temporary files that earlier runs left in Dokumente/Paperless/Archiv of paperless; the next run tries again.'], $this->loggedWarnings);
+
+		unset($this->failures['opendir']);
+		$this->service->prepare($config);
+
+		self::assertSame([$leftover], $this->unlinked);
+	}
+
+	/** A folder whose storage always refuses is tried three times, then left alone, so that the log doesn't repeat the warning on every run. */
+	public function testFolderThatAlwaysFailsIsLeftAloneAfterThreeAttempts(): void {
+		$leftover = self::HOME . '/Dokumente/Paperless/Archiv/.a.pdf.paperless-0123456789abcdef.part';
+		$this->failures['opendir'] = new RuntimeException('The storage refuses to list');
+		$config = $this->configService()->validate(['inbox_enabled' => false] + self::validSettings(), 'token');
+
+		$this->service->prepare($config);
+		$this->service->prepare($config);
+		$this->service->prepare($config);
+		$this->nodes[$leftover] = 'partial';
+		$retry = 'Paperless Sync could not remove the temporary files that earlier runs left in Dokumente/Paperless/Archiv of paperless; the next run tries again.';
+
+		self::assertSame([$retry, $retry, 'Paperless Sync could not remove the temporary files that earlier runs left in Dokumente/Paperless/Archiv of paperless for the third time and no longer tries; remove them by hand, as the troubleshooting page says under "Hidden .part files in the archive".'], $this->loggedWarnings);
+
+		unset($this->failures['opendir']);
+		$this->service->prepare($config);
+
+		self::assertCount(3, $this->loggedWarnings);
+		self::assertSame([], $this->unlinked, 'The folder that was given up is not tried again.');
 	}
 
 	public function testFileInThePlaceOfAFolderIsNotReplaced(): void {
@@ -263,6 +362,25 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$this->service->writeStream(self::USER, 'Archiv/a.pdf', 'not a stream', 'replace');
 	}
 
+	/**
+	 * Nextcloud 33.0.11, 34.0.6, 35.0.3 and newer move a file only when its node may be updated, or
+	 * deleted in a folder that takes new files, and keep no permissions for the node of a .part
+	 * file that Folder::newFile() created: every new file failed with "No permission to move", and
+	 * its temporary file stayed (#490).
+	 */
+	public function testANewFileReachesItsPlaceOnANextcloudThatChecksTheMoveOfItsTemporaryFile(): void {
+		$this->nodes[self::HOME . '/Archiv'] = null;
+
+		$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('%PDF-content'), 'replace');
+		$this->service->writeText(self::USER, 'Archiv/a.txt', 'text');
+
+		self::assertSame('%PDF-content', $this->nodes[self::HOME . '/Archiv/a.pdf']);
+		self::assertSame('text', $this->nodes[self::HOME . '/Archiv/a.txt']);
+		self::assertSame([], $this->temporaryFiles());
+		self::assertSame([], $this->deleted, 'Nothing goes to the trash bin.');
+		self::assertSame([], $this->unlinked);
+	}
+
 	public function testFailedWriteRemovesItsTemporaryFile(): void {
 		$this->failures['move'] = new RuntimeException('The storage is full');
 
@@ -274,11 +392,14 @@ final class NextcloudStorageServiceTest extends TestCase {
 		}
 		self::assertSame([], $this->temporaryFiles());
 		self::assertArrayNotHasKey(self::HOME . '/Archiv/a.pdf', $this->nodes);
+		self::assertCount(1, $this->unlinked, 'The storage removed the temporary file.');
+		self::assertSame([], $this->deleted, 'The trash bin takes no temporary file.');
+		self::assertSame([], $this->loggedWarnings);
 	}
 
 	public function testFailedCleanupKeepsTheErrorOfTheWrite(): void {
 		$this->failures['move'] = new RuntimeException('The storage is full');
-		$this->failures['delete'] = new NotPermittedException('The temporary file is locked');
+		$this->failures['unlink'] = new NotPermittedException('The temporary file is locked');
 
 		try {
 			$this->service->writeStream(self::USER, 'Archiv/a.pdf', $this->stream('new'), 'replace');
@@ -289,14 +410,41 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$temporary = $this->temporaryFiles();
 		self::assertCount(1, $temporary);
 		self::assertMatchesRegularExpression('#^/paperless/files/Archiv/\.a\.pdf\.paperless-[0-9a-f]{16}\.part$#', $temporary[0], 'A hidden file next to the target, with a random name and the ending .part that Nextcloud keeps out of the quota.');
+		self::assertSame(["Paperless Sync could not remove the temporary file {$temporary[0]}."], $this->loggedWarnings, 'The log names the file that stays.');
 	}
 
 	public function testWriteThatCreatesNoFileNeedsNoCleanup(): void {
-		$this->failures['newFile'] = new NotPermittedException('Quota exceeded');
+		$this->storageRefusesFiles = true;
 
-		$this->expectException(NotPermittedException::class);
-		$this->expectExceptionMessage('Quota exceeded');
-		$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed');
+		try {
+			$this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed');
+			self::fail('The refused file must be reported.');
+		} catch (NotPermittedException $exception) {
+			self::assertMatchesRegularExpression('#^Could not create /paperless/files/Fehler/\.a\.pdf\.error\.txt\.paperless-[0-9a-f]{16}\.part$#', $exception->getMessage());
+		}
+		self::assertSame([], $this->temporaryFiles());
+		self::assertSame([], $this->unlinked);
+		self::assertSame([], $this->loggedWarnings);
+	}
+
+	/** A storage that takes less than the whole file, as a full disk, fails the write, and the file never reaches its place. */
+	public function testIncompleteWriteFailsAndRemovesItsTemporaryFile(): void {
+		$this->storageRefusesWrites = true;
+		$writes = [
+			'text' => fn () => $this->service->writeText(self::USER, 'Fehler/a.pdf.error.txt', 'Paperless import failed'),
+			'stream' => fn () => $this->service->writeStream(self::USER, 'Fehler/a.pdf.error.txt', $this->stream('Paperless import failed'), 'replace'),
+		];
+		foreach ($writes as $kind => $write) {
+			try {
+				$write();
+				self::fail("The incomplete write of a {$kind} must be reported.");
+			} catch (NotPermittedException $exception) {
+				self::assertMatchesRegularExpression('#^Could not write the whole of /paperless/files/Fehler/\.a\.pdf\.error\.txt\.paperless-[0-9a-f]{16}\.part$#', $exception->getMessage(), $kind);
+			}
+			self::assertArrayNotHasKey(self::HOME . '/Fehler/a.pdf.error.txt', $this->nodes, $kind);
+			self::assertSame([], $this->temporaryFiles(), $kind);
+		}
+		self::assertCount(2, $this->unlinked);
 	}
 
 	/**
@@ -701,6 +849,9 @@ final class NextcloudStorageServiceTest extends TestCase {
 			$target = $this->resolve($path, $relative);
 			$this->nodes[$target] = is_resource($content) ? (string)stream_get_contents($content) : (string)$content;
 			$this->fileIds[$target] = ++$this->lastFileId;
+			if (str_ends_with($target, '.part')) {
+				$this->withoutPermissions[$target] = true;
+			}
 
 			return $this->file($target);
 		});
@@ -738,10 +889,15 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$node->method('getPath')->willReturn($path);
 		$node->method('isReadable')->willReturnCallback(fn (): bool => !isset($this->unreadable[$path]));
 		$node->method('getStorage')->willReturnCallback(fn (): IStorage => $this->storageOf($path));
+		// The path inside the storage of the files of the user, which starts at the folder of the user.
+		$node->method('getInternalPath')->willReturn((string)preg_replace('#^/[^/]+/?#', '', $path));
 		$node->method('getId')->willReturnCallback(fn (): int => $this->fileId($path));
 		$node->method('delete')->willReturnCallback(function () use ($path): void {
 			if (isset($this->failures['delete'])) {
 				throw $this->failures['delete'];
+			}
+			if (isset($this->withoutPermissions[$path])) {
+				throw new NotPermittedException('No delete permission for path "' . $path . '"');
 			}
 			$this->deleted[] = $path;
 			foreach (array_keys($this->nodes) as $candidate) {
@@ -753,6 +909,9 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$node->method('move')->willReturnCallback(function (string $target) use ($path): Node {
 			if (isset($this->failures['move'])) {
 				throw $this->failures['move'];
+			}
+			if (isset($this->withoutPermissions[$path])) {
+				throw new NotPermittedException('No permission to move ' . $path);
 			}
 			$moved = [];
 			foreach ($this->nodes as $candidate => $content) {
@@ -769,10 +928,13 @@ final class NextcloudStorageServiceTest extends TestCase {
 		});
 	}
 
-	/** The storage of a node: a share for those of $shareDownload, with or without its attribute for downloads. */
+	/**
+	 * The storage of a node: a share for those of $shareDownload, with or without its attribute for
+	 * downloads, and else the storage of the files of the user.
+	 */
 	private function storageOf(string $path): IStorage {
 		if (!array_key_exists($path, $this->shareDownload)) {
-			return $this->createStub(IStorage::class);
+			return $this->userStorage('/' . explode('/', $path)[1]);
 		}
 		$download = $this->shareDownload[$path];
 		$attributes = null;
@@ -785,6 +947,52 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$storage = $this->createStub(ISharedStorage::class);
 		$storage->method('instanceOfStorage')->willReturnCallback(static fn (string $class): bool => $class === ISharedStorage::class);
 		$storage->method('getShare')->willReturn($share);
+
+		return $storage;
+	}
+
+	/**
+	 * The storage of the files of the user in $root, such as /paperless, whose paths start at that
+	 * folder, such as files/Archiv. Like the storages of Nextcloud, it lists and writes a .part file
+	 * as any other, and removes a file without the trash bin.
+	 */
+	private function userStorage(string $root): IStorage {
+		$absolute = static fn (string $internal): string => $internal === '' ? $root : $root . '/' . $internal;
+		$storage = $this->createStub(IStorage::class);
+		$storage->method('fopen')->willReturnCallback(function (string $internal, string $mode) use ($absolute) {
+			if ($this->storageRefusesFiles) {
+				return false;
+			}
+			$target = $absolute($internal);
+			$this->nodes[$target] = '';
+
+			return StorageStreams::file(function (string $content) use ($target): void {
+				$this->nodes[$target] = $content;
+			}, $this->storageRefusesWrites);
+		});
+		$storage->method('file_exists')->willReturnCallback(fn (string $internal): bool => array_key_exists($absolute($internal), $this->nodes));
+		$storage->method('is_file')->willReturnCallback(fn (string $internal): bool => is_string($this->nodes[$absolute($internal)] ?? null));
+		$storage->method('unlink')->willReturnCallback(function (string $internal) use ($absolute): bool {
+			if (isset($this->failures['unlink'])) {
+				throw $this->failures['unlink'];
+			}
+			$target = $absolute($internal);
+			$this->unlinked[] = $target;
+			unset($this->nodes[$target], $this->fileIds[$target]);
+
+			return true;
+		});
+		$storage->method('opendir')->willReturnCallback(function (string $internal) use ($absolute) {
+			if (isset($this->failures['opendir'])) {
+				throw $this->failures['opendir'];
+			}
+			$folder = $absolute($internal);
+
+			return StorageStreams::directory(array_values(array_map(
+				static fn (string $child): string => substr($child, strlen($folder) + 1),
+				array_filter(array_keys($this->nodes), static fn (string $candidate): bool => dirname($candidate) === $folder),
+			)));
+		});
 
 		return $storage;
 	}

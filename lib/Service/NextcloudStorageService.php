@@ -9,14 +9,19 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
+use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
+use OCP\Files\NotPermittedException;
 use OCP\Files\Storage\ISharedStorage;
+use OCP\Files\Storage\IStorage;
+use OCP\IAppConfig;
 use OCP\IUserManager;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 
 /**
@@ -24,12 +29,23 @@ use RuntimeException;
  * that what a run deletes or replaces goes into the user's trash bin, whoever started the run.
  */
 final class NextcloudStorageService implements NextcloudStorageInterface {
+	/** The name of the temporary file of a write: hidden, next to its target, with a random part and the ending .part. */
+	private const TEMPORARY_NAME = '/^\..+\.paperless-[0-9a-f]{16}\.part$/';
+	/** The folders that a run cleared of the temporary files of earlier runs, one "user/path" on each line. */
+	private const CLEARED_KEY = 'temporary_files_cleared';
+	/** The failed attempts to clear a folder, one "user/path" on each line for each attempt. */
+	private const FAILED_KEY = 'temporary_files_failed';
+	/** The attempts after which a folder that always fails is left to be cleared by hand. */
+	private const MAX_ATTEMPTS = 3;
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private IUserManager $userManager,
 		private PathTemplateService $pathTemplate,
 		private UserFilesystemInterface $filesystem,
+		private IAppConfig $appConfig,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -52,13 +68,108 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	public function prepare(SyncConfig $config): void {
 		$this->filesystem->enter($config->targetUser);
 		$this->ensureFolder($config->targetUser, $config->basePath);
+		/** @var array<string, Folder> $written the folders into which the run writes new files, by path */
+		$written = [];
 		if ($config->exportEnabled) {
-			$this->ensureFolder($config->targetUser, $this->join($config->basePath, $config->archiveFolder));
+			$archive = $this->normalize($this->join($config->basePath, $config->archiveFolder));
+			$written[$archive] = $this->ensureFolder($config->targetUser, $archive);
 		}
 		if ($config->inboxEnabled) {
 			$this->ensureFolder($config->targetUser, $this->join($config->basePath, $config->inboxFolder));
-			$this->ensureFolder($config->targetUser, $this->join($config->basePath, $config->errorFolder));
+			$errors = $this->normalize($this->join($config->basePath, $config->errorFolder));
+			$written[$errors] = $this->ensureFolder($config->targetUser, $errors);
 		}
+		$this->clearLeftoverTemporaryFiles($config->targetUser, $written);
+	}
+
+	/**
+	 * On Nextcloud 33.0.11, 34.0.6, 35.0.3 and newer, the app up to 1.9.0 couldn't move the
+	 * temporary file of a new file into its place, nor remove it after the failure, so that every
+	 * run left one behind (#490). Nextcloud keeps such a file out of its file cache: Files doesn't
+	 * show it, and nothing else removes it. The first run that prepares a folder of the archive or
+	 * of the errors removes them below it, once: only the files with the name that a write of the
+	 * app gives its temporary file. A folder that fails is tried again by the next run, which the
+	 * failure doesn't stop, up to three attempts in all: a folder that always fails, such as one
+	 * whose storage refuses to list or delete, is then left to be cleared by hand, so that the log
+	 * doesn't repeat the warning every few minutes.
+	 *
+	 * @param array<string, Folder> $folders
+	 */
+	private function clearLeftoverTemporaryFiles(string $userId, array $folders): void {
+		$cleared = $this->lines(self::CLEARED_KEY);
+		$failed = $this->lines(self::FAILED_KEY);
+		foreach ($folders as $path => $folder) {
+			$line = $userId . '/' . $path;
+			if (in_array($line, $cleared, true)) {
+				continue;
+			}
+			$context = ['app' => AppConstants::APP_ID, 'path' => $path, 'user' => $userId];
+			try {
+				$removed = $this->removeTemporaryFiles($folder);
+				if ($removed > 0) {
+					$this->logger->info('Paperless Sync removed {count} temporary files that earlier runs left in {path} of {user}.', $context + ['count' => $removed]);
+				}
+			} catch (\Throwable $exception) {
+				$failed[] = $line;
+				if (count(array_keys($failed, $line, true)) < self::MAX_ATTEMPTS) {
+					$this->logger->warning('Paperless Sync could not remove the temporary files that earlier runs left in {path} of {user}; the next run tries again.', $context + ['exception' => $exception]);
+					$this->appConfig->setValueString(AppConstants::APP_ID, self::FAILED_KEY, implode("\n", $failed), lazy: true);
+					continue;
+				}
+				$this->logger->warning('Paperless Sync could not remove the temporary files that earlier runs left in {path} of {user} for the third time and no longer tries; remove them by hand, as the troubleshooting page says under "Hidden .part files in the archive".', $context + ['exception' => $exception]);
+			}
+			$cleared[] = $line;
+			$failed = array_values(array_diff($failed, [$line]));
+			$this->appConfig->setValueString(AppConstants::APP_ID, self::FAILED_KEY, implode("\n", $failed), lazy: true);
+			$this->appConfig->setValueString(AppConstants::APP_ID, self::CLEARED_KEY, implode("\n", $cleared), lazy: true);
+		}
+	}
+
+	/**
+	 * The lines of a lazy key of the app's configuration, without the empty ones.
+	 *
+	 * @return list<string>
+	 */
+	private function lines(string $key): array {
+		return array_values(array_filter(
+			explode("\n", $this->appConfig->getValueString(AppConstants::APP_ID, $key, '', lazy: true)),
+			static fn (string $line): bool => $line !== '',
+		));
+	}
+
+	/**
+	 * Removes the temporary files of writes in the folder and in every folder below it, through its
+	 * storage, which lists them although the file cache doesn't, and deletes them past the trash
+	 * bin, which never takes a .part file.
+	 *
+	 * @return int the number of files removed
+	 */
+	private function removeTemporaryFiles(Folder $folder): int {
+		$storage = $folder->getStorage();
+		$names = [];
+		$directory = $storage->opendir($folder->getInternalPath());
+		if (is_resource($directory)) {
+			while (($name = readdir($directory)) !== false) {
+				if (preg_match(self::TEMPORARY_NAME, $name) === 1) {
+					$names[] = $name;
+				}
+			}
+			closedir($directory);
+		}
+		$removed = 0;
+		foreach ($names as $name) {
+			$path = self::internalPath($folder, $name);
+			if ($storage->is_file($path) && $storage->unlink($path)) {
+				++$removed;
+			}
+		}
+		foreach ($folder->getDirectoryListing() as $node) {
+			if ($node instanceof Folder) {
+				$removed += $this->removeTemporaryFiles($node);
+			}
+		}
+
+		return $removed;
 	}
 
 	public function exists(string $userId, string $path): bool {
@@ -231,8 +342,15 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	 * place would lose all of these and leave the old copy in the trash bin. On local storage, an
 	 * update that fails halfway leaves the file incomplete until the next run writes it again.
 	 *
-	 * A new file is written next to its path first and then moved into place, so that readers never
-	 * see a partial file. A folder in its place is deleted.
+	 * A new file is written next to its path first, into a hidden temporary file with the ending
+	 * .part, and then moved into place, so that readers never see a partial file. A folder in its
+	 * place is deleted. The temporary file is written through the storage, as the WebDAV of
+	 * Nextcloud writes an upload: Nextcloud keeps a .part file out of its file cache, and the node
+	 * that Folder::newFile() gives one keeps no permissions, which Nextcloud 33.0.11, 34.0.6, 35.0.3
+	 * and newer check before a move or a delete (#490). Written past it, the file has the
+	 * permissions that Nextcloud gives a .part file, all of them, and only the move into place
+	 * sends the events of a new file. A write that fails removes its temporary file through the
+	 * storage as well.
 	 *
 	 * @param resource|string $content
 	 */
@@ -253,21 +371,58 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		}
 
 		$temporaryName = '.' . $name . '.paperless-' . bin2hex(random_bytes(8)) . '.part';
+		$storage = $parent->getStorage();
+		$temporaryPath = self::internalPath($parent, $temporaryName);
 		try {
-			$parent->newFile($temporaryName, $content);
+			$this->writeTemporaryFile($storage, $temporaryPath, $parent->getFullPath($temporaryName), $content);
 			if ($parent->nodeExists($name)) {
 				$parent->get($name)->delete();
 			}
 			$parent->get($temporaryName)->move($parent->getFullPath($name));
 		} catch (\Throwable $exception) {
+			// The error of the write is the one to report; a temporary file that stays is removed
+			// by no later run, so the log names it.
 			try {
-				if ($parent->nodeExists($temporaryName)) {
-					$parent->get($temporaryName)->delete();
-				}
-			} catch (\Throwable) {
+				$left = $storage->file_exists($temporaryPath) && !$storage->unlink($temporaryPath);
+			} catch (\Throwable $cleanup) {
+				$left = $cleanup;
+			}
+			if ($left !== false) {
+				$this->logger->warning('Paperless Sync could not remove the temporary file {path}.', ['app' => AppConstants::APP_ID, 'path' => $parent->getFullPath($temporaryName)] + ($left instanceof \Throwable ? ['exception' => $left] : []));
 			}
 			throw $exception;
 		}
+	}
+
+	/**
+	 * Writes the content into a new file of the storage: the whole of it, or a
+	 * NotPermittedException, as Folder::newFile() throws when the storage refuses a file.
+	 *
+	 * @param string $label the path of the file in Nextcloud, for the message of a failure
+	 * @param resource|string $content
+	 * @throws NotPermittedException
+	 */
+	private function writeTemporaryFile(IStorage $storage, string $path, string $label, $content): void {
+		$target = $storage->fopen($path, 'w');
+		if (!is_resource($target)) {
+			throw new NotPermittedException("Could not create {$label}");
+		}
+		try {
+			$written = is_string($content) ? fwrite($target, $content) : stream_copy_to_stream($content, $target);
+		} finally {
+			// A storage such as S3 uploads the file as it is closed.
+			$closed = fclose($target);
+		}
+		if ($written === false || !$closed || (is_string($content) && $written !== strlen($content))) {
+			throw new NotPermittedException("Could not write the whole of {$label}");
+		}
+	}
+
+	/** The path of a file of the folder in the storage of the folder. */
+	private static function internalPath(Folder $folder, string $name): string {
+		$parent = $folder->getInternalPath();
+
+		return $parent === '' ? $name : $parent . '/' . $name;
 	}
 
 	/**
