@@ -492,15 +492,16 @@ final class ExportPlanner {
 	/**
 	 * Whether the file at the path of a document is a copy that the app wrote although its state
 	 * doesn't name it: a run that stopped between writing a new copy, or moving one, and saving its
-	 * path left it there. The copy that the state names is gone, and the file has the content that
-	 * the app wrote last, by the saved fingerprint, or that of the document, by the checksum that
-	 * Paperless reports. A file with the content of the document loses nothing when the app writes
-	 * it again, whoever put it there.
+	 * path left it there. The copy that the state names is gone, or it is a file that another
+	 * document shares, which a run never moves and so leaves beside the new copy, and the file has
+	 * the content that the app wrote last, by the saved fingerprint, or that of the document, by
+	 * the checksum that Paperless reports. A file with the content of the document loses nothing
+	 * when the app writes it again, whoever put it there.
 	 *
 	 * @param \Closure(): string $checksumOf the checksum of the document, asked only when needed
 	 */
 	private function isUnsavedCopy(string $recordedPath, string $path, string $fingerprint, \Closure $checksumOf): bool {
-		if ($recordedPath !== '' && $this->files->exists($recordedPath)) {
+		if ($recordedPath !== '' && !isset($this->sharedPaths[$recordedPath]) && $this->files->exists($recordedPath)) {
 			return false;
 		}
 		$mirrored = $this->files->fingerprint($path);

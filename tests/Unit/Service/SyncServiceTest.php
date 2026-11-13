@@ -2274,6 +2274,37 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame($newPath, $this->state->exports[123]['path']);
 	}
 
+	/**
+	 * A run never moves a file that two documents share: it writes new copies and deletes the shared
+	 * file after them. A run that stopped before that delete and the save of their paths left the
+	 * shared file beside the new copies, which are still the app's own.
+	 */
+	public function testNewCopiesBesideASharedFileOfARunThatStoppedBeforeTheirSaveAreNoConflictWhenConflictsAreSkipped(): void {
+		$this->paperless->documents = [$this->document(123), $this->document(456)];
+		$this->paperless->contents = [123 => '%PDF-content-123', 456 => '%PDF-content-456'];
+		$this->paperless->correspondents = ['4' => 'Energie GmbH'];
+		$this->paperless->documentTypes = ['7' => 'Rechnung'];
+		$this->service->run();
+		$shared = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August.pdf';
+		$copyOf456 = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August [P456].pdf';
+		$this->storage->files = [$shared => '%PDF-content-456'];
+		$this->state->exports[123]['path'] = $shared;
+		$this->state->exports[456]['path'] = $shared;
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->storage->deleteException = new RuntimeException('The run was stopped');
+
+		$this->service->run();
+		self::assertEqualsCanonicalizing([$shared, $copyOf456, self::EXPORTED_PATH], array_keys($this->storage->files));
+		self::assertSame($shared, $this->state->exports[456]['path']);
+		$this->storage->deleteException = null;
+
+		$report = $this->service->run();
+
+		self::assertSame([], array_values(array_filter($report->actions, static fn (string $action): bool => str_starts_with($action, 'ERROR'))));
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		self::assertSame($copyOf456, $this->state->exports[456]['path']);
+	}
+
 	/** A file of the user without the content of the document stays a conflict, also for a document without a state. */
 	public function testFileOfTheUserWithoutAStateOfItsDocumentIsAConflictWhenConflictsAreSkipped(): void {
 		$this->configService->save(['conflict_mode' => 'skip']);
