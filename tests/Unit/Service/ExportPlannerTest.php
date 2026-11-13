@@ -174,13 +174,14 @@ final class ExportPlannerTest extends TestCase {
 			],
 			// A document that missing scans moved before it showed up in the trash of Paperless: its
 			// copy is in the deleted folder already, and a second move would nest it in another one.
+			// Its missing scans are reset twice without an executor, as above.
 			'a copy that missing scans moved to the deleted folder stays there' => [
 				[
 					'exported' => [[1, 'A', 'm1', ['state' => 'missing', 'missing_runs' => 3, 'path' => self::ARCHIVE . '/_Gelöscht/2026-08-20/A [P1].pdf']]],
 					'files' => [self::ARCHIVE . '/_Gelöscht/2026-08-20/A [P1].pdf' => '%PDF-1'],
 					'trash' => [1],
 				],
-				['save P1: state=trash, missing_runs=0'],
+				['save P1: state=trash, missing_runs=0', 'save P1: missing_runs=0'],
 			],
 			'a copy in a folder whose name only begins with that of the deleted folder moves' => [
 				[
