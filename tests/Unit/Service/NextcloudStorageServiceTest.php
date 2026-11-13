@@ -230,6 +230,27 @@ final class NextcloudStorageServiceTest extends TestCase {
 		self::assertSame([$leftover], $this->unlinked);
 	}
 
+	/** A folder whose storage always refuses is tried three times, then left alone, so that the log doesn't repeat the warning on every run. */
+	public function testFolderThatAlwaysFailsIsLeftAloneAfterThreeAttempts(): void {
+		$leftover = self::HOME . '/Dokumente/Paperless/Archiv/.a.pdf.paperless-0123456789abcdef.part';
+		$this->failures['opendir'] = new RuntimeException('The storage refuses to list');
+		$config = $this->configService()->validate(['inbox_enabled' => false] + self::validSettings(), 'token');
+
+		$this->service->prepare($config);
+		$this->service->prepare($config);
+		$this->service->prepare($config);
+		$this->nodes[$leftover] = 'partial';
+		$retry = 'Paperless Sync could not remove the temporary files that earlier runs left in Dokumente/Paperless/Archiv of paperless; the next run tries again.';
+
+		self::assertSame([$retry, $retry, 'Paperless Sync could not remove the temporary files that earlier runs left in Dokumente/Paperless/Archiv of paperless for the third time and no longer tries; remove them by hand, as the troubleshooting page says under "Hidden .part files in the archive".'], $this->loggedWarnings);
+
+		unset($this->failures['opendir']);
+		$this->service->prepare($config);
+
+		self::assertCount(3, $this->loggedWarnings);
+		self::assertSame([], $this->unlinked, 'The folder that was given up is not tried again.');
+	}
+
 	public function testFileInThePlaceOfAFolderIsNotReplaced(): void {
 		$this->nodes[self::HOME . '/Dokumente'] = 'a file';
 

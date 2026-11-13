@@ -33,6 +33,10 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	private const TEMPORARY_NAME = '/^\..+\.paperless-[0-9a-f]{16}\.part$/';
 	/** The folders that a run cleared of the temporary files of earlier runs, one "user/path" on each line. */
 	private const CLEARED_KEY = 'temporary_files_cleared';
+	/** The failed attempts to clear a folder, one "user/path" on each line for each attempt. */
+	private const FAILED_KEY = 'temporary_files_failed';
+	/** The attempts after which a folder that always fails is left to be cleared by hand. */
+	private const MAX_ATTEMPTS = 3;
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -85,32 +89,52 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	 * show it, and nothing else removes it. The first run that prepares a folder of the archive or
 	 * of the errors removes them below it, once: only the files with the name that a write of the
 	 * app gives its temporary file. A folder that fails is tried again by the next run, which the
-	 * failure doesn't stop.
+	 * failure doesn't stop, up to three attempts in all: a folder that always fails, such as one
+	 * whose storage refuses to list or delete, is then left to be cleared by hand, so that the log
+	 * doesn't repeat the warning every few minutes.
 	 *
 	 * @param array<string, Folder> $folders
 	 */
 	private function clearLeftoverTemporaryFiles(string $userId, array $folders): void {
-		$cleared = array_values(array_filter(
-			explode("\n", $this->appConfig->getValueString(AppConstants::APP_ID, self::CLEARED_KEY, '', lazy: true)),
-			static fn (string $line): bool => $line !== '',
-		));
+		$cleared = $this->lines(self::CLEARED_KEY);
+		$failed = $this->lines(self::FAILED_KEY);
 		foreach ($folders as $path => $folder) {
 			$line = $userId . '/' . $path;
 			if (in_array($line, $cleared, true)) {
 				continue;
 			}
+			$context = ['app' => AppConstants::APP_ID, 'path' => $path, 'user' => $userId];
 			try {
 				$removed = $this->removeTemporaryFiles($folder);
+				if ($removed > 0) {
+					$this->logger->info('Paperless Sync removed {count} temporary files that earlier runs left in {path} of {user}.', $context + ['count' => $removed]);
+				}
 			} catch (\Throwable $exception) {
-				$this->logger->warning('Paperless Sync could not remove the temporary files that earlier runs left in {path} of {user}; the next run tries again.', ['app' => AppConstants::APP_ID, 'path' => $path, 'user' => $userId, 'exception' => $exception]);
-				continue;
-			}
-			if ($removed > 0) {
-				$this->logger->info('Paperless Sync removed {count} temporary files that earlier runs left in {path} of {user}.', ['app' => AppConstants::APP_ID, 'count' => $removed, 'path' => $path, 'user' => $userId]);
+				$failed[] = $line;
+				if (count(array_keys($failed, $line, true)) < self::MAX_ATTEMPTS) {
+					$this->logger->warning('Paperless Sync could not remove the temporary files that earlier runs left in {path} of {user}; the next run tries again.', $context + ['exception' => $exception]);
+					$this->appConfig->setValueString(AppConstants::APP_ID, self::FAILED_KEY, implode("\n", $failed), lazy: true);
+					continue;
+				}
+				$this->logger->warning('Paperless Sync could not remove the temporary files that earlier runs left in {path} of {user} for the third time and no longer tries; remove them by hand, as the troubleshooting page says under "Hidden .part files in the archive".', $context + ['exception' => $exception]);
 			}
 			$cleared[] = $line;
+			$failed = array_values(array_diff($failed, [$line]));
+			$this->appConfig->setValueString(AppConstants::APP_ID, self::FAILED_KEY, implode("\n", $failed), lazy: true);
 			$this->appConfig->setValueString(AppConstants::APP_ID, self::CLEARED_KEY, implode("\n", $cleared), lazy: true);
 		}
+	}
+
+	/**
+	 * The lines of a lazy key of the app's configuration, without the empty ones.
+	 *
+	 * @return list<string>
+	 */
+	private function lines(string $key): array {
+		return array_values(array_filter(
+			explode("\n", $this->appConfig->getValueString(AppConstants::APP_ID, $key, '', lazy: true)),
+			static fn (string $line): bool => $line !== '',
+		));
 	}
 
 	/**
