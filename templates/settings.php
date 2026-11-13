@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, forgetUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, tagSharesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, forgetUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, tagSharesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, healthTokenUrl: string, healthToken: array{configured: bool, created: int, url: string}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -22,6 +22,8 @@ $config = $_['config'];
 $status = $_['status'];
 // The webhook of the workflows of Paperless, without its secret, which only its creation shows.
 $webhook = $_['webhook'];
+// The health check of a monitor, without its token, which only its creation shows.
+$healthToken = $_['healthToken'];
 // The warnings and errors of the setup checks of Administration → Overview, as they were when the
 // page loaded, which it shows on top.
 $health = $_['health'];
@@ -106,7 +108,8 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-users-url="<?php p($_['usersUrl']); ?>"
 	data-groups-url="<?php p($_['groupsUrl']); ?>"
 	data-tag-shares-url="<?php p($_['tagSharesUrl']); ?>"
-	data-webhook-url="<?php p($_['webhookStateUrl']); ?>">
+	data-webhook-url="<?php p($_['webhookStateUrl']); ?>"
+	data-health-token-url="<?php p($_['healthTokenUrl']); ?>">
 	<div class="paperless-sync-hero">
 		<img src="<?php p(image_path('paperless_sync', 'app.svg')); ?>" alt="" width="64" height="64">
 		<div>
@@ -585,6 +588,37 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 					<li><?php p($l->t('Change the title of a document in Paperless: its copy moves within seconds, and the last call appears here.')); ?></li>
 				</ol>
 			</details>
+		</section>
+
+		<section class="paperless-sync-card" aria-labelledby="paperless-sync-health-title">
+			<div class="paperless-sync-card-heading">
+				<div><h3 id="paperless-sync-health-title"><?php p($l->t('Health check for a monitor')); ?></h3></div>
+				<p><?php p($l->t('A monitor, such as Uptime Kuma or Home Assistant, reads the health of the mirror at this address, with a token that opens nothing else: no file, no setting and no account of Nextcloud.')); ?> <?php $help('being-notified', $l->t('Being notified')); ?></p>
+			</div>
+			<div class="paperless-sync-grid">
+				<div class="paperless-sync-field paperless-sync-field--wide">
+					<label for="paperless-sync-health-address"><?php p($l->t('Health check URL')); ?></label>
+					<div class="paperless-sync-copy">
+						<input id="paperless-sync-health-address" class="paperless-sync-code" type="text" value="<?php p($healthToken['url']); ?>" readonly spellcheck="false">
+						<button id="paperless-sync-health-copy-address" type="button" data-copy="paperless-sync-health-address"><?php p($l->t('Copy')); ?></button>
+					</div>
+				</div>
+				<div id="paperless-sync-health-token-field" class="paperless-sync-field paperless-sync-field--wide" hidden>
+					<label for="paperless-sync-health-token"><?php p($l->t('Token')); ?></label>
+					<div class="paperless-sync-copy">
+						<input id="paperless-sync-health-token" class="paperless-sync-code" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="paperless-sync-health-token-hint">
+						<button id="paperless-sync-health-copy-token" type="button" data-copy="paperless-sync-health-token"><?php p($l->t('Copy')); ?></button>
+					</div>
+					<p id="paperless-sync-health-token-hint" class="settings-hint"><?php p($l->t('Copy the token now: it is shown only this once. The monitor sends it in the header Authorization, as Bearer followed by a space and the token.')); ?></p>
+				</div>
+			</div>
+			<div class="paperless-sync-health-actions">
+				<button id="paperless-sync-health-create" type="button"><?php p($healthToken['configured'] ? $l->t('Create a new token') : $l->t('Create token')); ?></button>
+				<button id="paperless-sync-health-remove" type="button" <?php if (!$healthToken['configured']) {
+					print_unescaped('hidden');
+				} ?>><?php p($l->t('Revoke the token')); ?></button>
+				<p id="paperless-sync-health-state" class="settings-hint" aria-live="polite"><?php p($healthToken['configured'] ? $l->t('The health check answers calls with its token.') : $l->t('The health check is off: it refuses every call until you create its token.')); ?></p>
+			</div>
 		</section>
 
 		<details class="paperless-sync-card paperless-sync-advanced">

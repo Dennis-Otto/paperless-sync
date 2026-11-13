@@ -127,6 +127,7 @@
           - lib/Controller/SyncController.php
           - lib/Controller/StatusApiController.php
           - lib/Controller/WebhookController.php
+          - lib/Controller/HealthController.php
           - lib/Notification/**
           - lib/SetupChecks/**
           - lib/Service/SyncService.php
@@ -139,6 +140,8 @@
           - lib/Service/PaperlessRedirectException.php
           - lib/Service/StatusService.php
           - lib/Service/WebhookService.php
+          - lib/Service/HashedSecrets.php
+          - lib/Service/HealthToken.php
           - lib/Service/UserTimeZones.php
           - lib/Service/SyncStateRepository*.php
           - lib/Service/ExportStates.php
@@ -165,6 +168,7 @@
           - tests/Unit/Controller/SyncController*
           - tests/Unit/Controller/StatusApiController*
           - tests/Unit/Controller/WebhookController*
+          - tests/Unit/Controller/HealthController*
           - tests/Unit/Notification/**
           - tests/Unit/SetupChecks/**
           - tests/Unit/Service/SyncServiceTest.php
@@ -172,6 +176,7 @@
           - tests/Unit/Service/PaperlessApiServiceTest.php
           - tests/Unit/Service/StatusServiceTest.php
           - tests/Unit/Service/WebhookServiceTest.php
+          - tests/Unit/Service/HealthTokenTest.php
           - tests/Unit/Service/SyncStateRepositoryTest.php
           - tests/Unit/Service/ExportStatesTest.php
           - tests/Unit/Service/ExportPlannerTest.php

@@ -82,6 +82,20 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.webhook.state', $parameters['webhookStateUrl']);
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $parameters['webhook']);
 		self::assertSame($parameters['webhook'], $this->initialState['webhook']);
+		self::assertSame('/route/paperless_sync.health.state', $parameters['healthTokenUrl']);
+		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::HEALTH_URL], $parameters['healthToken']);
+		self::assertSame($parameters['healthToken'], $this->initialState['healthToken']);
+	}
+
+	/** The page shows the address of the health check and whether it has a token, never the token. */
+	public function testFormShowsTheHealthCheckWithoutItsToken(): void {
+		$this->configService()->save(self::validSettings(), 'secret-token');
+		$this->healthToken(new TestClock())->create();
+
+		$parameters = $this->adminSettings()->getForm()->getParams();
+
+		self::assertSame(['configured' => true, 'created' => TestClock::START, 'url' => self::HEALTH_URL], $parameters['healthToken']);
+		self::assertStringNotContainsString(self::SECRET, json_encode([$parameters['healthToken'], $this->initialState['healthToken']], JSON_THROW_ON_ERROR));
 	}
 
 	/**
@@ -236,7 +250,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(19, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, each warning of the setup checks, the setup of the account of the app, the address of Paperless in the browser, per-user ownership, the tags that a user may see, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(20, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, the health check for a monitor, each warning of the setup checks, the setup of the account of the app, the address of Paperless in the browser, per-user ownership, the tags that a user may see, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);
@@ -366,6 +380,7 @@ final class AdminSettingsTest extends TestCase {
 			$this->webhookService(new TestClock()),
 			$this->germanL10n(),
 			new GettingStarted($status, $this->germanL10n()),
+			$this->healthToken(new TestClock()),
 		);
 	}
 }

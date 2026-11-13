@@ -221,7 +221,7 @@ Eine native Nextcloud-App, die fertig bearbeitete Paperless-ngx-Dokumente in ein
       <img alt="Der Status von Paperless Sync nach einem Lauf mit einem Fehler: der Zustand Mit Fehlern abgeschlossen in Rot, die Zeiten des letzten Laufs, des letzten erfolgreichen Laufs und des nächsten geplanten Laufs, und darunter ein Kasten, der das Dokument nennt, dessen Herunterladen gescheitert ist" src="images/de/status-error-light.png">
     </picture>
 
-    Benachrichtigungen, Einrichtungsprüfungen und eine Status-API sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant. Der Aktivitätenstrom des Zielbenutzers erzählt, was jeder Lauf geändert und importiert hat.
+    Benachrichtigungen, Einrichtungsprüfungen, eine Zustandsprüfung und eine Status-API sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant, mit einem Token für die Überwachung, das sonst nichts öffnet. Der Aktivitätenstrom des Zielbenutzers erzählt, was jeder Lauf geändert und importiert hat.
 
     [:octicons-arrow-right-24: Benachrichtigungen](guide.de.md#being-notified) · [Aktivität](guide.de.md#aktivität)
 

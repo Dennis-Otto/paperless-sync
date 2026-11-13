@@ -818,10 +818,11 @@
 
 /* Test connection, at the end of the connection settings, with its checklist below it, the
    button of the setup of the account with what comes next, and the buttons of the secret of the
-   webhook with its state. */
+   webhook and of the token of the health check with their state. */
 .paperless-sync-test,
 .paperless-sync-account-actions,
-.paperless-sync-webhook-actions {
+.paperless-sync-webhook-actions,
+.paperless-sync-health-actions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px 14px;
@@ -831,7 +832,8 @@
 
 .paperless-sync-test .settings-hint,
 .paperless-sync-account-actions .settings-hint,
-.paperless-sync-webhook-actions .settings-hint {
+.paperless-sync-webhook-actions .settings-hint,
+.paperless-sync-health-actions .settings-hint {
 	flex: 1 1 260px;
 	margin: 0;
 }

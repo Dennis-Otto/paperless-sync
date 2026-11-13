@@ -566,6 +566,31 @@ status_api() {
 		"${BASE_URL}/ocs/v2.php/apps/paperless_sync/api/v1/status"
 }
 
+# The health check, as a monitor reads it with the header Authorization $1, without an account of
+# Nextcloud: its answer goes to $2, and its status code to the standard output.
+health_check() {
+	curl --silent --show-error \
+		--header 'Accept: application/json' \
+		--header "Authorization: $1" \
+		--output "$2" \
+		--write-out '%{http_code}' \
+		"${BASE_URL}/apps/paperless_sync/api/v1/health"
+}
+
+# The health check with its token answers as the mode $1 of assert_json expects, soon after a run
+# of occ, as assert_status_api_soon waits for the status API.
+assert_health_soon() {
+	mode="$1"
+	output="${TMP_DIR}/$1.json"
+	for _ in $(seq 1 20); do
+		if [[ "$(health_check "Bearer ${HEALTH_TOKEN}" "${output}")" == "200" ]] && assert_json "${mode}" "${output}" 2>/dev/null; then
+			return 0
+		fi
+		sleep 0.5
+	done
+	assert_json "${mode}" "${output}"
+}
+
 # Expects the answer $1 to the request of the user $2 to the route $4 of the app with the verb $3,
 # whose answer stays in route.json for a closer look. Nextcloud takes the header of the OCS API
 # in place of a request token, as for save_settings.
@@ -2134,6 +2159,24 @@ scenario_failing_mirror() {
 	notifications e2e-admin "${TMP_DIR}/notifications-failing.json"
 	assert_json notifications-failing "${TMP_DIR}/notifications-failing.json"
 	assert_status_api_soon status-api-failing "${TMP_DIR}/status-api-failing.json"
+	# The health check gives a monitor the same alarm with a token of its own, which opens nothing
+	# else, and refuses a call without it.
+	curl --fail-with-body --silent --show-error \
+		--user "e2e-admin:${PASSWORD}" \
+		--header 'Accept: application/json' \
+		--header 'OCS-APIRequest: true' \
+		--request POST \
+		--output "${TMP_DIR}/health-token.json" \
+		"${BASE_URL}/apps/paperless_sync/settings/health-token"
+	assert_json health-token "${TMP_DIR}/health-token.json"
+	HEALTH_TOKEN="$(json_value token < "${TMP_DIR}/health-token.json")"
+	REFUSED_STATUS="$(health_check 'Bearer wrong-token' "${TMP_DIR}/health-refused.json")"
+	if [[ "${REFUSED_STATUS}" != "401" ]]; then
+		echo "The health check answered HTTP ${REFUSED_STATUS} instead of 401 to a wrong token: $(cat "${TMP_DIR}/health-refused.json")" >&2
+		exit 1
+	fi
+	assert_json health-refused "${TMP_DIR}/health-refused.json"
+	assert_health_soon health-failing
 	USER_API_STATUS="$(status_api sync-target "${TMP_DIR}/status-api-user.json")"
 	if [[ "${USER_API_STATUS}" != "403" ]]; then
 		echo "The status API answered HTTP ${USER_API_STATUS} instead of 403 to a user who is no administrator: $(cat "${TMP_DIR}/status-api-user.json")" >&2
@@ -2151,6 +2194,7 @@ scenario_failing_mirror() {
 	notifications e2e-admin "${TMP_DIR}/notifications-recovered.json"
 	assert_json notifications-recovered "${TMP_DIR}/notifications-recovered.json"
 	assert_status_api_soon status-api-recovered "${TMP_DIR}/status-api-recovered.json"
+	assert_health_soon health-recovered
 }
 
 # The user and the path, for WebDAV, of each change of a type in a report.

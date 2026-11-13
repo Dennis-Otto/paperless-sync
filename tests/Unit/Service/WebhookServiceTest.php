@@ -137,7 +137,7 @@ final class WebhookServiceTest extends TestCase {
 
 		self::assertSame(['configured' => false, 'created' => 0, 'url' => self::WEBHOOK_URL, 'lastCall' => null], $this->webhook->state());
 		self::assertFalse($this->webhook->verify('Bearer ' . self::SECRET));
-		self::assertContains('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret (HMAC does not match.). Create a new secret in its settings.', $this->loggedWarnings);
+		self::assertContains('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret (HMAC does not match.). Create a new one in its settings.', $this->loggedWarnings);
 
 		$secret = $this->webhook->create();
 

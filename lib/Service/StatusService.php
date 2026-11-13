@@ -396,6 +396,14 @@ final class StatusService {
 		return $this->timeFactory->getTime() - $lastSuccess > self::staleAfter($config) ? 'stale' : 'ok';
 	}
 
+	/**
+	 * Whether a monitor should stay quiet about this health of health(): false for failed, errors
+	 * and stale, in which the mirror is incomplete or has stopped, true otherwise.
+	 */
+	public static function healthy(string $health): bool {
+		return !in_array($health, ['failed', 'errors', 'stale'], true);
+	}
+
 	/** After how many seconds without a successful run a mirror counts as stale. */
 	public static function staleAfter(SyncConfig $config): int {
 		return max(self::STALE_INTERVALS * $config->syncIntervalMinutes * 60, self::STALE_MINIMUM);

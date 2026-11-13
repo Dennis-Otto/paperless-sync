@@ -150,7 +150,7 @@ expect_upgrade() {
   fi
 }
 for path in lib/Migration/Version000130Date20261014120000.php lib/Service/ConfigService.php \
-  lib/Service/SyncStateRepository.php lib/Model/SyncConfig.php lib/Service/WebhookService.php \
+  lib/Service/SyncStateRepository.php lib/Model/SyncConfig.php lib/Service/WebhookService.php lib/Service/HashedSecrets.php \
   .nextcloudignore krankerl.toml scripts/check-package.sh tests/e2e/upgrade.sh \
   tests/e2e/upgrade_state.php tests/e2e/assert_upgrade.py tests/e2e/packages.sh tests/e2e/run.sh \
   tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml \

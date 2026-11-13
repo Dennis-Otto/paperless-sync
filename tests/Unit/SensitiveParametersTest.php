@@ -76,6 +76,8 @@ final class SensitiveParametersTest extends TestCase {
 			'ConfigService::storeToken($token)',
 			'ConfigService::validate($tokenCandidate)',
 			'ConnectionChecklist::checks($token)',
+			'HashedSecrets::verify($authorization)',
+			'HealthToken::verify($authorization)',
 			'PaperlessApiService::change($fields)',
 			'PaperlessApiService::createUser($password)',
 			'PaperlessApiService::failureMessage($token)',
