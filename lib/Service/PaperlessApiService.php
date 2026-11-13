@@ -1343,11 +1343,13 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		$url = rtrim($this->connection->url, '/') . '/' . ltrim($path, '/');
 		$options['headers'] = $this->headersForToken($token);
-		$options['allow_redirects'] ??= false;
-		$followsRedirects = $options['allow_redirects'] !== false;
+		$followsRedirects = isset($options['allow_redirects']) && $options['allow_redirects'] !== false;
+		if (!$followsRedirects) {
+			$options['allow_redirects'] = false;
+		}
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];
-		} elseif (is_array($options['allow_redirects'])) {
+		} elseif (isset($options['allow_redirects']) && is_array($options['allow_redirects'])) {
 			$options['allow_redirects'] = ['on_redirect' => $this->refuseLocalRedirect(...)] + $options['allow_redirects'];
 		}
 		try {
