@@ -153,7 +153,9 @@ for path in lib/Migration/Version000130Date20261014120000.php lib/Service/Config
   lib/Service/SyncStateRepository.php lib/Model/SyncConfig.php lib/Service/WebhookService.php \
   .nextcloudignore krankerl.toml scripts/check-package.sh tests/e2e/upgrade.sh \
   tests/e2e/upgrade_state.php tests/e2e/assert_upgrade.py tests/e2e/packages.sh tests/e2e/run.sh \
-  tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml   lib/Service/StatusService.php lib/Cron/SavedSettings.php lib/Service/SystemTagService.php   lib/Service/RemovedSinceTheRelease.php; do
+  tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml \
+  lib/Service/StatusService.php lib/Cron/SavedSettings.php lib/Service/SystemTagService.php \
+  lib/Service/RemovedSinceTheRelease.php; do
   expect_upgrade run "$path"
 done
 for path in lib/Service/SyncService.php lib/Service/PaperlessApiService.php lib/Service/Paths.php templates/settings.php \
@@ -179,7 +181,9 @@ for path in lib/Service/PaperlessApiService.php lib/Service/PaperlessClientInter
   lib/Service/PaperlessClientFactory.php lib/Model/PaperlessConnection.php \
   lib/Model/DocumentFingerprint.php tests/fixtures/paperless-ngx-2/metadata.json tests/e2e/contract.py \
   tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml tests/e2e/compose.yaml tests/e2e/mock_server.py \
-  .github/workflows/e2e.yml lib/Model/DocumentPermissions.php lib/Service/FileVersions.php   lib/Service/UserTags.php lib/Service/ImportExecutor.php lib/Service/ExportFilter.php   lib/Service/SyncService.php lib/Service/RemovedSinceTheRelease.php; do
+  .github/workflows/e2e.yml lib/Model/DocumentPermissions.php lib/Service/FileVersions.php \
+  lib/Service/UserTags.php lib/Service/ImportExecutor.php lib/Service/ExportFilter.php \
+  lib/Service/SyncService.php lib/Service/RemovedSinceTheRelease.php; do
   expect_contract run "$path"
 done
 for path in lib/Service/Paths.php lib/Service/StatusService.php lib/Cron/SavedSettings.php templates/settings.php \
