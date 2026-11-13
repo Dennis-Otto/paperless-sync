@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Notification;
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
+use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\StatusService;
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -30,6 +31,7 @@ final class Notifier implements INotifier {
 		private IFactory $l10nFactory,
 		private IURLGenerator $urlGenerator,
 		private StatusService $status,
+		private ConfigService $config,
 	) {
 	}
 
@@ -80,6 +82,9 @@ final class Notifier implements INotifier {
 				$file = isset($parameters['file']) && is_array($parameters['file']) ? $parameters['file'] : [];
 				$this->import($notification, ['file' => ['id' => 0] + $file] + $parameters, $l->t('Paperless Sync could not send {file}: it was deleted, or you may no longer read it'));
 				break;
+			case NotificationPublisher::SUBJECT_TARGET_USER_DELETED:
+				$this->targetUserDeleted($l, $notification, $parameters);
+				break;
 			default:
 				throw new UnknownNotificationException();
 		}
@@ -107,6 +112,28 @@ final class Notifier implements INotifier {
 			// The error is text, never a template, so it is the plain message: a brace in it stays as it is.
 			$notification->setParsedMessage($error);
 		}
+	}
+
+	/**
+	 * "Nextcloud deleted dennis, the target user of Paperless Sync", with what that means below it
+	 * and a link to the settings. It goes away once the settings name another target user; a new
+	 * account with the same ID keeps it, as that account would get every document.
+	 *
+	 * @param array<array-key, mixed> $parameters
+	 * @throws UnknownNotificationException for a notification without its user
+	 * @throws AlreadyProcessedException once the settings name another target user
+	 */
+	private function targetUserDeleted(IL10N $l, INotification $notification, array $parameters): void {
+		$user = isset($parameters['user']) && is_string($parameters['user']) ? $parameters['user'] : '';
+		if ($user === '') {
+			throw new UnknownNotificationException();
+		}
+		if (mb_strtolower($this->config->targetUser()) !== mb_strtolower($user)) {
+			throw new AlreadyProcessedException();
+		}
+		$notification->setParsedSubject($l->t('Nextcloud deleted %s, the target user of Paperless Sync', [$user]))
+			->setParsedMessage($l->t('Every run fails until you choose another target user. A new account with the ID %s would get every document.', [$user]))
+			->setLink($this->urlGenerator->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => AppConstants::APP_ID]));
 	}
 
 	/**

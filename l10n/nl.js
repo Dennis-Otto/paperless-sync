@@ -778,7 +778,9 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Laat dit leeg als browsers Paperless bereiken op de Paperless-URL. Bereikt Nextcloud Paperless via een naam of een adres dat alleen de server kent, zoals http://paperless:8000 in een Docker-netwerk, voer dan het adres in dat browsers openen, zoals https://paperless.example.com: de links naar Paperless in Bestanden, in meldingen, in de activiteit en in de metadata gebruiken het, terwijl de verzoeken van Nextcloud nog steeds naar de Paperless-URL gaan.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Voer een geldig adres van Paperless in de browser in, of laat het leeg.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Het adres van Paperless in de browser moet HTTP of HTTPS gebruiken.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Het adres van Paperless in de browser mag geen inloggegevens, query of fragment bevatten."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Het adres van Paperless in de browser mag geen inloggegevens, query of fragment bevatten.",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud heeft %s verwijderd, de doelgebruiker van Paperless Sync",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Elke run mislukt totdat je een andere doelgebruiker kiest. Een nieuw account met de ID %s zou elk document krijgen."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

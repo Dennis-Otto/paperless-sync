@@ -262,6 +262,35 @@ final class NotificationPublisherTest extends TestCase {
 		self::assertSame([], $this->notifications);
 	}
 
+	/**
+	 * Every enabled administrator hears that Nextcloud deleted the target user, with the ID of the
+	 * user as its object, but not the deleted user, who may have been an administrator too.
+	 */
+	public function testTheAdministratorsHearThatNextcloudDeletedTheTargetUser(): void {
+		$this->clock->advance(60);
+
+		$this->publisher->targetUserDeleted('second-admin');
+
+		self::assertSame(['e2e-admin'], $this->notifiedUsers(NotificationPublisher::SUBJECT_TARGET_USER_DELETED));
+		$notification = $this->notifications[0];
+		self::assertSame(AppConstants::APP_ID, $notification->getApp());
+		self::assertSame([NotificationPublisher::OBJECT_TARGET_USER, 'second-admin'], [$notification->getObjectType(), $notification->getObjectId()]);
+		self::assertSame(['user' => 'second-admin'], $notification->getSubjectParameters());
+		self::assertSame(TestClock::START + 60, $notification->getDateTime()->getTimestamp());
+	}
+
+	/** The user is deleted all the same; only the log says that the administrators didn't hear of it. */
+	public function testANotificationOfADeletedTargetUserThatNextcloudRefusesIsLogged(): void {
+		$this->notificationFailure = new RuntimeException('The database is full.');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('deleted its target user {user}'), self::callback(
+			static fn (array $context): bool => $context['user'] === 'paperless' && $context['error'] === 'The database is full.',
+		));
+
+		$this->publisher->targetUserDeleted('paperless');
+
+		self::assertSame([], $this->notifications);
+	}
+
 	private function failedRuns(int $count): void {
 		for ($run = 0; $run < $count; ++$run) {
 			$this->failedRun('Paperless is down.');

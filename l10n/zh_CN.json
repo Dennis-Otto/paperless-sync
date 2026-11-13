@@ -741,7 +741,9 @@
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "如果浏览器通过 Paperless URL 访问 Paperless，请留空。如果 Nextcloud 通过只有服务器知道的名称或地址访问 Paperless，例如 Docker 网络中的 http://paperless:8000，请输入浏览器打开的地址，例如 https://paperless.example.com：文件、通知、活动和元数据中指向 Paperless 的链接会使用它，而 Nextcloud 的请求仍然发往 Paperless URL。",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "请输入有效的浏览器中的 Paperless 地址，或将其留空。",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "浏览器中的 Paperless 地址必须使用 HTTP 或 HTTPS。",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "浏览器中的 Paperless 地址不得包含凭据、查询参数或片段。"
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "浏览器中的 Paperless 地址不得包含凭据、查询参数或片段。",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已删除 %s，即 Paperless Sync 的目标用户",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您选择其他目标用户之前，每次运行都会失败。ID 为 %s 的新账号将获得所有文档。"
 	},
 	"pluralForm": "nplurals=1; plural=0;"
 }

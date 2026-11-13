@@ -87,4 +87,11 @@ interface SyncStateRepositoryInterface {
 	public function saveSend(string $userId, int $fileId, array $values): void;
 
 	public function deleteSend(string $userId, int $fileId): void;
+
+	/**
+	 * Deletes every state of a user whom Nextcloud deleted: the exports of their archive, the
+	 * imports of their inbox and the files that they sent from Files, so that a new account with
+	 * the same ID starts without them. Returns how many it deleted.
+	 */
+	public function deleteOwner(string $userId): int;
 }

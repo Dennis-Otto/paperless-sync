@@ -47,7 +47,7 @@ final class NotifierTest extends TestCase {
 		$urls->method('imagePath')->willReturnCallback(static fn (string $app, string $image): string => "/apps/{$app}/img/{$image}");
 		$urls->method('getAbsoluteURL')->willReturnCallback(static fn (string $url): string => 'https://cloud.example.test' . $url);
 		$urls->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route, array $parameters): string => "https://cloud.example.test/{$route}?" . http_build_query($parameters));
-		$this->notifier = new Notifier($factory, $urls, $this->status);
+		$this->notifier = new Notifier($factory, $urls, $this->status, $this->configService());
 	}
 
 	public function testTheNotifierIsTheOneOfTheApp(): void {
@@ -240,6 +240,51 @@ final class NotifierTest extends TestCase {
 		$this->expectException(UnknownNotificationException::class);
 
 		$this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_IMPORT_FAILED, $parameters), 'en');
+	}
+
+	/**
+	 * The administrators hear that Nextcloud deleted the target user, with what that means and a
+	 * link to the settings, in the language of each, for as long as the settings name that user,
+	 * whatever the case of its ID.
+	 */
+	public function testADeletedTargetUserNamesTheUserAndLinksTheSettings(): void {
+		$this->settings['target_user'] = 'Paperless';
+
+		$notification = $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_TARGET_USER_DELETED, ['user' => 'paperless']), 'en');
+
+		self::assertSame('Nextcloud deleted paperless, the target user of Paperless Sync', $notification->getParsedSubject());
+		self::assertSame('Every run fails until you choose another target user. A new account with the ID paperless would get every document.', $notification->getParsedMessage());
+		self::assertSame('https://cloud.example.test/settings.AdminSettings.index?section=paperless_sync', $notification->getLink());
+		self::assertSame('https://cloud.example.test/apps/paperless_sync/img/app-dark.svg', $notification->getIcon());
+		$german = $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_TARGET_USER_DELETED, ['user' => 'paperless']), 'de_DE');
+		self::assertSame('Nextcloud hat paperless gelöscht, den Zielbenutzer von Paperless Sync', $german->getParsedSubject());
+		self::assertStringStartsWith('Jeder Lauf schlägt fehl, bis Sie einen anderen Zielbenutzer wählen.', $german->getParsedMessage());
+	}
+
+	/** Once the settings name another target user, the notification of the deleted one goes away. */
+	public function testTheNotificationOfADeletedTargetUserGoesOnceAnotherIsChosen(): void {
+		$this->settings['target_user'] = 'archive';
+		$this->expectException(AlreadyProcessedException::class);
+
+		$this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_TARGET_USER_DELETED, ['user' => 'paperless']), 'en');
+	}
+
+	/** @return array<string, array{array<string, mixed>}> */
+	public static function deletedTargetUsersWithoutTheirUser(): array {
+		return [
+			'no user' => [[]],
+			'an empty user' => [['user' => '']],
+			'a user that is no text' => [['user' => 42]],
+		];
+	}
+
+	/** @param array<string, mixed> $parameters */
+	#[DataProvider('deletedTargetUsersWithoutTheirUser')]
+	public function testADeletedTargetUserWithoutTheUserIsNotItsConcern(array $parameters): void {
+		$this->settings['target_user'] = '';
+		$this->expectException(UnknownNotificationException::class);
+
+		$this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_TARGET_USER_DELETED, $parameters), 'en');
 	}
 
 	/** @param array<string, mixed> $parameters */

@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\AppInfo;
 
 use OCA\PaperlessSync\Listener\FlowListener;
 use OCA\PaperlessSync\Listener\LoadAdditionalScriptsListener;
+use OCA\PaperlessSync\Listener\UserDeletedListener;
 use OCA\PaperlessSync\Notification\Notifier;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
 use OCA\PaperlessSync\Service\NextcloudStorageService;
@@ -26,6 +27,7 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\User\Events\UserDeletedEvent;
 use OCP\WorkflowEngine\Events\LoadSettingsScriptsEvent;
 use OCP\WorkflowEngine\Events\RegisterOperationsEvent;
 
@@ -53,6 +55,9 @@ final class Application extends App implements IBootstrap {
 		// "Send to Paperless" in Flow, for rules of the administrators.
 		$context->registerEventListener(RegisterOperationsEvent::class, FlowListener::class);
 		$context->registerEventListener(LoadSettingsScriptsEvent::class, FlowListener::class);
+		// A deleted user leaves the settings and the state, so that a new account with the same ID
+		// gets nothing of theirs.
+		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 	}
 
 	public function boot(IBootContext $context): void {

@@ -30,6 +30,8 @@ use Psr\Log\LoggerInterface;
  *   them ended ALERT_AFTER seconds ago. The next successful run removes it again.
  * - The target user gets one for each file of the inbox that Paperless could not import or refused.
  * - Whoever sent a file to Paperless from Files gets one when its import ended, whatever its end.
+ * - The administrators, or the group of GROUP_SETTING, get one when Nextcloud deleted the target
+ *   user, which stays until the settings name another.
  *
  * A dry-run notifies nobody. Notifier puts the notifications into words in the language of the
  * reader.
@@ -45,10 +47,14 @@ final class NotificationPublisher {
 	public const SUBJECT_SEND_REFUSED = 'send_refused';
 	public const SUBJECT_SEND_GONE = 'send_gone';
 	public const SEND_SUBJECTS = [self::SUBJECT_SEND_IMPORTED, self::SUBJECT_SEND_KNOWN, self::SUBJECT_SEND_FAILED, self::SUBJECT_SEND_REFUSED, self::SUBJECT_SEND_GONE];
+	/** Nextcloud deleted the target user, whose ID the notification names. */
+	public const SUBJECT_TARGET_USER_DELETED = 'target_user_deleted';
 	/** The object of the notification of a failing mirror, the same for every recipient, by which a success removes it. */
 	public const OBJECT_SYNCHRONIZATION = 'synchronization';
 	public const OBJECT_IMPORT = 'import';
 	public const OBJECT_SEND = 'send';
+	/** The object of the notification of a deleted target user, with the ID of the user. */
+	public const OBJECT_TARGET_USER = 'target_user';
 	/** The runs in a row that did not succeed before the administrators hear of it. */
 	public const ALERT_RUNS = 3;
 	/** The seconds since the first run of the row that did not succeed after which they hear of it all the same, for long intervals. */
@@ -145,6 +151,33 @@ final class NotificationPublisher {
 			$this->logger->warning('Paperless Sync could not tell {user} how the import of {path} ended: {error}', [
 				'user' => $userId,
 				'path' => $path,
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+		}
+	}
+
+	/**
+	 * Tells the administrators, or the group of GROUP_SETTING, that Nextcloud deleted the target
+	 * user: every run fails from then on, and a new account with the same ID would get every
+	 * document. Notifier lets the notification go once the settings name another target user. A
+	 * notification that Nextcloud refuses is logged; the user is deleted all the same.
+	 */
+	public function targetUserDeleted(string $userId): void {
+		try {
+			foreach (array_diff($this->recipients(), [$userId]) as $recipient) {
+				$this->notifications->notify(
+					$this->notifications->createNotification()
+						->setApp(AppConstants::APP_ID)
+						->setUser($recipient)
+						->setDateTime($this->timeFactory->getDateTime())
+						->setObject(self::OBJECT_TARGET_USER, $userId)
+						->setSubject(self::SUBJECT_TARGET_USER_DELETED, ['user' => $userId]),
+				);
+			}
+		} catch (\Throwable $exception) {
+			$this->logger->warning('Paperless Sync could not tell the administrators that Nextcloud deleted its target user {user}: {error}', [
+				'user' => $userId,
 				'error' => $exception->getMessage(),
 				'exception' => $exception,
 			]);

@@ -382,6 +382,40 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame([false, 'half a line', 'nobody'], [$config->perUser(), $config->userMap, $config->userGroup]);
 	}
 
+	/**
+	 * A user whom Nextcloud deleted loses their line of the tags, the lines of the table that name
+	 * them and their archive of the tags, so that a new account with their ID gets none of it; the
+	 * lines of the others stay as they are.
+	 */
+	public function testADeletedUserLeavesTheirLinesOfTheSettings(): void {
+		$this->usersOfNextcloud = ['paperless', 'admin', 'Katja', 'bob'];
+		$this->service->save([
+			'ownership' => 'per-user',
+			'user_map' => "jdoe = katja\nMax Muster = bob\nkatja.old = KATJA",
+			'user_tags' => "katja = Household\nbob = Bob",
+		] + self::validSettings(), 'secret-token');
+		$this->service->keepTagArchives(['Katja', 'bob']);
+		$this->usersOfNextcloud = ['paperless', 'admin', 'bob'];
+
+		self::assertSame(['user_tags', 'user_map', 'tag_archives'], $this->service->forgetUser('Katja'));
+
+		self::assertSame(['bob = Bob', 'Max Muster = bob'], [$this->settings['user_tags'], $this->settings['user_map']]);
+		self::assertSame(['bob'], $this->service->tagArchives());
+		self::assertSame('paperless', $this->service->targetUser());
+		$config = $this->service->save(['ownership' => 'per-user', 'user_map' => $this->settings['user_map'], 'user_tags' => $this->settings['user_tags']] + self::validSettings());
+		self::assertSame(['bob = Bob', 'Max Muster = bob'], [$config->userTags, $config->userMap], 'What is left is as a save takes it.');
+		self::assertSame([], $this->service->forgetUser('Katja'), 'A user without a line changes nothing.');
+	}
+
+	/** Single ownership keeps the table as typed, and a deleted user takes only the lines that name them. */
+	public function testADeletedUserLeavesTheTableOfSingleOwnershipAsTyped(): void {
+		$this->service->save(['ownership' => 'single', 'user_map' => "half a line\njdoe = john.doe"] + self::validSettings(), 'secret-token');
+
+		self::assertSame(['user_map'], $this->service->forgetUser('john.doe'));
+
+		self::assertSame('half a line', $this->settings['user_map']);
+	}
+
 	/** The documents follow their storage paths of Paperless only once an administrator turns it on. */
 	public function testTheStoragePathsOfPaperlessAreFollowedOnlyOnceTurnedOn(): void {
 		self::assertFalse($this->service->get()->followStoragePaths);
