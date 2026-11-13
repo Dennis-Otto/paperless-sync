@@ -168,7 +168,7 @@ function context() {
 			routes.push({ matches, handler })
 			return Promise.resolve()
 		},
-		async request(address, { method = 'GET', type = 'application/json', body = '', failure = null, resets = 0 } = {}) {
+		async request(address, { method = 'GET', type = 'application/json', body = '', failure = null, disposed = null, resets = 0 } = {}) {
 			const url = new URL(address)
 			const route = routes.find(({ matches }) => matches(url))
 			if (route === undefined) {
@@ -189,12 +189,14 @@ function context() {
 					if (resets > maxRetries) {
 						return Promise.reject(Object.assign(new Error('route.fetch: socket hang up (ECONNRESET)'), { code: 'ECONNRESET' }))
 					}
+					// As the answer of route.fetch: its body is gone once the context closed after it came.
+					const read = (value) => (disposed === null ? Promise.resolve(value()) : Promise.reject(disposed))
 					return Promise.resolve({
 						status: () => 200,
 						headers: () => ({ 'content-type': type, 'content-length': String(body.length), 'content-encoding': 'gzip' }),
-						json: () => Promise.resolve(JSON.parse(body)),
-						text: () => Promise.resolve(body),
-						body: () => Promise.resolve(Buffer.from(body)),
+						json: () => read(() => JSON.parse(body)),
+						text: () => read(() => body),
+						body: () => read(() => Buffer.from(body)),
 					})
 				},
 				fulfill: (fulfilled) => {
@@ -253,6 +255,24 @@ test('a request whose page closed on the way needs no answer, and any other fail
 	await assert.rejects(browser.request('http://nextcloud/apps/paperless_sync/sync/status', { failure: new Error('ECONNREFUSED') }), /ECONNREFUSED/)
 	assert.equal(closed(new Error('Target page, context or browser has been closed')), true)
 	assert.equal(closed(undefined), false)
+})
+
+test('an answer whose context closed before its body was read needs no answer either', async () => {
+	// screenshots.mjs closes the context of a part of the story while a poll of the status is
+	// on its way: route.fetch has its answer, and Playwright has thrown its body away before
+	// the route reads it. That once ended the render of the pictures with "apiResponse.json:
+	// Response has been disposed" (Dennis-Otto/paperless-sync#470).
+	const browser = context()
+	await freeze(browser, new Story())
+	const disposed = new Error('apiResponse.json: Response has been disposed')
+	assert.deepEqual(await browser.request('http://nextcloud/apps/paperless_sync/sync/status', { body: '{}', disposed }), {})
+	const binary = new Error('apiResponse.body: Response has been disposed')
+	assert.deepEqual(await browser.request('http://nextcloud/apps/paperless_sync/settings', { type: 'text/plain', body: 'plain', disposed: binary }), {})
+	const listing = new Error('apiResponse.text: Response has been disposed')
+	assert.deepEqual(await browser.request('http://nextcloud/remote.php/dav/files/paperless/Documents', { method: 'PROPFIND', type: 'application/xml', body: '<d:multistatus/>', disposed: listing }), {})
+	// A body that is no JSON is a failure of the app, which shows.
+	await assert.rejects(browser.request('http://nextcloud/apps/paperless_sync/sync/status', { body: '<html>' }), SyntaxError)
+	assert.equal(closed(new Error('Response has been disposed')), true)
 })
 
 test('a connection that the web server closes just as it is used again takes another, as in a browser', async () => {
