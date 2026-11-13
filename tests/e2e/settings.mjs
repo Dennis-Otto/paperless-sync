@@ -44,6 +44,7 @@ const PAGE = '/index.php/settings/admin/paperless_sync'
 const SETTINGS = '/apps/paperless_sync/settings'
 const RUN = '/apps/paperless_sync/sync/run'
 const STATUS = '/apps/paperless_sync/sync/status'
+const FORGET = '/apps/paperless_sync/sync/forget'
 // What Nextcloud answers to a route with #[PasswordConfirmationRequired] before the
 // password is confirmed.
 const NOT_CONFIRMED = { message: 'Password confirmation is required' }
@@ -796,6 +797,40 @@ try {
 	expect((await state.textContent()) !== 'Queued' && await spinner.isHidden(), 'The status must show that the run has ended.')
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: "Synchronize now" queues the run, follows it through the status past a failed answer, and counts its errors.')
+
+	// "Write all copies again" asks first and says what it costs, sends nothing when the question
+	// is dismissed, and then says how many copies the next runs write; an active run is refused
+	// (SyncController::forget(), #448). The answers are mocked: writing every copy again would
+	// download every document in the runs of the checks after this one.
+	const rewrite = page.locator('#paperless-sync-rewrite')
+	const rewriteRequests = []
+	await page.route(`**${FORGET}`, (route) => {
+		rewriteRequests.push(route.request().postDataJSON())
+		return route.fulfill({ json: { forgotten: 3, unknown: [], message: 'The next runs write 3 copies again from Paperless.' } })
+	})
+	let rewriteQuestion = ''
+	page.once('dialog', (dialog) => {
+		rewriteQuestion = dialog.message()
+		return dialog.dismiss()
+	})
+	await rewrite.click()
+	await page.waitForTimeout(500)
+	expect(rewriteQuestion.startsWith('Write every copy again from Paperless? The next runs download each document again, batch by batch,'), `"Write all copies again" must say what it costs first: ${rewriteQuestion}`)
+	expect(rewriteRequests.length === 0, 'A dismissed question must write no copy again.')
+	page.once('dialog', (dialog) => dialog.accept())
+	await rewrite.click()
+	await page.waitForFunction(() => document.querySelector('#paperless-sync-message').textContent === 'The next runs write 3 copies again from Paperless.')
+	expect(JSON.stringify(rewriteRequests) === JSON.stringify([{ all: true }]), `"Write all copies again" must ask for every copy: ${JSON.stringify(rewriteRequests)}`)
+	expect(await message.evaluate((element) => element.classList.contains('paperless-sync-message--success')), 'The answer is a success.')
+	await page.unroute(`**${FORGET}`)
+	await page.route(`**${FORGET}`, (route) => route.fulfill({ status: 409, json: { message: 'Another synchronization run is already active.' } }))
+	page.once('dialog', (dialog) => dialog.accept())
+	await rewrite.click()
+	await page.waitForFunction(() => document.querySelector('#paperless-sync-message').textContent === 'Another synchronization run is already active.')
+	expect(await message.evaluate((element) => element.classList.contains('paperless-sync-message--error')), 'An active run is an error.')
+	expect(await rewrite.isEnabled(), '"Write all copies again" is possible again.')
+	await page.unroute(`**${FORGET}`)
+	console.log('Settings: "Write all copies again" asks first, says how many copies the next runs write, and refuses while a run is active.')
 
 	// The report: a heading of its own, only the counts that aren't 0 and a sentence for the
 	// rest, the errors first with their badges, a filter for each kind, and a link to the

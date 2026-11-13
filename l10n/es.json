@@ -827,7 +827,20 @@
 		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless, o un proxy delante de él, redirige las solicitudes de Paperless Sync a %1$s (HTTP %2$s). Introduce la URL en la que Paperless responde sin redirección: un proxy que pide iniciar sesión tiene que dejar pasar la API de Paperless.",
 		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless, o un proxy delante de él, redirige a %1$s (HTTP %2$s).",
 		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "Introduce %s como URL de Paperless. Paperless Sync no sigue ninguna redirección: enviaría el token a otra dirección o convertiría una subida en una solicitud sin su archivo.",
-		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Introduce la URL en la que Paperless responde sin redirección: un proxy que pide iniciar sesión tiene que dejar pasar la API de Paperless."
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Introduce la URL en la que Paperless responde sin redirección: un proxy que pide iniciar sesión tiene que dejar pasar la API de Paperless.",
+		"The download of the document P%1$s took too long and stopped after %2$s bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.": "La descarga del documento P%1$s tardó demasiado y se detuvo tras %2$s bytes. Una transferencia se detiene tras un minuto por debajo de 1 KB por segundo, o tras una hora. Comprueba la red hasta Paperless, como una VPN.",
+		"Name the documents by their IDs in Paperless, such as 123 or P123.": "Indica los documentos por sus ID en Paperless, como 123 o P123.",
+		"Name the IDs of the documents, or choose every copy.": "Indica los ID de los documentos o elige todas las copias.",
+		"_The next runs write %n copy again from Paperless._::_The next runs write %n copies again from Paperless._": [
+			"Las próximas ejecuciones vuelven a escribir %n copia desde Paperless.",
+			"Las próximas ejecuciones vuelven a escribir %n copias desde Paperless.",
+			"Las próximas ejecuciones vuelven a escribir %n copias desde Paperless."
+		],
+		"Paperless Sync has no copy of %s.": "Paperless Sync no tiene ninguna copia de %s.",
+		"Paperless Sync has no copy to write again.": "Paperless Sync no tiene ninguna copia que volver a escribir.",
+		"Write all copies again": "Volver a escribir todas las copias",
+		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "¿Volver a escribir todas las copias desde Paperless? Las próximas ejecuciones descargan de nuevo cada documento, lote a lote, y lo escriben en lugar de su copia. Una copia que alguien editó en Nextcloud vuelve a tener el contenido de Paperless, y la edición se conserva como versión anterior en Versiones.",
+		"Could not write the copies again.": "No se pudieron volver a escribir las copias."
 	},
 	"pluralForm": "nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 }

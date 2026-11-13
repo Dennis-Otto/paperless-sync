@@ -173,7 +173,7 @@ Erhält ein Dokument in Paperless etwa einen neuen Typ und einen neuen Titel, ve
 
 | Was du in Nextcloud tust | Was passiert |
 | --- | --- |
-| Eine Kopie bearbeiten | Die Änderung bleibt, solange ihr Dokument in Paperless gleich bleibt. Ändert sich das Dokument dort, kann der nächste Lauf die Kopie neu schreiben, je nach Änderung, und deine Änderung bleibt dann als frühere Version erhalten, unter *Versionen* in den Details der Datei, außer deine Administration hat gewählt, deine Änderung zu behalten und einen Konflikt zu melden. |
+| Eine Kopie bearbeiten | Die Änderung bleibt, solange ihr Dokument in Paperless gleich bleibt. Ändert sich das Dokument dort, kann der nächste Lauf die Kopie neu schreiben, je nach Änderung, und deine Änderung bleibt dann als frühere Version erhalten, unter *Versionen* in den Details der Datei, außer deine Administration hat gewählt, deine Änderung zu behalten und einen Konflikt zu melden. Um den Inhalt von Paperless sofort zurückzubekommen, etwa für eine beschädigte Kopie, frag deine Administration: *Alle Kopien neu schreiben* auf der Einstellungsseite, oder `occ paperless_sync:forget` für einzelne Dokumente, schreibt sie mit dem nächsten Lauf neu. |
 | Eine Kopie umbenennen oder verschieben | Sie bleibt, wo du sie hingelegt hast, als deine eigene Datei, und der nächste Lauf schreibt das Dokument neu an seinen Pfad im Archiv. |
 | Eine Kopie löschen | Sie kommt in deinen Papierkorb, und der nächste Lauf schreibt sie neu. Um ein Dokument zu entfernen, lösche es in Paperless. |
 | Eine Datei in den Eingang legen | Sie geht an Paperless, und ihre Kopie kommt ins Archiv, sobald das Dokument dort fertig bearbeitet ist. |

@@ -101,6 +101,18 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const ACCOUNT_FORBIDDEN = 'forbidden';
 	/** The account of the token when Paperless didn't name it for another reason. */
 	private const ACCOUNT_UNKNOWN = 'unknown';
+	/**
+	 * The transfer of a document, its download or its upload, stops when less than STALL_BYTES a
+	 * second move for STALL_SECONDS, as the low speed limit of cURL measures it, and after
+	 * TRANSFER_TIMEOUT seconds in any case: a large file over a slow line goes on as long as it
+	 * moves, and a Paperless that stalls or only trickles holds the run for a minute or an hour at
+	 * most (#459). The texts of a transfer that took too long name these limits.
+	 */
+	private const STALL_BYTES = 1024;
+	private const STALL_SECONDS = 60;
+	private const TRANSFER_TIMEOUT = 3600;
+	/** The message of cURL for a transfer that the limits above stopped; its error 28 also names a connection or a name that took too long. */
+	private const TRANSFER_TOO_LONG = '/\bcURL error 28: Operation (?:timed out|too slow)/';
 	private IClient $client;
 
 	/**
@@ -477,17 +489,27 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		chmod($temporaryPath, 0600);
 		try {
-			$response = $this->send(
-				'GET',
-				'/api/documents/' . $documentId . '/download/',
-				[
-					'query' => ['original' => $original ? 'true' : 'false'],
-					'allow_redirects' => ['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']],
-					'connect_timeout' => 10,
-					'timeout' => 180,
-					'sink' => $temporaryPath,
-				],
-			);
+			try {
+				$response = $this->send(
+					'GET',
+					'/api/documents/' . $documentId . '/download/',
+					[
+						'query' => ['original' => $original ? 'true' : 'false'],
+						'allow_redirects' => ['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']],
+						...self::transferLimits(),
+						'sink' => $temporaryPath,
+					],
+				);
+			} catch (PaperlessRequestException $exception) {
+				$message = $exception->getMessage();
+				if (preg_match(self::TRANSFER_TOO_LONG, $message) !== 1) {
+					throw $exception;
+				}
+				// What arrived before the transfer stopped, which tells a stall from a slow line.
+				clearstatcache(true, $temporaryPath);
+				$received = (string)(int)filesize($temporaryPath);
+				throw new PaperlessRequestException($message, self::withDetail(new RunError('The download of the document P%1$s took too long and stopped after %2$s bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.', [(string)$documentId, $received]), $message));
+			}
 			$this->requireSuccess($response->getStatusCode(), 'download document');
 			$download = fopen($temporaryPath, 'rb');
 			if (!is_resource($download)) {
@@ -620,7 +642,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 			rewind($upload);
 
-			return $this->postDocument($upload, $filename, $tags);
+			return $this->postDocument($upload, $filename, $tags, $size);
 		} finally {
 			/** @psalm-suppress RedundantCondition Nextcloud's HTTP client may close the stream. */
 			if (is_resource($upload)) {
@@ -635,8 +657,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/**
 	 * @param resource $upload
 	 * @param list<int> $tags
+	 * @param int $size the bytes of the file, which a transfer that took too long names
 	 */
-	private function postDocument($upload, string $filename, array $tags): string {
+	private function postDocument($upload, string $filename, array $tags, int $size): string {
 		try {
 			$response = $this->send(
 				'POST',
@@ -647,8 +670,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 						['name' => 'document', 'contents' => $upload, 'filename' => $filename],
 						...array_map(static fn (int $tag): array => ['name' => 'tags', 'contents' => (string)$tag], $tags),
 					],
-					'connect_timeout' => 10,
-					'timeout' => 180,
+					...self::transferLimits(),
 					// An error comes back as a response, so that the reason in its body can be read.
 					'http_errors' => false,
 				],
@@ -660,7 +682,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			// So does a redirect, which would have turned the upload into a GET without the file.
 			throw new PaperlessUploadException($exception->getMessage(), false, $exception->status);
 		} catch (PaperlessRequestException $exception) {
-			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false);
+			$message = $exception->getMessage();
+			if (preg_match(self::TRANSFER_TOO_LONG, $message) === 1) {
+				// It may pass, on a better line or with a Paperless that is less busy.
+				throw new PaperlessUploadException("The upload of {$filename} ({$size} bytes) took too long and stopped. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN. Details: {$message}", false);
+			}
+			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $message, false);
 		}
 		$status = $response->getStatusCode();
 		if ($status < 200 || $status >= 300) {
@@ -1500,6 +1527,20 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	/** The explanation of a name of Paperless that has no address, which cURL names with its error 6. */
 	private static function unresolvedName(): RunError {
 		return new RunError('Nextcloud could not resolve the name of Paperless (cURL error 6). Enter the URL under which the Nextcloud server, not your browser, reaches Paperless.');
+	}
+
+	/**
+	 * The limits of the time of the transfer of a document, which Guzzle hands to cURL: see
+	 * STALL_BYTES.
+	 *
+	 * @return array{connect_timeout: int, timeout: int, curl: array<int, int>}
+	 */
+	private static function transferLimits(): array {
+		return [
+			'connect_timeout' => 10,
+			'timeout' => self::TRANSFER_TIMEOUT,
+			'curl' => [\CURLOPT_LOW_SPEED_LIMIT => self::STALL_BYTES, \CURLOPT_LOW_SPEED_TIME => self::STALL_SECONDS],
+		];
 	}
 
 	/** An explanation with the message of the HTTP client, which tells an administrator which request failed. */
