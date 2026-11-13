@@ -88,7 +88,8 @@ final class SyncService {
 			if ($batchSize !== null) {
 				$config = $config->withBatchSize($batchSize);
 			}
-			$paperless = $this->clients->connect($connection);
+			// A download or an upload may outlast the grace of the signs of life: it gives its own.
+			$paperless = $this->clients->connect($connection, $this->status->heartbeat(...));
 			$this->status->connected($paperless->testConnection());
 			$this->storage->test($config->targetUser, $config->basePath);
 			if (!$dryRun) {

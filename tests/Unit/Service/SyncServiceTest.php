@@ -278,6 +278,22 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('running', $this->settings['status_last_state'], 'The status keeps following the active run.');
 	}
 
+	/**
+	 * A download or an upload may outlast the grace of the signs of life: the client of the run
+	 * gives them while a document moves, so that no other run starts beside it.
+	 */
+	public function testTheTransfersOfARunGiveItsSignsOfLife(): void {
+		$this->paperless->documents = [$this->document()];
+		$this->service->run();
+		$this->clock->advance(StatusService::HEARTBEAT_GRACE);
+
+		$signOfLife = $this->paperless->signOfLife;
+		self::assertNotNull($signOfLife, 'The run connects with its sign of life.');
+		$signOfLife();
+
+		self::assertSame($this->clock->time, $this->settings['status_last_heartbeat']);
+	}
+
 	/** A run whose signs of life stopped a while ago was interrupted, and the next run starts. */
 	public function testARunStartsAfterAnInterruptedOne(): void {
 		$this->paperless->documents = [$this->document()];

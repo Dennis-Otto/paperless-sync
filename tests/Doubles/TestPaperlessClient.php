@@ -149,9 +149,17 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	/** The failure of the checklist of Paperless itself. */
 	public ?\Throwable $preflightException = null;
 
-	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
+	/**
+	 * The sign of life that the last connection passed, which the transfers of a run call.
+	 *
+	 * @var (\Closure(): void)|null
+	 */
+	public ?\Closure $signOfLife = null;
+
+	public function connect(PaperlessConnection $connection, ?\Closure $signOfLife = null): PaperlessClientInterface {
 		$this->connects[] = $connection;
 		$this->connection = $connection;
+		$this->signOfLife = $signOfLife;
 
 		return $this;
 	}

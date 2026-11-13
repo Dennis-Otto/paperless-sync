@@ -111,9 +111,9 @@ final class PaperlessApiServiceTest extends TestCase {
 	 * A client of the connection with $url, $token and $localNetwork, as PaperlessClientFactory
 	 * makes it for a run, by default that of the Paperless of the tests.
 	 */
-	private function client(string $url = self::URL, string $token = 'secret-token', bool $localNetwork = false): PaperlessClientInterface {
+	private function client(string $url = self::URL, string $token = 'secret-token', bool $localNetwork = false, ?\Closure $signOfLife = null): PaperlessClientInterface {
 		return (new PaperlessClientFactory($this->clientService, $this->tempManager, $this->remoteHostValidator))
-			->connect(new PaperlessConnection($url, $token, $localNetwork));
+			->connect(new PaperlessConnection($url, $token, $localNetwork), $signOfLife);
 	}
 
 	protected function tearDown(): void {
@@ -1599,6 +1599,35 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	/**
+	 * A download or an upload may last longer than the grace of the signs of life of a run, so the
+	 * client of a run gives a sign of life while a document moves, and no other request does.
+	 */
+	public function testTheTransfersOfARunGiveASignOfLife(): void {
+		$signs = 0;
+		$service = $this->client(signOfLife: static function () use (&$signs): void {
+			++$signs;
+		});
+		$this->responses[] = static function (array $options): array {
+			file_put_contents($options['sink'], '%PDF-original');
+			return [200, null];
+		};
+		$this->responses[] = static fn (): array => [200, '"4f1e0f9a-task"'];
+
+		$service->downloadDocument(123, true, static function (): void {
+		});
+		$service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+
+		foreach ($this->requests as $request) {
+			$progress = $request['options']['progress'];
+			self::assertIsCallable($progress);
+			// Guzzle passes the bytes of the transfer: the total and the moved ones of each direction.
+			$progress(100, 50, 0, 0);
+		}
+		self::assertCount(2, $this->requests);
+		self::assertSame(2, $signs, 'The progress of each transfer reaches the sign of life of the run.');
+	}
+
+	/**
 	 * The transfer of a document stops when it stalls, not after a fixed time, and after an hour in
 	 * any case, against a Paperless that only trickles (#459).
 	 *
@@ -1608,6 +1637,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(10, $options['connect_timeout']);
 		self::assertSame(3600, $options['timeout'], 'An hour is the upper bound of a transfer.');
 		self::assertSame([\CURLOPT_LOW_SPEED_LIMIT => 1024, \CURLOPT_LOW_SPEED_TIME => 60], $options['curl'], 'A transfer stops after a minute below 1 KB a second.');
+		self::assertArrayNotHasKey('progress', $options, 'A client without a run gives no sign of life.');
 	}
 
 	/** @return array<string, array{string}> every operation that sends the token to Paperless */

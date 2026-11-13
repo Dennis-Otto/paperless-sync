@@ -124,6 +124,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		IClientService $clientService,
 		private ITempManager $tempManager,
 		private IRemoteHostValidator $remoteHostValidator,
+		/** @var (\Closure(): void)|null what the transfer of a document calls while it moves: see transferLimits() */
+		private ?\Closure $signOfLife = null,
 	) {
 		$this->client = $clientService->newClient();
 	}
@@ -496,7 +498,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 					[
 						'query' => ['original' => $original ? 'true' : 'false'],
 						'allow_redirects' => ['max' => 3, 'strict' => true, 'referer' => false, 'protocols' => ['http', 'https']],
-						...self::transferLimits(),
+						...$this->transferLimits(),
 						'sink' => $temporaryPath,
 					],
 				);
@@ -670,7 +672,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 						['name' => 'document', 'contents' => $upload, 'filename' => $filename],
 						...array_map(static fn (int $tag): array => ['name' => 'tags', 'contents' => (string)$tag], $tags),
 					],
-					...self::transferLimits(),
+					...$this->transferLimits(),
 					// An error comes back as a response, so that the reason in its body can be read.
 					'http_errors' => false,
 				],
@@ -1531,16 +1533,28 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	/**
 	 * The limits of the time of the transfer of a document, which Guzzle hands to cURL: see
-	 * STALL_BYTES.
+	 * STALL_BYTES. A transfer may last longer than StatusService::HEARTBEAT_GRACE, after which a
+	 * run without a sign of life counts as ended and another may start beside it, so the progress
+	 * of the transfer gives the sign of life of a run, which StatusService::heartbeat() writes once
+	 * a minute at most.
 	 *
-	 * @return array{connect_timeout: int, timeout: int, curl: array<int, int>}
+	 * @return array{connect_timeout: int, timeout: int, curl: array<int, int>, progress?: \Closure}
 	 */
-	private static function transferLimits(): array {
-		return [
+	private function transferLimits(): array {
+		$limits = [
 			'connect_timeout' => 10,
 			'timeout' => self::TRANSFER_TIMEOUT,
 			'curl' => [\CURLOPT_LOW_SPEED_LIMIT => self::STALL_BYTES, \CURLOPT_LOW_SPEED_TIME => self::STALL_SECONDS],
 		];
+		$signOfLife = $this->signOfLife;
+		if ($signOfLife !== null) {
+			// Guzzle passes the bytes of the transfer, which the sign of life doesn't need.
+			$limits['progress'] = static function () use ($signOfLife): void {
+				$signOfLife();
+			};
+		}
+
+		return $limits;
 	}
 
 	/** An explanation with the message of the HTTP client, which tells an administrator which request failed. */

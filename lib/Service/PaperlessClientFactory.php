@@ -27,7 +27,7 @@ final class PaperlessClientFactory implements PaperlessClientFactoryInterface {
 	) {
 	}
 
-	public function connect(PaperlessConnection $connection): PaperlessClientInterface {
-		return new PaperlessApiService($connection, $this->clientService, $this->tempManager, $this->remoteHostValidator);
+	public function connect(PaperlessConnection $connection, ?\Closure $signOfLife = null): PaperlessClientInterface {
+		return new PaperlessApiService($connection, $this->clientService, $this->tempManager, $this->remoteHostValidator, $signOfLife);
 	}
 }
