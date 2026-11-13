@@ -64,6 +64,10 @@ final class Notifier implements INotifier {
 				$this->import($notification, $parameters, $l->t('Paperless refused {file}; it stays in the inbox until it changes'));
 				break;
 			case NotificationPublisher::SUBJECT_SEND_IMPORTED:
+				// The reason of an imported file is why Paperless refused its owner (#439).
+				if (isset($parameters['reason']) && is_string($parameters['reason']) && $parameters['reason'] !== '') {
+					$parameters['reason'] = $l->t('The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s', [$parameters['reason']]);
+				}
 				$this->import($notification, $parameters, $l->t('{file} is in Paperless now'));
 				$this->linkToDocument($notification, $parameters);
 				break;

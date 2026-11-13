@@ -709,6 +709,34 @@ try {
 	await page.unroute(`**${RUN}`)
 	console.log('Settings: when neither the run nor the status answers, the status keeps the last state that the server sent.')
 
+	// A run that the background jobs of Nextcloud don't start: once the status says that it has
+	// not started, the page says so in the color of errors, with the last run of the background
+	// jobs, and stops asking for the status, as only the background jobs can start the run (#438).
+	const waitingStatus = { state: 'queued', lastStarted: 0, lastCompleted: 0, lastEnded: 0, lastSuccess: 0, summary: {}, error: '', report: {}, nextRun: null }
+	const lastBackgroundJobs = Math.floor(Date.now() / 1000) - 3600
+	let stalledAnswers = 0
+	await page.route(`**${RUN}`, (route) => route.fulfill({ status: 202, json: { queued: true, status: waitingStatus } }))
+	await page.route(`**${STATUS}`, (route) => {
+		stalledAnswers++
+		return route.fulfill({ json: { ...waitingStatus, state: 'stalled', lastQueued: lastBackgroundJobs + 600, lastBackgroundJobs } })
+	})
+	page.once('dialog', (dialog) => dialog.accept())
+	await run.click()
+	await page.waitForFunction(() => document.querySelector('#paperless-sync-message').textContent.startsWith('The synchronization has not started:'))
+	const stalled = await message.textContent()
+	expect(
+		stalled.startsWith('The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: ') && !stalled.includes('—'),
+		`A run that the background jobs don't start must name their last run: ${stalled}`,
+	)
+	expect(await message.evaluate((element) => element.classList.contains('paperless-sync-message--error')), 'A run that does not start is an error.')
+	expect((await state.textContent()) === 'Not started' && await spinner.isHidden(), `The status must show that the run has not started, not ${await state.textContent()}.`)
+	const stalledBefore = stalledAnswers
+	await page.waitForTimeout(2500)
+	expect(stalledAnswers === stalledBefore, `The page must stop asking for the status of a run that does not start: ${stalledAnswers - stalledBefore} more requests.`)
+	await page.unroute(`**${STATUS}`)
+	await page.unroute(`**${RUN}`)
+	console.log('Settings: a run that the background jobs don\'t start says so, with their last run, and the page stops asking.')
+
 	// "Synchronize now" queues the run as a background job and answers at once. The page
 	// follows the status, also past an answer that fails, until the run ends, and then says
 	// how it ended, with the count of its errors.

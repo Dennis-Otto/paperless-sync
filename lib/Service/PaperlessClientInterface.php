@@ -126,7 +126,7 @@ interface PaperlessClientInterface {
 	 * away without keeping the permission View, counts as changed.
 	 *
 	 * @throws PaperlessRequestException when Paperless can't be reached
-	 * @throws \RuntimeException when Paperless doesn't change the owner, such as for an account that may not change the document
+	 * @throws PaperlessOwnerException when Paperless answers that it doesn't change the owner, such as for an account that may not change the document, with the status of its answer
 	 */
 	public function setOwner(int $documentId, int $owner): void;
 

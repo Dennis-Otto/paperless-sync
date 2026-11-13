@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\SendService;
@@ -234,16 +235,37 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_GONE, $id, 'Scans');
 	}
 
-	/** A sender whose account was deleted has no files left. */
+	/** A sender whose account was deleted has no files left: the storage finds none of theirs. */
 	public function testTheFilesOfAUserThatIsGoneAreGone(): void {
+		$this->state->saveSend(self::SENDER, 5, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
+
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, 5));
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_GONE, 5, 'Scans/receipt.pdf');
+	}
+
+	/**
+	 * A lookup of the file that fails, such as while the user backend of the sender can't answer,
+	 * says nothing about the file: it waits for its next attempt, as after a failed upload, and the
+	 * sender hears nothing yet (#440).
+	 */
+	public function testAFailedLookupOfTheFileWaitsForItsNextAttempt(): void {
 		$storage = $this->createStub(NextcloudStorageInterface::class);
 		$storage->method('nodeById')->willThrowException(new RuntimeException('Backends provided no user object for alice'));
 		$publisher = $this->notificationPublisher($this->statusService($this->clock), $this->storage, $this->clock, $this->createStub(LoggerInterface::class));
 		$this->state->saveSend(self::SENDER, 5, ['path' => 'Scans/receipt.pdf', 'status' => SendService::QUEUED]);
+		$this->state->saveSend(self::SENDER, 6, ['path' => 'Scans/letter.pdf', 'status' => SendService::QUEUED]);
 
 		(new SendService($this->configService, $this->paperless, $this->state, $storage, $publisher, $this->clock, $this->logger, $this->ownerMapping()))->process();
 
-		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_GONE, 5, 'Scans/receipt.pdf');
+		self::assertSame(
+			['path' => 'Scans/receipt.pdf', 'status' => SendService::RETRY, 'attempts' => 1, 'retry_at' => TestClock::START + 900, 'last_error' => 'Backends provided no user object for alice'],
+			array_intersect_key($this->send(5), ['path' => 0, 'status' => 0, 'attempts' => 0, 'retry_at' => 0, 'last_error' => 0]),
+		);
+		self::assertSame(SendService::RETRY, $this->send(6)['status'], 'A failure of the storage is no failure of Paperless, so the round goes on.');
+		self::assertSame([], $this->notifications);
+		self::assertSame([], $this->paperless->uploadAttempts);
 	}
 
 	public function testAFileThatPaperlessRefusesIsNotUploadedAgain(): void {
@@ -564,22 +586,71 @@ final class SendServiceTest extends TestCase {
 		self::assertSame([], $this->paperless->ownerChanges);
 	}
 
-	/** While Paperless refuses the owner, the import stays pending, the log says so once, and the next round asks again. */
+	/**
+	 * While Paperless refuses the owner for a reason that may pass, the import stays pending, the log
+	 * says so once, and the next round asks again, which ends the import once Paperless takes it.
+	 */
 	public function testAnOwnerThatPaperlessRefusesKeepsTheImportPending(): void {
-		$this->usersOfNextcloud = ['paperless', 'alice'];
-		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
-		$this->paperless->users = ['5' => 'alice'];
-		$id = $this->pending('Scans/receipt.pdf');
-		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
-		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 5 the owner of the document 123: HTTP 403.');
-		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('its owner'), self::identicalTo(['document' => 123, 'path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'error' => 'Paperless did not make the user 5 the owner of the document 123: HTTP 403.']));
+		$id = $this->sentWithOwner();
+		$this->paperless->ownerException = new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 123: HTTP 503.', 503);
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('its owner'), self::identicalTo(['document' => 123, 'path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'error' => 'Paperless did not make the user 5 the owner of the document 123: HTTP 503.']));
 
 		$this->service->process();
 		$this->service->process();
 
 		self::assertSame(SendService::PENDING, $this->send($id)['status']);
-		self::assertSame('Paperless did not make the user 5 the owner of the document 123: HTTP 403.', $this->send($id)['last_error']);
+		self::assertSame('Paperless did not make the user 5 the owner of the document 123: HTTP 503.', $this->send($id)['last_error']);
 		self::assertCount(2, $this->paperless->ownerChanges);
+		self::assertSame([], $this->notifications);
+
+		$this->paperless->ownerException = null;
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $id));
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123);
+	}
+
+	/**
+	 * A refusal of the owner that repeats for good, such as 403 for an account that may no longer
+	 * change the document, ends the import at once: the document is in Paperless, so the sender
+	 * hears that it is, with the reason why it keeps its owner, and may send the file again (#439).
+	 */
+	public function testAnOwnerThatPaperlessRefusesForGoodEndsTheImport(): void {
+		$id = $this->sentWithOwner();
+		$this->paperless->ownerException = new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 123: HTTP 403: Insufficient permissions.', 403);
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('keeps the owner that Paperless gave it'), self::identicalTo(['document' => 123, 'path' => 'Scans/receipt.pdf', 'user' => self::SENDER, 'error' => 'Paperless did not make the user 5 the owner of the document 123: HTTP 403: Insufficient permissions.']));
+
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $id), 'The file may be sent again.');
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'Paperless did not make the user 5 the owner of the document 123: HTTP 403: Insufficient permissions.');
+	}
+
+	/** A refusal that may pass but never does ends the import a day after the upload, as a task that never ends does (#439). */
+	public function testAnOwnerThatPaperlessKeepsRefusingEndsTheImportADayAfterTheUpload(): void {
+		$id = $this->sentWithOwner();
+		$this->paperless->ownerException = new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 123: HTTP 503.', 503);
+
+		$this->clock->advance(86399);
+		$this->service->process();
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
+
+		$this->clock->advance(1);
+		$this->service->process();
+
+		self::assertNull($this->state->findSend(self::SENDER, $id));
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'Paperless did not make the user 5 the owner of the document 123: HTTP 503.');
+	}
+
+	/** In per-user ownership, a file of the sender, whose upload created the document 123, which goes to the user 5 of Paperless. */
+	private function sentWithOwner(): int {
+		$this->usersOfNextcloud = ['paperless', 'alice'];
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'alice'];
+		$id = $this->pending('Scans/receipt.pdf');
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 123];
+
+		return $id;
 	}
 
 	/**
