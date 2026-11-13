@@ -2228,6 +2228,78 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
 	}
 
+	/**
+	 * A run that stopped between writing a new copy and saving its path left the app's own copy
+	 * there, which the next run takes as its own by the checksum that Paperless reports (#456).
+	 */
+	public function testNewCopyOfARunThatStoppedBeforeItsSaveIsNoConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->state->exportSaveFailure = self::failTheSaveOfAPath();
+
+		$this->exportDocument();
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+		self::assertArrayNotHasKey('path', $this->state->exports[123]);
+		$this->state->exportSaveFailure = null;
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . self::EXPORTED_PATH], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content'], $this->storage->files);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		self::assertNull($this->state->exports[123]['last_error']);
+	}
+
+	/**
+	 * A run that stopped between moving a copy and saving its new path left the app's own copy
+	 * there, which the next run takes as its own by the fingerprint of its state (#456).
+	 */
+	public function testMovedCopyOfARunThatStoppedBeforeItsSaveIsNoConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$this->paperless->documents[0]['title'] = 'Strom August neu';
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$newPath = self::ARCHIVE . '/Energie GmbH/Rechnung/2026/2026-08-26 - Strom August neu [P123].pdf';
+		$this->state->exportSaveFailure = self::failTheSaveOfAPath();
+
+		$this->service->run();
+		self::assertSame([$newPath => '%PDF-content'], $this->storage->files);
+		self::assertSame(self::EXPORTED_PATH, $this->state->exports[123]['path']);
+		$this->state->exportSaveFailure = null;
+
+		$report = $this->service->run();
+
+		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
+		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
+		self::assertSame($newPath, $this->state->exports[123]['path']);
+	}
+
+	/** A file of the user without the content of the document stays a conflict, also for a document without a state. */
+	public function testFileOfTheUserWithoutAStateOfItsDocumentIsAConflictWhenConflictsAreSkipped(): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-content of another document';
+
+		$report = $this->exportDocument();
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-content of another document'], $this->storage->files);
+		self::assertSame(1, $this->paperless->checksumRequests);
+
+		$next = $this->service->run();
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $next->actions);
+		self::assertSame(1, $this->paperless->checksumRequests, 'The state keeps the checksum of the revision, so the next run asks Paperless no more.');
+	}
+
+	/** A save of the state that names a path fails, as a run killed between the write of a copy and that save would leave it. */
+	private static function failTheSaveOfAPath(): \Closure {
+		return static function (array $values): void {
+			if (isset($values['path'])) {
+				throw new RuntimeException('The database went away');
+			}
+		};
+	}
+
 	public function testMoveOntoAnExistingFileIsAConflictWhenConflictsAreSkipped(): void {
 		$this->exportDocument();
 		$this->configService->save(['conflict_mode' => 'skip']);
@@ -2290,6 +2362,32 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame('broken', $this->storage->files[$errorPath]);
 		self::assertSame("Paperless import failed\n\nUnsupported mime type\n\nPaperless task: task-1\n", $this->storage->files[$errorPath . '.error.txt']);
 		self::assertSame([], $this->state->imports, 'The file left the inbox, and so did its import.');
+	}
+
+	/**
+	 * A file that someone replaced after its upload, such as a repaired scan, stays in the inbox
+	 * when the import of its former content failed, and its new content goes to Paperless in the
+	 * next run (#452).
+	 */
+	public function testAFileThatChangedSinceItsFailedUploadGoesUpAgain(): void {
+		$path = 'Dokumente/Paperless/Eingang/scan.pdf';
+		$this->storage->files[$path] = 'broken';
+		$this->service->run();
+		$this->storage->files[$path] = 'repaired';
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Broken PDF'];
+
+		$report = $this->service->run();
+
+		self::assertSame(1, $report->importsFailed);
+		self::assertSame(["ERROR: Import {$path}: Paperless could not import its former content: Broken PDF; the file changed since its upload, so a run uploads its new content"], $report->actions);
+		self::assertSame([$path => 'repaired'], $this->storage->files, 'Nothing reaches the error folder.');
+		self::assertSame([], $this->state->imports);
+
+		$next = $this->service->run();
+
+		self::assertSame(['IMPORT: ' . $path], $next->actions);
+		self::assertSame('repaired', $this->paperless->uploads['scan.pdf']);
+		self::assertSame('pending', $this->state->imports[$path]['status']);
 	}
 
 	/**

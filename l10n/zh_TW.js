@@ -744,7 +744,10 @@ OC.L10N.register(
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "瀏覽器中的 Paperless 位址必須使用 HTTP 或 HTTPS。",
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已刪除 %s，即 Paperless Sync 的目標使用者",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您選擇其他目標使用者之前，每次執行都會失敗。ID 為 %s 的新帳號將取得所有文件。"
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您選擇其他目標使用者之前，每次執行都會失敗。ID 為 %s 的新帳號將取得所有文件。",
+		"Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content": "匯入 %1$s：Paperless 無法匯入其先前的內容：%2$s；檔案在上傳後已變更，因此執行會上傳其新內容",
+		"Sent to Paperless without the tags %s": "已傳送到 Paperless，但沒有標籤 %s",
+		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless 中沒有 Paperless Sync 帳號可見的這些名稱的標籤，因此這些檔案在沒有這些標籤的情況下傳送到了 Paperless：%s。請讓管理員在 Paperless 中建立這些標籤或與該帳號分享，或開啟「建立缺少的標籤」。"
 	},
 	"nplurals=1; plural=0;"
 )

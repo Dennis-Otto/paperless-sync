@@ -779,7 +779,10 @@
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Die Paperless-Adresse im Browser muss HTTP oder HTTPS verwenden.",
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud hat %s gelöscht, den Zielbenutzer von Paperless Sync",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis du einen anderen Zielbenutzer wählst. Ein neues Konto mit der ID %s bekäme jedes Dokument."
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis du einen anderen Zielbenutzer wählst. Ein neues Konto mit der ID %s bekäme jedes Dokument.",
+		"Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content": "Import %1$s: Paperless konnte den früheren Inhalt nicht importieren: %2$s; die Datei hat sich seit dem Hochladen geändert, daher lädt ein Lauf ihren neuen Inhalt hoch",
+		"Sent to Paperless without the tags %s": "Ohne die Tags %s an Paperless gesendet",
+		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless hat keine Tags mit diesen Namen, die das Konto von Paperless Sync sieht, daher gingen diese Dateien ohne sie an Paperless: %s. Bitte einen Administrator, die Tags in Paperless anzulegen oder mit dem Konto zu teilen oder „Fehlende Tags anlegen“ einzuschalten."
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

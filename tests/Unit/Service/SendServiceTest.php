@@ -118,14 +118,51 @@ final class SendServiceTest extends TestCase {
 		self::assertSame(['Taxes'], $this->paperless->createdTags);
 	}
 
+	/**
+	 * A tag that Paperless lacks is left out, and named, as for the inbox: once in the log, and to
+	 * the sender, also the owner of the files of a rule, who would else never learn of it (#453).
+	 */
 	public function testATagOfARuleThatPaperlessLacksIsLeftOutWithoutCreatingTags(): void {
 		$this->paperless->tagInfo = ['names' => ['5' => 'Family'], 'inbox' => []];
 		$this->queueByRule('Scans/receipt.pdf', 'Family,Taxes');
+		$this->queueByRule('Scans/letter.pdf', 'taxes,Bank');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('went without them'), self::identicalTo(['names' => 'Taxes, Bank']));
 
 		$this->service->process();
 
 		self::assertSame([5], $this->paperless->uploadTags['receipt.pdf']);
+		self::assertSame([], $this->paperless->uploadTags['letter.pdf']);
 		self::assertSame([], $this->paperless->createdTags);
+		self::assertCount(1, $this->notifications, 'One notification for the round, not one for each file.');
+		$notification = $this->notifications[0];
+		self::assertSame([self::SENDER, NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS, NotificationPublisher::OBJECT_SENT_WITHOUT_TAGS, self::SENDER], [$notification->getUser(), $notification->getSubject(), $notification->getObjectType(), $notification->getObjectId()]);
+		self::assertSame(['tags' => 'Taxes, Bank', 'files' => 'receipt.pdf, letter.pdf'], $notification->getSubjectParameters());
+	}
+
+	/** A file sent from Files goes without such a tag as well, and the notification of a later round replaces that of an earlier one. */
+	public function testTheNotificationOfTagsThatPaperlessLacksReplacesTheEarlierOne(): void {
+		$this->configService->save(['inbox_tags' => 'Scanned', 'send_group' => 'scanners'] + self::validSettings());
+		$this->queue('Scans/a.pdf');
+		$this->service->process();
+		$this->queue('Scans/b.pdf');
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->uploadTags['b.pdf']);
+		self::assertCount(1, $this->notifications);
+		self::assertSame(['tags' => 'Scanned', 'files' => 'b.pdf'], $this->notifications[0]->getSubjectParameters());
+	}
+
+	/** A file whose content Paperless has already went nowhere, so it went without no tag. */
+	public function testAFileThatPaperlessHasAlreadyNamesNoTag(): void {
+		$this->configService->save(['inbox_tags' => 'Scanned', 'send_group' => 'scanners'] + self::validSettings());
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 123;
+		$this->logger->expects(self::never())->method('warning');
+
+		$this->service->process();
+
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_KNOWN, $id, 'Scans/receipt.pdf', 123);
 	}
 
 	/** A file moved after the click still goes, from its new place. */

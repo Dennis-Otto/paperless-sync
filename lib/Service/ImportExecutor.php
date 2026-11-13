@@ -179,7 +179,7 @@ final class ImportExecutor {
 			$this->known($action, $known);
 			return;
 		}
-		$tags = ['ids' => [], 'names' => []];
+		$tags = ['ids' => [], 'names' => [], 'missing' => []];
 		if ($this->tags->enabled()) {
 			try {
 				$tags = $this->tags->forFolder($action->folder);
@@ -406,10 +406,20 @@ final class ImportExecutor {
 	 * The import of a file of the inbox created no document, so it moves to the error folder, next to
 	 * a text that says why; its entry in the activity stream gives the reason alone. Neither the move
 	 * nor the text ever replaces a file there, whatever the conflict policy: one that appeared at its
-	 * free name since the plan is a conflict, and the next run finds another name.
+	 * free name since the plan is a conflict, and the next run finds another name. A file that
+	 * changed since its upload stays where it is, without its state, so that the next run uploads
+	 * its new content, and the report names the failure of its former content.
 	 */
 	private function failed(ImportFailed $action): void {
 		$path = $action->context->path;
+		if ($action->changed) {
+			if (!$this->dryRun) {
+				$this->state->deleteImport($this->config->targetUser, $path);
+			}
+			$this->report->error(new RunError('Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content', [$path, RunError::plain($action->reason)]), null, $path);
+			++$this->report->importsFailed;
+			return;
+		}
 		if (!$this->dryRun) {
 			$this->storage->move($this->config->targetUser, $path, $action->destination, 'skip');
 			$this->storage->writeText($this->config->targetUser, $action->destination . '.error.txt', $action->diagnostic, 'skip');

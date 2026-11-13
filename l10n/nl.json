@@ -779,7 +779,10 @@
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Het adres van Paperless in de browser moet HTTP of HTTPS gebruiken.",
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Het adres van Paperless in de browser mag geen inloggegevens, query of fragment bevatten.",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud heeft %s verwijderd, de doelgebruiker van Paperless Sync",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Elke run mislukt totdat je een andere doelgebruiker kiest. Een nieuw account met de ID %s zou elk document krijgen."
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Elke run mislukt totdat je een andere doelgebruiker kiest. Een nieuw account met de ID %s zou elk document krijgen.",
+		"Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content": "Import %1$s: Paperless kon de vorige inhoud niet importeren: %2$s; het bestand is sinds het uploaden gewijzigd, dus een run uploadt de nieuwe inhoud",
+		"Sent to Paperless without the tags %s": "Naar Paperless verzonden zonder de labels %s",
+		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless heeft geen labels met deze namen die het account van Paperless Sync ziet, dus deze bestanden gingen zonder die labels naar Paperless: %s. Vraag een beheerder om de labels in Paperless aan te maken of met het account te delen, of om „Ontbrekende labels aanmaken” in te schakelen."
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

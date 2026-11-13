@@ -247,6 +247,37 @@ final class NotifierTest extends TestCase {
 	 * link to the settings, in the language of each, for as long as the settings name that user,
 	 * whatever the case of its ID.
 	 */
+	/** Files that went to Paperless without tags that it lacks: the tags, the files, and what brings the tags back (#453). */
+	public function testFilesSentWithoutTagsNameTheTagsAndTheFiles(): void {
+		$parameters = ['tags' => 'Scans, Taxes', 'files' => 'receipt.pdf, letter.pdf'];
+
+		$notification = $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS, $parameters), 'en');
+		$german = $this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS, $parameters), 'de');
+
+		self::assertSame('Sent to Paperless without the tags Scans, Taxes', $notification->getParsedSubject());
+		self::assertSame('Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: receipt.pdf, letter.pdf. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on "Create missing tags".', $notification->getParsedMessage());
+		self::assertSame('Ohne die Tags Scans, Taxes an Paperless gesendet', $german->getParsedSubject());
+		self::assertStringContainsString('„Fehlende Tags anlegen“', $german->getParsedMessage());
+	}
+
+	/** @return array<string, array{array<string, mixed>}> */
+	public static function sentWithoutTagsWithoutTheirParameters(): array {
+		return [
+			'no tags' => [['files' => 'receipt.pdf']],
+			'no files' => [['tags' => 'Scans']],
+			'tags that are no text' => [['tags' => ['Scans'], 'files' => 'receipt.pdf']],
+			'files that are no text' => [['tags' => 'Scans', 'files' => ['receipt.pdf']]],
+		];
+	}
+
+	/** @param array<string, mixed> $parameters */
+	#[DataProvider('sentWithoutTagsWithoutTheirParameters')]
+	public function testFilesSentWithoutTagsWithoutTheirParametersAreNotItsConcern(array $parameters): void {
+		$this->expectException(UnknownNotificationException::class);
+
+		$this->notifier->prepare($this->notification(NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS, $parameters), 'en');
+	}
+
 	public function testADeletedTargetUserNamesTheUserAndLinksTheSettings(): void {
 		$this->settings['target_user'] = 'Paperless';
 

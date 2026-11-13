@@ -82,6 +82,9 @@ final class Notifier implements INotifier {
 				$file = isset($parameters['file']) && is_array($parameters['file']) ? $parameters['file'] : [];
 				$this->import($notification, ['file' => ['id' => 0] + $file] + $parameters, $l->t('Paperless Sync could not send {file}: it was deleted, or you may no longer read it'));
 				break;
+			case NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS:
+				$this->sentWithoutTags($l, $notification, $parameters);
+				break;
 			case NotificationPublisher::SUBJECT_TARGET_USER_DELETED:
 				$this->targetUserDeleted($l, $notification, $parameters);
 				break;
@@ -134,6 +137,23 @@ final class Notifier implements INotifier {
 		$notification->setParsedSubject($l->t('Nextcloud deleted %s, the target user of Paperless Sync', [$user]))
 			->setParsedMessage($l->t('Every run fails until you choose another target user. A new account with the ID %s would get every document.', [$user]))
 			->setLink($this->urlGenerator->linkToRouteAbsolute('settings.AdminSettings.index', ['section' => AppConstants::APP_ID]));
+	}
+
+	/**
+	 * "Sent to Paperless without the tags Scans, Taxes", with the files below it and what brings the
+	 * tags back.
+	 *
+	 * @param array<array-key, mixed> $parameters
+	 * @throws UnknownNotificationException for a notification without its tags or files
+	 */
+	private function sentWithoutTags(IL10N $l, INotification $notification, array $parameters): void {
+		$tags = isset($parameters['tags']) && is_string($parameters['tags']) ? $parameters['tags'] : '';
+		$files = isset($parameters['files']) && is_string($parameters['files']) ? $parameters['files'] : '';
+		if ($tags === '' || $files === '') {
+			throw new UnknownNotificationException();
+		}
+		$notification->setParsedSubject($l->t('Sent to Paperless without the tags %s', [$tags]))
+			->setParsedMessage($l->t('Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on "Create missing tags".', [$files]));
 	}
 
 	/**

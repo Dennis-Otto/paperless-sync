@@ -201,6 +201,8 @@ final class ExportPlanner {
 			// The mirrored file has the content of the document while its revision is the same, and
 			// after a change while Paperless reports one of its checksums, MD5 or SHA-256.
 			$sameContent = false;
+			// The checksum that Paperless reports for the revision, once the run knows it.
+			$known = null;
 			if ($entry !== null && $fingerprint !== '' && $fingerprint !== DocumentFingerprint::PENDING) {
 				$sameContent = ($entry['source_revision'] ?? '') === $sourceRevision;
 				if (!$sameContent) {
@@ -247,7 +249,18 @@ final class ExportPlanner {
 			// longer the app's own.
 			$ownCopy = false;
 			if ($this->config->conflictMode === 'skip' && $this->files->exists($target)) {
-				if (!$this->isOwnCopy($oldPath, $target, $fingerprint)) {
+				$checksumOf = function () use ($documentId, $document, $useOriginal, $entry, $sourceRevision, $known, &$checksum): string {
+					$known ??= $this->knownChecksum($entry ?? [], $sourceRevision);
+					if ($known !== null) {
+						return $known;
+					}
+					$known = $this->versions->checksum($documentId, $document, $useOriginal);
+					$checksum['remote_checksum'] = $known;
+					$checksum['remote_revision'] = $sourceRevision;
+
+					return $known;
+				};
+				if (!$this->isOwnCopy($oldPath, $target, $fingerprint) && !$this->isUnsavedCopy($oldPath, $target, $fingerprint, $checksumOf)) {
 					throw new RuntimeException("Nextcloud file conflict at {$target}.");
 				}
 				$ownCopy = true;
@@ -474,6 +487,26 @@ final class ExportPlanner {
 		$mirrored = $this->files->fingerprint($path);
 
 		return $mirrored !== null && DocumentFingerprint::matches($fingerprint, $mirrored->sha256);
+	}
+
+	/**
+	 * Whether the file at the path of a document is a copy that the app wrote although its state
+	 * doesn't name it: a run that stopped between writing a new copy, or moving one, and saving its
+	 * path left it there. The copy that the state names is gone, and the file has the content that
+	 * the app wrote last, by the saved fingerprint, or that of the document, by the checksum that
+	 * Paperless reports. A file with the content of the document loses nothing when the app writes
+	 * it again, whoever put it there.
+	 *
+	 * @param \Closure(): string $checksumOf the checksum of the document, asked only when needed
+	 */
+	private function isUnsavedCopy(string $recordedPath, string $path, string $fingerprint, \Closure $checksumOf): bool {
+		if ($recordedPath !== '' && $this->files->exists($recordedPath)) {
+			return false;
+		}
+		$mirrored = $this->files->fingerprint($path);
+
+		return $mirrored !== null
+			&& (DocumentFingerprint::matches($fingerprint, $mirrored->sha256) || DocumentFingerprint::matches($mirrored->value(), $checksumOf()));
 	}
 
 	/**

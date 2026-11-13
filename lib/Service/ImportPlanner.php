@@ -182,7 +182,9 @@ final class ImportPlanner {
 			if (in_array($task['status'], self::TASK_FAILED, true)) {
 				$reason = self::failureReason($task);
 
-				return [new ImportFailed($context, $this->errorPath($context->path), $reason, $this->diagnostic($taskId, $reason) . $this->formerName($context->path))];
+				// The failure is that of the content of the upload: a file that changed since then
+				// stays in the inbox, and its new content goes to Paperless in the next run.
+				return [new ImportFailed($context, $this->errorPath($context->path), $reason, $this->diagnostic($taskId, $reason) . $this->formerName($context->path), changed: !$unchangedFile)];
 			}
 			if ($now - (int)($pending['submitted_at'] ?? 0) >= self::TASK_TIMEOUT) {
 				return [$this->endUnfinished($context, $etag, $unchangedFile, (int)($pending['attempts'] ?? 0) + 1, $taskId, $task)];
