@@ -792,7 +792,19 @@ OC.L10N.register(
 		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless, of een proxy ervoor, stuurt de verzoeken van Paperless Sync door naar %1$s (HTTP %2$s). Vul de URL in waaronder Paperless zonder doorverwijzing antwoordt: een proxy die om een aanmelding vraagt, moet de API van Paperless doorlaten.",
 		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless, of een proxy ervoor, stuurt door naar %1$s (HTTP %2$s).",
 		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "Vul %s in als URL van Paperless. Paperless Sync volgt geen doorverwijzing: die zou het token naar een ander adres sturen, of een upload veranderen in een verzoek zonder het bestand.",
-		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Vul de URL in waaronder Paperless zonder doorverwijzing antwoordt: een proxy die om een aanmelding vraagt, moet de API van Paperless doorlaten."
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Vul de URL in waaronder Paperless zonder doorverwijzing antwoordt: een proxy die om een aanmelding vraagt, moet de API van Paperless doorlaten.",
+		"The download of the document P%1$s took too long and stopped after %2$s bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.": "Het downloaden van document P%1$s duurde te lang en stopte na %2$s bytes. Een overdracht stopt na een minuut onder 1 KB per seconde, of na een uur. Controleer het netwerk naar Paperless, zoals een VPN.",
+		"Name the documents by their IDs in Paperless, such as 123 or P123.": "Noem de documenten bij hun ID in Paperless, zoals 123 of P123.",
+		"Name the IDs of the documents, or choose every copy.": "Noem de ID’s van de documenten, of kies elke kopie.",
+		"_The next runs write %n copy again from Paperless._::_The next runs write %n copies again from Paperless._": [
+			"De volgende runs schrijven %n kopie opnieuw vanuit Paperless.",
+			"De volgende runs schrijven %n kopieën opnieuw vanuit Paperless."
+		],
+		"Paperless Sync has no copy of %s.": "Paperless Sync heeft geen kopie van %s.",
+		"Paperless Sync has no copy to write again.": "Paperless Sync heeft geen kopie om opnieuw te schrijven.",
+		"Write all copies again": "Alle kopieën opnieuw schrijven",
+		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "Elke kopie opnieuw schrijven vanuit Paperless? De volgende runs downloaden elk document opnieuw, batch voor batch, en schrijven het op de plaats van zijn kopie. Een kopie die iemand in Nextcloud heeft bewerkt, krijgt weer de inhoud van Paperless, en de bewerking blijft bewaard als eerdere versie onder Versies.",
+		"Could not write the copies again.": "De kopieën konden niet opnieuw worden geschreven."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

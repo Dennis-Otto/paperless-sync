@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Controller\SyncController;
 use OCA\PaperlessSync\Cron\ManualSyncJob;
+use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Service\GettingStarted;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
@@ -56,6 +57,7 @@ final class SyncControllerTest extends TestCase {
 	private ?IUser $user = null;
 	private TestPaperlessClient $paperless;
 	private TestStorage $storage;
+	private TestStateRepository $state;
 	private SyncController $controller;
 
 	protected function setUp(): void {
@@ -67,11 +69,12 @@ final class SyncControllerTest extends TestCase {
 		$status = $this->statusService($clock, $this->locking);
 		$this->paperless = new TestPaperlessClient();
 		$this->storage = new TestStorage();
+		$this->state = new TestStateRepository();
 		$sync = new SyncService(
 			$configService,
 			$this->paperless,
 			$this->storage,
-			new TestStateRepository(),
+			$this->state,
 			new PathTemplateService(),
 			$status,
 			$this->locking,
@@ -343,5 +346,92 @@ final class SyncControllerTest extends TestCase {
 		self::assertArrayNotHasKey('errorRecords', $status['report']);
 		self::assertIsArray($queued);
 		self::assertSame($status['report'], $queued['status']['report']);
+	}
+
+	/**
+	 * Writing copies again from the settings page, as occ paperless_sync:forget does (#448): the
+	 * next runs download the documents again and write each in place of its copy.
+	 */
+	public function testWritingEveryCopyAgainForgetsTheContentOfEach(): void {
+		$this->state->exports[1] = ['document_id' => 1, 'path' => 'Documents/Paperless/P1.pdf', 'state' => 'active', 'fingerprint' => 'sha256:one'];
+		$this->state->exports[2] = ['document_id' => 2, 'path' => 'Documents/Paperless/P2.pdf', 'state' => 'active', 'fingerprint' => 'sha256:two'];
+		$this->jobList->expects(self::never())->method('add');
+
+		$response = $this->controller->forget(true);
+
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		self::assertSame(['forgotten' => 2, 'unknown' => [], 'message' => 'Die nächsten Läufe schreiben 2 Kopien erneut aus Paperless.'], $response->getData());
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[1]['fingerprint']);
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[2]['fingerprint']);
+		self::assertSame('Documents/Paperless/P1.pdf', $this->state->exports[1]['path'], 'The copy keeps its path, its file ID, its shares and its versions.');
+	}
+
+	/** The documents may be named as Paperless and the names of the copies show them, and one without a copy is named. */
+	public function testWritingCopiesOfSomeDocumentsAgainNamesThoseWithoutACopy(): void {
+		$this->state->exports[1] = ['document_id' => 1, 'path' => 'Documents/Paperless/P1.pdf', 'state' => 'active', 'fingerprint' => 'sha256:one'];
+		$this->state->exports[2] = ['document_id' => 2, 'path' => 'Documents/Paperless/P2.pdf', 'state' => 'active', 'fingerprint' => 'sha256:two'];
+
+		$response = $this->controller->forget(false, ['P1', 1, '999']);
+
+		self::assertSame(['forgotten' => 1, 'unknown' => [999], 'message' => 'Die nächsten Läufe schreiben 1 Kopie erneut aus Paperless. Paperless Sync hat keine Kopie von P999.'], $response->getData());
+		self::assertSame(DocumentFingerprint::PENDING, $this->state->exports[1]['fingerprint']);
+		self::assertSame('sha256:two', $this->state->exports[2]['fingerprint'], 'Only the named documents are written again.');
+	}
+
+	public function testWritingCopiesAgainWithoutAnySaysSo(): void {
+		self::assertSame(['forgotten' => 0, 'unknown' => [], 'message' => 'Paperless Sync hat keine Kopie zum erneuten Schreiben.'], $this->controller->forget(true)->getData());
+		self::assertSame(['forgotten' => 0, 'unknown' => [7], 'message' => 'Paperless Sync hat keine Kopie von P7.'], $this->controller->forget(false, [7])->getData());
+	}
+
+	/** @return array<string, array{bool, list<mixed>|null, string}> requests that name neither the documents nor every copy, or both */
+	public static function unclearRequests(): array {
+		return [
+			'nothing' => [false, null, 'Nenne die IDs der Dokumente oder wähle jede Kopie.'],
+			'an empty list' => [false, [], 'Nenne die IDs der Dokumente oder wähle jede Kopie.'],
+			'both' => [true, [1], 'Nenne die IDs der Dokumente oder wähle jede Kopie.'],
+			'a name' => [false, ['invoice.pdf'], 'Nenne die Dokumente mit ihren IDs in Paperless, etwa 123 oder P123.'],
+			'zero' => [false, [0], 'Nenne die Dokumente mit ihren IDs in Paperless, etwa 123 oder P123.'],
+			'a list' => [false, [[1]], 'Nenne die Dokumente mit ihren IDs in Paperless, etwa 123 oder P123.'],
+		];
+	}
+
+	/** @param list<mixed>|null $documents */
+	#[DataProvider('unclearRequests')]
+	public function testWritingCopiesAgainNeedsTheDocumentsOrEveryCopy(bool $all, ?array $documents, string $message): void {
+		$this->state->exports[1] = ['document_id' => 1, 'path' => 'Documents/Paperless/P1.pdf', 'state' => 'active', 'fingerprint' => 'sha256:one'];
+
+		$response = $this->controller->forget($all, $documents);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => $message], $response->getData());
+		self::assertSame('sha256:one', $this->state->exports[1]['fingerprint']);
+	}
+
+	/** An active run is a conflict, as the exit code 3 of the command: it would save the content that this forgets. */
+	public function testWritingCopiesAgainWhileARunIsActiveIsAConflict(): void {
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('paperless_sync::synchronization'));
+
+		$response = $this->controller->forget(true);
+
+		self::assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		self::assertSame(['message' => 'Es läuft bereits eine andere Synchronisation.'], $response->getData());
+	}
+
+	public function testWritingCopiesAgainWithoutATargetUserSaysSo(): void {
+		$this->settings = [];
+
+		$response = $this->controller->forget(true);
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame(['message' => 'Paperless Sync ist noch nicht vollständig eingerichtet.'], $response->getData());
+	}
+
+	public function testWritingCopiesAgainThatFailsSaysWhy(): void {
+		$this->locking->method('acquireLock')->willThrowException(new \RuntimeException('The cache of the locks is gone.'));
+
+		$response = $this->controller->forget(true);
+
+		self::assertSame(Http::STATUS_INTERNAL_SERVER_ERROR, $response->getStatus());
+		self::assertSame(['message' => 'The cache of the locks is gone.'], $response->getData());
 	}
 }

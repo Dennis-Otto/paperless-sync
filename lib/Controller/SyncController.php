@@ -107,6 +107,60 @@ final class SyncController extends Controller {
 	}
 
 	/**
+	 * Writes copies anew from Paperless, as occ paperless_sync:forget does, for those who have no
+	 * shell, such as the members of a group to which the page is delegated (#448): the next runs
+	 * download the documents again, batch by batch, and write each in place of its copy, which
+	 * keeps its path, its file ID, its shares and its versions. It takes the IDs of the documents,
+	 * such as 123 or "P123", or $all for every copy, and answers how many copies the next runs
+	 * write and the IDs without a copy. An active run is a conflict, as the exit code 3 of the
+	 * command.
+	 *
+	 * @param list<mixed>|null $documents
+	 */
+	#[FrontpageRoute(verb: 'POST', url: '/sync/forget')]
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	public function forget(bool $all = false, ?array $documents = null): JSONResponse {
+		$documentIds = [];
+		/** @psalm-suppress MixedAssignment The IDs are checked one by one. */
+		foreach ($documents ?? [] as $document) {
+			$documentId = is_int($document) || is_string($document)
+				? filter_var((string)preg_replace('/^P/i', '', (string)$document), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+				: false;
+			if ($documentId === false) {
+				return new JSONResponse(['message' => $this->l10n->t('Name the documents by their IDs in Paperless, such as 123 or P123.')], Http::STATUS_BAD_REQUEST);
+			}
+			$documentIds[$documentId] = $documentId;
+		}
+		$documentIds = array_values($documentIds);
+		if ($all === ($documentIds !== [])) {
+			return new JSONResponse(['message' => $this->l10n->t('Name the IDs of the documents, or choose every copy.')], Http::STATUS_BAD_REQUEST);
+		}
+		try {
+			$forgotten = $this->syncService->forget($all ? null : $documentIds);
+		} catch (LockedException) {
+			return $this->locked();
+		} catch (InvalidSettingException $exception) {
+			return new JSONResponse(['message' => $exception->translated($this->l10n)], Http::STATUS_BAD_REQUEST);
+		} catch (\Throwable $exception) {
+			return new JSONResponse(['message' => RunError::of($exception)->translated($this->l10n)], Http::STATUS_INTERNAL_SERVER_ERROR);
+		}
+		$unknown = array_values(array_diff($documentIds, $forgotten));
+		$parts = [];
+		if ($forgotten !== []) {
+			$parts[] = $this->l10n->n('The next runs write %n copy again from Paperless.', 'The next runs write %n copies again from Paperless.', count($forgotten));
+		}
+		if ($unknown !== []) {
+			$parts[] = $this->l10n->t('Paperless Sync has no copy of %s.', [implode(', ', array_map(static fn (int $id): string => "P{$id}", $unknown))]);
+		}
+
+		return new JSONResponse([
+			'forgotten' => count($forgotten),
+			'unknown' => $unknown,
+			'message' => $parts === [] ? $this->l10n->t('Paperless Sync has no copy to write again.') : implode(' ', $parts),
+		]);
+	}
+
+	/**
 	 * Queues the run by hand, after the checks that a run would fail at once, so that the page says
 	 * so at once. The status says "queued" before the job exists, so that a job that starts at once
 	 * says "running" after it, never before. The job names the person who queued it, whom

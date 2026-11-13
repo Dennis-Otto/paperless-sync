@@ -792,7 +792,19 @@ OC.L10N.register(
 		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless oder ein Proxy davor leitet die Anfragen von Paperless Sync nach %1$s um (HTTP %2$s). Tragen Sie die Adresse ein, unter der Paperless ohne Umleitung antwortet: Ein Proxy, der eine Anmeldung verlangt, muss die API von Paperless durchlassen.",
 		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless oder ein Proxy davor leitet nach %1$s um (HTTP %2$s).",
 		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "Tragen Sie %s als Adresse von Paperless ein. Paperless Sync folgt keiner Umleitung: Sie würde das Token an eine andere Adresse schicken oder einen Upload in eine Anfrage ohne seine Datei verwandeln.",
-		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Tragen Sie die Adresse ein, unter der Paperless ohne Umleitung antwortet: Ein Proxy, der eine Anmeldung verlangt, muss die API von Paperless durchlassen."
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Tragen Sie die Adresse ein, unter der Paperless ohne Umleitung antwortet: Ein Proxy, der eine Anmeldung verlangt, muss die API von Paperless durchlassen.",
+		"The download of the document P%1$s took too long and stopped after %2$s bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.": "Das Herunterladen des Dokuments P%1$s hat zu lange gedauert und wurde nach %2$s Bytes beendet. Eine Übertragung endet nach einer Minute unter 1 KB pro Sekunde oder nach einer Stunde. Prüfen Sie das Netzwerk zu Paperless, etwa ein VPN.",
+		"Name the documents by their IDs in Paperless, such as 123 or P123.": "Nennen Sie die Dokumente mit ihren IDs in Paperless, etwa 123 oder P123.",
+		"Name the IDs of the documents, or choose every copy.": "Nennen Sie die IDs der Dokumente oder wählen Sie jede Kopie.",
+		"_The next runs write %n copy again from Paperless._::_The next runs write %n copies again from Paperless._": [
+			"Die nächsten Läufe schreiben %n Kopie erneut aus Paperless.",
+			"Die nächsten Läufe schreiben %n Kopien erneut aus Paperless."
+		],
+		"Paperless Sync has no copy of %s.": "Paperless Sync hat keine Kopie von %s.",
+		"Paperless Sync has no copy to write again.": "Paperless Sync hat keine Kopie zum erneuten Schreiben.",
+		"Write all copies again": "Alle Kopien neu schreiben",
+		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "Jede Kopie neu aus Paperless schreiben? Die nächsten Läufe laden jedes Dokument erneut herunter, Stapel für Stapel, und schreiben es an die Stelle seiner Kopie. Eine Kopie, die jemand in Nextcloud bearbeitet hat, bekommt wieder den Inhalt von Paperless, und die Bearbeitung bleibt als frühere Version unter Versionen erhalten.",
+		"Could not write the copies again.": "Die Kopien konnten nicht neu geschrieben werden."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

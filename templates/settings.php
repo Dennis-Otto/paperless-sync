@@ -6,7 +6,7 @@ declare(strict_types=1);
  * SPDX-FileCopyrightText: 2026 Dennis Otto
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, tagSharesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
+ * @var array{config: \OCA\PaperlessSync\Model\SyncConfig, status: array<string, mixed>, saveUrl: string, testUrl: string, accountUrl: string, resetUrl: string, runUrl: string, statusUrl: string, forgetUrl: string, previewUrl: string, filesUrl: string, tagsUrl: string, usersUrl: string, groupsUrl: string, tagSharesUrl: string, webhookStateUrl: string, webhook: array{configured: bool, created: int, url: string, lastCall: array{at: int, document: int, result: string, message: string}|null}, health: list<array{severity: string, description: string}>, setup: array{complete: bool, steps: list<array{id: string, state: 'done'|'next'|'todo'}>, estimate: string}} $_
  */
 
 use OCA\PaperlessSync\AppInfo\AppConstants;
@@ -99,6 +99,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 	data-reset-url="<?php p($_['resetUrl']); ?>"
 	data-run-url="<?php p($_['runUrl']); ?>"
 	data-status-url="<?php p($_['statusUrl']); ?>"
+	data-forget-url="<?php p($_['forgetUrl']); ?>"
 	data-preview-url="<?php p($_['previewUrl']); ?>"
 	data-files-url="<?php p($_['filesUrl']); ?>"
 	data-tags-url="<?php p($_['tagsUrl']); ?>"
@@ -183,6 +184,7 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 				<strong id="paperless-sync-next-run">—</strong>
 			</div>
 			<button id="paperless-sync-refresh-status" type="button"><?php p($l->t('Refresh')); ?></button>
+			<button id="paperless-sync-rewrite" type="button"><?php p($l->t('Write all copies again')); ?></button>
 			<p id="paperless-sync-paperless-version" class="paperless-sync-status-paperless" hidden></p>
 		</div>
 		<div id="paperless-sync-errors" class="paperless-sync-errors" role="alert" hidden>

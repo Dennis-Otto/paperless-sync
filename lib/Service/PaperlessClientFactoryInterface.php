@@ -14,7 +14,11 @@ use OCA\PaperlessSync\Model\PaperlessConnection;
 interface PaperlessClientFactoryInterface {
 	/**
 	 * A client of the Paperless of $connection: every request of the client goes to its URL, with
-	 * its token, whatever the settings say meanwhile.
+	 * its token, whatever the settings say meanwhile. A run passes $signOfLife, which the client
+	 * calls while a document moves, so that a long download or upload keeps the run alive
+	 * (StatusService::HEARTBEAT_GRACE).
+	 *
+	 * @param (\Closure(): void)|null $signOfLife
 	 */
-	public function connect(PaperlessConnection $connection): PaperlessClientInterface;
+	public function connect(PaperlessConnection $connection, ?\Closure $signOfLife = null): PaperlessClientInterface;
 }

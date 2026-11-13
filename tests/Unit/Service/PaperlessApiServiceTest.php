@@ -111,9 +111,9 @@ final class PaperlessApiServiceTest extends TestCase {
 	 * A client of the connection with $url, $token and $localNetwork, as PaperlessClientFactory
 	 * makes it for a run, by default that of the Paperless of the tests.
 	 */
-	private function client(string $url = self::URL, string $token = 'secret-token', bool $localNetwork = false): PaperlessClientInterface {
+	private function client(string $url = self::URL, string $token = 'secret-token', bool $localNetwork = false, ?\Closure $signOfLife = null): PaperlessClientInterface {
 		return (new PaperlessClientFactory($this->clientService, $this->tempManager, $this->remoteHostValidator))
-			->connect(new PaperlessConnection($url, $token, $localNetwork));
+			->connect(new PaperlessConnection($url, $token, $localNetwork), $signOfLife);
 	}
 
 	protected function tearDown(): void {
@@ -469,7 +469,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(hash('md5', '%PDF-original'), $fingerprint->md5);
 		self::assertSame(self::URL . '/api/documents/123/download/', $request['url']);
 		self::assertSame(['original' => 'true'], $request['options']['query']);
-		self::assertSame(180, $request['options']['timeout']);
+		self::assertTransferLimits($request['options']);
 		$redirects = $request['options']['allow_redirects'];
 		self::assertIsArray($redirects);
 		self::assertIsCallable($redirects['on_redirect'], 'Without the setting, every redirect is checked against the local network.');
@@ -941,7 +941,7 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(['name' => 'document', 'filename' => 'police.pdf', 'content' => '%PDF-inbox', 'size' => 10], $sent);
 		self::assertCount(1, $request['options']['multipart'], 'Without tags, the file is the only part.');
 		self::assertSame('application/json; version=9', $request['options']['headers']['Accept']);
-		self::assertSame(180, $request['options']['timeout']);
+		self::assertTransferLimits($request['options']);
 		self::assertFalse($request['options']['http_errors'], 'Errors must come back as responses, with the reason in their body.');
 		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'), 'The copy of the file must be removed.');
 	}
@@ -1510,7 +1510,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	}
 
 	public function testUnreachablePaperlessMayPass(): void {
-		$timeout = new RuntimeException('cURL error 28: Operation timed out after 180001 milliseconds');
+		$timeout = new RuntimeException('cURL error 28: Connection timed out after 10001 milliseconds');
 		$this->responses[] = static function () use ($timeout): array {
 			throw $timeout;
 		};
@@ -1519,12 +1519,125 @@ final class PaperlessApiServiceTest extends TestCase {
 			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
 			self::fail('An unreachable Paperless must be reported.');
 		} catch (PaperlessUploadException $exception) {
-			self::assertSame('Paperless could not be reached for the upload: cURL error 28: Operation timed out after 180001 milliseconds', $exception->getMessage());
+			self::assertSame('Paperless could not be reached for the upload: cURL error 28: Connection timed out after 10001 milliseconds', $exception->getMessage());
 			self::assertFalse($exception->permanent);
 			self::assertSame(0, $exception->statusCode);
 			self::assertNull($exception->getPrevious(), 'The trace of the failure of the HTTP client holds the token.');
 		}
 		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	/** @return array<string, array{string}> the two ways in which cURL stops a transfer that took too long */
+	public static function transfersThatTookTooLong(): array {
+		return [
+			'one that stalled' => ['cURL error 28: Operation too slow. Less than 1024 bytes/sec transferred the last 60 seconds (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://paperless.example.test/api/documents/123/download/?original=true'],
+			'one that reached the upper bound' => ['cURL error 28: Operation timed out after 3600001 milliseconds with 7 out of 9000000 bytes received (see https://curl.haxx.se/libcurl/c/libcurl-errors.html) for https://paperless.example.test/api/documents/123/download/?original=true'],
+		];
+	}
+
+	/**
+	 * A download that took too long names the document and what arrived of it, in the words of the
+	 * app, and keeps the message of cURL as its detail; a large file over a slow line is no longer
+	 * cut off after three minutes, only one that stalls (#459).
+	 */
+	#[DataProvider('transfersThatTookTooLong')]
+	public function testADownloadThatTookTooLongNamesTheDocumentAndWhatArrived(string $failure): void {
+		$this->responses[] = static function (array $options) use ($failure): array {
+			file_put_contents($options['sink'], '%PDF-or');
+			throw new RuntimeException($failure);
+		};
+
+		try {
+			$this->service->downloadDocument(123, true, self::discard());
+			self::fail('A download that took too long must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			$detail = $exception->getMessage();
+			self::assertStringNotContainsString('?', $detail, 'The detail leaves out the query of the URL.');
+			$explanation = 'The download of the document P123 took too long and stopped after 7 bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.';
+			$error = RunError::of($exception);
+			self::assertSame("{$explanation} Details: {$detail}", $error->message());
+			self::assertLessThanOrEqual(NotificationPublisher::ERROR_LIMIT, mb_strlen($explanation), 'The notification of a failing row, which cuts the error at its limit, keeps the whole explanation.');
+			$german = $error->translated($this->germanL10n());
+			self::assertStringStartsWith('Das Herunterladen des Dokuments P123 hat zu lange gedauert', $german, 'A German settings page shows the explanation in German.');
+			self::assertStringEndsWith(" Details: {$detail}", $german, 'The message of the HTTP client stays as it came.');
+			self::assertNull($exception->getPrevious(), 'The trace of the failure of the HTTP client holds the token.');
+		}
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'), 'The part that arrived is removed.');
+	}
+
+	/** A connection to Paperless that took too long is no transfer that took too long: it keeps the explanation of a Paperless that did not answer. */
+	public function testADownloadWhoseConnectionTookTooLongKeepsItsExplanation(): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 28: Connection timed out after 10001 milliseconds');
+		};
+
+		try {
+			$this->service->downloadDocument(123, true, self::discard());
+			self::fail('A download that did not connect must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertStringStartsWith('Paperless did not answer in time (cURL error 28).', RunError::of($exception)->message());
+		}
+	}
+
+	/** An upload that took too long names the file and its size, and may pass the next time (#459). */
+	#[DataProvider('transfersThatTookTooLong')]
+	public function testAnUploadThatTookTooLongNamesTheFileAndItsSize(string $failure): void {
+		$this->responses[] = static function () use ($failure): array {
+			throw new RuntimeException($failure);
+		};
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('An upload that took too long must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertStringStartsWith('The upload of police.pdf (10 bytes) took too long and stopped. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN. Details: cURL error 28: Operation ', $exception->getMessage());
+			self::assertStringNotContainsString('?', $exception->getMessage(), 'The detail leaves out the query of the URL.');
+			self::assertFalse($exception->permanent, 'The upload is tried again.');
+			self::assertNull($exception->getPrevious(), 'The trace of the failure of the HTTP client holds the token.');
+		}
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	/**
+	 * A download or an upload may last longer than the grace of the signs of life of a run, so the
+	 * client of a run gives a sign of life while a document moves, and no other request does.
+	 */
+	public function testTheTransfersOfARunGiveASignOfLife(): void {
+		$signs = 0;
+		$service = $this->client(signOfLife: static function () use (&$signs): void {
+			++$signs;
+		});
+		$this->responses[] = static function (array $options): array {
+			file_put_contents($options['sink'], '%PDF-original');
+			return [200, null];
+		};
+		$this->responses[] = static fn (): array => [200, '"4f1e0f9a-task"'];
+
+		$service->downloadDocument(123, true, static function (): void {
+		});
+		$service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+
+		foreach ($this->requests as $request) {
+			$progress = $request['options']['progress'];
+			self::assertIsCallable($progress);
+			// Guzzle passes the bytes of the transfer: the total and the moved ones of each direction.
+			$progress(100, 50, 0, 0);
+		}
+		self::assertCount(2, $this->requests);
+		self::assertSame(2, $signs, 'The progress of each transfer reaches the sign of life of the run.');
+	}
+
+	/**
+	 * The transfer of a document stops when it stalls, not after a fixed time, and after an hour in
+	 * any case, against a Paperless that only trickles (#459).
+	 *
+	 * @param array<array-key, mixed> $options
+	 */
+	private static function assertTransferLimits(array $options): void {
+		self::assertSame(10, $options['connect_timeout']);
+		self::assertSame(3600, $options['timeout'], 'An hour is the upper bound of a transfer.');
+		self::assertSame([\CURLOPT_LOW_SPEED_LIMIT => 1024, \CURLOPT_LOW_SPEED_TIME => 60], $options['curl'], 'A transfer stops after a minute below 1 KB a second.');
+		self::assertArrayNotHasKey('progress', $options, 'A client without a run gives no sign of life.');
 	}
 
 	/** @return array<string, array{string}> every operation that sends the token to Paperless */
@@ -1663,9 +1776,9 @@ final class PaperlessApiServiceTest extends TestCase {
 				'Nothing answered at the address of Paperless (cURL error 7). Check the URL with its port, that Paperless runs, and that no firewall or Docker network stands between Nextcloud and Paperless.',
 			],
 			'a Paperless that answers too late' => [
-				'downloadDocument',
+				'documents',
 				0,
-				'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+				'cURL error 28: Operation timed out after 60001 milliseconds with 0 bytes received',
 				'Paperless did not answer in time (cURL error 28). Check that Paperless runs and is not overloaded, and that no proxy in front of it holds the request back.',
 			],
 			'HTTPS at a port of HTTP' => [

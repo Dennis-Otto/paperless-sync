@@ -54,6 +54,7 @@ final class ControllerRoutesTest extends TestCase {
 			'remove the shares past the tags' => [TagSharesController::class, 'remove', 'DELETE', '/settings/user-tags/shares'],
 			'sync run' => [SyncController::class, 'run', 'POST', '/sync/run'],
 			'sync status' => [SyncController::class, 'status', 'GET', '/sync/status'],
+			'write copies again' => [SyncController::class, 'forget', 'POST', '/sync/forget'],
 			'webhook' => [WebhookController::class, 'receive', 'POST', '/api/v1/webhook'],
 			'webhook state' => [WebhookController::class, 'state', 'GET', '/settings/webhook'],
 			'webhook secret' => [WebhookController::class, 'create', 'POST', '/settings/webhook'],
@@ -104,7 +105,7 @@ final class ControllerRoutesTest extends TestCase {
 	}
 
 	public function testTheRoutesOfTheSettingsPageAreAllFound(): void {
-		self::assertCount(16, self::routesOfTheSettingsPage());
+		self::assertCount(17, self::routesOfTheSettingsPage());
 	}
 
 	/**

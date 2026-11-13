@@ -71,6 +71,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame('/route/paperless_sync.settings.reset', $parameters['resetUrl']);
 		self::assertSame('/route/paperless_sync.sync.run', $parameters['runUrl']);
 		self::assertSame('/route/paperless_sync.sync.status', $parameters['statusUrl']);
+		self::assertSame('/route/paperless_sync.sync.forget', $parameters['forgetUrl']);
 		self::assertSame('/route/paperless_sync.settings.preview', $parameters['previewUrl']);
 		self::assertSame('/route/files.view.index', $parameters['filesUrl']);
 		self::assertSame('/route/paperless_sync.settings.tags', $parameters['tagsUrl']);

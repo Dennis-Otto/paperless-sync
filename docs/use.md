@@ -171,7 +171,7 @@ When a document gets a new type and a new title in Paperless, for example, the n
 
 | What you do in Nextcloud | What happens |
 | --- | --- |
-| Edit a copy | The edit stays while its document stays the same in Paperless. When the document changes there, the next run may write the copy anew, depending on the change, and your edit then remains as an earlier version, under *Versions* in the details of the file, unless your administrator chose to keep your edit and report a conflict. |
+| Edit a copy | The edit stays while its document stays the same in Paperless. When the document changes there, the next run may write the copy anew, depending on the change, and your edit then remains as an earlier version, under *Versions* in the details of the file, unless your administrator chose to keep your edit and report a conflict. To get the content of Paperless back at once, such as for a copy that was damaged, ask your administrator: *Write all copies again* on the settings page, or `occ paperless_sync:forget` for single documents, writes it anew with the next run. |
 | Rename or move a copy | It stays where you put it, as a file of your own, and the next run writes the document anew at its path in the archive. |
 | Delete a copy | It goes into your trash bin, and the next run writes it anew. To remove a document, delete it in Paperless. |
 | Put a file into the inbox | It goes to Paperless, and its copy comes into the archive once the document is finished there. |

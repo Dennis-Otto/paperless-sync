@@ -295,6 +295,7 @@
 		const run = element('run')
 		const reset = element('reset')
 		const refresh = element('refresh-status')
+		const rewrite = element('rewrite')
 		const unsaved = element('unsaved')
 		const message = element('message')
 		const report = element('report')
@@ -340,7 +341,7 @@
 		const gettingStartedComplete = element('getting-started-complete')
 		const gettingStartedAnnouncement = element('getting-started-announcement')
 		const statusRegion = element('status')
-		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, webhookCreate, webhookRemove]
+		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, rewrite, webhookCreate, webhookRemove]
 		// The bar of the buttons sticks to the bottom of the window, and css/settings.css keeps its
 		// height free below a control that the focus moves to, so that the bar never covers it. The
 		// bar grows with its message and wraps on a narrow screen, so the page measures it.
@@ -2444,6 +2445,23 @@
 				showMessage(translate('Status refreshed.'), 'success')
 			} catch (error) {
 				showError(error, translate('Could not refresh status.'))
+			} finally {
+				setBusy(false)
+			}
+		})
+		// Writes every copy again from Paperless, as occ paperless_sync:forget --all does
+		// (SyncController::forget()), such as after copies were edited or damaged in Nextcloud:
+		// the next runs do the work, batch by batch, and the answer says how many copies they write.
+		rewrite.addEventListener('click', async function() {
+			if (!window.confirm(translate('Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.'))) {
+				return
+			}
+			setBusy(true)
+			try {
+				const result = await request(root.dataset.forgetUrl, 'POST', { all: true })
+				showMessage(result.message, 'success')
+			} catch (error) {
+				showError(error, translate('Could not write the copies again.'))
 			} finally {
 				setBusy(false)
 			}

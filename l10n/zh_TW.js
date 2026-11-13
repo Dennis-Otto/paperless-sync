@@ -756,7 +756,18 @@ OC.L10N.register(
 		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless 或其前端代理伺服器將 Paperless Sync 的請求重新導向至 %1$s（HTTP %2$s）。請填寫 Paperless 不經重新導向即可回應的 URL：要求登入的代理伺服器必須放行 Paperless 的 API。",
 		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless 或其前端代理伺服器重新導向至 %1$s（HTTP %2$s）。",
 		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "請將 %s 填寫為 Paperless 的 URL。Paperless Sync 不會跟隨任何重新導向：重新導向會將 Token 傳送到其他位址，或將上傳變成不含檔案的請求。",
-		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "請填寫 Paperless 不經重新導向即可回應的 URL：要求登入的代理伺服器必須放行 Paperless 的 API。"
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "請填寫 Paperless 不經重新導向即可回應的 URL：要求登入的代理伺服器必須放行 Paperless 的 API。",
+		"The download of the document P%1$s took too long and stopped after %2$s bytes. A transfer stops after a minute below 1 KB a second, or after an hour. Check the network to Paperless, such as a VPN.": "文件 P%1$s 的下載耗時過久，在收到 %2$s 位元組後停止。傳輸在一分鐘內低於每秒 1 KB 或滿一小時後停止。請檢查到 Paperless 的網路，例如 VPN。",
+		"Name the documents by their IDs in Paperless, such as 123 or P123.": "請用 Paperless 中的 ID 指定文件，例如 123 或 P123。",
+		"Name the IDs of the documents, or choose every copy.": "請指定文件的 ID，或選擇全部副本。",
+		"_The next runs write %n copy again from Paperless._::_The next runs write %n copies again from Paperless._": [
+			"接下來的執行將從 Paperless 重新寫入 %n 個副本。"
+		],
+		"Paperless Sync has no copy of %s.": "Paperless Sync 沒有 %s 的副本。",
+		"Paperless Sync has no copy to write again.": "Paperless Sync 沒有需要重新寫入的副本。",
+		"Write all copies again": "重新寫入所有副本",
+		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "要從 Paperless 重新寫入每個副本嗎？接下來的執行會逐批重新下載每份文件，並將其寫入其副本的位置。有人在 Nextcloud 中編輯過的副本會重新取得 Paperless 的內容，編輯內容會作為較早版本保留在「版本」中。",
+		"Could not write the copies again.": "無法重新寫入副本。"
 	},
 	"nplurals=1; plural=0;"
 )
