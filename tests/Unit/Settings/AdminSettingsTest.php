@@ -250,7 +250,7 @@ final class AdminSettingsTest extends TestCase {
 		$template = file_get_contents("{$root}/templates/settings.php");
 		self::assertIsString($template);
 		preg_match_all('/\$help\(\'([a-z0-9-]+)\'/', $template, $links);
-		self::assertCount(19, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, each warning of the setup checks, the setup of the account of the app, the address of Paperless in the browser, per-user ownership, the tags that a user may see, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
+		self::assertCount(20, $links[1], 'The getting-started checklist, the delegation of the page, each of the six sections, the health check for a monitor, each warning of the setup checks, the setup of the account of the app, the address of Paperless in the browser, per-user ownership, the tags that a user may see, the storage paths of Paperless, the tags to mirror, the tags of the inbox, the metadata next to the archive, the tags in Nextcloud and sending from Files link to the guide.');
 
 		foreach (['docs/guide.md' => 'README.md', 'docs/guide.de.md' => 'README.de.md'] as $guide => $readme) {
 			$anchors = self::anchorsOfTheGuide($root, $guide, $readme);
