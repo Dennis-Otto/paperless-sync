@@ -186,7 +186,8 @@ export function plainHeaders(headers) {
 
 // Answers a request with what the server answered, its body changed by rewrite, or as it
 // is when rewrite gives undefined. A request whose page closed on the way, such as the
-// preview that a page asks for as screenshots.mjs closes it, needs no answer. Apache closes
+// preview that a page asks for as screenshots.mjs closes it, or a poll of the status whose
+// answer came just before its context closed, needs no answer. Apache closes
 // a connection after 5 idle seconds, and a request that reuses it in that moment gets no
 // answer: a browser sends it again on its own, and route.fetch only with maxRetries.
 async function rewritten(route, rewrite) {
@@ -207,9 +208,11 @@ async function rewritten(route, rewrite) {
 	}
 }
 
-// Whether an error of Playwright says that the page, its context or the browser closed.
+// Whether an error of Playwright says that the page, its context or the browser closed. The
+// context keeps the body of each answer of route.fetch until it closes: a body read after
+// that is "disposed", since Playwright says so in place of the TargetClosedError (#470).
 export function closed(error) {
-	return error?.name === 'TargetClosedError' || /Target page, context or browser has been closed|Request context disposed/.test(String(error?.message))
+	return error?.name === 'TargetClosedError' || /Target page, context or browser has been closed|Request context disposed|Response has been disposed/.test(String(error?.message))
 }
 
 // Freezes the clock of every page of a browser context that opens now, for the story: the
