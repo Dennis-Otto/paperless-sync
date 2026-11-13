@@ -27,6 +27,8 @@ use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Files\NotPermittedException;
+use OCP\Lock\LockedException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -164,20 +166,31 @@ final class ExportExecutor {
 			$ownTarget = $action->ownTarget;
 			$writeMode = $ownTarget ? 'replace' : $this->config->conflictMode;
 			$target = $action->target;
+			$recorded = $action->fingerprint;
 			// The download goes to Nextcloud in chunks, so that a document of any size fits into the
 			// memory of PHP.
 			$fingerprint = $this->paperless->downloadDocument(
 				$documentId,
 				$action->useOriginal,
 				/** @param resource $download */
-				function ($download) use ($user, $documentId, $target, $writeMode, $ownTarget): void {
+				function ($download) use ($user, $documentId, $target, $writeMode, $ownTarget, $recorded): void {
 					// While the new content replaces the content of the app's own copy, the state says
 					// so: a write in place that fails halfway leaves the copy incomplete, and the next
 					// run still takes it as its own and writes it again, also when conflicts are skipped.
 					if ($ownTarget) {
 						$this->states->save($documentId, ['fingerprint' => DocumentFingerprint::PENDING]);
 					}
-					$this->storage->writeStream($user, $target, $download, $writeMode);
+					try {
+						$this->storage->writeStream($user, $target, $download, $writeMode);
+					} catch (FullStorageException|LockedException|NotPermittedException $refused) {
+						// Nextcloud refused the write before it touched the copy, for a full quota, a
+						// lock or a missing permission: the copy keeps its content, and the state its
+						// fingerprint, so that the next run sees an edit of the copy as a conflict.
+						if ($ownTarget) {
+							$this->states->save($documentId, ['fingerprint' => $recorded]);
+						}
+						throw $refused;
+					}
 				},
 			)->value();
 		}

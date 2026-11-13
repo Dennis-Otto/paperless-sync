@@ -751,7 +751,12 @@ OC.L10N.register(
 		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您選擇其他目標使用者之前，每次執行都會失敗。ID 為 %s 的新帳號將取得所有文件。",
 		"Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content": "匯入 %1$s：Paperless 無法匯入其先前的內容：%2$s；檔案在上傳後已變更，因此執行會上傳其新內容",
 		"Sent to Paperless without the tags %s": "已傳送到 Paperless，但沒有標籤 %s",
-		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless 中沒有 Paperless Sync 帳號可見的這些名稱的標籤，因此這些檔案在沒有這些標籤的情況下傳送到了 Paperless：%s。請讓管理員在 Paperless 中建立這些標籤或與該帳號分享，或開啟「建立缺少的標籤」。"
+		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless 中沒有 Paperless Sync 帳號可見的這些名稱的標籤，因此這些檔案在沒有這些標籤的情況下傳送到了 Paperless：%s。請讓管理員在 Paperless 中建立這些標籤或與該帳號分享，或開啟「建立缺少的標籤」。",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter %3$s as the URL of Paperless in the settings of Paperless Sync.": "Paperless 或其前端代理伺服器將 Paperless Sync 的請求重新導向至 %1$s（HTTP %2$s）。請在 Paperless Sync 的設定中將 %3$s 填寫為 Paperless 的 URL。",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless 或其前端代理伺服器將 Paperless Sync 的請求重新導向至 %1$s（HTTP %2$s）。請填寫 Paperless 不經重新導向即可回應的 URL：要求登入的代理伺服器必須放行 Paperless 的 API。",
+		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless 或其前端代理伺服器重新導向至 %1$s（HTTP %2$s）。",
+		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "請將 %s 填寫為 Paperless 的 URL。Paperless Sync 不會跟隨任何重新導向：重新導向會將 Token 傳送到其他位址，或將上傳變成不含檔案的請求。",
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "請填寫 Paperless 不經重新導向即可回應的 URL：要求登入的代理伺服器必須放行 Paperless 的 API。"
 	},
 	"nplurals=1; plural=0;"
 )

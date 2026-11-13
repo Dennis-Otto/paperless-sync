@@ -493,6 +493,9 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 self._json(200, STATE.copy())
             return
+        if parsed.path.startswith("/moved/"):
+            self._moved(parsed)
+            return
         if not parsed.path.startswith("/api/"):
             self._json(404, {"detail": "Not found"})
             return
@@ -975,6 +978,20 @@ class Handler(BaseHTTPRequestHandler):
             return False
         self.api_headers = {"X-Api-Version": str(max(allowed)), "X-Version": paperless}
         return True
+
+    def _moved(self, parsed):
+        """
+        A Paperless that moved, such as behind a proxy that sends http:// to https://, or an old name
+        to a new one: a request under /moved/ goes to the same path at the root of the mock, with
+        301 Moved Permanently and an absolute Location.
+        """
+        location = f"http://{self.headers.get('Host', 'paperless-mock:8080')}{parsed.path.removeprefix('/moved')}"
+        if parsed.query:
+            location += f"?{parsed.query}"
+        self.send_response(301)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def _page(self, results, count=None):
         self._json(200, {"count": len(results) if count is None else count, "next": None, "previous": None, "results": results})

@@ -392,6 +392,10 @@ De documentatie is er in het [Engels](https://dennis-otto.github.io/paperless-sy
 	<donation type="other" title="GitHub Sponsors">https://github.com/sponsors/Dennis-Otto</donation>
 	<dependencies>
 		<php min-version="8.2"/>
+		<!-- Not Oracle: it stores an empty text as NULL, which the columns of the app that are NOT NULL with the default '' refuse. -->
+		<database>sqlite</database>
+		<database>mysql</database>
+		<database>pgsql</database>
 		<nextcloud min-version="33" max-version="35"/>
 	</dependencies>
 	<background-jobs>
