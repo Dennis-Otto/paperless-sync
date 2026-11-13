@@ -136,7 +136,9 @@ for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php \
 done
 
 # The upgrade from the last release runs for a change of the migrations, of the settings and
-# the state that a release stored, of the package that users install, and of the tests.
+# the state that a release stored, of the package that users install, and of the tests. A class
+# of lib/ counts by what it uses, IAppConfig, IConfig, IUserConfig or IDBConnection, as one
+# that the change deletes does (#443).
 expect_upgrade() {
   local expected="$1" path="$2" actual=skip
   if path_affects_upgrade "$path"; then
@@ -151,17 +153,18 @@ for path in lib/Migration/Version000130Date20261014120000.php lib/Service/Config
   lib/Service/SyncStateRepository.php lib/Model/SyncConfig.php lib/Service/WebhookService.php \
   .nextcloudignore krankerl.toml scripts/check-package.sh tests/e2e/upgrade.sh \
   tests/e2e/upgrade_state.php tests/e2e/assert_upgrade.py tests/e2e/packages.sh tests/e2e/run.sh \
-  tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml; do
+  tests/e2e/mock_server.py tests/e2e/compose.upgrade.yaml .github/workflows/e2e.yml   lib/Service/StatusService.php lib/Cron/SavedSettings.php lib/Service/SystemTagService.php   lib/Service/RemovedSinceTheRelease.php; do
   expect_upgrade run "$path"
 done
-for path in lib/Service/SyncService.php lib/Service/PaperlessApiService.php templates/settings.php \
+for path in lib/Service/SyncService.php lib/Service/PaperlessApiService.php lib/Service/Paths.php templates/settings.php \
   js/settings.js l10n/de.json README.md tests/e2e/README.md tests/e2e/accessibility.mjs \
   tests/e2e/package-lock.json tests/e2e/screenshots.sh tests/e2e/contract.py tests/e2e/test_contract.py; do
   expect_upgrade skip "$path"
 done
 
 # The contract tests against a real Paperless-ngx run for a change of what the app asks
-# Paperless or of how it reads the answers.
+# Paperless or of how it reads the answers. A class of lib/ counts by what it takes, the client
+# of Paperless or a document that it answered, as one that the change deletes does (#443).
 expect_contract() {
   local expected="$1" path="$2" actual=skip
   if path_affects_contract "$path"; then
@@ -176,14 +179,21 @@ for path in lib/Service/PaperlessApiService.php lib/Service/PaperlessClientInter
   lib/Service/PaperlessClientFactory.php lib/Model/PaperlessConnection.php \
   lib/Model/DocumentFingerprint.php tests/fixtures/paperless-ngx-2/metadata.json tests/e2e/contract.py \
   tests/e2e/run-contract.sh tests/e2e/compose.paperless.yaml tests/e2e/compose.yaml tests/e2e/mock_server.py \
-  .github/workflows/e2e.yml; do
+  .github/workflows/e2e.yml lib/Model/DocumentPermissions.php lib/Service/FileVersions.php   lib/Service/UserTags.php lib/Service/ImportExecutor.php lib/Service/ExportFilter.php   lib/Service/SyncService.php lib/Service/RemovedSinceTheRelease.php; do
   expect_contract run "$path"
 done
-for path in lib/Service/SyncService.php lib/Service/PathTemplateService.php templates/settings.php \
+for path in lib/Service/Paths.php lib/Service/StatusService.php lib/Cron/SavedSettings.php templates/settings.php \
   tests/e2e/run.sh tests/e2e/README.md tests/e2e/test_contract.py tests/Unit/Service/PaperlessApiServiceTest.php \
   README.md .github/fixture_bot.py .github/workflows/paperless-fixtures.yml; do
   expect_contract skip "$path"
 done
+# In a pull request, the rules read each file as the commit of the comparison has it.
+AFFECTED_HEAD=HEAD
+expect_contract run lib/Service/FileVersions.php
+expect_contract skip lib/Service/Paths.php
+expect_upgrade run lib/Service/StatusService.php
+expect_upgrade skip lib/Service/Paths.php
+AFFECTED_HEAD=""
 
 # The smoke test of the demo runs for a change of the demo or of what it reads.
 expect_demo() {
@@ -323,7 +333,7 @@ fi
 if ((problems > 0)); then
   exit 1
 fi
-echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, the upgrade from the last release for the migrations, the stored settings and state and the package, and the contract tests against a real Paperless for the client of Paperless."
+echo "tests/e2e/affected.sh runs the end-to-end tests for the app and its tests, and skips them for the rest; the other databases and the object store run for the state, the files and the uploads, the upgrade from the last release for the migrations, each class that keeps settings or state and the package, and the contract tests against a real Paperless for the client of Paperless and each class that reads its answers."
 
 printf '\n== %s\n' "The shards of the end-to-end tests"
 # The two required jobs of .github/workflows/e2e.yml each run one shard of

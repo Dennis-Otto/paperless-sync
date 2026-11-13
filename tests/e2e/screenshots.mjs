@@ -31,7 +31,7 @@ import gifenc from 'gifenc'
 import { chromium } from 'playwright-core'
 import { PNG } from 'pngjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
-import { blackCorners, freeze, Story } from './frozen.mjs'
+import { blackCorners, frameThemes, freeze, Story } from './frozen.mjs'
 import { pictureLanguage } from './language.mjs'
 import { thumbnail } from './thumbnail.mjs'
 
@@ -432,13 +432,22 @@ class Animation {
 		this.text = null
 	}
 
-	// Takes the page as it shows now in every theme: first in the one that it shows, then in
-	// each other one, and back.
+	// Takes the page as it shows now in every theme: first in each other one, then in the one
+	// that it shows, so that the page ends in it again (frameThemes).
+	//
+	// Each picture follows a change of the theme, which makes Chromium draw the whole page
+	// anew. A picture right after a scroll showed what Chromium kept of earlier drawings
+	// instead: the text of the bar of the buttons, which floats over the page in a layer of its
+	// own, stood a pixel higher or lower on the first step of a glide, depending on where the
+	// page had scrolled on its own while the run went on. The light dry-run.gif flipped between
+	// two renderings from run to run, while the dark one, whose frames already followed a
+	// change of the theme, stayed the same (#442).
 	async frame(delay = 80) {
 		await this.page.evaluate(drawCaption, this.text)
-		for (const [number, theme] of this.themes.entries()) {
-			if (number > 0) {
-				await showTheme(this.page, theme)
+		for (const theme of frameThemes(this.themes)) {
+			await showTheme(this.page, theme)
+			if (!this.themes.includes(theme)) {
+				continue
 			}
 			const { width, height, data } = PNG.sync.read(await this.drawn(theme))
 			const frames = this.frames[theme]
@@ -448,9 +457,6 @@ class Animation {
 			} else {
 				frames.push({ width, height, data, delay })
 			}
-		}
-		if (this.themes.length > 1) {
-			await showTheme(this.page, this.themes[0])
 		}
 	}
 
