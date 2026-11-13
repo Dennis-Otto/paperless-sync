@@ -56,12 +56,43 @@ path_affects_variants() {
 	esac
 }
 
+# The commit whose files lib_file_names() reads: HEAD of the comparison, or the working tree
+# when scripts/check-project.sh sources this script to test its rules.
+AFFECTED_HEAD=""
+
+# Whether a PHP file of lib/ names one of the words of an extended regular expression, as the
+# change leaves the file, or whether the change deletes it, which can take anything away. The
+# rules below find the files that matter by what they use, not by a list of their names that
+# someone has to remember to extend: a new class that reads the answers of Paperless or the
+# stored state counts from its first line on (Dennis-Otto/paperless-sync#443).
+lib_file_names() {
+	local path="$1" words="$2" text
+	[[ "${path}" == lib/*.php ]] || return 1
+	if [[ -n "${AFFECTED_HEAD}" ]]; then
+		text="$(git show "${AFFECTED_HEAD}:${path}" 2>/dev/null)" || return 0
+	else
+		[[ -f "${path}" ]] || return 0
+		text="$(<"${path}")"
+	fi
+	grep -qE -- "${words}" <<<"${text}"
+}
+
+# The words of a class that reads or writes what an installation keeps: the settings of the
+# app and of its users, and the tables of the database.
+STORED_STATE_WORDS='\b(IAppConfig|IConfig|IUserConfig|IDBConnection)\b'
+
+# The words of a class that asks Paperless or reads its answers: the client of Paperless, which
+# hands them out, and a parameter array $document or $documents, which takes a document of
+# Paperless as the client answered it, such as its versions or its permissions.
+PAPERLESS_ANSWER_WORDS='\bPaperless(Client|ApiService)|\barray [$]documents?\b'
+
 # A file whose change can break the upgrade of an installation in use from the last release
-# (upgrade.sh): the migrations, which meet the rows of the release there alone, the settings
-# and the state that the release stored, the secret of the webhook, what goes into the package
-# that the upgrade installs, and the upgrade test itself and its workflow; not the checks in
-# the browser or the contract tests, which it doesn't run. appinfo/info.xml counts as for
-# path_affects_app.
+# (upgrade.sh): the migrations, which meet the rows of the release there alone, each class of
+# lib/ that reads or writes the settings and the state that the release stored
+# (STORED_STATE_WORDS), such as the state of the runs and the saved settings, the settings
+# themselves and the secret of the webhook, what goes into the package that the upgrade
+# installs, and the upgrade test itself and its workflow; not the checks in the browser or the
+# contract tests, which it doesn't run. appinfo/info.xml counts as for path_affects_app.
 path_affects_upgrade() {
 	case "$1" in
 		tests/e2e/*.md | tests/e2e/*.mjs | tests/e2e/package.json | tests/e2e/package-lock.json) return 1 ;;
@@ -70,21 +101,23 @@ path_affects_upgrade() {
 		lib/Migration/* | lib/Service/ConfigService.php | lib/Service/SyncStateRepository* | lib/Model/SyncConfig.php) return 0 ;;
 		lib/Service/WebhookService.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;
 		tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
-		*) return 1 ;;
+		*) lib_file_names "$1" "${STORED_STATE_WORDS}" ;;
 	esac
 }
 
 # A file whose change can alter what the app asks Paperless or how it reads the answers:
 # the client of Paperless, the connection that it takes and the checksums that it compares,
-# the mock that stands in for Paperless and the answers recorded from it, which the unit
-# tests read, and the contract tests themselves and their workflow.
+# each class of lib/ that takes the client or a document that it answered
+# (PAPERLESS_ANSWER_WORDS), such as the versions of a file, its permissions and the states of
+# the tasks, the mock that stands in for Paperless and the answers recorded from it, which the
+# unit tests read, and the contract tests themselves and their workflow.
 path_affects_contract() {
 	case "$1" in
 		lib/Service/Paperless* | lib/Model/DocumentFingerprint.php | lib/Model/PaperlessConnection.php) return 0 ;;
 		tests/fixtures/paperless-ngx-*) return 0 ;;
 		tests/e2e/contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.yaml | tests/e2e/compose.paperless.yaml) return 0 ;;
 		tests/e2e/mock_server.py | .github/workflows/e2e.yml) return 0 ;;
-		*) return 1 ;;
+		*) lib_file_names "$1" "${PAPERLESS_ANSWER_WORDS}" ;;
 	esac
 }
 
@@ -175,6 +208,7 @@ cd "$(dirname -- "${BASH_SOURCE[0]}")/../.."
 
 BASE="${1:-HEAD^1}"
 HEAD="${2:-HEAD}"
+AFFECTED_HEAD="${HEAD}"
 QUESTION="${E2E_QUESTION:-app}"
 
 # The answers for the end-to-end tests, affected, variants and upgrade, or with

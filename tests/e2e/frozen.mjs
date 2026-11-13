@@ -26,6 +26,18 @@ export const STORY_START = '2026-10-18T10:20:00+02:00'
 const CORNER = 16
 const BLACK_PIXELS_OF_THE_PAGE = 4
 
+// The themes that a frame of an animation shows the page in, one after the other, while the
+// page shows the first of the themes of the animation: each other one, then the first, so
+// that the page ends in it again. Each picture follows a change of the theme, which makes
+// Chromium draw the whole page anew; a picture right after a scroll shows what it kept of
+// earlier drawings instead, such as the text of a layer of its own a pixel higher or lower,
+// which differs from run to run (#442). An animation in a single theme shows the page in the
+// other one first, without a picture of it.
+export function frameThemes(themes) {
+	const [first, ...others] = themes
+	return others.length > 0 ? [...others, first] : [first === 'dark' ? 'light' : 'dark', first]
+}
+
 // Whether a picture of pngjs shows a corner of a box of the page, such as the panel of Nextcloud,
 // black. After a change of the theme, Chromium now and then draws the corners of a part of the
 // page that scrolls black, in other frames on each run, and for longer than two pictures in a
