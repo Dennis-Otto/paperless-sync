@@ -351,6 +351,28 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(['b.pdf', 'c.pdf'], array_column($this->repository->allSends(), 'path'));
 	}
 
+	/** A user whom Nextcloud deleted leaves no state behind for a new account with the same ID, and the others keep theirs. */
+	public function testEveryStateOfADeletedUserGoesAndThatOfOthersStays(): void {
+		$this->repository->saveExport('alice', 1, ['path' => 'Archiv/a.pdf']);
+		$this->repository->saveExport('alice', 2, ['path' => 'Archiv/b.pdf']);
+		$this->repository->saveExport('bob', 1, ['path' => 'Archiv/c.pdf']);
+		$this->repository->saveImport('alice', 'Eingang/scan.pdf', ['etag' => 'e1']);
+		$this->repository->saveImport('bob', 'Eingang/scan.pdf', ['etag' => 'e2']);
+		$this->repository->saveSend('alice', 42, ['path' => 'Steuer/beleg.pdf']);
+		$this->repository->saveSend('bob', 42, ['path' => 'Steuer/beleg.pdf']);
+
+		self::assertSame(4, $this->repository->deleteOwner('alice'));
+
+		self::assertSame([], $this->repository->allExports('alice'));
+		self::assertSame([], $this->repository->allImports('alice'));
+		self::assertNull($this->repository->findSend('alice', 42));
+		self::assertSame(['bob'], $this->repository->exportOwners());
+		self::assertSame(['Archiv/c.pdf'], array_column($this->repository->allExports('bob'), 'path'));
+		self::assertSame(['Eingang/scan.pdf'], array_column($this->repository->allImports('bob'), 'path'));
+		self::assertSame(['bob'], array_column($this->repository->allSends(), 'user_id'));
+		self::assertSame(0, $this->repository->deleteOwner('alice'), 'A user without state deletes nothing.');
+	}
+
 	private function queryBuilder(): IQueryBuilder {
 		$query = ['type' => '', 'table' => '', 'values' => [], 'where' => []];
 		$parameters = [];

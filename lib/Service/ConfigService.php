@@ -785,6 +785,40 @@ final class ConfigService {
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::TAG_ARCHIVES_KEY, implode("\n", $users), lazy: true);
 	}
 
+	/**
+	 * Forgets a user whom Nextcloud deleted, so that a new account with the same ID gets nothing of
+	 * theirs: their line of "Tags that a user may see", the lines of "Paperless users with another
+	 * Nextcloud ID" that name them, and their archive of the tags, whose files went with them. The
+	 * settings then are as a save would accept them, which refuses a line of a user that doesn't
+	 * exist; every other line stays as it is. The target user stays, as a save keeps it too: the
+	 * runs fail without them, and NotificationPublisher::targetUserDeleted() tells the
+	 * administrators.
+	 *
+	 * @return list<string> the keys of the settings that changed
+	 */
+	public function forgetUser(string $userId): array {
+		$changed = [];
+		foreach (['user_tags', 'user_map', self::TAG_ARCHIVES_KEY] as $key) {
+			$lines = explode("\n", $this->appConfig->getValueString(AppConstants::APP_ID, $key, '', lazy: true));
+			$kept = array_filter($lines, static fn (string $line): bool => mb_strtolower(self::userOfLine($key, $line)) !== mb_strtolower($userId));
+			if (count($kept) !== count($lines)) {
+				$this->appConfig->setValueString(AppConstants::APP_ID, $key, implode("\n", $kept), lazy: true);
+				$changed[] = $key;
+			}
+		}
+
+		return $changed;
+	}
+
+	/** The user of Nextcloud whom a line of the setting $key names, or '' for a line that names none. */
+	private static function userOfLine(string $key, string $line): string {
+		return match ($key) {
+			'user_tags' => UserTags::parse($line, false)[0]['user'] ?? '',
+			'user_map' => OwnerMapping::parse($line, false)[0]['nextcloud'] ?? '',
+			default => trim($line),
+		};
+	}
+
 	/** The value when it is from $minimum to $maximum, or else null. */
 	private static function within(int $value, int $minimum, int $maximum): ?int {
 		return $value >= $minimum && $value <= $maximum ? $value : null;

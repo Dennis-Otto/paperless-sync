@@ -226,6 +226,12 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$this->delete(self::SEND_TABLE, ['user_id' => $userId, 'file_id' => $fileId]);
 	}
 
+	public function deleteOwner(string $userId): int {
+		return $this->delete(self::EXPORT_TABLE, ['owner_uid' => $userId])
+			+ $this->delete(self::IMPORT_TABLE, ['owner_uid' => $userId])
+			+ $this->delete(self::SEND_TABLE, ['user_id' => $userId]);
+	}
+
 	/**
 	 * @return list<array<string, int|string|null>>
 	 * @psalm-suppress MixedReturnTypeCoercion
@@ -271,14 +277,18 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$query->executeStatement();
 	}
 
-	/** @param array<string, int|string> $where */
-	private function delete(string $table, array $where): void {
+	/**
+	 * @param array<string, int|string> $where
+	 * @return int the rows that it deleted
+	 */
+	private function delete(string $table, array $where): int {
 		$query = $this->connection->getQueryBuilder();
 		$query->delete($table);
 		foreach ($where as $column => $value) {
 			$query->andWhere($query->expr()->eq($column, $query->createNamedParameter($value)));
 		}
-		$query->executeStatement();
+
+		return $query->executeStatement();
 	}
 
 	/** @param array<string, mixed> $row @return array<string, int|string|null> */

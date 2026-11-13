@@ -814,7 +814,9 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Laissez-la vide lorsque les navigateurs atteignent Paperless à l’URL de Paperless. Lorsque Nextcloud atteint Paperless par un nom ou une adresse que seul le serveur connaît, comme http://paperless:8000 dans un réseau Docker, saisissez l’adresse qu’ouvrent les navigateurs, comme https://paperless.example.com : les liens vers Paperless dans Fichiers, dans les notifications, dans l’activité et dans les métadonnées la prennent, tandis que les requêtes de Nextcloud vont toujours à l’URL de Paperless.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Saisissez une adresse de Paperless dans le navigateur valide, ou laissez-la vide.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "L’adresse de Paperless dans le navigateur doit utiliser HTTP ou HTTPS.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "L’adresse de Paperless dans le navigateur ne doit contenir ni identifiants, ni requête, ni fragment."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "L’adresse de Paperless dans le navigateur ne doit contenir ni identifiants, ni requête, ni fragment.",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud a supprimé %s, l’utilisateur cible de Paperless Sync",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Chaque exécution échoue jusqu’à ce que vous choisissiez un autre utilisateur cible. Un nouveau compte avec l’identifiant %s recevrait tous les documents."
 	},
 	"nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

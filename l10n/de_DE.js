@@ -778,7 +778,9 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Lassen Sie das Feld leer, wenn Browser Paperless unter der Paperless-Adresse erreichen. Erreicht Nextcloud Paperless unter einem Namen oder einer Adresse, die nur der Server kennt, etwa http://paperless:8000 in einem Docker-Netzwerk, geben Sie die Adresse ein, die Browser öffnen, etwa https://paperless.example.com: Die Links zu Paperless in Dateien, in Benachrichtigungen, in der Aktivität und in den Metadaten nehmen sie, während die Anfragen von Nextcloud weiter an die Paperless-Adresse gehen.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Geben Sie eine gültige Paperless-Adresse im Browser ein oder lassen Sie das Feld leer.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Die Paperless-Adresse im Browser muss HTTP oder HTTPS verwenden.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud hat %s gelöscht, den Zielbenutzer von Paperless Sync",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis Sie einen anderen Zielbenutzer wählen. Ein neues Konto mit der ID %s bekäme jedes Dokument."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

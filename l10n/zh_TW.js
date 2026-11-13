@@ -742,7 +742,9 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "如果瀏覽器透過 Paperless URL 連到 Paperless，請留空。如果 Nextcloud 透過只有伺服器知道的名稱或位址連到 Paperless，例如 Docker 網路中的 http://paperless:8000，請輸入瀏覽器開啟的位址，例如 https://paperless.example.com：檔案、通知、活動和中繼資料中連到 Paperless 的連結會使用它，而 Nextcloud 的請求仍然送往 Paperless URL。",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "請輸入有效的瀏覽器中的 Paperless 位址，或將其留空。",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "瀏覽器中的 Paperless 位址必須使用 HTTP 或 HTTPS。",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。"
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已刪除 %s，即 Paperless Sync 的目標使用者",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您選擇其他目標使用者之前，每次執行都會失敗。ID 為 %s 的新帳號將取得所有文件。"
 	},
 	"nplurals=1; plural=0;"
 )

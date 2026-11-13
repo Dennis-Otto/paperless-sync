@@ -814,7 +814,9 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Déjalo vacío cuando los navegadores lleguen a Paperless en la URL de Paperless. Cuando Nextcloud llegue a Paperless con un nombre o una dirección que solo conoce el servidor, como http://paperless:8000 en una red de Docker, escribe la dirección que abren los navegadores, como https://paperless.example.com: los enlaces a Paperless en Archivos, en las notificaciones, en la actividad y en los metadatos la usan, mientras las solicitudes de Nextcloud siguen yendo a la URL de Paperless.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Escribe una dirección de Paperless en el navegador válida o déjala vacía.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "La dirección de Paperless en el navegador debe usar HTTP o HTTPS.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "La dirección de Paperless en el navegador no debe contener credenciales, una consulta ni un fragmento."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "La dirección de Paperless en el navegador no debe contener credenciales, una consulta ni un fragmento.",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud eliminó a %s, el usuario de destino de Paperless Sync",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Cada ejecución falla hasta que elijas otro usuario de destino. Una cuenta nueva con el ID %s recibiría todos los documentos."
 	},
 	"nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )
