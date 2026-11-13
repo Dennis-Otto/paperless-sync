@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, test } from 'node:test'
-import { blackCorners, changedNow, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenFolderInfo, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
+import { blackCorners, changedNow, frameThemes, closed, EXAMPLE_SECRET, freeze, frozenAnswer, frozenFolderInfo, frozenInitialState, plainHeaders, Story, STORY_START } from './frozen.mjs'
 
 const AT_10_20 = Date.parse(STORY_START) / 1000
 const AT_10_21 = AT_10_20 + 60
@@ -318,4 +318,20 @@ test('a few black pixels in a corner are a part of the page, and black in its mi
 test('a box that reaches over the picture looks only at the pixels that the picture has', () => {
 	assert.equal(blackCorners(pictureWith(100, 120, []), { left: -8, top: -8, right: 108, bottom: 128 }), false)
 	assert.equal(blackCorners(pictureWith(100, 120, [[0, 0, 6]]), { left: -8, top: -8, right: 108, bottom: 128 }), true)
+})
+
+// Chromium draws the whole page anew after a change of the theme, and only then is a picture
+// the same on every run: right after a scroll, the text of the bar of the buttons stood a
+// pixel higher or lower in one frame of the light dry-run.gif from run to run (#442).
+test('a frame takes each picture right after a change of the theme and ends in the theme that the page showed', () => {
+	for (const themes of [['light', 'dark'], ['dark', 'light'], ['light'], ['dark']]) {
+		const shown = frameThemes(themes)
+		let before = themes[0]
+		for (const theme of shown) {
+			assert.notEqual(theme, before, `${shown} shows ${theme} twice in a row`)
+			before = theme
+		}
+		assert.equal(shown.at(-1), themes[0])
+		assert.deepEqual(shown.filter((theme) => themes.includes(theme)).sort(), [...themes].sort())
+	}
 })
