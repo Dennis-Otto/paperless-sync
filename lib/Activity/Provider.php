@@ -54,7 +54,7 @@ final class Provider implements IProvider {
 		}
 		$event->setParsedSubject(strtr($subject, $names))
 			->setRichSubject($subject, $objects)
-			->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath(AppConstants::APP_ID, 'app.svg')));
+			->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath(AppConstants::APP_ID, 'app-dark.svg')));
 		if ($link !== '') {
 			$event->setLink($link);
 		}

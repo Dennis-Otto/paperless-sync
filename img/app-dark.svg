@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-	<rect x="8" y="4" width="34" height="48" rx="5" fill="#1f8f72"/>
-	<path d="M31 4h6l5 6v7H31z" fill="#daf4ec"/>
-	<path d="M16 23h19M16 30h19M16 37h13" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
-	<path d="M39 38a12 12 0 0 1 21 8c0 7-5 12-12 12H31a9 9 0 0 1-1-18 13 13 0 0 1 9-2z" fill="#0082c9" stroke="#fff" stroke-width="2"/>
-	<path d="M37 47h15m-4-4 4 4-4 4" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<!--
+  The icon of the app as one dark shape, as Nextcloud expects the icons of its lists: the
+  sections of the settings, the list of apps, the activity and its filter, the notifications.
+  Nextcloud turns it white on the colour of the active section and in its dark theme.
+  app.svg keeps the colours of the logo, for the page of the settings, the README and the website.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Paperless Sync">
+	<mask id="paperless-sync-paper">
+		<rect width="64" height="64" fill="#fff"/>
+		<!-- The fold, the lines of text and the room around the cloud. -->
+		<path d="M31 2v14h13" fill="none" stroke="#000" stroke-width="4" stroke-linejoin="round"/>
+		<path d="M16 23h17M16 31h10" fill="none" stroke="#000" stroke-width="4.5" stroke-linecap="round"/>
+		<path d="M39 36a12 12 0 0 1 21 8c0 7-5 12-12 12H31a9 9 0 0 1-1-18 13 13 0 0 1 9-2z" fill="#000" stroke="#000" stroke-width="9" stroke-linejoin="round"/>
+	</mask>
+	<mask id="paperless-sync-cloud">
+		<rect width="64" height="64" fill="#fff"/>
+		<!-- The arrow that carries the document. -->
+		<path d="M36 46h15m-5-5 5 5-5 5" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+	</mask>
+	<path d="M13 4h18l13 13v30a5 5 0 0 1-5 5H13a5 5 0 0 1-5-5V9a5 5 0 0 1 5-5z" fill="#222" mask="url(#paperless-sync-paper)"/>
+	<path d="M39 36a12 12 0 0 1 21 8c0 7-5 12-12 12H31a9 9 0 0 1-1-18 13 13 0 0 1 9-2z" fill="#222" mask="url(#paperless-sync-cloud)"/>
 </svg>
