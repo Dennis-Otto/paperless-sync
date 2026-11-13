@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Doubles;
 
 use Exception;
+use OCA\PaperlessSync\Service\HashedSecrets;
+use OCA\PaperlessSync\Service\HealthToken;
 use OCA\PaperlessSync\Service\WebhookService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IURLGenerator;
@@ -17,9 +19,10 @@ use OCP\Security\ICredentialsManager;
 use OCP\Security\ISecureRandom;
 
 /**
- * The webhook of the app with Nextcloud's credentials store in $webhookCredentials, by the
- * identifier of each credential, and a random generator that gives the secrets of $secrets one
- * after another. It keeps its last call in the app configuration of InMemoryConfiguration.
+ * The webhook and the health check of the app with Nextcloud's credentials store in
+ * $webhookCredentials, by the identifier of each credential, and a random generator that gives the
+ * secrets of $secrets one after another, to whichever of them creates one next. The webhook keeps
+ * its last call in the app configuration of InMemoryConfiguration.
  */
 trait InMemoryWebhook {
 	/** @var array<string, mixed> what the credentials store holds, by its identifier, as it gives it back: decoded from JSON */
@@ -39,8 +42,18 @@ trait InMemoryWebhook {
 	private const OTHER_SECRET = 'NewSecretNewSecretNewSecretNewSecretNewSecretNew';
 	/** The address of the webhook, as Nextcloud links to its route. */
 	private const WEBHOOK_URL = 'https://cloud.example.test/index.php/apps/paperless_sync/api/v1/webhook';
+	/** The address of the health check, as Nextcloud links to its route. */
+	private const HEALTH_URL = 'https://cloud.example.test/index.php/apps/paperless_sync/api/v1/health';
 
 	private function webhookService(ITimeFactory $clock): WebhookService {
+		return new WebhookService($this->hashedSecrets($clock), $clock, $this->appConfig(), $this->secretsUrlGenerator());
+	}
+
+	private function healthToken(ITimeFactory $clock): HealthToken {
+		return new HealthToken($this->hashedSecrets($clock), $this->secretsUrlGenerator());
+	}
+
+	private function hashedSecrets(ITimeFactory $clock): HashedSecrets {
 		$credentials = $this->createStub(ICredentialsManager::class);
 		$credentials->method('retrieve')->willReturnCallback(function (string $userId, string $identifier): mixed {
 			if ($this->webhookStoreFailure !== null) {
@@ -67,15 +80,24 @@ trait InMemoryWebhook {
 		});
 		$random = $this->createStub(ISecureRandom::class);
 		$random->method('generate')->willReturnCallback(function (int $length, string $characters): string {
-			self::assertSame([WebhookService::SECRET_LENGTH, ISecureRandom::CHAR_ALPHANUMERIC], [$length, $characters]);
+			self::assertSame([HashedSecrets::LENGTH, ISecureRandom::CHAR_ALPHANUMERIC], [$length, $characters]);
 			$secret = array_shift($this->secrets);
 			self::assertIsString($secret, 'The test creates more secrets than it has.');
 
 			return $secret;
 		});
-		$urlGenerator = $this->createStub(IURLGenerator::class);
-		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route): string => $route === WebhookService::ROUTE ? self::WEBHOOK_URL : "https://cloud.example.test/{$route}");
 
-		return new WebhookService($credentials, $random, $clock, $this->appConfig(), $urlGenerator, $this->recordingLogger());
+		return new HashedSecrets($credentials, $random, $clock, $this->recordingLogger());
+	}
+
+	private function secretsUrlGenerator(): IURLGenerator {
+		$urlGenerator = $this->createStub(IURLGenerator::class);
+		$urlGenerator->method('linkToRouteAbsolute')->willReturnCallback(static fn (string $route): string => match ($route) {
+			WebhookService::ROUTE => self::WEBHOOK_URL,
+			HealthToken::ROUTE => self::HEALTH_URL,
+			default => "https://cloud.example.test/{$route}",
+		});
+
+		return $urlGenerator;
 	}
 }

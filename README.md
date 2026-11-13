@@ -160,7 +160,7 @@ Until the first run has succeeded, the settings open with **Getting started**, t
 - [Pickers in the settings](#target-user-and-tags) offer the users of Nextcloud for the target user and the tags of Paperless for the excluded tags, the tags to mirror and the tags of every import, and mark a user or a tag that doesn't exist, so that a typo shows before the first run
 - The [Activity stream](#activity) of the target user tells what each run changed, with links to its files, and every import, with a link to the new document in Paperless
 - In English, German, formal German, French, Spanish, Dutch, Simplified Chinese and Traditional Chinese: the settings, their messages, the Activity stream, the notifications and the folders that a new installation proposes follow the language of Nextcloud, the *Help* links open the guide in English or German, and the times follow the locale of your personal settings
-- [Notifications, setup checks and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant
+- [Notifications, setup checks, a health check and a status API](#being-notified) tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant, with a token for the monitor that opens nothing else
 - [`occ` commands](#command-line) for scripts, cron jobs and monitoring: a run or a dry-run with a batch size of its own or none, the status, and copies written again, with JSON output and exit codes
 - Accessible: the settings, the actions in Files and the form of the rule in Flow are checked with axe-core against WCAG 2.1 AA, with no serious or critical finding, in the light and the dark theme, on a computer and on a phone 320 pixels wide, where the settings and the form fit without scrolling sideways, and the settings work by keyboard alone, with a focus that shows and that the bar of the buttons never covers; the end-to-end tests check it in every change of the app
 - Signed releases: the same package in the Nextcloud App Store and on GitHub, with an SBOM and signed build provenance
@@ -986,7 +986,35 @@ A mirror that stops is the worst failure of a backup, and nobody looks at the se
 
 - **Notifications.** Three runs in a row that failed or completed with errors, or fewer once the first of them ended a day ago, as with an interval of a day, send every administrator one notification, with the first 200 characters of the error and a link to the settings: *Paperless Sync failed 3 times in a row*. It comes once for the whole row, also by mail or as a push notification of the Nextcloud apps where the user has turned those on, and the next successful run removes it. Two failed runs, such as during a restart of Paperless, notify nobody. The target user, or with per-user ownership the user whose inbox held the file, gets a notification for each file of the inbox that Paperless could not import or refused, with its reason, and so does the owner of a file that a [rule of Flow](#send-by-a-rule-of-flow) sent. When an administrator deletes the target user in Nextcloud, every administrator gets a notification, *Nextcloud deleted paperless, the target user of Paperless Sync*, until the settings name another target user: every run fails until then, and a new account with that ID would get every document. A dry-run notifies nobody.
 - **Setup checks.** *Administration → Overview* and `occ setupchecks` show two checks of the app. *Paperless Sync* is an error when the last run failed, a warning when it completed with errors or when no run succeeded for three intervals, at least an hour, as when the background jobs stopped, and a note with a link to the settings while they lack the URL of Paperless, its token or the target user, as on a new installation or after **Disconnect**. *Paperless Sync background job* warns when scheduled runs are on but Nextcloud runs its background jobs with AJAX or Webcron, which start them only while someone uses Nextcloud. The settings page shows their warnings on top.
-- **The status API** gives a monitor, such as Uptime Kuma or Home Assistant, the health of the mirror. Only administrators may read it; give the monitor an app password of an administrator, from *Personal settings → Security*, here in the variable `APP_PASSWORD`:
+- **The health check** gives a monitor, such as Uptime Kuma or Home Assistant, the health of the mirror, with a token that opens nothing else: no file, no setting and no account of Nextcloud. **Create token** under *Health check for a monitor* on the settings page shows the token once, beside the *Health check URL*; a new token replaces the one before at once, and **Revoke the token** turns the health check off. Here the token is in the variable `HEALTH_TOKEN`:
+
+```sh
+curl --header "Authorization: Bearer $HEALTH_TOKEN" \
+  "https://cloud.example.com/index.php/apps/paperless_sync/api/v1/health"
+```
+
+It answers:
+
+```json
+{"healthy": false, "health": "failed", "state": "failed",
+  "lastSuccess": 1787900400, "failedRuns": 3, "failingSince": 1787909405}
+```
+
+`health` is `unconfigured` while the settings lack the URL of Paperless, its token or the target user, so that no run can start, then `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. `state` is the state of the last run, also of a dry-run, as the settings page names it, such as `completed` or `failed`, `failedRuns` counts the runs in a row that failed or completed with errors, and `failingSince` is when the first of them ended; the times are Unix timestamps, 0 for none. The answer is 200 whatever the health, so that a monitor tells a failing mirror from a health check that it can't reach. A call without the token, or with a wrong one, gets 401, and Nextcloud's brute-force protection delays the next calls of that address, as for the webhook. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"Authorization": "Bearer <token>"}`, the query `healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same, with `paperless_sync_health: Bearer <token>` in `secrets.yaml`:
+
+```yaml
+rest:
+  - resource: https://cloud.example.com/index.php/apps/paperless_sync/api/v1/health
+    headers:
+      Authorization: !secret paperless_sync_health
+    scan_interval: 300
+    binary_sensor:
+      - name: Paperless Sync problem
+        device_class: problem
+        value_template: "{{ not value_json.healthy }}"
+```
+
+The status API tells an administrator more, for a script of their own: also the error of the last run, the counts of the last run and of each user, and the Paperless that it reached. Only administrators may read it, with an app password of an administrator, from *Personal settings → Security*, which opens every file and the administration of the whole Nextcloud, so give a monitor the token of the health check instead. Here the app password is in the variable `APP_PASSWORD`:
 
 ```sh
 curl --user "admin:$APP_PASSWORD" --header "OCS-APIRequest: true" \
@@ -1005,22 +1033,7 @@ It answers, with the counts of `summary` shortened:
   "paperlessVersion": "", "paperlessApiVersion": ""}}}
 ```
 
-`health` is `unconfigured` while the settings lack the URL of Paperless, its token or the target user, so that no run can start, then `failed` or `errors` while the last run failed or completed with errors, also one by hand while scheduled runs are off, then `off` while they are off, `waiting` before the first successful run, `stale` as the setup check names it, or `ok`; `healthy` is false for `failed`, `errors` and `stale`. The times are Unix timestamps, `summary` holds the counts of the last run, also of a dry-run, `users` with [per-user ownership](#per-user-ownership) the counts of each user by their ID, such as `{"alice": {"exported": 2, …}}`, and `error` the error of the last run of the row that failed, in English: for a request that Paperless refused or that did not reach it, what happened and what to do, and after `Details:` the message of the HTTP client. In Uptime Kuma, a monitor of the type *HTTP(s) - Json Query* with this URL, the header `{"OCS-APIRequest": "true"}`, basic authentication, the query `ocs.data.healthy` and the expected value `true` raises an alarm. In Home Assistant, a RESTful binary sensor does the same:
-
-```yaml
-rest:
-  - resource: https://cloud.example.com/ocs/v2.php/apps/paperless_sync/api/v1/status?format=json
-    headers:
-      OCS-APIRequest: "true"
-    authentication: basic
-    username: admin
-    password: !secret nextcloud_app_password
-    scan_interval: 300
-    binary_sensor:
-      - name: Paperless Sync problem
-        device_class: problem
-        value_template: "{{ not value_json.ocs.data.healthy }}"
-```
+`healthy`, `health`, `state`, `lastSuccess`, `failedRuns` and `failingSince` are those of the health check. `summary` holds the counts of the last run, also of a dry-run, `users` with [per-user ownership](#per-user-ownership) the counts of each user by their ID, such as `{"alice": {"exported": 2, …}}`, and `error` the error of the last run of the row that failed, in English: for a request that Paperless refused or that did not reach it, what happened and what to do, and after `Details:` the message of the HTTP client.
 
 The notification of a failing mirror goes to the group `admin`. Another group, such as one for the people who look after the archive, gets it in its place with `occ config:app:set paperless_sync notification_group --value=archive-admins`; a group that doesn't exist leaves it to the administrators, with a warning in the log.
 <!-- --8<-- [end:notifications] -->

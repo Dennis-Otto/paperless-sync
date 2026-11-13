@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Settings;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\GettingStarted;
+use OCA\PaperlessSync\Service\HealthToken;
 use OCA\PaperlessSync\Service\StatusService;
 use OCA\PaperlessSync\Service\StatusTranslation;
 use OCA\PaperlessSync\Service\WebhookService;
@@ -41,6 +42,7 @@ final class AdminSettings implements IDelegatedSettings {
 		private WebhookService $webhookService,
 		private IL10N $l10n,
 		private GettingStarted $gettingStarted,
+		private HealthToken $healthToken,
 	) {
 	}
 
@@ -61,6 +63,9 @@ final class AdminSettings implements IDelegatedSettings {
 		// The webhook of the workflows of Paperless, without its secret.
 		$webhook = $this->webhookService->state();
 		$this->initialState->provideInitialState('webhook', $webhook);
+		// The health check of a monitor, without its token.
+		$healthToken = $this->healthToken->state();
+		$this->initialState->provideInitialState('healthToken', $healthToken);
 
 		return new TemplateResponse(AppConstants::APP_ID, 'settings', [
 			'config' => $config,
@@ -79,6 +84,8 @@ final class AdminSettings implements IDelegatedSettings {
 			'filesUrl' => $this->urlGenerator->linkToRoute('files.view.index'),
 			'webhookStateUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.webhook.state'),
 			'webhook' => $webhook,
+			'healthTokenUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.health.state'),
+			'healthToken' => $healthToken,
 			'health' => $this->health(),
 			'tagsUrl' => $this->urlGenerator->linkToRoute(AppConstants::APP_ID . '.settings.tags'),
 			// The users and groups of Nextcloud, which the page offers for the target user and its

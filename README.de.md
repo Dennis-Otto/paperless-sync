@@ -165,7 +165,7 @@ Bis der erste Lauf erfolgreich war, öffnen sich die Einstellungen mit **Erste S
 - [Auswahlfelder in den Einstellungen](#zielbenutzer-und-tags) bieten die Benutzer von Nextcloud für den Zielbenutzer und die Tags von Paperless für die ausgeschlossenen Tags, die Tags zum Spiegeln und die Tags jedes Imports an und markieren einen Benutzer oder einen Tag, den es nicht gibt, sodass sich ein Tippfehler vor dem ersten Lauf zeigt
 - Der [Aktivitätenstrom](#aktivität) des Zielbenutzers erzählt, was jeder Lauf geändert hat, mit Links zu seinen Dateien, und jeden Import, mit einem Link zum neuen Dokument in Paperless
 - Auf Englisch, Deutsch mit Du und mit Sie, Französisch, Spanisch, Niederländisch, vereinfachtem und traditionellem Chinesisch: Die Einstellungen, ihre Meldungen, der Aktivitätenstrom, die Benachrichtigungen und die Ordner, die eine neue Installation vorschlägt, folgen der Sprache von Nextcloud, die Links *Hilfe* öffnen die Anleitung auf Englisch oder Deutsch, und die Zeiten folgen dem Gebietsschema deiner persönlichen Einstellungen
-- [Benachrichtigungen, Einrichtungsprüfungen und eine Status-API](#benachrichtigungen) sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant
+- [Benachrichtigungen, Einrichtungsprüfungen, eine Zustandsprüfung und eine Status-API](#benachrichtigungen) sagen den Administratoren, wenn die Spiegelung immer wieder scheitert oder stehen geblieben ist, auch in Uptime Kuma oder Home Assistant, mit einem Token für die Überwachung, das sonst nichts öffnet
 - [`occ`-Befehle](#kommandozeile) für Skripte, Cron-Jobs und Überwachung: ein Lauf oder ein Testlauf mit eigener oder ohne Batchgröße, der Status und neu geschriebene Kopien, mit JSON-Ausgabe und Exit-Codes
 - Barrierefrei: Die Einstellungen, die Aktionen in Dateien und das Formular der Regel in Flow werden mit axe-core gegen WCAG 2.1 AA geprüft, ohne ernsten oder kritischen Befund, im hellen und im dunklen Design, am Computer und auf einem Telefon mit 320 Pixeln Breite, auf dem die Einstellungen und das Formular ohne seitliches Scrollen passen, und die Einstellungen lassen sich allein mit der Tastatur bedienen, mit einem sichtbaren Fokus, den die Leiste der Knöpfe nie verdeckt; die End-to-End-Tests prüfen das bei jeder Änderung der App
 - Signierte Releases: dasselbe Paket im Nextcloud App Store und auf GitHub, mit einer SBOM und signierter Build-Provenienz
@@ -1033,7 +1033,35 @@ Eine Spiegelung, die stehen bleibt, ist der schlimmste Fehler einer Sicherung, u
 
 - **Benachrichtigungen.** Drei Läufe in Folge, die fehlgeschlagen oder mit Fehlern abgeschlossen sind, oder weniger, sobald der erste von ihnen vor einem Tag geendet hat, etwa bei einem Intervall von einem Tag, schicken jedem Administrator eine Benachrichtigung mit den ersten 200 Zeichen des Fehlers und einem Link zu den Einstellungen: *Paperless Sync ist 3 Mal in Folge fehlgeschlagen*. Sie kommt einmal für die ganze Reihe, auch per E-Mail oder als Push-Benachrichtigung der Nextcloud-Apps, wo der Benutzer diese eingeschaltet hat, und der nächste erfolgreiche Lauf entfernt sie. Zwei fehlgeschlagene Läufe, etwa während eines Neustarts von Paperless, benachrichtigen niemanden. Der Zielbenutzer, oder beim Eigentum je Benutzer der Benutzer, dessen Eingang die Datei hatte, bekommt eine Benachrichtigung für jede Datei des Eingangs, die Paperless nicht importieren konnte oder abgelehnt hat, mit ihrem Grund, und ebenso der Eigentümer einer Datei, die eine [Regel von Flow](#durch-eine-regel-von-flow-senden) gesendet hat. Löscht ein Administrator den Zielbenutzer in Nextcloud, bekommt jeder Administrator eine Benachrichtigung, *Nextcloud hat paperless gelöscht, den Zielbenutzer von Paperless Sync*, bis die Einstellungen einen anderen Zielbenutzer nennen: Bis dahin schlägt jeder Lauf fehl, und ein neues Konto mit dieser ID bekäme jedes Dokument. Ein Testlauf benachrichtigt niemanden.
 - **Einrichtungsprüfungen.** *Administration → Übersicht* und `occ setupchecks` zeigen zwei Prüfungen der App. *Paperless Sync* ist ein Fehler, wenn der letzte Lauf gescheitert ist, und eine Warnung, wenn er mit Fehlern abgeschlossen ist oder wenn drei Intervalle lang kein Lauf erfolgreich war, mindestens eine Stunde, etwa wenn die Hintergrundjobs stehen geblieben sind, und ein Hinweis mit einem Link zu den Einstellungen, solange ihnen die Adresse von Paperless, sein Token oder der Zielbenutzer fehlt, wie auf einer neuen Installation oder nach **Trennen**. *Hintergrundjob von Paperless Sync* warnt, wenn geplante Läufe an sind, Nextcloud seine Hintergrundjobs aber mit AJAX oder Webcron ausführt, die sie nur starten, während jemand Nextcloud benutzt. Die Einstellungsseite zeigt ihre Warnungen oben.
-- **Die Status-API** gibt einer Überwachung, etwa Uptime Kuma oder Home Assistant, den Zustand der Spiegelung. Nur Administratoren dürfen sie lesen; gib der Überwachung ein App-Passwort eines Administrators, aus *Persönliche Einstellungen → Sicherheit*, hier in der Variablen `APP_PASSWORD`:
+- **Die Zustandsprüfung** gibt einer Überwachung, etwa Uptime Kuma oder Home Assistant, den Zustand der Spiegelung, mit einem Token, das sonst nichts öffnet: keine Datei, keine Einstellung und kein Konto von Nextcloud. **Token erstellen** unter *Zustandsprüfung für eine Überwachung* auf der Einstellungsseite zeigt das Token einmal, neben der *URL der Zustandsprüfung*; ein neues Token ersetzt das bisherige sofort, und **Token widerrufen** schaltet die Zustandsprüfung aus. Hier steht das Token in der Variablen `HEALTH_TOKEN`:
+
+```sh
+curl --header "Authorization: Bearer $HEALTH_TOKEN" \
+  "https://cloud.example.com/index.php/apps/paperless_sync/api/v1/health"
+```
+
+Sie antwortet:
+
+```json
+{"healthy": false, "health": "failed", "state": "failed",
+  "lastSuccess": 1787900400, "failedRuns": 3, "failingSince": 1787909405}
+```
+
+`health` ist `unconfigured`, solange den Einstellungen die Adresse von Paperless, sein Token oder der Zielbenutzer fehlt, sodass kein Lauf starten kann, dann `failed` oder `errors`, solange der letzte Lauf gescheitert oder mit Fehlern abgeschlossen ist, auch einer von Hand, während geplante Läufe aus sind, dann `off`, solange sie aus sind, `waiting` vor dem ersten erfolgreichen Lauf, `stale`, wie es die Einrichtungsprüfung nennt, oder `ok`; `healthy` ist false für `failed`, `errors` und `stale`. `state` ist der Zustand des letzten Laufs, auch eines Testlaufs, wie ihn die Einstellungsseite nennt, etwa `completed` oder `failed`, `failedRuns` zählt die Läufe in Folge, die gescheitert oder mit Fehlern abgeschlossen sind, und `failingSince` ist der Zeitpunkt, an dem der erste von ihnen geendet hat; die Zeiten sind Unix-Zeitstempel, 0 für keine. Die Antwort ist 200, wie auch immer der Zustand ist, damit eine Überwachung eine scheiternde Spiegelung von einer Zustandsprüfung unterscheidet, die sie nicht erreicht. Ein Aufruf ohne das Token, oder mit einem falschen, bekommt 401, und der Schutz vor Brute-Force-Angriffen von Nextcloud verzögert die nächsten Aufrufe dieser Adresse, wie beim Webhook. In Uptime Kuma schlägt ein Monitor vom Typ *HTTP(s) - Json Query* mit dieser Adresse, dem Header `{"Authorization": "Bearer <token>"}`, der Abfrage `healthy` und dem erwarteten Wert `true` Alarm. In Home Assistant tut ein RESTful Binary Sensor dasselbe, mit `paperless_sync_health: Bearer <token>` in `secrets.yaml`:
+
+```yaml
+rest:
+  - resource: https://cloud.example.com/index.php/apps/paperless_sync/api/v1/health
+    headers:
+      Authorization: !secret paperless_sync_health
+    scan_interval: 300
+    binary_sensor:
+      - name: Paperless Sync Problem
+        device_class: problem
+        value_template: "{{ not value_json.healthy }}"
+```
+
+Die Status-API sagt einem Administrator mehr, für ein eigenes Skript: auch den Fehler des letzten Laufs, die Zahlen des letzten Laufs und jedes Benutzers und das Paperless, das er erreicht hat. Nur Administratoren dürfen sie lesen, mit einem App-Passwort eines Administrators, aus *Persönliche Einstellungen → Sicherheit*, das jede Datei und die Verwaltung der ganzen Nextcloud öffnet; gib einer Überwachung also stattdessen das Token der Zustandsprüfung. Hier steht das App-Passwort in der Variablen `APP_PASSWORD`:
 
 ```sh
 curl --user "admin:$APP_PASSWORD" --header "OCS-APIRequest: true" \
@@ -1052,22 +1080,7 @@ Sie antwortet, mit gekürzten Zahlen in `summary`:
   "paperlessVersion": "", "paperlessApiVersion": ""}}}
 ```
 
-`health` ist `unconfigured`, solange den Einstellungen die Adresse von Paperless, sein Token oder der Zielbenutzer fehlt, sodass kein Lauf starten kann, dann `failed` oder `errors`, solange der letzte Lauf gescheitert oder mit Fehlern abgeschlossen ist, auch einer von Hand, während geplante Läufe aus sind, dann `off`, solange sie aus sind, `waiting` vor dem ersten erfolgreichen Lauf, `stale`, wie es die Einrichtungsprüfung nennt, oder `ok`; `healthy` ist false für `failed`, `errors` und `stale`. Die Zeiten sind Unix-Zeitstempel, `summary` enthält die Zahlen des letzten Laufs, auch eines Testlaufs, `users` mit [Eigentum je Benutzer](#eigentum-je-benutzer) die Zahlen jedes Benutzers nach seiner ID, etwa `{"alice": {"exported": 2, …}}`, und `error` den Fehler des letzten Laufs der Reihe, der gescheitert ist, auf Englisch: für eine Anfrage, die Paperless abgelehnt hat oder die es nicht erreicht hat, was passiert ist und was zu tun ist, und nach `Details:` die Meldung des HTTP-Clients. In Uptime Kuma schlägt ein Monitor vom Typ *HTTP(s) - Json Query* mit dieser Adresse, dem Header `{"OCS-APIRequest": "true"}`, Basic-Authentifizierung, der Abfrage `ocs.data.healthy` und dem erwarteten Wert `true` Alarm. In Home Assistant tut ein RESTful Binary Sensor dasselbe:
-
-```yaml
-rest:
-  - resource: https://cloud.example.com/ocs/v2.php/apps/paperless_sync/api/v1/status?format=json
-    headers:
-      OCS-APIRequest: "true"
-    authentication: basic
-    username: admin
-    password: !secret nextcloud_app_password
-    scan_interval: 300
-    binary_sensor:
-      - name: Paperless Sync Problem
-        device_class: problem
-        value_template: "{{ not value_json.ocs.data.healthy }}"
-```
+`healthy`, `health`, `state`, `lastSuccess`, `failedRuns` und `failingSince` sind die der Zustandsprüfung. `summary` enthält die Zahlen des letzten Laufs, auch eines Testlaufs, `users` mit [Eigentum je Benutzer](#eigentum-je-benutzer) die Zahlen jedes Benutzers nach seiner ID, etwa `{"alice": {"exported": 2, …}}`, und `error` den Fehler des letzten Laufs der Reihe, der gescheitert ist, auf Englisch: für eine Anfrage, die Paperless abgelehnt hat oder die es nicht erreicht hat, was passiert ist und was zu tun ist, und nach `Details:` die Meldung des HTTP-Clients.
 
 Die Benachrichtigung einer scheiternden Spiegelung geht an die Gruppe `admin`. Eine andere Gruppe, etwa eine für die Menschen, die sich um das Archiv kümmern, bekommt sie an ihrer Stelle mit `occ config:app:set paperless_sync notification_group --value=archive-admins`; eine Gruppe, die es nicht gibt, überlässt sie den Administratoren, mit einer Warnung im Protokoll.
 <!-- --8<-- [end:notifications] -->

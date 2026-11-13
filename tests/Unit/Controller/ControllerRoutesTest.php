@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Controller;
 use OCA\PaperlessSync\Controller\DirectoryController;
 use OCA\PaperlessSync\Controller\FileActionController;
 use OCA\PaperlessSync\Controller\FolderInfoController;
+use OCA\PaperlessSync\Controller\HealthController;
 use OCA\PaperlessSync\Controller\SettingsController;
 use OCA\PaperlessSync\Controller\StatusApiController;
 use OCA\PaperlessSync\Controller\SyncController;
@@ -59,6 +60,10 @@ final class ControllerRoutesTest extends TestCase {
 			'webhook state' => [WebhookController::class, 'state', 'GET', '/settings/webhook'],
 			'webhook secret' => [WebhookController::class, 'create', 'POST', '/settings/webhook'],
 			'webhook off' => [WebhookController::class, 'remove', 'DELETE', '/settings/webhook'],
+			'health check' => [HealthController::class, 'check', 'GET', '/api/v1/health'],
+			'health check state' => [HealthController::class, 'state', 'GET', '/settings/health-token'],
+			'health check token' => [HealthController::class, 'create', 'POST', '/settings/health-token'],
+			'health check token revoked' => [HealthController::class, 'remove', 'DELETE', '/settings/health-token'],
 			'send to Paperless from Files' => [FileActionController::class, 'send', 'POST', '/api/v1/send'],
 			'the note in Files' => [FolderInfoController::class, 'show', 'GET', '/api/v1/folder-info'],
 			'hide the note in Files' => [FolderInfoController::class, 'dismiss', 'POST', '/api/v1/folder-info/dismissed'],
@@ -92,9 +97,10 @@ final class ControllerRoutesTest extends TestCase {
 	 */
 	public static function routesOfTheSettingsPage(): array {
 		$routes = [];
-		foreach ([SettingsController::class, SyncController::class, WebhookController::class, DirectoryController::class, TagSharesController::class] as $controller) {
+		foreach ([SettingsController::class, SyncController::class, WebhookController::class, HealthController::class, DirectoryController::class, TagSharesController::class] as $controller) {
 			foreach ((new ReflectionClass($controller))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-				// The webhook itself is for a workflow of Paperless, not for the page.
+				// The webhook itself is for a workflow of Paperless, and the health check for a
+				// monitor, not for the page.
 				if ($method->getAttributes(FrontpageRoute::class) !== [] && $method->getAttributes(PublicPage::class) === []) {
 					$routes["{$controller}::{$method->getName()}"] = [$method];
 				}
@@ -105,7 +111,7 @@ final class ControllerRoutesTest extends TestCase {
 	}
 
 	public function testTheRoutesOfTheSettingsPageAreAllFound(): void {
-		self::assertCount(17, self::routesOfTheSettingsPage());
+		self::assertCount(20, self::routesOfTheSettingsPage());
 	}
 
 	/**
@@ -139,6 +145,8 @@ final class ControllerRoutesTest extends TestCase {
 			SettingsController::class . '::account',
 			WebhookController::class . '::create',
 			WebhookController::class . '::remove',
+			HealthController::class . '::create',
+			HealthController::class . '::remove',
 			TagSharesController::class . '::remove',
 		], $confirmed);
 	}

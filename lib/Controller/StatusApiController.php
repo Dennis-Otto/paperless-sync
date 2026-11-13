@@ -20,12 +20,10 @@ use OCP\IRequest;
 /**
  * The health of the mirror for a monitor, such as Uptime Kuma or the RESTful sensor of Home
  * Assistant, at /ocs/v2.php/apps/paperless_sync/api/v1/status. Only administrators may read it,
- * as every route of the app that doesn't say otherwise.
+ * as every route of the app that doesn't say otherwise; HealthController gives a monitor the health
+ * alone, with a token of its own.
  */
 final class StatusApiController extends OCSController {
-	/** The states of health in which a monitor should raise an alarm. */
-	private const UNHEALTHY = ['failed', 'errors', 'stale'];
-
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		string $appName,
@@ -53,7 +51,7 @@ final class StatusApiController extends OCSController {
 		$failures = $this->statusService->failures();
 
 		return new DataResponse([
-			'healthy' => !in_array($health, self::UNHEALTHY, true),
+			'healthy' => StatusService::healthy($health),
 			'health' => $health,
 			'enabled' => $config->enabled,
 			'state' => $status['state'],

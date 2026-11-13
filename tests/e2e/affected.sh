@@ -90,7 +90,7 @@ PAPERLESS_ANSWER_WORDS='\bPaperless(Client|ApiService)|\barray [$]documents?\b'
 # (upgrade.sh): the migrations, which meet the rows of the release there alone, each class of
 # lib/ that reads or writes the settings and the state that the release stored
 # (STORED_STATE_WORDS), such as the state of the runs and the saved settings, the settings
-# themselves and the secret of the webhook, what goes into the package that the upgrade
+# themselves and the secret of the webhook, which HashedSecrets stores, what goes into the package that the upgrade
 # installs, and the upgrade test itself and its workflow; not the checks in the browser or the
 # contract tests, which it doesn't run. appinfo/info.xml counts as for path_affects_app.
 path_affects_upgrade() {
@@ -99,7 +99,7 @@ path_affects_upgrade() {
 		tests/e2e/screenshots.* | tests/e2e/contract.py | tests/e2e/test_contract.py | tests/e2e/run-contract.sh | tests/e2e/compose.paperless.yaml) return 1 ;;
 		tests/e2e/demo.sh | tests/e2e/test_demo.py) return 1 ;;
 		lib/Migration/* | lib/Service/ConfigService.php | lib/Service/SyncStateRepository* | lib/Model/SyncConfig.php) return 0 ;;
-		lib/Service/WebhookService.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;
+		lib/Service/WebhookService.php | lib/Service/HashedSecrets.php | .nextcloudignore | krankerl.toml | scripts/check-package.sh) return 0 ;;
 		tests/e2e/* | .github/workflows/e2e.yml) return 0 ;;
 		*) lib_file_names "$1" "${STORED_STATE_WORDS}" ;;
 	esac

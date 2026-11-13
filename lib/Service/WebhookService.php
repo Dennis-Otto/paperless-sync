@@ -9,26 +9,20 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Service;
 
-use Exception;
 use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\Exception as DatabaseException;
 use OCP\IAppConfig;
 use OCP\IURLGenerator;
-use OCP\Security\ICredentialsManager;
-use OCP\Security\ISecureRandom;
-use Psr\Log\LoggerInterface;
 
 /**
  * The webhook through which a workflow of Paperless-ngx names a document that it added or changed,
  * so that its copy changes within seconds: its secret, which Paperless sends in the header
  * Authorization as "Bearer <secret>", its address, and what came of its last call.
  *
- * The secret is random, 48 letters and digits, and Nextcloud's credentials store, which encrypts
- * it, keeps only its SHA-256: the settings page shows the secret once, when it is created, and no
- * one can read it afterwards, neither from the page nor from the database. A new secret replaces
- * the one before at once.
+ * The secret is one of HashedSecrets: random, kept as its SHA-256 alone, so that the settings page
+ * shows it once, when it is created, and no one can read it afterwards, neither from the page nor
+ * from the database. A new secret replaces the one before at once.
  *
  * @psalm-type LastCall = array{at: int, document: int, result: string, message: string}
  * @psalm-type State = array{configured: bool, created: int, url: string, lastCall: LastCall|null}
@@ -36,21 +30,16 @@ use Psr\Log\LoggerInterface;
 final class WebhookService {
 	/** The route that Paperless calls. */
 	public const ROUTE = AppConstants::APP_ID . '.webhook.receive';
-	/** The length of a secret: 48 letters and digits, about 285 bits. */
-	public const SECRET_LENGTH = 48;
 	/** The most characters of the message of the last call that the settings page shows. */
 	private const MESSAGE_LENGTH = 1000;
-	private const SECRET_IDENTIFIER = AppConstants::APP_ID . '.webhook-secret';
 	private const LAST_CALL = 'webhook_last_call';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
-		private ICredentialsManager $credentialsManager,
-		private ISecureRandom $random,
+		private HashedSecrets $secrets,
 		private ITimeFactory $timeFactory,
 		private IAppConfig $appConfig,
 		private IURLGenerator $urlGenerator,
-		private LoggerInterface $logger,
 	) {
 	}
 
@@ -59,11 +48,7 @@ final class WebhookService {
 	 * alone, for the settings page to show once.
 	 */
 	public function create(): string {
-		$secret = $this->random->generate(self::SECRET_LENGTH, ISecureRandom::CHAR_ALPHANUMERIC);
-		$this->credentialsManager->store('', self::SECRET_IDENTIFIER, [
-			'hash' => hash('sha256', $secret),
-			'created' => $this->timeFactory->getTime(),
-		]);
+		$secret = $this->secrets->create(HashedSecrets::WEBHOOK);
 		// The last call belongs to the secret before.
 		$this->appConfig->deleteKey(AppConstants::APP_ID, self::LAST_CALL);
 
@@ -72,21 +57,13 @@ final class WebhookService {
 
 	/** Turns the webhook off: no call is accepted until a new secret is created. */
 	public function remove(): void {
-		$this->credentialsManager->delete('', self::SECRET_IDENTIFIER);
+		$this->secrets->remove(HashedSecrets::WEBHOOK);
 		$this->appConfig->deleteKey(AppConstants::APP_ID, self::LAST_CALL);
 	}
 
-	/**
-	 * Whether the header Authorization of a call carries the secret, as "Bearer <secret>". The
-	 * comparison takes the same time for every wrong secret, so that its time tells nothing.
-	 */
+	/** Whether the header Authorization of a call carries the secret, as "Bearer <secret>". */
 	public function verify(#[\SensitiveParameter] string $authorization): bool {
-		$stored = $this->stored();
-		if ($stored === null || preg_match('/^Bearer\s+(\S+)\s*$/i', $authorization, $match) !== 1) {
-			return false;
-		}
-
-		return hash_equals($stored['hash'], hash('sha256', $match[1]));
+		return $this->secrets->verify(HashedSecrets::WEBHOOK, $authorization);
 	}
 
 	/**
@@ -109,13 +86,13 @@ final class WebhookService {
 	 * @return State
 	 */
 	public function state(): array {
-		$stored = $this->stored();
+		$created = $this->secrets->created(HashedSecrets::WEBHOOK);
 
 		return [
-			'configured' => $stored !== null,
-			'created' => $stored['created'] ?? 0,
+			'configured' => $created !== null,
+			'created' => $created ?? 0,
 			'url' => $this->urlGenerator->linkToRouteAbsolute(self::ROUTE),
-			'lastCall' => $stored === null ? null : $this->lastCall(),
+			'lastCall' => $created === null ? null : $this->lastCall(),
 		];
 	}
 
@@ -156,39 +133,5 @@ final class WebhookService {
 		}
 
 		return ['at' => $at, 'document' => $document, 'result' => $result, 'message' => $message];
-	}
-
-	/**
-	 * The hash of the secret and when it was created, null without one. A secret that the store can't
-	 * decrypt, as after a restore or a move of Nextcloud with another secret in config.php, counts as
-	 * none: the settings page offers to create one, and a call of the webhook is refused.
-	 *
-	 * @return array{hash: string, created: int}|null
-	 */
-	private function stored(): ?array {
-		try {
-			/** @psalm-suppress MixedAssignment */
-			$stored = $this->credentialsManager->retrieve('', self::SECRET_IDENTIFIER);
-		} catch (DatabaseException $exception) {
-			// A failure of the database is no secret that can't be decrypted: a new one wouldn't help.
-			throw $exception;
-		} catch (Exception $exception) {
-			$this->logger->warning('Paperless Sync could not read the stored secret of its webhook, as after a restore or a move of Nextcloud with another secret ({error}). Create a new secret in its settings.', [
-				'app' => AppConstants::APP_ID,
-				'error' => $exception->getMessage(),
-				'exception' => $exception,
-			]);
-
-			return null;
-		}
-		if (!is_array($stored)) {
-			return null;
-		}
-		$hash = $stored['hash'] ?? null;
-		if (!is_string($hash) || strlen($hash) !== 64) {
-			return null;
-		}
-
-		return ['hash' => $hash, 'created' => isset($stored['created']) && is_int($stored['created']) ? $stored['created'] : 0];
 	}
 }

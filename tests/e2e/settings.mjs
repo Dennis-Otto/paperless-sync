@@ -983,6 +983,38 @@ try {
 	expect((await page.locator('#paperless-sync-webhook-state').textContent()) === 'The webhook accepts calls with its secret.', 'The webhook keeps its new secret.')
 	console.log('Settings: a new secret of the webhook replaces the old one, shows once, and a reload has it no more.')
 
+	// The token of the health check of a monitor: the page shows it this once, selected for
+	// copying, and revokes it after a question. A scenario before may have left one, which a new
+	// token replaces after a question too.
+	const healthCreate = page.locator('#paperless-sync-health-create')
+	const healthRemove = page.locator('#paperless-sync-health-remove')
+	const healthToken = page.locator('#paperless-sync-health-token')
+	const healthState = page.locator('#paperless-sync-health-state')
+	const healthQuestions = []
+	const answerHealthQuestion = (dialog) => {
+		healthQuestions.push(dialog.message())
+		dialog.accept()
+	}
+	page.on('dialog', answerHealthQuestion)
+	const hadHealthToken = await healthRemove.isVisible()
+	expect(await healthToken.isHidden(), 'The page shows no token of the health check before one is created.')
+	await healthCreate.click()
+	await settle()
+	expect(hadHealthToken === (healthQuestions.length === 1), `Only a token that replaces one asks first: ${healthQuestions}`)
+	expect((await message.textContent()) === 'Token created. Copy it now: it is shown only this once.', `Creating the token failed: ${await message.textContent()}`)
+	const healthTokenValue = await healthToken.inputValue()
+	expect(/^[A-Za-z0-9]{48}$/.test(healthTokenValue) && await focused(healthToken), 'The new token shows once, with the focus on it for copying.')
+	expect((await healthCreate.textContent()) === 'Create a new token' && await healthRemove.isVisible(), 'A health check with a token offers a new one and its revocation.')
+	expect((await healthState.textContent()) === 'The health check answers calls with its token.', `The health check keeps its token: ${await healthState.textContent()}`)
+	await healthRemove.click()
+	await settle()
+	expect((healthQuestions.at(-1) || '').startsWith('Revoke the token? The health check refuses the calls of the monitor'), `Revoking the token must say what it does: ${healthQuestions}`)
+	expect((await message.textContent()) === 'The token is revoked.', `Revoking the token failed: ${await message.textContent()}`)
+	expect(await healthToken.isHidden() && (await healthToken.inputValue()) === '' && await healthRemove.isHidden(), 'A revoked token leaves the page.')
+	expect((await healthState.textContent()) === 'The health check is off: it refuses every call until you create its token.', `The health check is off again: ${await healthState.textContent()}`)
+	page.off('dialog', answerHealthQuestion)
+	console.log('Settings: the token of the health check shows once, and is revoked after a question.')
+
 	// The setup of the account of the app in Paperless: Enter in its fields sets the account up
 	// instead of saving the form without it, the settings are saved with the token of the new
 	// account, and the token of the superuser leaves its field. A second setup asks before it

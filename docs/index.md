@@ -221,7 +221,7 @@ A native Nextcloud app that mirrors finalized Paperless-ngx documents into a str
       <img alt="The status of Paperless Sync after a run with an error: the state Completed with errors in red, the times of the last run, of the last successful run and of the next scheduled run, and below them a box that names the document whose download failed" src="images/status-error-light.png">
     </picture>
 
-    Notifications, setup checks and a status API tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant. The Activity stream of the target user tells what each run changed and imported.
+    Notifications, setup checks, a health check and a status API tell the administrators when the mirror keeps failing or has stopped, also in Uptime Kuma or Home Assistant, with a token for the monitor that opens nothing else. The Activity stream of the target user tells what each run changed and imported.
 
     [:octicons-arrow-right-24: Being notified](guide.md#being-notified) · [Activity](guide.md#activity)
 

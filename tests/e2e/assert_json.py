@@ -726,6 +726,28 @@ elif mode == "status-api-recovered":
     # ok, or off while the scheduled runs of the tests are off.
     if data.get("healthy") is not True or data.get("health") not in ("ok", "off") or data.get("failedRuns") != 0 or data.get("error") != "":
         raise AssertionError(f"status-api-recovered: the status API does not report the recovered mirror: {data!r}")
+elif mode in ("health-token", "health-refused", "health-failing", "health-recovered"):
+    # The health check of a monitor: the answer to the creation of its token, the one time that it
+    # shows it, and the answers of the check, which never name the error of a run.
+    if mode == "health-token":
+        token = payload.get("token")
+        if not isinstance(token, str) or len(token) != 48 or not token.isalnum():
+            raise AssertionError(f"health-token: no token of 48 letters and digits: {payload!r}")
+        expect("configured", True)
+        if not str(payload.get("url", "")).endswith("/apps/paperless_sync/api/v1/health"):
+            raise AssertionError(f"health-token: the address of the health check is wrong: {payload!r}")
+    elif mode == "health-refused":
+        if "health" in payload or "token" not in str(payload.get("message", "")):
+            raise AssertionError(f"health-refused: a call with a wrong token got more than the refusal: {payload!r}")
+    else:
+        fields = ["failedRuns", "failingSince", "health", "healthy", "lastSuccess", "state"]
+        if sorted(payload) != fields:
+            raise AssertionError(f"{mode}: the health check answered other fields than {fields}: {payload!r}")
+        if mode == "health-failing" and (payload["healthy"] is not False or payload["health"] != "failed" or payload["failedRuns"] < 3):
+            raise AssertionError(f"health-failing: the health check does not report the failing mirror: {payload!r}")
+        # ok, or off while the scheduled runs of the tests are off.
+        if mode == "health-recovered" and (payload["healthy"] is not True or payload["health"] not in ("ok", "off") or payload["failedRuns"] != 0):
+            raise AssertionError(f"health-recovered: the health check does not report the recovered mirror: {payload!r}")
 elif mode == "webhook-secret":
     # The answer to the creation of the secret of the webhook, the one time that it shows it.
     secret = payload.get("secret")

@@ -333,6 +333,11 @@
 		const webhookLastCall = element('webhook-last-call')
 		const webhookSecretField = element('webhook-secret-field')
 		const webhookSecret = element('webhook-secret')
+		const healthCreate = element('health-create')
+		const healthRemove = element('health-remove')
+		const healthState = element('health-state')
+		const healthTokenField = element('health-token-field')
+		const healthToken = element('health-token')
 		const gettingStarted = element('getting-started')
 		const gettingStartedTitle = element('getting-started-title')
 		const gettingStartedShow = element('getting-started-show')
@@ -341,7 +346,7 @@
 		const gettingStartedComplete = element('getting-started-complete')
 		const gettingStartedAnnouncement = element('getting-started-announcement')
 		const statusRegion = element('status')
-		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, rewrite, webhookCreate, webhookRemove]
+		const buttons = [save, test, accountCreate, dryRun, run, reset, refresh, rewrite, webhookCreate, webhookRemove, healthCreate, healthRemove]
 		// The bar of the buttons sticks to the bottom of the window, and css/settings.css keeps its
 		// height free below a control that the focus moves to, so that the bar never covers it. The
 		// bar grows with its message and wraps on a narrow screen, so the page measures it.
@@ -1700,8 +1705,59 @@
 			}
 		})
 
-		// Copies the webhook URL or the secret; without the clipboard of the browser, which needs
-		// HTTPS, the text stays selected for copying by hand.
+		// The health check as the server sent it, without its token: whether it has one.
+		function showHealthToken(state) {
+			setText(healthCreate, state.configured ? translate('Create a new token') : translate('Create token'))
+			healthRemove.hidden = !state.configured
+			setText(healthState, state.configured
+				? translate('The health check answers calls with its token.')
+				: translate('The health check is off: it refuses every call until you create its token.'))
+		}
+
+		async function refreshHealthToken() {
+			showHealthToken(await request(root.dataset.healthTokenUrl, 'GET'))
+		}
+
+		// A new token replaces the one before at once; the page shows it this once, selected for copying.
+		healthCreate.addEventListener('click', async function() {
+			if (!healthRemove.hidden && !window.confirm(translate('Create a new token? The token before stops working at once, so the monitor needs the new one.'))) {
+				return
+			}
+			setBusy(true)
+			try {
+				const answer = await request(root.dataset.healthTokenUrl, 'POST')
+				showHealthToken(answer)
+				healthToken.value = answer.token
+				healthTokenField.hidden = false
+				healthToken.focus()
+				healthToken.select()
+				showMessage(translate('Token created. Copy it now: it is shown only this once.'), 'success')
+			} catch (error) {
+				showError(error, translate('Could not create the token.'))
+			} finally {
+				setBusy(false)
+			}
+		})
+
+		healthRemove.addEventListener('click', async function() {
+			if (!window.confirm(translate('Revoke the token? The health check refuses the calls of the monitor until you create a new one. The runs go on.'))) {
+				return
+			}
+			setBusy(true)
+			try {
+				showHealthToken(await request(root.dataset.healthTokenUrl, 'DELETE'))
+				healthToken.value = ''
+				healthTokenField.hidden = true
+				showMessage(translate('The token is revoked.'), 'success')
+			} catch (error) {
+				showError(error, translate('Could not revoke the token.'))
+			} finally {
+				setBusy(false)
+			}
+		})
+
+		// Copies the webhook URL, the secret, the address of the health check or its token; without
+		// the clipboard of the browser, which needs HTTPS, the text stays selected for copying by hand.
 		root.querySelectorAll('[data-copy]').forEach(function(button) {
 			button.addEventListener('click', async function() {
 				const input = document.getElementById(button.dataset.copy)
@@ -2441,7 +2497,7 @@
 		refresh.addEventListener('click', async function() {
 			setBusy(true)
 			try {
-				await Promise.all([refreshStatus(), refreshWebhook()])
+				await Promise.all([refreshStatus(), refreshWebhook(), refreshHealthToken()])
 				showMessage(translate('Status refreshed.'), 'success')
 			} catch (error) {
 				showError(error, translate('Could not refresh status.'))
@@ -2545,6 +2601,10 @@
 		const webhook = initialState('webhook')
 		if (webhook !== null) {
 			showWebhook(webhook)
+		}
+		const healthTokenState = initialState('healthToken')
+		if (healthTokenState !== null) {
+			showHealthToken(healthTokenState)
 		}
 		updatePreview()
 	})
