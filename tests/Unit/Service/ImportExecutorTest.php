@@ -26,6 +26,7 @@ use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ImportExecutor;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\SyncBatch;
@@ -457,20 +458,58 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame(1, $this->report->importsSucceeded, 'The import succeeded all the same.');
 	}
 
-	/** While Paperless refuses the owner, the upload stays pending, so that the next run asks again; a dry-run asks nothing. */
+	/**
+	 * While Paperless refuses the owner for a reason that may pass, the upload stays pending, so that
+	 * the next run asks again; a dry-run asks nothing.
+	 */
 	public function testAnOwnerThatPaperlessRefusesKeepsTheUploadPending(): void {
 		$this->arrange(false, [], 5);
-		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 5 the owner of the document 7: HTTP 403.');
+		$this->paperless->ownerException = new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 7: HTTP 503.', 503);
 
-		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
+		$this->executor->apply($this->uploaded(86399));
 
 		self::assertArrayHasKey(self::FILE, $this->storage->files);
-		self::assertSame('Paperless did not make the user 5 the owner of the document 7: HTTP 403.', $this->state->imports[self::FILE]['last_error']);
+		self::assertSame('Paperless did not make the user 5 the owner of the document 7: HTTP 503.', $this->state->imports[self::FILE]['last_error']);
 		self::assertSame(0, $this->report->importsSucceeded);
 
 		$this->arrange(true, [], 5);
-		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, true));
+		$this->executor->apply($this->uploaded(86399));
 		self::assertSame([], $this->paperless->ownerChanges);
+	}
+
+	/** @return array<string, array{\Throwable, int}> a refusal of the owner, and how long ago its file went up */
+	public static function lastingRefusals(): array {
+		return [
+			'a refusal that repeats for good' => [new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 7: HTTP 403: Insufficient permissions.', 403), 0],
+			'a refusal that may pass, a day after the upload' => [new PaperlessOwnerException('Paperless did not make the user 5 the owner of the document 7: HTTP 503.', 503), 86400],
+			'a failure without an answer, a day after the upload' => [new RuntimeException('Paperless did not make the user 5 the owner of the document 7: HTTP 503.'), 86400],
+		];
+	}
+
+	/**
+	 * A refusal of the owner that repeats for good, or that lasts a day, ends the import as one that
+	 * succeeded, as the document is in Paperless: the file leaves the inbox, and the report names the
+	 * owner that the document keeps as an error of this run alone (#439).
+	 */
+	#[DataProvider('lastingRefusals')]
+	public function testAnOwnerThatPaperlessKeepsRefusingEndsTheImport(\Throwable $refusal, int $age): void {
+		$this->arrange(false, [], 5);
+		$this->paperless->ownerException = $refusal;
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('keeps the owner that Paperless gave it'), self::identicalTo(['path' => self::FILE, 'document' => 7, 'error' => $refusal->getMessage()]));
+
+		$this->executor->apply($this->uploaded($age));
+
+		$error = 'Import ' . self::FILE . ': Paperless refused to change the owner of the document 7, which keeps the owner that Paperless gave it: ' . $refusal->getMessage();
+		self::assertSame([$error], $this->report->errorMessages);
+		self::assertSame(['ERROR: ' . $error, 'IMPORT SUCCESS: ' . self::FILE . ' -> P7'], $this->report->actions);
+		self::assertSame(1, $this->report->importsSucceeded);
+		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
+		self::assertSame([], $this->state->imports);
+	}
+
+	/** The import of the document 7 of the file, whose upload was $ago seconds ago, as the plan of a run finds it. */
+	private function uploaded(int $ago): ImportSucceeded {
+		return new ImportSucceeded(new ImportContext(self::FILE, ['status' => 'pending', 'submitted_at' => $this->clock->time - $ago]), 'etag', true, 7, true);
 	}
 
 	public function testTheFileOfAFailedImportMovesToTheErrorFolderWithItsReason(): void {

@@ -46,6 +46,7 @@ $state = (string)($status['state'] ?? 'never-run');
 $stateLabels = [
 	'never-run' => $l->t('Never run'),
 	'queued' => $l->t('Queued'),
+	'stalled' => $l->t('Not started'),
 	'running' => $l->t('Running'),
 	'dry-run-running' => $l->t('Dry-run running'),
 	'completed' => $l->t('Completed'),

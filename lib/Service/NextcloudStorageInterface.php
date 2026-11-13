@@ -53,7 +53,8 @@ interface NextcloudStorageInterface {
 	 * with them, or null when they see none with the ID: its path among their files, its name,
 	 * whether it is a folder and whether they may read it. A file or folder of a share whose owner
 	 * allows viewing only, without downloads, counts as not readable: a copy in Paperless would be
-	 * a download.
+	 * a download. A user who no longer exists sees none; any other failure of the lookup, such as
+	 * of a user backend that can't answer, throws, as the file may be back once it passes.
 	 *
 	 * @return array{path: string, name: string, folder: bool, readable: bool}|null
 	 */

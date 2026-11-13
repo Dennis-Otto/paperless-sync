@@ -170,6 +170,25 @@ final class StatusTest extends TestCase {
 		self::assertSame($code, $this->execute(['--exit-code' => true, '--output' => 'json']));
 	}
 
+	/** A run by hand that the background jobs have not started says since when it waits, and when they last ran (#438). */
+	public function testARunThatWaitsTooLongForTheBackgroundJobsSaysSo(): void {
+		$this->settings['status_last_state'] = 'queued';
+		$this->settings['status_last_queued'] = $this->clock->time - 3600;
+		$this->settings['lastcron'] = $this->clock->time - 7200;
+
+		self::assertSame(Status::OK, $this->execute(['--exit-code' => true]), 'No run ended, so none ended badly.');
+
+		self::assertStringStartsWith(
+			"State:               Not started\n"
+			. 'The run of "Synchronize now" has waited for the background jobs of Nextcloud since ' . date(DATE_ATOM, $this->clock->time - 3600) . '. Check that they run: Nextcloud last ran them at ' . date(DATE_ATOM, $this->clock->time - 7200) . ". Or start the run with occ paperless_sync:run.\n",
+			$this->command->getDisplay(),
+		);
+
+		unset($this->settings['lastcron']);
+		$this->execute([]);
+		self::assertStringContainsString('Check that they run: Nextcloud has never run them.', $this->command->getDisplay());
+	}
+
 	public function testInterruptedRunExitsWithTwo(): void {
 		$this->settings['status_last_state'] = 'running';
 		$this->settings['status_last_started'] = $this->clock->time - 7200;

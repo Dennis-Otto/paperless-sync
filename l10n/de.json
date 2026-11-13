@@ -778,6 +778,10 @@
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Gib eine gültige Paperless-Adresse im Browser ein oder lass das Feld leer.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Die Paperless-Adresse im Browser muss HTTP oder HTTPS verwenden.",
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.",
+		"Not started": "Nicht gestartet",
+		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "Die Synchronisation hat nicht begonnen: Die Hintergrundjobs von Nextcloud haben sie seit 15 Minuten nicht gestartet. Prüfe, ob sie laufen; Nextcloud hat sie zuletzt ausgeführt: {time}.",
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Import %1$s: Paperless hat abgelehnt, den Eigentümer des Dokuments %2$s zu ändern, das den Eigentümer behält, den Paperless ihm gegeben hat: %3$s",
+		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "Das Dokument behält den Eigentümer, den Paperless ihm gegeben hat, da Paperless abgelehnt hat, ihn zu ändern: %s",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud hat %s gelöscht, den Zielbenutzer von Paperless Sync",
 		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis du einen anderen Zielbenutzer wählst. Ein neues Konto mit der ID %s bekäme jedes Dokument."
 	},

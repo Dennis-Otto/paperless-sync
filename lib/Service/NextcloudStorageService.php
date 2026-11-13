@@ -147,7 +147,18 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 	}
 
 	public function nodeById(string $userId, int $fileId): ?array {
-		$userFolder = $this->rootFolder->getUserFolder($userId);
+		try {
+			$userFolder = $this->rootFolder->getUserFolder($userId);
+		} catch (\Throwable $exception) {
+			// Nextcloud has no folder for a user who is gone, and none while their user backend,
+			// such as LDAP, can't answer, or while their storage can't be set up: only the first
+			// has no files left.
+			if ($this->userManager->userExists($userId)) {
+				throw $exception;
+			}
+
+			return null;
+		}
 		$node = $userFolder->getFirstNodeById($fileId);
 		$path = $node === null ? null : $userFolder->getRelativePath($node->getPath());
 		// The folder of the files of the user itself is no file of theirs to send.

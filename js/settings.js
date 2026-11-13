@@ -367,6 +367,8 @@
 		// "Synchronize now" queued a run in a background job; the page says how it ended, once the
 		// status shows its end.
 		let awaitedRun = false
+		// Whether the page has said that a run by hand waits for background jobs that don't start it.
+		let stallShown = false
 		// The status answers in any order, and a dry-run answers with a report newer than every
 		// status asked for before its answer: each status that the page asks for, and each answer
 		// that brings a newer status or report, takes the next number, and an answer to a status
@@ -718,6 +720,7 @@
 		const stateLabels = {
 			'never-run': translate('Never run'),
 			queued: translate('Queued'),
+			stalled: translate('Not started'),
 			running: translate('Running'),
 			'dry-run-running': translate('Dry-run running'),
 			completed: translate('Completed'),
@@ -870,6 +873,13 @@
 				awaitedRun = false
 				announce(status, lastReport)
 			}
+			// A run by hand waits for background jobs that don't start it: the page says so once, with
+			// their last run, and stops asking, as only the background jobs can start it (#438).
+			if (state === 'stalled' && !stallShown) {
+				awaitedRun = false
+				showMessage(translate('The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.', { time: formatTime(status.lastBackgroundJobs) }), 'error')
+			}
+			stallShown = state === 'stalled'
 			watch(state)
 		}
 

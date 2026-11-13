@@ -742,6 +742,10 @@
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "請輸入有效的瀏覽器中的 Paperless 位址，或將其留空。",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "瀏覽器中的 Paperless 位址必須使用 HTTP 或 HTTPS。",
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。",
+		"Not started": "未開始",
+		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "同步尚未開始：Nextcloud 的背景作業已有 15 分鐘未執行它。請檢查背景作業是否在執行；Nextcloud 上次執行它們的時間：{time}。",
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "匯入 %1$s：Paperless 拒絕變更文件 %2$s 的擁有者，該文件保留 Paperless 為其設定的擁有者：%3$s",
+		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "該文件保留 Paperless 為其設定的擁有者，因為 Paperless 拒絕變更擁有者：%s",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已刪除 %s，即 Paperless Sync 的目標使用者",
 		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您選擇其他目標使用者之前，每次執行都會失敗。ID 為 %s 的新帳號將取得所有文件。"
 	},
