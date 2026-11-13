@@ -142,6 +142,18 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 		unset($this->sends[$userId . '/' . $fileId]);
 	}
 
+	public function deleteOwner(string $userId): int {
+		$exports = &$this->exportsOf($userId);
+		$imports = &$this->importsOf($userId);
+		$sends = array_filter($this->sends, static fn (array $send): bool => $send['user_id'] === $userId);
+		$deleted = count($exports) + count($imports) + count($sends);
+		$exports = [];
+		$imports = [];
+		$this->sends = array_diff_key($this->sends, $sends);
+
+		return $deleted;
+	}
+
 	/** @return array<int, array<string, int|string|null>> */
 	private function &exportsOf(string $ownerUid): array {
 		$this->owners[] = $ownerUid;

@@ -586,7 +586,7 @@ final class SendServiceTest extends TestCase {
 		$this->service->process();
 
 		self::assertNull($this->state->findSend(self::SENDER, $id), 'The file may be sent again.');
-		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'The document keeps the owner that Paperless gave it, as Paperless refused to change it: Paperless did not make the user 5 the owner of the document 123: HTTP 403: Insufficient permissions.');
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'Paperless did not make the user 5 the owner of the document 123: HTTP 403: Insufficient permissions.');
 	}
 
 	/** A refusal that may pass but never does ends the import a day after the upload, as a task that never ends does (#439). */
@@ -602,7 +602,7 @@ final class SendServiceTest extends TestCase {
 		$this->service->process();
 
 		self::assertNull($this->state->findSend(self::SENDER, $id));
-		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'The document keeps the owner that Paperless gave it, as Paperless refused to change it: Paperless did not make the user 5 the owner of the document 123: HTTP 503.');
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 123, 'Paperless did not make the user 5 the owner of the document 123: HTTP 503.');
 	}
 
 	/** In per-user ownership, a file of the sender, whose upload created the document 123, which goes to the user 5 of Paperless. */

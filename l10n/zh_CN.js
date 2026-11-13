@@ -745,7 +745,10 @@ OC.L10N.register(
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "浏览器中的 Paperless 地址不得包含凭据、查询参数或片段。",
 		"Not started": "未开始",
 		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "同步尚未开始：Nextcloud 的后台任务已有 15 分钟未运行它。请检查后台任务是否在运行；Nextcloud 上次运行它们的时间：{time}。",
-		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "导入 %1$s：Paperless 拒绝更改文档 %2$s 的所有者，该文档保留 Paperless 为其设置的所有者：%3$s"
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "导入 %1$s：Paperless 拒绝更改文档 %2$s 的所有者，该文档保留 Paperless 为其设置的所有者：%3$s",
+		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "该文档保留 Paperless 为其设置的所有者，因为 Paperless 拒绝更改所有者：%s",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已删除 %s，即 Paperless Sync 的目标用户",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您选择其他目标用户之前，每次运行都会失败。ID 为 %s 的新账号将获得所有文档。"
 	},
 	"nplurals=1; plural=0;"
 )

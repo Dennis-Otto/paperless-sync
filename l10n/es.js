@@ -817,7 +817,10 @@ OC.L10N.register(
 		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "La dirección de Paperless en el navegador no debe contener credenciales, una consulta ni un fragmento.",
 		"Not started": "Sin empezar",
 		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "La sincronización no ha empezado: las tareas en segundo plano de Nextcloud no la han iniciado en 15 minutos. Comprueba que se ejecuten; Nextcloud las ejecutó por última vez: {time}.",
-		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Importación %1$s: Paperless rechazó cambiar el propietario del documento %2$s, que conserva el propietario que le dio Paperless: %3$s"
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Importación %1$s: Paperless rechazó cambiar el propietario del documento %2$s, que conserva el propietario que le dio Paperless: %3$s",
+		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "El documento conserva el propietario que le dio Paperless, ya que Paperless rechazó cambiarlo: %s",
+		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud eliminó a %s, el usuario de destino de Paperless Sync",
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Cada ejecución falla hasta que elijas otro usuario de destino. Una cuenta nueva con el ID %s recibiría todos los documentos."
 	},
 	"nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

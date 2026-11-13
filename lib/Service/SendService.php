@@ -297,7 +297,7 @@ final class SendService {
 	 * Paperless keeps refusing the owner, for good or for as long as a task may take: the document
 	 * is in Paperless, so the import ends as imported and the file may be sent again. The document
 	 * keeps the owner that Paperless gave it, which the log and the sender learn with the reason of
-	 * Paperless. The answer is that reason, for the notification.
+	 * Paperless. The answer is that reason, which the notification puts in its own words.
 	 *
 	 * @param array<string, int|string|null> $send
 	 */
@@ -310,7 +310,7 @@ final class SendService {
 			'error' => $error,
 		]);
 
-		return "The document keeps the owner that Paperless gave it, as Paperless refused to change it: {$error}";
+		return $error;
 	}
 
 	/**
