@@ -4,6 +4,33 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.9.0...v1.10.0) (2026-11-13)
+
+
+### Features
+
+* **runs:** explain a request that Paperless refuses during a run ([#471](https://github.com/Dennis-Otto/paperless-sync/issues/471)) ([2e95c46](https://github.com/Dennis-Otto/paperless-sync/commit/2e95c4654f1ea8cba466fb4ceca19b778ee68d52))
+* **settings:** a health check for monitors with a token of its own ([#487](https://github.com/Dennis-Otto/paperless-sync/issues/487)) ([f63aa97](https://github.com/Dennis-Otto/paperless-sync/commit/f63aa974addf21056b9ebced1ba468b075a0b878))
+* **settings:** an address of Paperless in the browser for its links ([#474](https://github.com/Dennis-Otto/paperless-sync/issues/474)) ([80a631a](https://github.com/Dennis-Otto/paperless-sync/commit/80a631ac4aa55c1c2745f9932d5c1ac4df11e5e3))
+
+
+### Bug fixes
+
+* a deleted Nextcloud user leaves nothing behind for a new account with the same ID ([#476](https://github.com/Dennis-Otto/paperless-sync/issues/476)) ([531a3fa](https://github.com/Dennis-Otto/paperless-sync/commit/531a3fa3d632de58e55ed389a8a631545e42f2b5))
+* a large document over a slow line is no longer cut off after three minutes ([#483](https://github.com/Dennis-Otto/paperless-sync/issues/483)) ([10ff4dc](https://github.com/Dennis-Otto/paperless-sync/commit/10ff4dcbba986ffa80c9ac095f65c2f1539a0423))
+* a replaced inbox file goes up again, missing tags of sent files are named, a stopped run's copy is no conflict ([#478](https://github.com/Dennis-Otto/paperless-sync/issues/478)) ([c5e1de8](https://github.com/Dennis-Otto/paperless-sync/commit/c5e1de8d90f502cccc53d2c00900547a27fe17b8))
+* end the waits that had no end for queued runs, owners and sent files ([#477](https://github.com/Dennis-Otto/paperless-sync/issues/477)) ([d125f53](https://github.com/Dennis-Otto/paperless-sync/commit/d125f5382ff88b2dd2d5c4b453b3f93785de25cb))
+* export new documents again on Nextcloud 33.0.11, 34.0.6, 35.0.3 and newer ([#492](https://github.com/Dennis-Otto/paperless-sync/issues/492)) ([8cc164e](https://github.com/Dennis-Otto/paperless-sync/commit/8cc164e7b2d67c970fd50b609d425bf77cc66060))
+* **inbox:** a failed file never replaces another one in the error folder ([#465](https://github.com/Dennis-Otto/paperless-sync/issues/465)) ([737bc82](https://github.com/Dennis-Otto/paperless-sync/commit/737bc826d3915707a67c845e23cf58d64b0835fe))
+* **inbox:** upload a file of the inbox once, also after a rename, a move or a lost answer ([#466](https://github.com/Dennis-Otto/paperless-sync/issues/466)) ([6b18ed8](https://github.com/Dennis-Otto/paperless-sync/commit/6b18ed82f5c57b679bde1f3476fb5250c8caab4c))
+* keep a trashed copy in the deleted folder, and explain two archive switches ([#488](https://github.com/Dennis-Otto/paperless-sync/issues/488)) ([8fef5c5](https://github.com/Dennis-Otto/paperless-sync/commit/8fef5c509282472f3a33abc691da17c89f35ad32))
+* keep an edited copy after a refused write, name a redirecting URL, and declare the databases ([#479](https://github.com/Dennis-Otto/paperless-sync/issues/479)) ([4ab68fd](https://github.com/Dennis-Otto/paperless-sync/commit/4ab68fd3b08203adb30195baa07b77f878722042))
+* **runs:** a user of Nextcloud whose ID is all digits works like any other ([#467](https://github.com/Dennis-Otto/paperless-sync/issues/467)) ([6fd7681](https://github.com/Dennis-Otto/paperless-sync/commit/6fd76818aadfc91239ff76526220c83f8bf27f67))
+* **settings:** a stored token that no longer decrypts counts as none ([#468](https://github.com/Dennis-Otto/paperless-sync/issues/468)) ([16ec0aa](https://github.com/Dennis-Otto/paperless-sync/commit/16ec0aafb7e3aea08b2c175373093dab9af99794))
+* **settings:** find the shares of the archive with a Team, a Talk conversation or a Deck board ([#463](https://github.com/Dennis-Otto/paperless-sync/issues/463)) ([6cb8754](https://github.com/Dennis-Otto/paperless-sync/commit/6cb875496a3c60f1f19952aac3d77fce03427b0d))
+* **settings:** save the target user as Nextcloud spells the ID ([#469](https://github.com/Dennis-Otto/paperless-sync/issues/469)) ([702fefc](https://github.com/Dennis-Otto/paperless-sync/commit/702fefc1800cd65dfa804b83f9a14b47e7441727))
+* show the icon of the app in black where Nextcloud lists it ([#486](https://github.com/Dennis-Otto/paperless-sync/issues/486)) ([80ae747](https://github.com/Dennis-Otto/paperless-sync/commit/80ae747a6480cf0f6be3c7178954d8e53806805b))
+
 ## [1.9.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.8.0...v1.9.0) (2026-11-10)
 
 ### Features
