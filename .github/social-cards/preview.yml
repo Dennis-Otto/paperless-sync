@@ -18,7 +18,9 @@ tags:
   og:image:type: "{{ image.type }}"
   og:image:width: "{{ image.width }}"
   og:image:height: "{{ image.height }}"
-  og:image:alt: "{{ config.site_name }} for Nextcloud: a finished document of Paperless-ngx, synchronized on its own into the folders of Nextcloud by correspondent, type and year"
+  # The text of the picture in the language of the page: the German home page, /de/, has
+  # lang="de", and mkdocs-static-i18n gives each of its files the locale de.
+  og:image:alt: &alt "{% if page.file.locale == 'de' %}{{ config.site_name }} für Nextcloud: ein fertiges Dokument von Paperless-ngx, von selbst in die Ordner von Nextcloud synchronisiert, nach Korrespondent, Typ und Jahr{% else %}{{ config.site_name }} for Nextcloud: a finished document of Paperless-ngx, synchronized on its own into the folders of Nextcloud by correspondent, type and year{% endif %}"
   og:url: "{{ page.canonical_url }}"
 
   # Twitter
@@ -26,4 +28,4 @@ tags:
   twitter:title: "{{ config.site_name }}"
   twitter:description: "{{ page.meta.get('description', config.site_description) }}"
   twitter:image: "{{ image.url }}"
-  twitter:image:alt: "{{ config.site_name }} for Nextcloud: a finished document of Paperless-ngx, synchronized on its own into the folders of Nextcloud by correspondent, type and year"
+  twitter:image:alt: *alt

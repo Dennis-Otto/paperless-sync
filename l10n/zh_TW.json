@@ -344,6 +344,8 @@
 		"Paths of the newest documents in the archive folder": "最新文件在封存資料夾中的路徑",
 		"Prefer Paperless archive versions": "優先使用 Paperless 的封存版本",
 		"Skip Paperless inbox documents": "跳過 Paperless 收件匣中的文件",
+		"The archive version is the PDF that Paperless makes of a document, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.": "封存版本是 Paperless 從文件產生的 PDF，帶有其文字辨識讀出的文字層，可以搜尋和複製。關閉時，副本為傳入 Paperless 時的原始檔案：保持其本身的類型，例如圖片或辦公文件，掃描檔則沒有文字層。沒有封存版本的文件無論如何都以原始檔案傳來。",
+		"The inbox here is that of Paperless, not the Nextcloud inbox below: a document with an inbox tag of Paperless waits until it is filed there and has lost the tag, and the next run then brings its copy.": "這裡的收件匣指 Paperless 的收件匣，而不是下方的 Nextcloud 收件匣：帶有 Paperless 收件匣標籤的文件會等待，直到它在那裡歸檔並移除該標籤，之後下一次執行才會帶來它的副本。",
 		"Additional excluded Paperless tags": "額外排除的 Paperless 標籤",
 		"Excluded tags": "排除的標籤",
 		"Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.": "選擇一個 Paperless 標籤，或輸入其名稱後按 Enter 鍵；Paperless 中尚不存在的標籤也可以。",

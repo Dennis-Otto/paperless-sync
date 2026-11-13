@@ -286,6 +286,8 @@ OC.L10N.register(
 		"Choose one of the options of \"File conflict policy\".": "Wählen Sie eine der Optionen von „Dateikonflikt-Regel“.",
 		"Prefer Paperless archive versions": "Paperless-Archivversionen bevorzugen",
 		"Skip Paperless inbox documents": "Paperless-Posteingangsdokumente überspringen",
+		"The archive version is the PDF that Paperless makes of a document, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.": "Die Archivversion ist das PDF, das Paperless aus einem Dokument macht, mit dem Text seiner Texterkennung als Ebene, die sich durchsuchen und kopieren lässt. Ausgeschaltet sind die Kopien die Originale, wie sie zu Paperless kamen: in ihren eigenen Dateitypen, etwa Bilder oder Office-Dokumente, und ein Scan ohne Textebene. Ein Dokument ohne Archivversion kommt in jedem Fall als sein Original.",
+		"The inbox here is that of Paperless, not the Nextcloud inbox below: a document with an inbox tag of Paperless waits until it is filed there and has lost the tag, and the next run then brings its copy.": "Gemeint ist der Posteingang von Paperless, nicht der Nextcloud-Eingang weiter unten: Ein Dokument mit einem Posteingangs-Tag von Paperless wartet, bis es dort abgelegt ist und den Tag verloren hat, und der nächste Lauf bringt dann seine Kopie.",
 		"Additional excluded Paperless tags": "Zusätzlich ausgeschlossene Paperless-Tags",
 		"Excluded tags": "Ausgeschlossene Tags",
 		"Add a tag": "Tag hinzufügen",
