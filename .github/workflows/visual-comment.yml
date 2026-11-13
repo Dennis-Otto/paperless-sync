@@ -5,10 +5,14 @@ name: Visual check comment
 
 # The second half of the visual check (visual.yml). When the check of a pull request
 # ends, this workflow posts or updates one comment on the pull request: the pictures
-# that look different, with the share of their pixels that changed and whether the
-# artifact has a picture of their difference, their changed pixels in red, and links to
-# them before and after. When one language failed to render, the comment still lists
-# the pictures of the other one and names the language that failed. It may comment, so
+# that look different, with the share of their pixels that changed, the comparison of
+# each, the place of its change before and after in one picture, in its own colors, with
+# the frame that it shows of an animation, whether the artifact has a picture of their
+# difference, their changed pixels in red, and links to them before and after. A comment
+# on GitHub can't show a picture of an artifact, which only a signed-in download
+# reaches, so it names the file of the comparison, which the pager shows. When one
+# language failed to render, the comment still lists the pictures of the other one and
+# names the language that failed. It may comment, so
 # it never checks out or runs the code of the pull request: it reads only the reports of
 # the check, takes nothing from them but paths and numbers it checks, and writes the
 # comment itself. A pull request whose pictures all look as committed gets no comment,
@@ -99,6 +103,25 @@ jobs:
               return f"diff/{path}" + ("" if path.lower().endswith(".png") else ".png")
 
 
+          def comparison_path(path):
+              """Where the artifact has the comparison of the picture at path, before and
+              after in one picture, as compare.mjs and keep name it: under comparison/, as a PNG."""
+              return "comparison/" + diff_path(path).removeprefix("diff/")
+
+
+          def counted(value):
+              return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+
+          def change(status, compared, frame, frames):
+              """How a picture changed, and for an animation the frame that its comparison
+              shows, as the screenshot bot names it; a frame that isn't one of the frames is
+              left out."""
+              if compared and counted(frame) and counted(frames) and 1 < frames and frame <= frames:
+                  return f"{status}, most in frame {frame} of {frames}"
+              return status
+
+
           languages = {"en": "English", "de": "German"}
           sha = os.environ["HEAD_SHA"][:7]
           run = os.environ["RUN_URL"]
@@ -124,7 +147,7 @@ jobs:
 
 
           lines = ["<!-- visual-check -->", "### Visual check", ""]
-          rows, unchanged, read, missing, drawn = [], 0, [], [], 0
+          rows, unchanged, read, missing, drawn, compared_ones = [], 0, [], [], 0, 0
           for code in languages:
               try:
                   with open(f"{folder}/visual-{code}/report.json") as file:
@@ -147,10 +170,15 @@ jobs:
                       and (share is None or is_share(share))
                   ):
                       shown = percent(share) if status == "changed" else ""
-                      # Only the difference at the place of a changed picture counts.
+                      # Only the difference and the comparison at the place of a changed
+                      # picture count.
                       red = status == "changed" and entry.get("diff") == diff_path(path)
+                      compared = status == "changed" and entry.get("comparison") == comparison_path(path)
                       drawn += red
-                      rows.append(f"| `{path}` | {status} | {shown} | {'in red' if red else ''} |")
+                      compared_ones += compared
+                      how = change(status, compared, entry.get("frame"), entry.get("frames"))
+                      named = f"`{comparison_path(path)}`" if compared else ""
+                      rows.append(f"| `{path}` | {how} | {shown} | {named} | {'in red' if red else ''} |")
           # A language whose report is missing failed to render; the other one still
           # gets its report, named by its language.
           which = f"{languages[read[0]]} " if read and missing else ""
@@ -169,14 +197,21 @@ jobs:
                   f"Rendered from the Paperless mock with its frozen story for {sha}: {len(rows)} of "
                   f"{len(rows) + unchanged} {which}pictures look different from the committed ones.",
                   "",
-                  "| Picture | Change | Pixels changed | Difference |",
-                  "| --- | --- | ---: | --- |",
+                  "| Picture | Change | Pixels changed | Before and after | Difference |",
+                  "| --- | --- | ---: | --- | --- |",
                   *rows,
                   "",
               ]
               if links:
                   shown = " · ".join(f"[{languages[code]}]({link})" for code, link in sorted(links.items()))
-                  if drawn:
+                  if compared_ones:
+                      lines.append(
+                          f"The pictures before and after, with the comparison that *Before and after* names: the "
+                          "place of the change before and after in one picture, in its own colors, with a red frame "
+                          "around each change on both sides, of the frame with the most changes of an animation, "
+                          f"which *Change* names: {shown}."
+                      )
+                  elif drawn:
                       lines.append(f"The pictures before and after, and the changed pixels of each one marked in red: {shown}.")
                   else:
                       lines.append(f"The pictures before and after: {shown}.")

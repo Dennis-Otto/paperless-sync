@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { compare, diffPath, PICTURES, report, shownShare, summary } from './compare.mjs'
+import { change, compare, comparisonPath, diffPath, PICTURES, report, shownShare, summary } from './compare.mjs'
 
 const ROOT = new URL('../../', import.meta.url)
 const SCRIPT = fileURLToPath(new URL('compare.mjs', import.meta.url))
@@ -56,6 +56,20 @@ test('the difference of a picture is a PNG under diff/ at its path, as keep name
 	assert.equal(diffPath('screenshots/LOUD.PNG'), 'diff/screenshots/LOUD.PNG')
 })
 
+test('the comparison of a picture is a PNG under comparison/ at its path, as keep names it', () => {
+	assert.equal(comparisonPath('docs/images/settings-light.png'), 'comparison/docs/images/settings-light.png')
+	assert.equal(comparisonPath('docs/images/archive.gif'), 'comparison/docs/images/archive.gif.png')
+	assert.equal(comparisonPath('docs/images/de/archive.gif'), 'comparison/docs/images/de/archive.gif.png')
+	assert.equal(comparisonPath('screenshots/LOUD.PNG'), 'comparison/screenshots/LOUD.PNG')
+})
+
+test('the change of an animation names the frame of its comparison, as the screenshot bot does', () => {
+	assert.equal(change({ status: 'changed', frame: 3, frames: 4 }), 'changed, most in frame 3 of 4')
+	assert.equal(change({ status: 'changed', frame: 1, frames: 1 }), 'changed')
+	assert.equal(change({ status: 'changed', frame: null, frames: null }), 'changed')
+	assert.equal(change({ status: 'new', frame: null, frames: null }), 'new')
+})
+
 test('the share of the changed pixels reads as in the pull request of the screenshot bot', () => {
 	assert.equal(shownShare(null), 'another size or frames')
 	assert.equal(shownShare(1), '100 %')
@@ -77,8 +91,16 @@ test('the report of a language lists its pictures that look different, and count
 	const found = {
 		pictures: [
 			{ path: 'docs/images/de/report-dark.png', status: 'changed', share: 0.25, diff: 'diff/docs/images/de/report-dark.png' },
-			{ path: 'docs/images/dry-run.gif', status: 'changed', share: 0.0011, diff: 'diff/docs/images/dry-run.gif.png' },
-			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null },
+			{
+				path: 'docs/images/dry-run.gif',
+				status: 'changed',
+				share: 0.0011,
+				diff: 'diff/docs/images/dry-run.gif.png',
+				comparison: 'comparison/docs/images/dry-run.gif.png',
+				frame: 3,
+				frames: 4,
+			},
+			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null, comparison: null, frame: null, frames: null },
 			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.5 },
 			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted' },
 			{ path: '.github/social-preview.png', status: 'changed', share: 0.1, diff: 'diff/.github/social-preview.png' },
@@ -88,18 +110,27 @@ test('the report of a language lists its pictures that look different, and count
 	assert.deepEqual(report('en', found, tracked), {
 		language: 'en',
 		images: [
-			// A GIF has its difference as a PNG, as a PNG has.
-			{ path: 'docs/images/dry-run.gif', status: 'changed', share: 0.0011, diff: 'diff/docs/images/dry-run.gif.png' },
-			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null },
+			// A GIF has its difference and its comparison as a PNG, as a PNG has, of the
+			// frame with the most changes, here the third of four.
+			{
+				path: 'docs/images/dry-run.gif',
+				status: 'changed',
+				share: 0.0011,
+				diff: 'diff/docs/images/dry-run.gif.png',
+				comparison: 'comparison/docs/images/dry-run.gif.png',
+				frame: 3,
+				frames: 4,
+			},
+			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null, comparison: null, frame: null, frames: null },
 			// A report of a keep from before the differences names none.
-			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.5, diff: null },
-			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null, diff: null },
+			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.5, diff: null, comparison: null, frame: null, frames: null },
+			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null, diff: null, comparison: null, frame: null, frames: null },
 		],
 		unchanged: 1,
 	})
 	assert.deepEqual(report('de', found, tracked), {
 		language: 'de',
-		images: [{ path: 'docs/images/de/report-dark.png', status: 'changed', share: 0.25, diff: 'diff/docs/images/de/report-dark.png' }],
+		images: [{ path: 'docs/images/de/report-dark.png', status: 'changed', share: 0.25, diff: 'diff/docs/images/de/report-dark.png', comparison: null, frame: null, frames: null }],
 		unchanged: 1,
 	})
 	// Without report.json, no picture changed.
@@ -121,52 +152,126 @@ test('a difference counts only at the place where keep puts that of a changed pi
 	assert.deepEqual(images.map(({ diff }) => diff), [null, null, null, null, null, null, null])
 })
 
+test('a comparison counts only at the place where keep puts that of a changed picture, with one of its frames', () => {
+	const at = (path) => comparisonPath(path)
+	const pictures = [
+		{ path: 'docs/images/archive.gif', status: 'changed', share: 0.1, comparison: 'comparison/docs/images/archive.gif', frame: 1, frames: 2 },
+		{ path: 'docs/images/dry-run.gif', status: 'changed', share: 0.1, comparison: 'comparison/docs/images/../../../dry-run.gif.png', frame: 1, frames: 2 },
+		{ path: 'docs/images/report-dark.png', status: 'changed', share: 0.1, comparison: 'diff/docs/images/report-dark.png', frame: 1, frames: 1 },
+		{ path: 'docs/images/settings-dark.png', status: 'new', share: null, comparison: at('docs/images/settings-dark.png'), frame: 1, frames: 1 },
+		// A frame that is not one of the frames, or no whole number from 1, or missing.
+		{ path: 'docs/images/sync.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync.gif'), frame: 5, frames: 4 },
+		{ path: 'docs/images/sync-2.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync-2.gif'), frame: 0, frames: 4 },
+		{ path: 'docs/images/sync-3.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync-3.gif'), frame: 1.5, frames: 4 },
+		{ path: 'docs/images/sync-4.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync-4.gif'), frame: true, frames: 4 },
+		{ path: 'docs/images/sync-5.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync-5.gif') },
+		// As keep names it.
+		{ path: 'docs/images/sync-6.gif', status: 'changed', share: 0.1, comparison: at('docs/images/sync-6.gif'), frame: 4, frames: 4 },
+	]
+	const { images } = report('en', { pictures, ignored: [] }, [])
+	assert.deepEqual(images.map(({ comparison, frame, frames }) => [comparison, frame, frames]), [
+		...Array(9).fill([null, null, null]),
+		['comparison/docs/images/sync-6.gif.png', 4, 4],
+	])
+})
+
 test('the summary is a table of the pictures that look different, or says that none does', () => {
 	assert.equal(summary('de', { images: [], unchanged: 36 }), 'Every German picture looks as committed (36 pictures).\n')
 	assert.equal(summary('en', {
 		images: [
-			{ path: 'docs/images/archive.gif', status: 'changed', share: 0.0011, diff: 'diff/docs/images/archive.gif.png' },
-			{ path: 'docs/images/report-light.png', status: 'changed', share: 0.0123, diff: 'diff/docs/images/report-light.png' },
-			{ path: 'docs/images/settings-light.png', status: 'changed', share: null, diff: null },
-			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null },
+			{
+				path: 'docs/images/archive.gif',
+				status: 'changed',
+				share: 0.0011,
+				diff: 'diff/docs/images/archive.gif.png',
+				comparison: 'comparison/docs/images/archive.gif.png',
+				frame: 3,
+				frames: 4,
+			},
+			{
+				path: 'docs/images/report-light.png',
+				status: 'changed',
+				share: 0.0123,
+				diff: 'diff/docs/images/report-light.png',
+				comparison: 'comparison/docs/images/report-light.png',
+				frame: 1,
+				frames: 1,
+			},
+			{ path: 'docs/images/settings-light.png', status: 'changed', share: null, diff: null, comparison: null, frame: null, frames: null },
+			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null, comparison: null, frame: null, frames: null },
 		],
 		unchanged: 40,
 	}), [
 		'4 English pictures look different; 40 look as committed.',
 		'',
-		'| Picture | Change | Pixels changed | Difference |',
-		'| --- | --- | ---: | --- |',
-		'| `docs/images/archive.gif` | changed | 0.11 % | `diff/docs/images/archive.gif.png` |',
-		'| `docs/images/report-light.png` | changed | 1.23 % | `diff/docs/images/report-light.png` |',
-		'| `docs/images/settings-light.png` | changed | another size or frames |  |',
-		'| `docs/images/new-picture.png` | new |  |  |',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/archive.gif` | changed, most in frame 3 of 4 | 0.11 % | `comparison/docs/images/archive.gif.png` | `diff/docs/images/archive.gif.png` |',
+		'| `docs/images/report-light.png` | changed | 1.23 % | `comparison/docs/images/report-light.png` | `diff/docs/images/report-light.png` |',
+		'| `docs/images/settings-light.png` | changed | another size or frames |  |  |',
+		'| `docs/images/new-picture.png` | new |  |  |  |',
+		'',
+		'The artifact of the run has each one before and after, and each comparison that the table names '
+			+ 'under *Before and after*: the place of the change before and after in one picture, in its own colors '
+			+ 'and cut to the changes, with a red frame around each change on both sides. '
+			+ 'Each difference that the table names shows the whole picture with every changed pixel in red. '
+			+ 'Both show the same frame: of a GIF the one with the most changes, which *Change* names.',
+		'',
+	].join('\n'))
+	// A keep from before the comparisons drew only the differences.
+	assert.equal(summary('en', {
+		images: [
+			{ path: 'docs/images/archive.gif', status: 'changed', share: 0.0011, diff: 'diff/docs/images/archive.gif.png', comparison: null, frame: null, frames: null },
+		],
+		unchanged: 40,
+	}), [
+		'1 English pictures look different; 40 look as committed.',
+		'',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/archive.gif` | changed | 0.11 % |  | `diff/docs/images/archive.gif.png` |',
 		'',
 		'The artifact of the run has each one before and after, and each difference that the table names: '
 			+ 'the changed pixels in red, framed in red so that a small change shows on a phone too, '
 			+ 'and of a GIF its frame with the most changes.',
 		'',
 	].join('\n'))
+	// A comparison without the picture of its difference.
+	assert.match(summary('en', {
+		images: [
+			{
+				path: 'docs/images/archive.gif',
+				status: 'changed',
+				share: 0.0011,
+				diff: null,
+				comparison: 'comparison/docs/images/archive.gif.png',
+				frame: 2,
+				frames: 4,
+			},
+		],
+		unchanged: 40,
+	}), /on both sides\. Both show the same frame/)
 	assert.equal(summary('de', {
 		images: [
-			{ path: 'docs/images/de/settings-light.png', status: 'changed', share: null, diff: null },
-			{ path: 'docs/images/de/archive.gif', status: 'deleted', share: null, diff: null },
+			{ path: 'docs/images/de/settings-light.png', status: 'changed', share: null, diff: null, comparison: null, frame: null, frames: null },
+			{ path: 'docs/images/de/archive.gif', status: 'deleted', share: null, diff: null, comparison: null, frame: null, frames: null },
 		],
 		unchanged: 30,
 	}), [
 		'2 German pictures look different; 30 look as committed.',
 		'',
-		'| Picture | Change | Pixels changed | Difference |',
-		'| --- | --- | ---: | --- |',
-		'| `docs/images/de/settings-light.png` | changed | another size or frames |  |',
-		'| `docs/images/de/archive.gif` | deleted |  |  |',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/de/settings-light.png` | changed | another size or frames |  |  |',
+		'| `docs/images/de/archive.gif` | deleted |  |  |  |',
 		'',
-		'The artifact of the run has each one before and after. None has a picture of its difference, '
-			+ 'which a new or deleted picture, or one of another size or frames, lacks.',
+		'The artifact of the run has each one before and after. None has a comparison or a picture of its '
+			+ 'difference, which a new or deleted picture, or one of another size or frames, lacks.',
 		'',
 	].join('\n'))
 })
 
-test('the artifact of a language holds each picture before and after, and the difference that keep drew', (t) => {
+test('the artifact of a language holds each picture before and after, and the comparison and the difference that keep drew', (t) => {
 	const committed = {
 		'docs/images/archive.gif': 'the GIF before',
 		'docs/images/report-dark.png': 'the PNG of another size before',
@@ -176,13 +281,42 @@ test('the artifact of a language holds each picture before and after, and the di
 	}
 	const tracked = [...Object.keys(committed), 'docs/images/de/archive.gif', 'screenshots/02-admin-settings.png']
 	const folderOfKeep = kept(t, [
-		{ path: 'docs/images/archive.gif', status: 'changed', share: 0.0011, before: null, diff: 'diff/docs/images/archive.gif.png' },
+		// An animation whose change is in its third frame of four.
+		{
+			path: 'docs/images/archive.gif',
+			status: 'changed',
+			share: 0.0011,
+			before: null,
+			diff: 'diff/docs/images/archive.gif.png',
+			comparison: 'comparison/docs/images/archive.gif.png',
+			frame: 3,
+			frames: 4,
+		},
 		{ path: 'docs/images/de/archive.gif', status: 'changed', share: 0.5, before: null, diff: 'diff/docs/images/de/archive.gif.png' },
 		{ path: 'docs/images/new-picture.png', status: 'new', share: null, before: null, diff: null },
 		{ path: 'docs/images/report-dark.png', status: 'changed', share: null, before: [10, 20], diff: null },
-		{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.0123, before: null, diff: 'diff/docs/images/settings-light.png' },
-		// keep names a difference that its folder lacks: the artifact names none.
-		{ path: 'docs/images/status-error.png', status: 'changed', share: 0.2, before: null, diff: 'diff/docs/images/status-error.png' },
+		{
+			path: 'docs/images/settings-light.png',
+			status: 'changed',
+			share: 0.0123,
+			before: null,
+			diff: 'diff/docs/images/settings-light.png',
+			comparison: 'comparison/docs/images/settings-light.png',
+			frame: 1,
+			frames: 1,
+		},
+		// keep names a difference and a comparison that its folder lacks: the artifact names
+		// neither, nor the frame.
+		{
+			path: 'docs/images/status-error.png',
+			status: 'changed',
+			share: 0.2,
+			before: null,
+			diff: 'diff/docs/images/status-error.png',
+			comparison: 'comparison/docs/images/status-error.png',
+			frame: 1,
+			frames: 1,
+		},
 		{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null, before: null, diff: null },
 	], {
 		'files/docs/images/archive.gif': 'the GIF after',
@@ -194,6 +328,8 @@ test('the artifact of a language holds each picture before and after, and the di
 		'diff/docs/images/archive.gif.png': 'the red of the GIF',
 		'diff/docs/images/de/archive.gif.png': 'the red of the German GIF',
 		'diff/docs/images/settings-light.png': 'the red of the PNG',
+		'comparison/docs/images/archive.gif.png': 'the third frame of the GIF before and after',
+		'comparison/docs/images/settings-light.png': 'the PNG before and after',
 	})
 	const output = folder(t)
 	const calls = []
@@ -213,6 +349,8 @@ test('the artifact of a language holds each picture before and after, and the di
 		'before/docs/images/settings-light.png',
 		'before/docs/images/status-error.png',
 		'before/screenshots/02-admin-settings-small.png',
+		'comparison/docs/images/archive.gif.png',
+		'comparison/docs/images/settings-light.png',
 		'diff/docs/images/archive.gif.png',
 		'diff/docs/images/settings-light.png',
 		'report.json',
@@ -223,21 +361,40 @@ test('the artifact of a language holds each picture before and after, and the di
 	assert.equal(read('after/docs/images/archive.gif'), 'the GIF after')
 	assert.equal(read('diff/docs/images/archive.gif.png'), 'the red of the GIF')
 	assert.equal(read('diff/docs/images/settings-light.png'), 'the red of the PNG')
+	assert.equal(read('comparison/docs/images/archive.gif.png'), 'the third frame of the GIF before and after')
+	assert.equal(read('comparison/docs/images/settings-light.png'), 'the PNG before and after')
 	assert.equal(read('before/screenshots/02-admin-settings-small.png'), 'the deleted PNG')
 	const written = JSON.parse(read('report.json'))
 	assert.deepEqual(written, {
 		language: 'en',
 		images: [
-			{ path: 'docs/images/archive.gif', status: 'changed', share: 0.0011, diff: 'diff/docs/images/archive.gif.png' },
-			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null },
-			{ path: 'docs/images/report-dark.png', status: 'changed', share: null, diff: null },
-			{ path: 'docs/images/settings-light.png', status: 'changed', share: 0.0123, diff: 'diff/docs/images/settings-light.png' },
-			{ path: 'docs/images/status-error.png', status: 'changed', share: 0.2, diff: null },
-			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null, diff: null },
+			{
+				path: 'docs/images/archive.gif',
+				status: 'changed',
+				share: 0.0011,
+				diff: 'diff/docs/images/archive.gif.png',
+				comparison: 'comparison/docs/images/archive.gif.png',
+				frame: 3,
+				frames: 4,
+			},
+			{ path: 'docs/images/new-picture.png', status: 'new', share: null, diff: null, comparison: null, frame: null, frames: null },
+			{ path: 'docs/images/report-dark.png', status: 'changed', share: null, diff: null, comparison: null, frame: null, frames: null },
+			{
+				path: 'docs/images/settings-light.png',
+				status: 'changed',
+				share: 0.0123,
+				diff: 'diff/docs/images/settings-light.png',
+				comparison: 'comparison/docs/images/settings-light.png',
+				frame: 1,
+				frames: 1,
+			},
+			{ path: 'docs/images/status-error.png', status: 'changed', share: 0.2, diff: null, comparison: null, frame: null, frames: null },
+			{ path: 'screenshots/02-admin-settings-small.png', status: 'deleted', share: null, diff: null, comparison: null, frame: null, frames: null },
 		],
 		unchanged: 1,
 	})
 	assert.equal(text, summary('en', written))
+	assert.match(text, /\| `docs\/images\/archive\.gif` \| changed, most in frame 3 of 4 \| 0\.11 % \| `comparison\/docs\/images\/archive\.gif\.png` \|/)
 	assert.equal(read('summary.md'), text)
 	// The committed pictures come from the commit, a new one has none.
 	assert.deepEqual(calls, [
@@ -277,18 +434,29 @@ test('the command writes the artifact from the commit of the repository that it 
 	git('add', '.')
 	git('commit', '--quiet', '--message', 'The pictures')
 	const folderOfKeep = kept(t, [
-		{ path: 'docs/images/archive.gif', status: 'changed', share: 0.25, before: null, diff: 'diff/docs/images/archive.gif.png' },
+		{
+			path: 'docs/images/archive.gif',
+			status: 'changed',
+			share: 0.25,
+			before: null,
+			diff: 'diff/docs/images/archive.gif.png',
+			comparison: 'comparison/docs/images/archive.gif.png',
+			frame: 2,
+			frames: 3,
+		},
 	], {
 		'files/docs/images/archive.gif': 'the GIF after',
 		'diff/docs/images/archive.gif.png': 'the red of the GIF',
+		'comparison/docs/images/archive.gif.png': 'the GIF before and after',
 	})
 	const output = folder(t)
 	const run = spawnSync(process.execPath, [SCRIPT, 'en', folderOfKeep, output], { cwd: repository, env, encoding: 'utf8' })
 	assert.equal(run.status, 0, run.stderr)
 	assert.equal(run.stdout, readFileSync(join(output, 'summary.md'), 'utf8'))
-	assert.match(run.stdout, /\| `docs\/images\/archive\.gif` \| changed \| 25\.00 % \| `diff\/docs\/images\/archive\.gif\.png` \|/)
+	assert.match(run.stdout, /\| `docs\/images\/archive\.gif` \| changed, most in frame 2 of 3 \| 25\.00 % \| `comparison\/docs\/images\/archive\.gif\.png` \| `diff\/docs\/images\/archive\.gif\.png` \|/)
 	assert.equal(readFileSync(join(output, 'before/docs/images/archive.gif'), 'utf8'), 'the GIF before')
 	assert.equal(readFileSync(join(output, 'diff/docs/images/archive.gif.png'), 'utf8'), 'the red of the GIF')
+	assert.equal(readFileSync(join(output, 'comparison/docs/images/archive.gif.png'), 'utf8'), 'the GIF before and after')
 	const usage = spawnSync(process.execPath, [SCRIPT, 'en'], { cwd: repository, env, encoding: 'utf8' })
 	assert.equal(usage.status, 2)
 	assert.match(usage.stderr, /Usage: node tests\/e2e\/compare\.mjs en\|de FOLDER OUTPUT/)
@@ -359,13 +527,13 @@ test('the comment marks each picture whose difference the artifact holds in red'
 		'',
 		'Rendered from the Paperless mock with its frozen story for 0123456: 5 of 45 English pictures look different from the committed ones.',
 		'',
-		'| Picture | Change | Pixels changed | Difference |',
-		'| --- | --- | ---: | --- |',
-		'| `docs/images/archive.gif` | changed | 0.11 % | in red |',
-		'| `docs/images/report-light.png` | changed | 1.23 % | in red |',
-		'| `docs/images/settings-light.png` | changed | another size or frames |  |',
-		'| `docs/images/status-error.png` | changed | 20.00 % |  |',
-		'| `docs/images/new-picture.png` | new |  |  |',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/archive.gif` | changed | 0.11 % |  | in red |',
+		'| `docs/images/report-light.png` | changed | 1.23 % |  | in red |',
+		'| `docs/images/settings-light.png` | changed | another size or frames |  |  |',
+		'| `docs/images/status-error.png` | changed | 20.00 % |  |  |',
+		'| `docs/images/new-picture.png` | new |  |  |  |',
 		'',
 		`The pictures before and after, and the changed pixels of each one marked in red: [English](${ARTIFACTS}/7).`,
 		'This check only reports. When the change is intended, the screenshot bot renews the pictures after the merge, in a pull request that merges itself.',
@@ -395,12 +563,64 @@ test('the comment promises no red when no picture has a difference', { skip: SKI
 		'',
 		'Rendered from the Paperless mock with its frozen story for 0123456: 2 of 72 pictures look different from the committed ones.',
 		'',
-		'| Picture | Change | Pixels changed | Difference |',
-		'| --- | --- | ---: | --- |',
-		'| `docs/images/settings-light.png` | changed | another size or frames |  |',
-		'| `docs/images/de/archive.gif` | deleted |  |  |',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/settings-light.png` | changed | another size or frames |  |  |',
+		'| `docs/images/de/archive.gif` | deleted |  |  |  |',
 		'',
 		`The pictures before and after: [German](${ARTIFACTS}/8) · [English](${ARTIFACTS}/7).`,
+		'This check only reports. When the change is intended, the screenshot bot renews the pictures after the merge, in a pull request that merges itself.',
+		'',
+	].join('\n'))
+})
+
+test('the comment names the comparison of each changed picture and the frame that it shows of an animation', { skip: SKIP }, (t) => {
+	const at = (path) => comparisonPath(path)
+	const { post, text } = comment(t, {
+		en: {
+			language: 'en',
+			images: [
+				// An animation whose change is in its third frame of four.
+				{
+					path: 'docs/images/archive.gif',
+					status: 'changed',
+					share: 0.0011,
+					diff: 'diff/docs/images/archive.gif.png',
+					comparison: at('docs/images/archive.gif'),
+					frame: 3,
+					frames: 4,
+				},
+				{ path: 'docs/images/report-light.png', status: 'changed', share: 0.0123, diff: null, comparison: at('docs/images/report-light.png'), frame: 1, frames: 1 },
+				// A comparison only at its place, and a frame only when it is one of the frames.
+				{ path: 'docs/images/status-error.png', status: 'changed', share: 0.2, comparison: 'comparison/../status-error.png', frame: 1, frames: 1 },
+				{ path: 'docs/images/sync.gif', status: 'changed', share: 0.2, comparison: at('docs/images/sync.gif'), frame: 5, frames: 4 },
+				{ path: 'docs/images/sync-2.gif', status: 'changed', share: 0.2, comparison: at('docs/images/sync-2.gif'), frame: '2', frames: 4 },
+				{ path: 'docs/images/new-picture.png', status: 'new', share: null, comparison: at('docs/images/new-picture.png'), frame: 1, frames: 1 },
+			],
+			unchanged: 40,
+		},
+		de: { language: 'de', images: [], unchanged: 30 },
+	}, ['visual-en 7', 'visual-de 8'])
+	assert.equal(post, 'always')
+	assert.equal(text, [
+		'<!-- visual-check -->',
+		'### Visual check',
+		'',
+		'Rendered from the Paperless mock with its frozen story for 0123456: 6 of 76 pictures look different from the committed ones.',
+		'',
+		'| Picture | Change | Pixels changed | Before and after | Difference |',
+		'| --- | --- | ---: | --- | --- |',
+		'| `docs/images/archive.gif` | changed, most in frame 3 of 4 | 0.11 % | `comparison/docs/images/archive.gif.png` | in red |',
+		'| `docs/images/report-light.png` | changed | 1.23 % | `comparison/docs/images/report-light.png` |  |',
+		'| `docs/images/status-error.png` | changed | 20.00 % |  |  |',
+		'| `docs/images/sync.gif` | changed | 20.00 % | `comparison/docs/images/sync.gif.png` |  |',
+		'| `docs/images/sync-2.gif` | changed | 20.00 % | `comparison/docs/images/sync-2.gif.png` |  |',
+		'| `docs/images/new-picture.png` | new |  |  |  |',
+		'',
+		'The pictures before and after, with the comparison that *Before and after* names: the place of the change '
+			+ 'before and after in one picture, in its own colors, with a red frame around each change on both sides, '
+			+ 'of the frame with the most changes of an animation, which *Change* names: '
+			+ `[German](${ARTIFACTS}/8) · [English](${ARTIFACTS}/7).`,
 		'This check only reports. When the change is intended, the screenshot bot renews the pictures after the merge, in a pull request that merges itself.',
 		'',
 	].join('\n'))
