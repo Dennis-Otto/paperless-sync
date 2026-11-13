@@ -71,6 +71,17 @@ final class ApplicationTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Nextcloud and the App Store take an app without a database in its app info as fit for every
+	 * one, Oracle too, which stores an empty text as NULL: the columns of the app that are NOT NULL
+	 * with the default '' can't take the rows that it writes there (#462).
+	 */
+	public function testTheAppInfoNamesTheDatabasesWhoseTablesTakeTheRowsOfTheApp(): void {
+		$databases = array_map('strval', iterator_to_array(self::appInfo()->dependencies->database, false));
+
+		self::assertSame(['sqlite', 'mysql', 'pgsql'], $databases);
+	}
+
 	/** Nextcloud registers the commands and the background jobs that the app info names. */
 	public function testTheCommandsAndJobsOfTheAppInfoExist(): void {
 		$info = self::appInfo();

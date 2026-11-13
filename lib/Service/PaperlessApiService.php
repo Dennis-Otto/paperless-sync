@@ -63,6 +63,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	];
 	/** The answers to an upload that repeat for the same file: invalid, too large, or of a type Paperless doesn't take. */
 	private const PERMANENT_UPLOAD_STATUSES = [400, 413, 415, 422];
+	/** The statuses of a redirect, which Guzzle would follow; 300 and 304 are none. */
+	private const REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 	private const REASON_LENGTH = 300;
 	/** The lists that the export reads, by the line of the connection checklist, in the order of a run. */
 	private const EXPORT_LISTS = [
@@ -132,6 +134,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				blocking: true,
 				setting: PaperlessLocalNetworkException::SETTING,
 			)];
+		} catch (PaperlessRedirectException $redirect) {
+			return [$redirect->check()];
 		} catch (PaperlessVersionException) {
 			return [ConnectionCheck::failed(
 				ConnectionCheck::PAPERLESS,
@@ -652,6 +656,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		} catch (PaperlessVersionException $exception) {
 			// Every other file would fail the same way, so the file waits as for an unreachable Paperless.
 			throw new PaperlessUploadException($exception->getMessage(), false, Http::STATUS_NOT_ACCEPTABLE);
+		} catch (PaperlessRedirectException $exception) {
+			// So does a redirect, which would have turned the upload into a GET without the file.
+			throw new PaperlessUploadException($exception->getMessage(), false, $exception->status);
 		} catch (PaperlessRequestException $exception) {
 			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $exception->getMessage(), false);
 		}
@@ -1320,6 +1327,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * allow_local_remote_servers, which would lift the protection for every app, stays off.
 	 * Without it, a request that follows redirects checks every one of them as Nextcloud does.
 	 *
+	 * A request follows no redirect unless it says so, as the download does: Nextcloud's HTTP client
+	 * would follow it with the defaults of Guzzle, which take the token off a request to another
+	 * address and turn a POST or a PATCH into a GET without its body. A redirect is a
+	 * PaperlessRedirectException then, which names the address that it leads to (#458).
+	 *
 	 * @param 'GET'|'POST'|'PATCH' $method
 	 * @param array<string, mixed> $options the options of Nextcloud's HTTP client, without the headers
 	 */
@@ -1331,6 +1343,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		$url = rtrim($this->connection->url, '/') . '/' . ltrim($path, '/');
 		$options['headers'] = $this->headersForToken($token);
+		$followsRedirects = isset($options['allow_redirects']) && $options['allow_redirects'] !== false;
+		if (!$followsRedirects) {
+			$options['allow_redirects'] = false;
+		}
 		if ($localNetwork) {
 			$options['nextcloud'] = ['allow_local_address' => true];
 		} elseif (isset($options['allow_redirects']) && is_array($options['allow_redirects'])) {
@@ -1366,8 +1382,63 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if ($response->getStatusCode() === Http::STATUS_NOT_ACCEPTABLE) {
 			throw new PaperlessVersionException();
 		}
+		if (!$followsRedirects) {
+			self::refuseRedirect($response, $url, $path);
+		}
 
 		return $response;
+	}
+
+	/**
+	 * Throws the redirect of an answer to a request that follows none, with the address that it
+	 * leads to, without its query, and the URL of Paperless that this address means when it leads
+	 * to the same path of the API under another address. An answer of 3xx without a Location, which
+	 * is no redirect, stays an answer.
+	 *
+	 * @throws PaperlessRedirectException
+	 */
+	private static function refuseRedirect(IResponse $response, string $url, string $path): void {
+		$status = $response->getStatusCode();
+		$location = trim($response->getHeader('Location'));
+		if (!in_array($status, self::REDIRECT_STATUSES, true) || $location === '') {
+			return;
+		}
+		$target = self::withoutQuery(self::absolute($location, $url));
+		$apiPath = '/' . ltrim($path, '/');
+		// A redirect to the same address, such as one that only adds a query, names no other URL.
+		$base = str_ends_with($target, $apiPath) && $target !== self::withoutQuery($url) ? substr($target, 0, -strlen($apiPath)) : '';
+
+		throw new PaperlessRedirectException($status, $target, $base);
+	}
+
+	/** The address of a Location, which may be relative to the URL of the request, as an absolute one. */
+	private static function absolute(string $location, string $url): string {
+		if (preg_match('~^[a-z][a-z0-9+.-]*:~i', $location) === 1) {
+			return $location;
+		}
+		$scheme = (string)parse_url($url, PHP_URL_SCHEME);
+		if (str_starts_with($location, '//')) {
+			return $scheme . ':' . $location;
+		}
+		$port = parse_url($url, PHP_URL_PORT);
+		$origin = $scheme . '://' . (string)parse_url($url, PHP_URL_HOST) . (is_int($port) ? ':' . $port : '');
+		if (str_starts_with($location, '/')) {
+			return $origin . $location;
+		}
+		// A relative path replaces the last part of the path of the request.
+		$path = (string)parse_url($url, PHP_URL_PATH);
+
+		return $origin . substr($path, 0, (int)strrpos($path, '/')) . '/' . $location;
+	}
+
+	/** An address without its query, its fragment and the user and password in it, which may hold secrets. */
+	private static function withoutQuery(string $address): string {
+		$parts = parse_url($address);
+		if (!is_array($parts) || !isset($parts['scheme'], $parts['host'])) {
+			return (string)preg_replace('/[?#].*$/s', '', $address);
+		}
+
+		return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . ($parts['path'] ?? '');
 	}
 
 	/**
