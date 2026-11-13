@@ -263,6 +263,36 @@ final class NotificationPublisherTest extends TestCase {
 	}
 
 	/**
+	 * The sender of files that went to Paperless without tags that it lacks hears of them in one
+	 * notification, which names the first files and replaces the one of an earlier round (#453).
+	 */
+	public function testTheSenderHearsOfFilesThatWentWithoutTags(): void {
+		$this->publisher->sendTagsUnknown('alice', ['Scans'], ['old.pdf']);
+		$this->publisher->sendTagsUnknown('bob', ['Scans'], ['other.pdf']);
+		$this->clock->advance(60);
+
+		$this->publisher->sendTagsUnknown('alice', ['Scans', 'Taxes'], ['1.pdf', '2.pdf', '3.pdf', '4.pdf', '5.pdf', '6.pdf']);
+
+		self::assertSame(['bob', 'alice'], $this->notifiedUsers(NotificationPublisher::SUBJECT_SENT_WITHOUT_TAGS));
+		$notification = $this->notifications[1];
+		self::assertSame([NotificationPublisher::OBJECT_SENT_WITHOUT_TAGS, 'alice'], [$notification->getObjectType(), $notification->getObjectId()]);
+		self::assertSame(['tags' => 'Scans, Taxes', 'files' => '1.pdf, 2.pdf, 3.pdf, 4.pdf, 5.pdf, …'], $notification->getSubjectParameters());
+		self::assertSame(TestClock::START + 60, $notification->getDateTime()->getTimestamp());
+	}
+
+	/** The files went to Paperless all the same; only the log says that their sender didn't hear of the tags. */
+	public function testANotificationOfFilesWithoutTagsThatNextcloudRefusesIsLogged(): void {
+		$this->notificationFailure = new RuntimeException('The database is full.');
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('without the tags {tags}'), self::callback(
+			static fn (array $context): bool => $context['user'] === 'alice' && $context['tags'] === 'Scans, Taxes' && $context['error'] === 'The database is full.',
+		));
+
+		$this->publisher->sendTagsUnknown('alice', ['Scans', 'Taxes'], ['receipt.pdf']);
+
+		self::assertSame([], $this->notifications);
+	}
+
+	/**
 	 * Every enabled administrator hears that Nextcloud deleted the target user, with the ID of the
 	 * user as its object, but not the deleted user, who may have been an administrator too.
 	 */

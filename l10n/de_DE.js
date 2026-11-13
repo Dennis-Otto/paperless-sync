@@ -784,7 +784,10 @@ OC.L10N.register(
 		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Import %1$s: Paperless hat abgelehnt, den Eigentümer des Dokuments %2$s zu ändern, das den Eigentümer behält, den Paperless ihm gegeben hat: %3$s",
 		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "Das Dokument behält den Eigentümer, den Paperless ihm gegeben hat, da Paperless abgelehnt hat, ihn zu ändern: %s",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud hat %s gelöscht, den Zielbenutzer von Paperless Sync",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis Sie einen anderen Zielbenutzer wählen. Ein neues Konto mit der ID %s bekäme jedes Dokument."
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Jeder Lauf schlägt fehl, bis Sie einen anderen Zielbenutzer wählen. Ein neues Konto mit der ID %s bekäme jedes Dokument.",
+		"Import %1$s: Paperless could not import its former content: %2$s; the file changed since its upload, so a run uploads its new content": "Import %1$s: Paperless konnte den früheren Inhalt nicht importieren: %2$s; die Datei hat sich seit dem Hochladen geändert, daher lädt ein Lauf ihren neuen Inhalt hoch",
+		"Sent to Paperless without the tags %s": "Ohne die Tags %s an Paperless gesendet",
+		"Paperless has no tags of these names that the account of Paperless Sync sees, so these files went to Paperless without them: %s. Ask an administrator to create the tags in Paperless or share them with the account, or to turn on \"Create missing tags\".": "Paperless hat keine Tags mit diesen Namen, die das Konto von Paperless Sync sieht, daher gingen diese Dateien ohne sie an Paperless: %s. Bitten Sie einen Administrator, die Tags in Paperless anzulegen oder mit dem Konto zu teilen oder „Fehlende Tags anlegen“ einzuschalten."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

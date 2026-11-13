@@ -40,6 +40,13 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 	 * @var array<string, array<string, int|string|null>>
 	 */
 	public array $sends = [];
+	/**
+	 * Called with the values of each save of an export before it, to fail it as a database that
+	 * goes away, or a run that is killed, would.
+	 *
+	 * @var (\Closure(array<string, int|string|null>): void)|null
+	 */
+	public ?\Closure $exportSaveFailure = null;
 
 	public function findExport(string $ownerUid, int $documentId): ?array {
 		$this->exportCalls[] = 'findExport';
@@ -55,6 +62,9 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 
 	public function saveExport(string $ownerUid, int $documentId, array $values, ?bool $exists = null): void {
 		$this->exportCalls[] = 'saveExport';
+		if ($this->exportSaveFailure !== null) {
+			($this->exportSaveFailure)($values);
+		}
 		$exports = &$this->exportsOf($ownerUid);
 		// The database would insert a second row, or update none, after a wrong hint.
 		if ($exists !== null && $exists !== isset($exports[$documentId])) {

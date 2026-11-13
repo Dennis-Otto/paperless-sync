@@ -47,12 +47,18 @@ final class NotificationPublisher {
 	public const SUBJECT_SEND_REFUSED = 'send_refused';
 	public const SUBJECT_SEND_GONE = 'send_gone';
 	public const SEND_SUBJECTS = [self::SUBJECT_SEND_IMPORTED, self::SUBJECT_SEND_KNOWN, self::SUBJECT_SEND_FAILED, self::SUBJECT_SEND_REFUSED, self::SUBJECT_SEND_GONE];
+	/** Sent files went to Paperless without tags that Paperless lacks, which the notification names with the files. */
+	public const SUBJECT_SENT_WITHOUT_TAGS = 'sent_without_tags';
 	/** Nextcloud deleted the target user, whose ID the notification names. */
 	public const SUBJECT_TARGET_USER_DELETED = 'target_user_deleted';
 	/** The object of the notification of a failing mirror, the same for every recipient, by which a success removes it. */
 	public const OBJECT_SYNCHRONIZATION = 'synchronization';
 	public const OBJECT_IMPORT = 'import';
 	public const OBJECT_SEND = 'send';
+	/** The object of the notification of files sent without tags, one for each sender, which the next one replaces. */
+	public const OBJECT_SENT_WITHOUT_TAGS = 'sent_without_tags';
+	/** The names of files that the notification of files sent without tags names at most. */
+	public const SENT_WITHOUT_TAGS_FILES = 5;
 	/** The object of the notification of a deleted target user, with the ID of the user. */
 	public const OBJECT_TARGET_USER = 'target_user';
 	/** The runs in a row that did not succeed before the administrators hear of it. */
@@ -151,6 +157,37 @@ final class NotificationPublisher {
 			$this->logger->warning('Paperless Sync could not tell {user} how the import of {path} ended: {error}', [
 				'user' => $userId,
 				'path' => $path,
+				'error' => $exception->getMessage(),
+				'exception' => $exception,
+			]);
+		}
+	}
+
+	/**
+	 * Tells whoever sent files, from Files or by a rule of Flow, that they went to Paperless without
+	 * tags that Paperless lacks. Each sender has one such notification, which the next round
+	 * replaces, so that a rule that sends many files doesn't bury them in notifications. A
+	 * notification that Nextcloud refuses is logged; the files went to Paperless all the same.
+	 *
+	 * @param list<string> $tags the names of the tags
+	 * @param list<string> $files the names of the files
+	 */
+	public function sendTagsUnknown(string $userId, array $tags, array $files): void {
+		try {
+			$notification = $this->notifications->createNotification()
+				->setApp(AppConstants::APP_ID)
+				->setUser($userId)
+				->setObject(self::OBJECT_SENT_WITHOUT_TAGS, $userId);
+			$this->notifications->markProcessed($notification);
+			$names = implode(', ', array_slice($files, 0, self::SENT_WITHOUT_TAGS_FILES)) . (count($files) > self::SENT_WITHOUT_TAGS_FILES ? ', …' : '');
+			$this->notifications->notify(
+				$notification->setDateTime($this->timeFactory->getDateTime())
+					->setSubject(self::SUBJECT_SENT_WITHOUT_TAGS, ['tags' => implode(', ', $tags), 'files' => $names]),
+			);
+		} catch (\Throwable $exception) {
+			$this->logger->warning('Paperless Sync could not tell {user} that files went to Paperless without the tags {tags}: {error}', [
+				'user' => $userId,
+				'tags' => implode(', ', $tags),
 				'error' => $exception->getMessage(),
 				'exception' => $exception,
 			]);

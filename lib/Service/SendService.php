@@ -54,6 +54,15 @@ final class SendService {
 	/** The ends of an import that the owner of a file of a rule of Flow doesn't hear of. */
 	private const QUIET_FOR_RULES = [NotificationPublisher::SUBJECT_SEND_IMPORTED, NotificationPublisher::SUBJECT_SEND_KNOWN, NotificationPublisher::SUBJECT_SEND_GONE];
 
+	/**
+	 * The files of this round that went to Paperless without tags that Paperless lacks, by their
+	 * sender: the sender, the names of the files, and the names of the tags by their names in lower
+	 * case.
+	 *
+	 * @var array<string, array{user: string, files: list<string>, tags: array<string, string>}>
+	 */
+	private array $leftOut = [];
+
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
 		private ConfigService $configService,
@@ -79,6 +88,7 @@ final class SendService {
 		}
 		$paperless = $this->clients->connect($connection);
 		$tags = new InboxTags($paperless, $config, new SyncReport(false));
+		$this->leftOut = [];
 		$now = $this->timeFactory->getTime();
 		$uploads = 0;
 		$paperlessFailed = false;
@@ -95,6 +105,29 @@ final class SendService {
 			}
 			++$uploads;
 			$paperlessFailed = !$this->upload($paperless, $tags, $config, $send, $now);
+		}
+		$this->noticeOfUnknownTags();
+	}
+
+	/**
+	 * The tags that files of this round went to Paperless without, as "Create missing tags" is off
+	 * and Paperless has no tag of their names, or none that the account sees: the log names them
+	 * once, and each sender hears of the files, also the owner of the files of a rule of Flow, so
+	 * that no name is lost without a word, as for the inbox.
+	 */
+	private function noticeOfUnknownTags(): void {
+		if ($this->leftOut === []) {
+			return;
+		}
+		$names = [];
+		foreach ($this->leftOut as $sent) {
+			$names += $sent['tags'];
+		}
+		$this->logger->warning('Paperless shows the account of Paperless Sync no tags named {names}, so files sent to Paperless went without them. Create the tags in Paperless or share them with the account, or turn on "Create missing tags" in the settings of Paperless Sync.', [
+			'names' => implode(', ', $names),
+		]);
+		foreach ($this->leftOut as $sent) {
+			$this->notifications->sendTagsUnknown($sent['user'], array_values($sent['tags']), $sent['files']);
 		}
 	}
 
@@ -117,7 +150,7 @@ final class SendService {
 				return true;
 			}
 			$path = $node['path'];
-			$tagIds = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')))['ids'];
+			$tagsOfFile = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')));
 			$known = $paperless->findDocument($this->fingerprint($userId, $path));
 			if ($known !== null) {
 				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_KNOWN, $known);
@@ -126,7 +159,7 @@ final class SendService {
 			$stream = null;
 			try {
 				$stream = $this->storage->openRead($userId, $path);
-				$taskId = $paperless->uploadDocument($stream, $node['name'], $tagIds);
+				$taskId = $paperless->uploadDocument($stream, $node['name'], $tagsOfFile['ids']);
 			} finally {
 				// The client of Paperless may have closed it.
 				if (is_resource($stream)) {
@@ -140,6 +173,14 @@ final class SendService {
 				'submitted_at' => $now,
 				'last_error' => null,
 			]);
+			if ($tagsOfFile['missing'] !== []) {
+				$sent = $this->leftOut[$userId] ?? ['user' => $userId, 'files' => [], 'tags' => []];
+				$sent['files'][] = $node['name'];
+				foreach ($tagsOfFile['missing'] as $name) {
+					$sent['tags'][mb_strtolower($name)] ??= $name;
+				}
+				$this->leftOut[$userId] = $sent;
+			}
 
 			return true;
 		} catch (PaperlessUploadException $exception) {
