@@ -302,6 +302,8 @@ Die Einstellungen sprechen Englisch und Deutsch. Sie, die Aktionen in Dateien un
 
 --8<-- "README.de.md:how-it-works"
 
+<a id="try-it"></a>
+
 ## Ausprobieren
 
 --8<-- "README.de.md:try-it"

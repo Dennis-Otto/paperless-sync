@@ -12,7 +12,8 @@
 # step, with the rules of ESLint, the thumbnails of the screenshots of the App Store, the language of the pictures
 # of the documentation, their frozen story and the report of their visual check, and that
 # the German twins of the documentation, README.de.md and
-# docs/*.de.md, follow their English pages, and that the environments of the release
+# docs/*.de.md, follow their English pages, that the roadmap plans no closed issue, and
+# that the environments of the release
 # guide hold the secrets that the workflows read in them; the versions check covers
 # README.de.md and docs/index.de.md as well.
 set -euo pipefail
@@ -1045,6 +1046,65 @@ broken_twin docs/faq.md 'it ends where line' -e '/^### Wie deinstalliere ich Pap
 rm -rf "$twin_copy"
 trap - EXIT
 echo "The check of the German twins reports a heading that is gone, of another level, too many or gone among others, an English diagram, light or dark, an English snippet and a page that ends early."
+
+printf '\n== %s\n' "Plans of the roadmap"
+# The section The next twelve months of docs/roadmap.md says what is planned. An issue
+# that it links and that is closed is done or given up, and the roadmap would still plan
+# it, as it planned the languages and the demo after both had shipped. Only GitHub knows
+# whether an issue is closed: gh asks it where it is signed in, as on the machine of a
+# maintainer, whose hook runs these checks before every push. The CI gives these checks
+# no token, so there, and without gh or a network, the check names each issue that it
+# couldn't ask about and passes.
+planned_issues() {
+  awk '/^## /{plan = ($0 == "## The next twelve months"); next} plan' "$1" |
+    grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/[0-9]+' | sort -u || true
+}
+closed_plans() {
+  local roadmap="$1" link state closed=0 ask=(gh)
+  # timeout keeps a hanging network from holding the hook; macOS has it only with coreutils.
+  if command -v timeout >/dev/null; then ask=(timeout 30 gh); fi
+  while read -r link; do
+    if ! state="$("${ask[@]}" api "repos/${link#https://github.com/}" --jq .state </dev/null 2>/dev/null)"; then
+      echo "GitHub didn't say whether $link, which $roadmap plans, is closed; the check leaves it out."
+    elif [[ "$state" == closed ]]; then
+      echo "$roadmap plans $link in The next twelve months, but the issue is closed: move what shipped to Done, with its link into the guide, drop what was given up, and say what is really planned."
+      closed=1
+    fi
+  done < <(planned_issues "$roadmap")
+  return "$closed"
+}
+# A gh in place of the real one answers for the issues of a roadmap: #1 is closed, #2
+# open, and for #3 GitHub doesn't answer; #4, under Done, is no plan.
+plans_copy="$(mktemp -d)"
+trap 'rm -rf "$plans_copy"' EXIT
+mkdir -p "$plans_copy/bin"
+cat >"$plans_copy/bin/gh" <<'GH'
+#!/usr/bin/env bash
+case "$2" in
+  repos/o/r/issues/1) echo closed ;;
+  repos/o/r/issues/2) echo open ;;
+  *) echo 'HTTP 502: Bad Gateway' >&2; exit 1 ;;
+esac
+GH
+chmod +x "$plans_copy/bin/gh"
+printf '%s\n' '# Roadmap' '## The next twelve months' \
+  '- **Shipped** ([#1](https://github.com/o/r/issues/1)), see [#1](https://github.com/o/r/issues/1).' \
+  '- **Coming** ([#2](https://github.com/o/r/issues/2)).' '- **Unknown** ([#3](https://github.com/o/r/issues/3)).' \
+  '## Done' '- **Old** ([#4](https://github.com/o/r/issues/4)).' >"$plans_copy/roadmap.md"
+expected="$plans_copy/roadmap.md plans https://github.com/o/r/issues/1 in The next twelve months, but the issue is closed: move what shipped to Done, with its link into the guide, drop what was given up, and say what is really planned.
+GitHub didn't say whether https://github.com/o/r/issues/3, which $plans_copy/roadmap.md plans, is closed; the check leaves it out."
+if output="$(PATH="$plans_copy/bin:$PATH" closed_plans "$plans_copy/roadmap.md")" || [[ "$output" != "$expected" ]]; then
+  echo "The check of the roadmap should report the closed #1 once, pass the open #2, name #3, for which GitHub doesn't answer, and leave out #4 under Done, but says: ${output:-nothing}"
+  exit 1
+fi
+rm -rf "$plans_copy"
+trap - EXIT
+if ! command -v gh >/dev/null 2>&1; then
+  echo "Without gh, the check can't ask GitHub whether an issue that docs/roadmap.md plans is closed."
+elif ! closed_plans docs/roadmap.md; then
+  exit 1
+fi
+echo "docs/roadmap.md plans no issue that GitHub knows as closed, and the check reports a closed one, once, among the plans alone."
 
 printf '\n== %s\n' "Environments of the release guide"
 # The section Secrets and recovery of docs/releases.md is what a maintainer follows to set
