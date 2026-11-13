@@ -135,6 +135,19 @@ elif mode == "checklist-no-ui-settings":
         "In Paperless, under Users & Groups, give the account the permission View for UI Settings, so that this checklist can read its permissions. "
         "The inbox needs Add for Documents and View for Paperless Tasks.",
     )
+elif mode == "checklist-redirect":
+    # Nextcloud follows no redirect of the app, so the checklist ends with the line that names it.
+    if set(payload) != {"checks"} or payload["checks"][0]["id"] != "paperless":
+        raise AssertionError(f"{mode}: the test answers with another checklist: {payload!r}")
+    expect_line(
+        "paperless",
+        "failed",
+        "Paperless, or a proxy in front of it, redirects to http://paperless-mock:8080/api/documents/ (HTTP 301).",
+        "Enter http://paperless-mock:8080 as the URL of Paperless. Paperless Sync follows no redirect: "
+        "it would send the token to another address, or turn an upload into a request without its file.",
+    )
+    if checks()["paperless"]["setting"] != "paperless_url":
+        raise AssertionError(f"{mode}: the line of Paperless names no setting: {payload!r}")
 elif mode == "saved-with-failures":
     # A permission that one module needs is saved with the settings, and the checklist says what to do.
     expect("tokenConfigured", True)

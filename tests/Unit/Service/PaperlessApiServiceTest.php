@@ -2352,6 +2352,99 @@ final class PaperlessApiServiceTest extends TestCase {
 		];
 	}
 
+	/** @return array<string, array{int, string, string, string}> a redirect of the first request, the address that it leads to and the URL of Paperless that this address means */
+	public static function redirects(): array {
+		return [
+			'to a new name' => [301, 'https://paperless.example.org/api/documents/?page=1&page_size=1', 'https://paperless.example.org/api/documents/', 'https://paperless.example.org'],
+			'to a path on the same host' => [308, '/paperless/api/documents/?page=1&page_size=1', self::URL . '/paperless/api/documents/', self::URL . '/paperless'],
+			'to another port, relative to the protocol' => [302, '//docs.example.test:8443/api/documents/', 'https://docs.example.test:8443/api/documents/', 'https://docs.example.test:8443'],
+			'with a user and a password' => [307, 'https://user:secret@paperless.example.org/api/documents/#top', 'https://paperless.example.org/api/documents/', 'https://paperless.example.org'],
+			'to the sign-in of a proxy' => [302, 'https://sso.example.test/login?rd=https%3A%2F%2Fpaperless.example.test%2F', 'https://sso.example.test/login', ''],
+			'to a path relative to the request' => [303, 'login/?next=/api/documents/', self::URL . '/api/documents/login/', ''],
+			'to the same address with a query' => [302, '/api/documents/?page=1', self::URL . '/api/documents/', ''],
+			'to an address that is no web address' => [302, 'urn:example:paperless?token=secret', 'urn:example:paperless', ''],
+		];
+	}
+
+	/**
+	 * A redirect, such as from http:// to https://, would reach Paperless without the token, which
+	 * looked like a token that Paperless refused (#458): the checklist names where it leads instead.
+	 */
+	#[DataProvider('redirects')]
+	public function testARedirectEndsTheChecklistWithTheAddressThatItLeadsTo(int $status, string $location, string $target, string $url): void {
+		$this->responses[] = [$status, '', ['Location' => $location]];
+
+		$checks = $this->preflight();
+
+		$hint = $url !== ''
+			? 'Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.'
+			: 'Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.';
+		self::assertEquals([new ConnectionCheck(
+			'paperless',
+			ConnectionCheck::FAILED,
+			'Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).',
+			[$target, (string)$status],
+			$hint,
+			$url !== '' ? [$url] : [],
+			true,
+			'paperless_url',
+		)], $checks);
+		self::assertTrue($checks[0]->blocks());
+		self::assertCount(1, $this->requests);
+		self::assertFalse($this->requests[0]['options']['allow_redirects'], 'Nextcloud would follow the redirect without the token.');
+	}
+
+	/** A run names the redirect and the setting that ends it, not a failure without a cause. */
+	public function testARedirectFailsARequestWithTheAddressThatItLeadsTo(): void {
+		$this->responses[] = [301, '', ['Location' => 'https://paperless.example.org/api/documents/?page=1&page_size=1000']];
+
+		try {
+			$this->service->documents();
+			self::fail('A redirect must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			$error = RunError::of($exception);
+			self::assertSame('Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to https://paperless.example.org/api/documents/ (HTTP 301). Enter https://paperless.example.org as the URL of Paperless in the settings of Paperless Sync.', $error->message());
+			self::assertSame('paperless_url', $error->setting);
+		}
+		self::assertFalse($this->requests[0]['options']['allow_redirects']);
+	}
+
+	/** A Location without a host takes the scheme, the host and the port of the request. */
+	public function testARedirectOnTheSameHostKeepsThePortOfTheUrl(): void {
+		$this->responses[] = [308, '', ['Location' => '/paperless/api/documents/?page=1&page_size=1000']];
+
+		try {
+			$this->client('http://paperless.example.test:8000')->documents();
+			self::fail('A redirect must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertSame('Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to http://paperless.example.test:8000/paperless/api/documents/ (HTTP 308). Enter http://paperless.example.test:8000/paperless as the URL of Paperless in the settings of Paperless Sync.', $exception->getMessage());
+		}
+	}
+
+	public function testARedirectToTheSignInOfAProxyNamesNoUrl(): void {
+		$this->responses[] = [302, '', ['Location' => 'https://sso.example.test/login?rd=x']];
+
+		$this->expectException(PaperlessRequestException::class);
+		$this->expectExceptionMessage('Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to https://sso.example.test/login (HTTP 302). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.');
+		$this->service->documents();
+	}
+
+	/** A redirect would have turned the upload into a GET without the file, so the file waits, as for an unreachable Paperless, with the cause. */
+	public function testARedirectOfAnUploadNamesTheAddressThatItLeadsTo(): void {
+		$this->responses[] = [302, '', ['Location' => '/paperless/api/documents/post_document/']];
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('A redirect of the upload must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertSame('Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to ' . self::URL . '/paperless/api/documents/post_document/ (HTTP 302). Enter ' . self::URL . '/paperless as the URL of Paperless in the settings of Paperless Sync.', $exception->getMessage());
+			self::assertFalse($exception->permanent, 'Every other file would be redirected as well.');
+			self::assertSame(302, $exception->statusCode);
+		}
+		self::assertSame('POST', $this->requests[0]['method']);
+		self::assertFalse($this->requests[0]['options']['allow_redirects']);
+	}
+
 	/** Without the documents, nothing else of Paperless works, so the checklist ends there and blocks a save. */
 	#[DataProvider('answersThatAreNoPage')]
 	public function testAnAnswerThatIsNoPageOfPaperlessEndsTheChecklist(int $status, mixed $body, ConnectionCheck $line): void {

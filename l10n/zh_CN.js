@@ -748,7 +748,12 @@ OC.L10N.register(
 		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "导入 %1$s：Paperless 拒绝更改文档 %2$s 的所有者，该文档保留 Paperless 为其设置的所有者：%3$s",
 		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "该文档保留 Paperless 为其设置的所有者，因为 Paperless 拒绝更改所有者：%s",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud 已删除 %s，即 Paperless Sync 的目标用户",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您选择其他目标用户之前，每次运行都会失败。ID 为 %s 的新账号将获得所有文档。"
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "在您选择其他目标用户之前，每次运行都会失败。ID 为 %s 的新账号将获得所有文档。",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter %3$s as the URL of Paperless in the settings of Paperless Sync.": "Paperless 或其前端代理将 Paperless Sync 的请求重定向到 %1$s（HTTP %2$s）。请在 Paperless Sync 的设置中将 %3$s 填写为 Paperless 的 URL。",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless 或其前端代理将 Paperless Sync 的请求重定向到 %1$s（HTTP %2$s）。请填写 Paperless 无需重定向即可应答的 URL：要求登录的代理必须放行 Paperless 的 API。",
+		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless 或其前端代理重定向到 %1$s（HTTP %2$s）。",
+		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "请将 %s 填写为 Paperless 的 URL。Paperless Sync 不跟随任何重定向：重定向会把令牌发送到其他地址，或把上传变成不含文件的请求。",
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "请填写 Paperless 无需重定向即可应答的 URL：要求登录的代理必须放行 Paperless 的 API。"
 	},
 	"nplurals=1; plural=0;"
 )

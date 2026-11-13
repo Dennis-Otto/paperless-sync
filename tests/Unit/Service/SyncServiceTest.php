@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ConfigService;
+use OCA\PaperlessSync\Service\FullStorageException;
 use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\MetadataSidecars;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
@@ -2226,6 +2227,40 @@ final class SyncServiceTest extends TestCase {
 
 		self::assertSame(['EXPORT P123: ' . $newPath], $report->actions);
 		self::assertSame([$newPath => '%PDF-content-v2'], $this->storage->files);
+	}
+
+	/**
+	 * A write that Nextcloud refuses before it starts leaves the copy as it was, so the state keeps
+	 * its fingerprint: an edit of the copy before the next run is a conflict, not the app's own copy.
+	 */
+	#[DataProvider('refusedWrites')]
+	public function testEditOfACopyWhoseUpdateNextcloudRefusedIsAConflictWhenConflictsAreSkipped(\Throwable $refusal): void {
+		$this->configService->save(['conflict_mode' => 'skip']);
+		$this->exportDocument();
+		$fingerprint = $this->state->exports[123]['fingerprint'];
+		$this->paperless->documents[0]['modified'] = '2026-08-26T11:00:00+02:00';
+		$this->paperless->contents[123] = '%PDF-content-v2';
+		$this->storage->writeFailures[self::EXPORTED_PATH] = $refusal;
+
+		$this->service->run();
+		self::assertSame($fingerprint, $this->state->exports[123]['fingerprint']);
+		$this->storage->files[self::EXPORTED_PATH] = '%PDF-annotated by the user';
+		$this->storage->writeFailures = [];
+
+		$report = $this->service->run();
+
+		self::assertSame(['ERROR: P123: Nextcloud file conflict at ' . self::EXPORTED_PATH . '.'], $report->actions);
+		self::assertSame([self::EXPORTED_PATH => '%PDF-annotated by the user'], $this->storage->files);
+		self::assertSame($fingerprint, $this->state->exports[123]['fingerprint']);
+	}
+
+	/** @return array<string, array{\Throwable}> */
+	public static function refusedWrites(): array {
+		return [
+			'full quota' => [new FullStorageException('Not enough free space in Nextcloud: the file needs %1$s bytes, and %2$s are free.', ['15', '3'])],
+			'locked copy' => [new LockedException(self::EXPORTED_PATH)],
+			'no permission' => [new NotPermittedException('The copy is read-only')],
+		];
 	}
 
 	public function testMoveOntoAnExistingFileIsAConflictWhenConflictsAreSkipped(): void {

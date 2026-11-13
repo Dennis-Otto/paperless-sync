@@ -784,7 +784,12 @@ OC.L10N.register(
 		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Import %1$s: Paperless weigerde de eigenaar van het document %2$s te wijzigen, dat de eigenaar houdt die Paperless het gaf: %3$s",
 		"The document keeps the owner that Paperless gave it, as Paperless refused to change it: %s": "Het document houdt de eigenaar die Paperless het gaf, omdat Paperless weigerde die te wijzigen: %s",
 		"Nextcloud deleted %s, the target user of Paperless Sync": "Nextcloud heeft %s verwijderd, de doelgebruiker van Paperless Sync",
-		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Elke run mislukt totdat je een andere doelgebruiker kiest. Een nieuw account met de ID %s zou elk document krijgen."
+		"Every run fails until you choose another target user. A new account with the ID %s would get every document.": "Elke run mislukt totdat je een andere doelgebruiker kiest. Een nieuw account met de ID %s zou elk document krijgen.",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter %3$s as the URL of Paperless in the settings of Paperless Sync.": "Paperless, of een proxy ervoor, stuurt de verzoeken van Paperless Sync door naar %1$s (HTTP %2$s). Vul %3$s in als URL van Paperless bij de instellingen van Paperless Sync.",
+		"Paperless, or a proxy in front of it, redirects the requests of Paperless Sync to %1$s (HTTP %2$s). Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Paperless, of een proxy ervoor, stuurt de verzoeken van Paperless Sync door naar %1$s (HTTP %2$s). Vul de URL in waaronder Paperless zonder doorverwijzing antwoordt: een proxy die om een aanmelding vraagt, moet de API van Paperless doorlaten.",
+		"Paperless, or a proxy in front of it, redirects to %1$s (HTTP %2$s).": "Paperless, of een proxy ervoor, stuurt door naar %1$s (HTTP %2$s).",
+		"Enter %s as the URL of Paperless. Paperless Sync follows no redirect: it would send the token to another address, or turn an upload into a request without its file.": "Vul %s in als URL van Paperless. Paperless Sync volgt geen doorverwijzing: die zou het token naar een ander adres sturen, of een upload veranderen in een verzoek zonder het bestand.",
+		"Enter the URL under which Paperless answers without a redirect: a proxy that asks for a sign-in has to let the API of Paperless through.": "Vul de URL in waaronder Paperless zonder doorverwijzing antwoordt: een proxy die om een aanmelding vraagt, moet de API van Paperless doorlaten."
 	},
 	"nplurals=2; plural=(n != 1);"
 )

@@ -944,12 +944,13 @@ checklist() {
 	endpoint="$1"
 	output="$2"
 	token="${3:-e2e-view-only-token}"
+	url="${4:-http://paperless-mock:8080}"
 	curl --fail-with-body --silent --show-error \
 		--user "e2e-admin:${PASSWORD}" \
 		--header 'Accept: application/json' \
 		--header 'OCS-APIRequest: true' \
 		--request POST \
-		--data-urlencode 'settings[paperless_url]=http://paperless-mock:8080' \
+		--data-urlencode "settings[paperless_url]=${url}" \
 		--data-urlencode 'settings[paperless_local_network]=1' \
 		--data-urlencode 'settings[target_user]=sync-target' \
 		--data-urlencode 'settings[base_path]=Documents/Paperless' \
@@ -1003,6 +1004,11 @@ scenario_connection() {
 	# permissions of the account: the lines of the trash and the inbox name that permission.
 	checklist settings/test "${TMP_DIR}/checklist-no-ui-settings.json" e2e-no-ui-settings-token
 	assert_json checklist-no-ui-settings "${TMP_DIR}/checklist-no-ui-settings.json"
+	# A URL that redirects, such as from http:// to https://, would reach Paperless without the
+	# token, and an upload through it as a GET without its file: the checklist names the address
+	# that it leads to, also for the token of the full account, which passes every line otherwise (#458).
+	checklist settings/test "${TMP_DIR}/checklist-redirect.json" e2e-only-token http://paperless-mock:8080/moved
+	assert_json checklist-redirect "${TMP_DIR}/checklist-redirect.json"
 
 	curl --fail-with-body --silent --show-error \
 		--user "e2e-admin:${PASSWORD}" \
