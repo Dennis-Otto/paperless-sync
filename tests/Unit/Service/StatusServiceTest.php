@@ -55,6 +55,8 @@ final class StatusServiceTest extends TestCase {
 			'report' => [],
 			'paperlessVersion' => '',
 			'paperlessApiVersion' => '',
+			'lastQueued' => 0,
+			'lastBackgroundJobs' => 0,
 		], $this->service->get());
 	}
 
@@ -110,6 +112,43 @@ final class StatusServiceTest extends TestCase {
 
 		$this->service->started(false);
 		self::assertSame('running', $this->service->get()['state'], 'The run says when it starts.');
+	}
+
+	/**
+	 * A run by hand that the background jobs of Nextcloud have not started for 15 minutes waits for
+	 * background jobs that don't run, or for a job that Nextcloud lost: the status says so, with the
+	 * last run of the background jobs, until the run starts (#438).
+	 */
+	public function testAQueuedRunThatWaitsTooLongHasNotStarted(): void {
+		$this->settings['lastcron'] = TestClock::START - 3600;
+		$this->service->queued();
+
+		$this->clock->advance(StatusService::QUEUE_PATIENCE - 1);
+		self::assertSame('queued', $this->service->get()['state']);
+
+		$this->clock->advance(1);
+		$status = $this->service->get();
+		self::assertSame(['stalled', TestClock::START, TestClock::START - 3600], [$status['state'], $status['lastQueued'], $status['lastBackgroundJobs']]);
+
+		$this->service->started(false);
+		self::assertSame('running', $this->service->get()['state'], 'The run says when it starts, however late.');
+	}
+
+	/** A run by hand waits as long as another run holds the lock, as its job can't start before that one ends. */
+	public function testAQueuedRunWaitsForTheRunThatHoldsTheLock(): void {
+		$this->service->queued();
+		$this->clock->advance(StatusService::QUEUE_PATIENCE);
+
+		$this->locked = true;
+
+		self::assertSame('queued', $this->service->get()['state']);
+	}
+
+	/** A run that an earlier version queued kept no time: it waits for longer than any background jobs should take. */
+	public function testAQueuedRunOfAnEarlierVersionHasNotStarted(): void {
+		$this->settings['status_last_state'] = 'queued';
+
+		self::assertSame(['stalled', 0], [$this->service->get()['state'], $this->service->get()['lastQueued']]);
 	}
 
 	public function testRunIsActiveWhileItHoldsItsLock(): void {
@@ -202,6 +241,7 @@ final class StatusServiceTest extends TestCase {
 
 	public function testOnlyARunCanBeInterrupted(): void {
 		$this->settings['status_last_started'] = $this->clock->time - 7200;
+		$this->settings['status_last_queued'] = $this->clock->time;
 		foreach (['queued', 'completed', 'failed'] as $state) {
 			$this->settings['status_last_state'] = $state;
 
@@ -232,6 +272,7 @@ final class StatusServiceTest extends TestCase {
 	}
 
 	public function testEveryKeyOfTheStatusIsLazy(): void {
+		$this->service->queued();
 		$this->service->started(false);
 		$this->service->connected(['version' => '2.20.15', 'apiVersion' => '9']);
 		$this->service->completed(new SyncReport(false, 1000, 1060));

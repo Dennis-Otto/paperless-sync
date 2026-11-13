@@ -358,7 +358,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		}
 		if ($status < 200 || $status >= 300) {
 			$reason = $this->errorReason($response->getBody());
-			throw new RuntimeException("Paperless did not make the user {$owner} the owner of the document {$documentId}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'));
+			throw new PaperlessOwnerException("Paperless did not make the user {$owner} the owner of the document {$documentId}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'), $status);
 		}
 	}
 

@@ -30,6 +30,7 @@ final class Status extends Base {
 	private const STATES = [
 		'never-run' => 'Never run',
 		'queued' => 'Queued',
+		'stalled' => 'Not started',
 		'running' => 'Running',
 		'dry-run-running' => 'Dry-run running',
 		'completed' => 'Completed',
@@ -73,6 +74,9 @@ final class Status extends Base {
 				$this->line($output, 'The stored API token of Paperless can not be read, as after a restore or a move of Nextcloud with another secret: enter it again in the settings.');
 			}
 			$this->field($output, 'State', self::STATES[$status['state']] ?? $status['state']);
+			if ($status['state'] === 'stalled') {
+				$this->line($output, 'The run of "Synchronize now" has waited for the background jobs of Nextcloud since ' . self::time($status['lastQueued']) . '. Check that they run: ' . ($status['lastBackgroundJobs'] > 0 ? 'Nextcloud last ran them at ' . self::time($status['lastBackgroundJobs']) : 'Nextcloud has never run them') . '. Or start the run with occ paperless_sync:run.');
+			}
 			$this->field($output, 'Last started', self::time($status['lastStarted']));
 			$this->field($output, 'Last finished', self::time($status['lastEnded']));
 			$this->field($output, 'Last successful run', self::time($status['lastSuccess']));

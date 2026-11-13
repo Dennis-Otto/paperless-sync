@@ -778,7 +778,10 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Lass das Feld leer, wenn Browser Paperless unter der Paperless-Adresse erreichen. Erreicht Nextcloud Paperless unter einem Namen oder einer Adresse, die nur der Server kennt, etwa http://paperless:8000 in einem Docker-Netzwerk, gib die Adresse ein, die Browser öffnen, etwa https://paperless.example.com: Die Links zu Paperless in Dateien, in Benachrichtigungen, in der Aktivität und in den Metadaten nehmen sie, während die Anfragen von Nextcloud weiter an die Paperless-Adresse gehen.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Gib eine gültige Paperless-Adresse im Browser ein oder lass das Feld leer.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Die Paperless-Adresse im Browser muss HTTP oder HTTPS verwenden.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Die Paperless-Adresse im Browser darf weder Zugangsdaten noch eine Abfrage oder ein Fragment enthalten.",
+		"Not started": "Nicht gestartet",
+		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "Die Synchronisation hat nicht begonnen: Die Hintergrundjobs von Nextcloud haben sie seit 15 Minuten nicht gestartet. Prüfe, ob sie laufen; Nextcloud hat sie zuletzt ausgeführt: {time}.",
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Import %1$s: Paperless hat abgelehnt, den Eigentümer des Dokuments %2$s zu ändern, das den Eigentümer behält, den Paperless ihm gegeben hat: %3$s"
 	},
 	"nplurals=2; plural=(n != 1);"
 )

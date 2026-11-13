@@ -30,11 +30,16 @@ use Psr\Log\LogLevel;
  * - A file whose content Paperless has already isn't uploaded again, as Paperless-ngx 3.x would
  *   import it a second time: the sender learns the document that has it.
  * - A file that Paperless refuses isn't uploaded again either; the sender learns why.
+ * - A file or a user that is gone ends the import. A lookup of the file that fails otherwise, such
+ *   as while the user backend of the sender can't answer, waits as a failed upload does.
  * - An upload that fails for a reason that may pass, such as Paperless being down, follows after
  *   a wait that doubles each time, up to MAX_ATTEMPTS uploads, and the other files wait for the
  *   next round.
  * - A task that Paperless has not finished a day after the upload ends the import, as Paperless
  *   may still create the document; the file is not uploaded again.
+ * - In per-user ownership, a document whose owner Paperless refuses to change waits for it while
+ *   the refusal may pass, up to a day after the upload; then, or at once for a refusal that
+ *   repeats, such as 403, the import ends as imported, and the document keeps its owner.
  *
  * A round uploads at most a batch of files; while the app is not connected to Paperless, the files
  * wait.
@@ -104,17 +109,14 @@ final class SendService {
 		$fileId = (int)$send['file_id'];
 		$path = (string)$send['path'];
 		try {
+			// A file or a user that is gone ends the import; a lookup that fails, such as while the
+			// user backend of the sender can't answer, waits for the next attempt, as an upload does.
 			$node = $this->storage->nodeById($userId, $fileId);
-		} catch (\Throwable) {
-			// The user is gone, and with them their files.
-			$node = null;
-		}
-		if ($node === null || $node['folder'] || !$node['readable']) {
-			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_GONE);
-			return true;
-		}
-		$path = $node['path'];
-		try {
+			if ($node === null || $node['folder'] || !$node['readable']) {
+				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_GONE);
+				return true;
+			}
+			$path = $node['path'];
 			$tagIds = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')))['ids'];
 			$known = $paperless->findDocument($this->fingerprint($userId, $path));
 			if ($known !== null) {
@@ -226,10 +228,18 @@ final class SendService {
 			return;
 		}
 		if (in_array($task['status'], ImportPlanner::TASK_SUCCEEDED, true)) {
-			if ($config->perUser() && $task['documentId'] !== null && !$this->giveOwner($paperless, $config, $send, $task['documentId'], $owners)) {
-				return;
+			$reason = '';
+			if ($config->perUser() && $task['documentId'] !== null) {
+				$refusal = $this->giveOwner($paperless, $config, $send, $task['documentId'], $owners);
+				if ($refusal !== null) {
+					if (!PaperlessOwnerException::endsTheWait($refusal, (int)($send['submitted_at'] ?? 0), $now)) {
+						$this->waitForOwner($send, $task['documentId'], $refusal);
+						return;
+					}
+					$reason = $this->keepsItsOwner($send, $task['documentId'], $refusal);
+				}
 			}
-			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_IMPORTED, $task['documentId']);
+			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_IMPORTED, $task['documentId'], $reason);
 		} elseif (in_array($task['status'], ImportPlanner::TASK_FAILED, true)) {
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, ImportPlanner::failureReason($task));
 		} elseif ($now - (int)($send['submitted_at'] ?? 0) >= ImportPlanner::TASK_TIMEOUT) {
@@ -244,12 +254,12 @@ final class SendService {
 	 * uploads a file the owner of its document, so that the next runs mirror it into that user's
 	 * archive. A user without a user of Paperless leaves it to the account. Only the document that
 	 * the task of the upload names changes, never one that Paperless had with the content of the
-	 * file already. While Paperless refuses, the import stays pending, and the log says so once.
+	 * file already.
 	 *
 	 * @param array<string, int|string|null> $send
-	 * @return bool whether the import may end
+	 * @return \Throwable|null why Paperless did not change the owner, or null when the import may end
 	 */
-	private function giveOwner(PaperlessClientInterface $paperless, SyncConfig $config, array $send, int $documentId, ?Owners &$owners): bool {
+	private function giveOwner(PaperlessClientInterface $paperless, SyncConfig $config, array $send, int $documentId, ?Owners &$owners): ?\Throwable {
 		try {
 			$owners ??= $this->ownerMapping->owners($config, $paperless->users());
 			$owner = $owners->paperlessUserOf((string)$send['user_id']);
@@ -257,21 +267,50 @@ final class SendService {
 				$paperless->setOwner($documentId, $owner);
 			}
 
-			return true;
+			return null;
 		} catch (\Throwable $exception) {
-			$error = $exception->getMessage();
-			if (($send['last_error'] ?? null) !== $error) {
-				$this->logger->warning('Paperless Sync could not give the document {document} of {path}, which {user} sent to Paperless, its owner: {error}', [
-					'document' => $documentId,
-					'path' => (string)$send['path'],
-					'user' => (string)$send['user_id'],
-					'error' => $error,
-				]);
-				$this->state->saveSend((string)$send['user_id'], (int)$send['file_id'], ['last_error' => mb_substr($error, 0, 4000)]);
-			}
-
-			return false;
+			return $exception;
 		}
+	}
+
+	/**
+	 * Paperless refused the owner for a reason that may pass, so the import stays pending, the log
+	 * says so once, and the next round asks again.
+	 *
+	 * @param array<string, int|string|null> $send
+	 */
+	private function waitForOwner(array $send, int $documentId, \Throwable $refusal): void {
+		$error = $refusal->getMessage();
+		if (($send['last_error'] ?? null) === $error) {
+			return;
+		}
+		$this->logger->warning('Paperless Sync could not give the document {document} of {path}, which {user} sent to Paperless, its owner: {error}', [
+			'document' => $documentId,
+			'path' => (string)$send['path'],
+			'user' => (string)$send['user_id'],
+			'error' => $error,
+		]);
+		$this->state->saveSend((string)$send['user_id'], (int)$send['file_id'], ['last_error' => mb_substr($error, 0, 4000)]);
+	}
+
+	/**
+	 * Paperless keeps refusing the owner, for good or for as long as a task may take: the document
+	 * is in Paperless, so the import ends as imported and the file may be sent again. The document
+	 * keeps the owner that Paperless gave it, which the log and the sender learn with the reason of
+	 * Paperless. The answer is that reason, for the notification.
+	 *
+	 * @param array<string, int|string|null> $send
+	 */
+	private function keepsItsOwner(array $send, int $documentId, \Throwable $refusal): string {
+		$error = $refusal->getMessage();
+		$this->logger->warning('The document {document} of {path}, which {user} sent to Paperless, keeps the owner that Paperless gave it, as Paperless did not make the user of Paperless of {user} its owner: {error}', [
+			'document' => $documentId,
+			'path' => (string)$send['path'],
+			'user' => (string)$send['user_id'],
+			'error' => $error,
+		]);
+
+		return "The document keeps the owner that Paperless gave it, as Paperless refused to change it: {$error}";
 	}
 
 	/**

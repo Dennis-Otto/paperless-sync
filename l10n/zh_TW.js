@@ -742,7 +742,10 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "如果瀏覽器透過 Paperless URL 連到 Paperless，請留空。如果 Nextcloud 透過只有伺服器知道的名稱或位址連到 Paperless，例如 Docker 網路中的 http://paperless:8000，請輸入瀏覽器開啟的位址，例如 https://paperless.example.com：檔案、通知、活動和中繼資料中連到 Paperless 的連結會使用它，而 Nextcloud 的請求仍然送往 Paperless URL。",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "請輸入有效的瀏覽器中的 Paperless 位址，或將其留空。",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "瀏覽器中的 Paperless 位址必須使用 HTTP 或 HTTPS。",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。"
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "瀏覽器中的 Paperless 位址不得包含帳號密碼、查詢參數或片段。",
+		"Not started": "未開始",
+		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "同步尚未開始：Nextcloud 的背景作業已有 15 分鐘未執行它。請檢查背景作業是否在執行；Nextcloud 上次執行它們的時間：{time}。",
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "匯入 %1$s：Paperless 拒絕變更文件 %2$s 的擁有者，該文件保留 Paperless 為其設定的擁有者：%3$s"
 	},
 	"nplurals=1; plural=0;"
 )

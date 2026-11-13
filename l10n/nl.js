@@ -778,7 +778,10 @@ OC.L10N.register(
 		"Leave it empty when browsers reach Paperless at the Paperless URL. When Nextcloud reaches Paperless at a name or an address that only the server knows, such as http://paperless:8000 in a Docker network, enter the address that browsers open, such as https://paperless.example.com: the links to Paperless in Files, in notifications, in the activity and in the metadata take it, while the requests of Nextcloud still go to the Paperless URL.": "Laat dit leeg als browsers Paperless bereiken op de Paperless-URL. Bereikt Nextcloud Paperless via een naam of een adres dat alleen de server kent, zoals http://paperless:8000 in een Docker-netwerk, voer dan het adres in dat browsers openen, zoals https://paperless.example.com: de links naar Paperless in Bestanden, in meldingen, in de activiteit en in de metadata gebruiken het, terwijl de verzoeken van Nextcloud nog steeds naar de Paperless-URL gaan.",
 		"Enter a valid address of Paperless in the browser, or leave it empty.": "Voer een geldig adres van Paperless in de browser in, of laat het leeg.",
 		"The address of Paperless in the browser must use HTTP or HTTPS.": "Het adres van Paperless in de browser moet HTTP of HTTPS gebruiken.",
-		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Het adres van Paperless in de browser mag geen inloggegevens, query of fragment bevatten."
+		"The address of Paperless in the browser must not contain credentials, a query, or a fragment.": "Het adres van Paperless in de browser mag geen inloggegevens, query of fragment bevatten.",
+		"Not started": "Niet gestart",
+		"The synchronization has not started: the background jobs of Nextcloud have not run it for 15 minutes. Check that they run; Nextcloud last ran them: {time}.": "De synchronisatie is niet gestart: de achtergrondtaken van Nextcloud hebben haar 15 minuten lang niet gestart. Controleer of ze draaien; Nextcloud voerde ze het laatst uit: {time}.",
+		"Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s": "Import %1$s: Paperless weigerde de eigenaar van het document %2$s te wijzigen, dat de eigenaar houdt die Paperless het gaf: %3$s"
 	},
 	"nplurals=2; plural=(n != 1);"
 )

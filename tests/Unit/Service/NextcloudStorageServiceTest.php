@@ -60,6 +60,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private bool $filesCannotBeOpened = false;
 	/** How often the service looked up the folder of the files of a user. */
 	private int $userFolderLookups = 0;
+	/** @var list<string> the users for whom Nextcloud gives no folder of files, as for a user who is gone or whose user backend can't answer */
+	private array $withoutUserObject = [];
 	private TestUserFilesystem $filesystem;
 	private NextcloudStorageService $service;
 
@@ -69,11 +71,15 @@ final class NextcloudStorageServiceTest extends TestCase {
 		$rootFolder = $this->createStub(IRootFolder::class);
 		$rootFolder->method('getUserFolder')->willReturnCallback(function (string $userId): Folder {
 			++$this->userFolderLookups;
+			if (in_array($userId, $this->withoutUserObject, true)) {
+				throw new RuntimeException("Backends provided no user object for {$userId}");
+			}
 
 			return $this->folder('/' . $userId . '/files');
 		});
 		$userManager = $this->createStub(IUserManager::class);
 		$userManager->method('get')->willReturnCallback(fn (string $userId): ?IUser => $userId === self::USER ? $this->createStub(IUser::class) : null);
+		$userManager->method('userExists')->willReturnCallback(static fn (string $userId): bool => $userId === self::USER);
 		// Each user whose filesystem a change entered, with the number of lookups of the files of a
 		// user and of deleted nodes before.
 		$this->filesystem = new TestUserFilesystem(fn (string $userId): array => [$userId, $this->userFolderLookups, count($this->deleted)]);
@@ -502,6 +508,20 @@ final class NextcloudStorageServiceTest extends TestCase {
 
 		self::assertNull($this->service->nodeById(self::USER, $this->fileId(self::HOME)));
 		self::assertNull($this->service->nodeById(self::USER, $this->fileId('/someone/files/letter.pdf')));
+	}
+
+	/**
+	 * A user who is gone has no files left, but a lookup that fails for a user who exists, such as
+	 * while their user backend can't answer, fails, as the file may be back once it passes (#440).
+	 */
+	public function testAUserWhoIsGoneHasNoFilesAndAFailedLookupFails(): void {
+		$this->withoutUserObject = ['ghost', self::USER];
+
+		self::assertNull($this->service->nodeById('ghost', 1));
+
+		$this->expectException(RuntimeException::class);
+		$this->expectExceptionMessage('Backends provided no user object for ' . self::USER);
+		$this->service->nodeById(self::USER, 1);
 	}
 
 	public function testOpenReadReturnsTheContent(): void {

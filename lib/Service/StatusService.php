@@ -23,7 +23,8 @@ use OCP\Lock\ILockingProvider;
  * reached. Every key is lazy: Nextcloud loads the status when the app asks for it, not with every
  * request of every user.
  *
- * Its state is one of never-run, queued (a run by hand waits for its background job), running,
+ * Its state is one of never-run, queued (a run by hand waits for its background job), stalled (it
+ * has waited for longer than the background jobs of Nextcloud should take to start it), running,
  * dry-run-running, completed, dry-run-completed, completed-with-errors, failed, and interrupted: a
  * run that ended without saying how, because PHP stopped it, which the status tells from its lock
  * and from the signs of life of the run.
@@ -38,7 +39,7 @@ use OCP\Lock\ILockingProvider;
  * checklist of the settings page (GettingStarted), as it keeps whether the connection checklist
  * passed with the saved token.
  *
- * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string}
+ * @psalm-type Status = array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, lastQueued: int, lastBackgroundJobs: int}
  * @psalm-type Failures = array{runs: int, since: int, failed: bool, errors: int, error: string}
  * @psalm-type DryRun = array{ended: int, documents: int}
  * @psalm-type Health = 'unconfigured'|'off'|'waiting'|'ok'|'stale'|'errors'|'failed'
@@ -64,9 +65,17 @@ final class StatusService {
 	 */
 	public const STALE_INTERVALS = 3;
 	public const STALE_MINIMUM = 3600;
+	/**
+	 * How long a run by hand may wait for its background job, in seconds, before the status says
+	 * that it has not started: three times the five minutes after which the cron job of the system
+	 * starts the background jobs of Nextcloud (#438).
+	 */
+	public const QUEUE_PATIENCE = 900;
 
 	/** The start of the last run, also of a dry-run. */
 	private const LAST_STARTED = 'status_last_started';
+	/** When "Synchronize now" last queued a run. */
+	private const LAST_QUEUED = 'status_last_queued';
 	/** The last sign of life of the active run, which it writes while it works. */
 	private const LAST_HEARTBEAT = 'status_last_heartbeat';
 	/** The end of the last run that completed, also with errors. */
@@ -115,7 +124,7 @@ final class StatusService {
 		self::LAST_STARTED, self::LAST_COMPLETED, self::LAST_ENDED, self::LAST_SUCCESS, self::LAST_STATE,
 		self::LAST_SUMMARY, self::LAST_ERROR, self::LAST_ERROR_RECORD, self::LAST_REPORT, self::LAST_SYNC_STARTED, self::LAST_SYNC_ENDED,
 		self::PAPERLESS_VERSION, self::PAPERLESS_API_VERSION, self::FAILURES, self::LAST_HEARTBEAT,
-		self::LAST_DRY_RUN, self::LAST_DRY_RUN_DOCUMENTS, self::CONNECTION_URL, self::CONNECTION_PASSED,
+		self::LAST_DRY_RUN, self::LAST_DRY_RUN_DOCUMENTS, self::CONNECTION_URL, self::CONNECTION_PASSED, self::LAST_QUEUED,
 	];
 
 	/** @psalm-suppress PossiblyUnusedMethod */
@@ -131,9 +140,11 @@ final class StatusService {
 
 	/**
 	 * A run by hand waits for its background job, which Nextcloud starts with its next background
-	 * jobs. The run says when it starts; until then, the status keeps the times of the last one.
+	 * jobs. The run says when it starts; until then, the status keeps the times of the last one, and
+	 * the time of the queueing, from which it tells a run that waits too long.
 	 */
 	public function queued(): void {
+		$this->appConfig->setValueInt(AppConstants::APP_ID, self::LAST_QUEUED, $this->timeFactory->getTime(), lazy: true);
 		$this->appConfig->setValueString(AppConstants::APP_ID, self::LAST_STATE, 'queued', lazy: true);
 	}
 
@@ -263,6 +274,13 @@ final class StatusService {
 		if (str_ends_with($state, 'running') && !$this->active()) {
 			$state = 'interrupted';
 		}
+		$lastQueued = $this->appConfig->getValueInt(AppConstants::APP_ID, self::LAST_QUEUED, 0, lazy: true);
+		// A run by hand that the background jobs have not started for a while, and that no other
+		// run holds back by its lock, waits for background jobs that don't run, or for a job that
+		// Nextcloud lost: the settings page and occ say so, with the last run of the background jobs.
+		if ($state === 'queued' && $this->timeFactory->getTime() - $lastQueued >= self::QUEUE_PATIENCE && !$this->active()) {
+			$state = 'stalled';
+		}
 
 		return [
 			'lastStarted' => $lastStarted,
@@ -279,6 +297,9 @@ final class StatusService {
 			'report' => $this->decode($this->appConfig->getValueString(AppConstants::APP_ID, self::LAST_REPORT, '{}', lazy: true)),
 			'paperlessVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_VERSION, '', lazy: true),
 			'paperlessApiVersion' => $this->appConfig->getValueString(AppConstants::APP_ID, self::PAPERLESS_API_VERSION, '', lazy: true),
+			'lastQueued' => $lastQueued,
+			// When the background jobs of Nextcloud last ran, as Nextcloud keeps it; 0 before the first.
+			'lastBackgroundJobs' => $this->appConfig->getValueInt('core', 'lastcron', 0),
 		];
 	}
 
@@ -383,7 +404,7 @@ final class StatusService {
 	/**
 	 * The status as the settings page shows it, with the time of the next scheduled run.
 	 *
-	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, nextRun: int|null}
+	 * @return array{lastStarted: int, lastCompleted: int, lastEnded: int, lastSuccess: int, state: string, summary: array<string, mixed>, error: string, errorRecord: array<string, mixed>, report: array<string, mixed>, paperlessVersion: string, paperlessApiVersion: string, lastQueued: int, lastBackgroundJobs: int, nextRun: int|null}
 	 */
 	public function overview(SyncConfig $config): array {
 		$status = $this->get();

@@ -392,14 +392,30 @@ final class ImportExecutor {
 	 * document that the task of the upload names is the upload's: another document with the content
 	 * of the file, which a search found, may be someone else's, so it stays as it is, and so does a
 	 * document that Paperless didn't name, which the report names as an error. When Paperless
-	 * refuses the owner, the upload stays pending, so that the next run asks again.
+	 * refuses the owner for a reason that may pass, the upload stays pending, so that the next run
+	 * asks again; a refusal that repeats for good, or one that lasts as long as a task may take,
+	 * ends the import as imported, as the document is in Paperless, with its owner as Paperless has
+	 * it, which the report names as an error of this run alone (#439).
 	 */
 	private function giveOwner(ImportSucceeded $action): void {
+		$path = $action->context->path;
 		if ($action->document === null || !$action->uploaded) {
-			$this->report->error(new RunError('Import %s: Paperless did not name the document that the upload created, so its owner stays as Paperless has it', [$action->context->path]), null, $action->context->path);
+			$this->report->error(new RunError('Import %s: Paperless did not name the document that the upload created, so its owner stays as Paperless has it', [$path]), null, $path);
 			return;
 		}
-		$this->paperless->setOwner($action->document, (int)$this->owner);
+		try {
+			$this->paperless->setOwner($action->document, (int)$this->owner);
+		} catch (\Throwable $exception) {
+			if (!PaperlessOwnerException::endsTheWait($exception, (int)($action->context->pending['submitted_at'] ?? 0), $this->now())) {
+				throw $exception;
+			}
+			$this->report->error(new RunError('Import %1$s: Paperless refused to change the owner of the document %2$s, which keeps the owner that Paperless gave it: %3$s', [$path, (string)$action->document, RunError::of($exception)]), null, $path);
+			$this->logger->warning('The document {document} of the inbox file {path} keeps the owner that Paperless gave it, as Paperless did not make the user of Paperless of the inbox its owner: {error}', [
+				'path' => $path,
+				'document' => $action->document,
+				'error' => SyncErrors::message($exception),
+			]);
+		}
 	}
 
 	/**

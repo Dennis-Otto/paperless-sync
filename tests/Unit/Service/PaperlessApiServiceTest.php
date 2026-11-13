@@ -23,6 +23,7 @@ use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\PaperlessVersionException;
@@ -995,22 +996,26 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame(self::URL . '/api/ui_settings/', $this->requests[0]['url']);
 	}
 
-	/** @return array<string, array{int, mixed, string}> the answer of Paperless and the message of the failure */
+	/** @return array<string, array{int, mixed, string, bool}> the answer of Paperless, the message of the failure and whether it repeats for good */
 	public static function refusedOwners(): array {
 		return [
-			'an account that may not change the document' => [403, ['detail' => 'Insufficient permissions.'], 'Paperless did not make the user 5 the owner of the document 77: HTTP 403: Insufficient permissions.'],
-			'an answer without a reason' => [502, '', 'Paperless did not make the user 5 the owner of the document 77: HTTP 502.'],
+			'an account that may not change the document' => [403, ['detail' => 'Insufficient permissions.'], 'Paperless did not make the user 5 the owner of the document 77: HTTP 403: Insufficient permissions.', true],
+			'an owner that Paperless does not take' => [400, ['owner' => ['Invalid pk "5" - object does not exist.']], 'Paperless did not make the user 5 the owner of the document 77: HTTP 400: owner: Invalid pk "5" - object does not exist.', true],
+			'an answer without a reason' => [502, '', 'Paperless did not make the user 5 the owner of the document 77: HTTP 502.', false],
 		];
 	}
 
+	/** A refusal that repeats for the same document, such as 403, tells itself from one that may pass, such as 502 (#439). */
 	#[DataProvider('refusedOwners')]
-	public function testAnOwnerThatPaperlessRefusesIsReportedWithItsReason(int $status, mixed $body, string $message): void {
+	public function testAnOwnerThatPaperlessRefusesIsReportedWithItsReason(int $status, mixed $body, string $message, bool $permanent): void {
 		$this->responses[] = [$status, $body];
 
-		$this->expectException(RuntimeException::class);
-		$this->expectExceptionMessage($message);
-
-		$this->service->setOwner(77, 5);
+		try {
+			$this->service->setOwner(77, 5);
+			self::fail('The refusal must throw.');
+		} catch (PaperlessOwnerException $exception) {
+			self::assertSame([$message, $status, $permanent], [$exception->getMessage(), $exception->statusCode, $exception->permanent()]);
+		}
 	}
 
 	/**
