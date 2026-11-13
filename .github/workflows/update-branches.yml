@@ -2,36 +2,38 @@ name: Update branches
 
 # The branch bot. main only takes pull requests that are up to date with it, and
 # auto-merge doesn't update a branch by itself. So only one pull request can merge
-# next, and each merge leaves the others behind again: bringing all of them up to
-# date after every merge ran the checks of every waiting pull request for the one
-# that merged. The bot keeps a line instead, the pull requests that wait for
-# auto-merge in the order in which it was turned on, and brings only the first one up
-# to date that can merge, as the release app, so that its checks run again and it
-# merges once they pass. While its checks run, the others wait; its merge, or a
-# required check of it that fails, starts the next run, and turning auto-merge on
-# starts one at once. A pull request whose required check failed waits for a fix and
-# leaves its place to the next one. One that conflicts with main gets the label
-# merge-conflict and one comment. The label goes once it no longer conflicts; the
-# comment stays for the history, so a later conflict brings back only the label. One
-# of a bot that builds its branch anew from main, the screenshot bot, the picture bot
-# or the issue assistant sync, gets the label and no comment, and the bot starts the
-# workflow of that bot once for each conflict (decision 0118). A
+# next, and each merge leaves the others behind again: bringing all of them up to date
+# after every merge ran the checks of every waiting pull request for the one that
+# merged. The bot keeps a line instead, the pull requests that wait for auto-merge in
+# the order in which it was turned on, and brings only the first one up to date that
+# can merge, as the release app, so that its checks run again and it merges once they
+# pass. While its checks run, the others wait; its merge starts the next run, and so
+# does a required check of it that fails for good, through the bots after the checks,
+# which start this workflow then and only then: GitHub would create a run here after
+# the end of every check, which skipped in all but a few (decision 0151). Turning
+# auto-merge on starts one at once. A pull request whose required check failed waits
+# for a fix and leaves its place to the next one. One that conflicts with main gets
+# the label merge-conflict and one comment. The label goes once it no longer
+# conflicts; the comment stays for the history, so a later conflict brings back only
+# the label. One of a bot that builds its branch anew from main, the screenshot bot,
+# the picture bot or the issue assistant sync, gets the label and no comment, and the
+# bot starts the workflow of that bot once for each conflict (decision 0118). A
 # request that GitHub refuses is a warning about that pull request, and the bot goes
-# on with the next one. The release bot keeps its own pull request current.
-# Renovate's pull requests take their place in the line as well, which spares them
-# the wait for its next run: Renovate commits as the release app too, so it still
-# takes the branch for its own; one that conflicts with main it builds anew itself.
-# A pull request from a fork takes its place as well, once its author allows edits by
-# maintainers; without that, or with a commit that the rules of main refuse for its
-# signature, it waits outside the line, and the summary says so. GitHub holds the runs
-# of each new head of a fork for an approval, so such a head isn't in flight: it waits
-# for a person and leaves its place to the next one, and the bot doesn't update it again
-# until someone approved. Only a head that the bot made itself, on top of commits that a
-# person approved, gets its runs approved by the bot, in the summary of the run, since
-# nothing new from the fork runs then (decision 0099).
-# Every merge leaves the runs of its pull request behind, and every update the runs of
-# the commit that it replaced: after the line, the bot cancels those that no open pull
-# request has as its head any more, as this job runs anyway (decision 0108).
+# on with the next one. The release bot keeps its own pull request current. Renovate's
+# pull requests take their place in the line as well, which spares them the wait for
+# its next run: Renovate commits as the release app too, so it still takes the branch
+# for its own; one that conflicts with main it builds anew itself. A pull request from
+# a fork takes its place as well, once its author allows edits by maintainers; without
+# that, or with a commit that the rules of main refuse for its signature, it waits
+# outside the line, and the summary says so. GitHub holds the runs of each new head of
+# a fork for an approval, so such a head isn't in flight: it waits for a person and
+# leaves its place to the next one, and the bot doesn't update it again until someone
+# approved. Only a head that the bot made itself, on top of commits that a person
+# approved, gets its runs approved by the bot, in the summary of the run, since
+# nothing new from the fork runs then (decision 0099). Every merge leaves the runs of
+# its pull request behind, and every update the runs of the commit that it replaced:
+# after the line, the bot cancels those that no open pull request has as its head any
+# more, as this job runs anyway (decision 0108).
 # The bot checks out main alone, for blueprint.py, which holds the logic, and runs
 # nothing of a pull request. https://github.com/Dennis-Otto/repo-blueprint
 
@@ -45,59 +47,103 @@ on:
   # [actions] in .github/repository.toml lists (decision 0138).
   pull_request_target:
     types: [auto_merge_enabled, auto_merge_disabled]
-  # A required check that fails moves the line on to the next pull request.
-  workflow_run:
-    # The checks of this repository, its end-to-end tests if a workflow of its own named Docker E2E runs them,
-    # and the workflows of its other tests that the answer test_workflows of the blueprint names.
-    # Then those of the other required checks and of the scanners, the same in every repository, and Renovate for the check of its rules where it runs in the repository.
-    workflows: [CI (php), Docker E2E, Visual check, CodeQL, Dependency review, Docs, Lint, Pull request title, Secret scan, Fuzzing, Links, OSV-Scanner, Workflow security]
-    types: [completed]
   # The schedule is only a safety net, for an event that GitHub lost and a pull
   # request whose fix passed its checks: every merge into main is a push of the
   # release app or of a person, and GitHub runs schedules as it can, often hours late.
   schedule:
     - cron: "50 */6 * * *"
+  # By hand, and by the bots after the checks when a required check of a pull request
+  # failed for good, which moves the line on to the next pull request: they name the
+  # run of that check, and the bot first asks whether GitHub started it.
   workflow_dispatch:
+    inputs:
+      after:
+        description: The run of a check of a pull request that failed for good and moves the line on, if one did
+        type: string
+        default: ""
+      attempt:
+        description: The attempt of that run
+        type: string
+        default: ""
 
 permissions: {}
 
 # The GitHub CLI of the jobs sends no telemetry to GitHub.
 env:
   GH_TELEMETRY: "false"
+  # Each call of its API asks for the version of the REST API that the steps are
+  # written for (decision 0125).
+  API_VERSION_HEADER: "X-GitHub-Api-Version: 2022-11-28"
+  # What every step of a bot here that calls GitHub runs first, with eval "$OUTAGE":
+  # one copy for every step, which needs no checkout, as a checkout fails in an outage
+  # too (decision 0155). GitHub answers a call now and then with an error of its own,
+  # a 5xx, or not in time, and for minutes in an outage, as on 8 and 9 November 2026:
+  # tried runs a call of gh again then, four times in all, 10, 20 and 40 seconds
+  # apart, and prints what it printed only once it worked; once runs a call that
+  # writes, such as a comment, only once, as GitHub may have done it before it
+  # failed. Any other error, such as a refusal, stops either at once; the last one
+  # stays in $RUNNER_TEMP/gh-errors, and given_up says whether it was GitHub's. When
+  # GitHub keeps failing, the trap ends the step with a notice instead of a failure:
+  # the next event or the bot-health bot catches up, and a person has nothing to do
+  # (decision 0136), and leaves $RUNNER_TEMP/github-sat-out for the steps after it,
+  # as a job that sat out an outage passed nothing. A step says in INSTEAD what it
+  # does instead, if it does more than nothing.
+  OUTAGE: |
+    outage="$RUNNER_TEMP/github-unavailable"
+    unavailable() {
+      local status=$?
+      if ((status)) && [[ -e "$outage" ]]; then
+        echo "::notice title=GitHub is unavailable::GitHub kept failing ($(head -n 1 "$RUNNER_TEMP/gh-errors")), as in an outage of GitHub (https://www.githubstatus.com), so ${INSTEAD:-the bot did nothing this time}; its next run catches up. Nothing to do for a person."
+        touch "$RUNNER_TEMP/github-sat-out"
+        exit 0
+      fi
+    }
+    trap unavailable EXIT
+    calls() {
+      local waits="$1" wait output
+      shift
+      rm -f "$outage"
+      for wait in $waits; do
+        if output="$("$@" 2>"$RUNNER_TEMP/gh-errors")"; then
+          printf '%s\n' "$output"
+          return 0
+        fi
+        if ! grep -qiE 'HTTP 5[0-9]{2}|timeout|timed out|connection reset|unexpected EOF' "$RUNNER_TEMP/gh-errors"; then
+          cat "$RUNNER_TEMP/gh-errors" >&2
+          return 1
+        fi
+        if ((wait == 0)); then
+          touch "$outage"
+          cat "$RUNNER_TEMP/gh-errors" >&2
+          return 1
+        fi
+        echo "GitHub failed, so gh tries again in $wait seconds: $(head -n 1 "$RUNNER_TEMP/gh-errors")" >&2
+        sleep "$wait"
+      done
+    }
+    tried() { calls "10 20 40 0" "$@"; }
+    once() { calls 0 "$@"; }
+    given_up() { [[ -e "$outage" ]]; }
 
 jobs:
   update:
     name: update branches
-    # Pull requests into main, also from forks, and the failures of their checks, also
-    # of those that run on pull_request_target, such as the title's. A fork's event only
-    # starts the bot, which reads the line from the API and runs nothing of the pull
-    # request. The bots after the checks run a failed test once more: only a failure that
-    # stays, at the second attempt, moves the line on; the other checks fail the same
-    # way again and move it on at once. The first run of a fork's head that was approved
-    # is its second attempt. A check of a fork that runs on pull_request_target starts
-    # nothing: GitHub holds no such run, so whoever edits a title could keep cancelling
-    # the bot. Every other event of a fork took a person first.
+    # Pull requests into main, also from forks. A fork's event only starts the bot,
+    # which reads the line from the API and runs nothing of the pull request; the job
+    # after the checks that starts it decides which failed checks move the line on.
     if: >-
       !github.event.repository.fork &&
       (github.event_name != 'pull_request_target' ||
-        github.event.pull_request.base.ref == github.event.repository.default_branch) &&
-      (github.event_name != 'workflow_run' ||
-        (contains(fromJSON('["pull_request", "pull_request_target"]'), github.event.workflow_run.event) &&
-          (github.event.workflow_run.head_repository.full_name == github.repository ||
-            github.event.workflow_run.event == 'pull_request') &&
-          contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion) &&
-          (github.event.workflow_run.conclusion != 'failure' ||
-            github.event.workflow_run.run_attempt > 1 ||
-            contains(fromJSON('["CodeQL", "Dependency review", "Docs", "Lint", "Pull request title", "Secret scan", "Fuzzing", "Links", "OSV-Scanner", "Workflow security"]'), github.event.workflow_run.name))))
-    # On the job, so that a run whose job skips, as after checks that passed, cancels
-    # no run that updates.
+        github.event.pull_request.base.ref == github.event.repository.default_branch)
+    # On the job, so that a run whose job skips, as for a pull request into another
+    # branch, cancels no run that updates.
     concurrency:
       group: update-branches
       cancel-in-progress: true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # The environment holds the private key of the release app; only main may use it.
-    # Every event of the workflow runs on main, pull_request_target and workflow_run too.
+    # Every event of the workflow runs on main, pull_request_target too.
     environment:
       name: release
       deployment: false
@@ -226,6 +272,7 @@ jobs:
           fi
       - name: Create a token of the release app
         id: app
+        continue-on-error: true
         if: steps.release-app.outputs.ready == 'true'
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
@@ -241,6 +288,19 @@ jobs:
           permission-pull-requests: write
           permission-statuses: read
           permission-workflows: write
+      # In an outage, GitHub fails the token of the app too, after its own three more
+      # tries: the bot sits it out with a notice, while a token that GitHub refuses as
+      # it answers fails the job (decision 0155).
+      - name: Tell an outage of GitHub from a refused token
+        if: steps.app.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          eval "$OUTAGE"
+          tried gh api --header "$API_VERSION_HEADER" "repos/$GH_REPO" --jq .full_name > /dev/null
+          echo "::error title=The release app gave no token::GitHub answers, but refused the token of the release app; the log of the step that asked for it has its answer. Most often the app isn't installed on this repository or lacks a permission that the bot asks for, or the secret RELEASE_AUTOMATION_PRIVATE_KEY of the environment release holds the key of another app. A short outage of GitHub that ended a moment ago looks the same: if none of these holds, the next run tells them apart."
+          exit 1
       # The default branch, also for pull_request_target, without the token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.app.outputs.token != ''
@@ -257,8 +317,8 @@ jobs:
           # The account whose merges are the updates of the bot.
           BOT_ACCOUNT: ${{ steps.app.outputs.app-slug }}[bot]
           # The run of a check whose end started the bot, if one did.
-          AFTER: ${{ github.event.workflow_run.id }}
-          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          AFTER: ${{ inputs.after }}
+          ATTEMPT: ${{ inputs.attempt }}
         run: |
           set -o pipefail
           # Repositories have the copy that the blueprint keeps current; the blueprint
@@ -277,8 +337,8 @@ jobs:
           # A check that GitHub couldn't start, as in its outage of 9 November 2026,
           # failed for no pull request: the line stays as it is (decision 0136).
           after=()
-          if [[ "$GITHUB_EVENT_NAME" == workflow_run ]]; then
-            after=(--after "$AFTER" --attempt "$ATTEMPT")
+          if [[ -n "$AFTER" ]]; then
+            after=(--after "$AFTER" --attempt "${ATTEMPT:-1}")
           fi
           python3 "$script" --repo "$GITHUB_REPOSITORY" next-branch "${only[@]}" "${after[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Wait until Harden-Runner has removed Docker
