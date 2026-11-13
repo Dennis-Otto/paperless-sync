@@ -87,7 +87,7 @@ final class ProviderTest extends TestCase {
 			],
 		], $event->getRichSubjectParameters());
 		self::assertSame(self::CLOUD . '/index.php/f/5', $event->getLink(), 'The entry opens the archive folder.');
-		self::assertSame(self::CLOUD . '/apps/paperless_sync/img/app.svg', $event->getIcon());
+		self::assertSame(self::CLOUD . '/apps/paperless_sync/img/app-dark.svg', $event->getIcon());
 	}
 
 	public function testRunInGerman(): void {

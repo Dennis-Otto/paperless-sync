@@ -35,6 +35,6 @@ final class AdminSection implements IIconSection {
 	}
 
 	public function getIcon(): string {
-		return $this->urlGenerator->imagePath(AppConstants::APP_ID, 'app.svg');
+		return $this->urlGenerator->imagePath(AppConstants::APP_ID, 'app-dark.svg');
 	}
 }

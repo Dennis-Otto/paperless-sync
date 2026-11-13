@@ -322,7 +322,7 @@ final class AdminSettingsTest extends TestCase {
 		self::assertSame($section->getID(), $settings->getSection());
 		self::assertSame(AppConstants::APP_ID, $section->getID());
 		self::assertSame('Paperless-Synchronisation', $section->getName());
-		self::assertSame('/apps/paperless_sync/img/app.svg', $section->getIcon());
+		self::assertSame('/apps/paperless_sync/img/app-dark.svg', $section->getIcon());
 		self::assertSame(55, $section->getPriority());
 		self::assertSame(55, $settings->getPriority());
 	}
