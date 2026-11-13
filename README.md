@@ -612,7 +612,7 @@ The preview and a dry-run take the switch of the page before you save. Turning i
 
 The archive mirrors every document that the account of the token may view in Paperless, but two kinds, which *3 · Structured archive* leaves out:
 
-- **Documents in the inbox of Paperless,** while *Skip Paperless inbox documents* is on, as it is by default, so that a document waits until it is finished.
+- **Documents in the inbox of Paperless,** those with one of its inbox tags, not the files of the [Nextcloud inbox](#nextcloud-inbox), while *Skip Paperless inbox documents* is on, as it is by default, so that a document waits until it is finished.
 - **Documents with an excluded tag,** one of *Additional excluded Paperless tags*, such as `Private`.
 
 **Only mirror documents with these tags** turns this around, for an archive of a part of Paperless, such as the documents that a family shares: with tags in the list, such as `Nextcloud`, the archive mirrors only the documents that have at least one of them, and leaves the others in Paperless alone. An excluded tag and the inbox still win, so a document tagged both `Nextcloud` and `Private` stays out. Empty, as it is by default, the list mirrors every document.
@@ -625,6 +625,8 @@ A run compares the names without regard to case, as for the excluded tags, and t
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-documents-the-archive-mirrors.dark.svg">
   <img src="docs/images/diagrams/which-documents-the-archive-mirrors.svg" alt="Which documents the archive mirrors: A run first checks that Paperless has every tag to mirror of the settings; without one of them, the export stops before a file changes. Then it asks three questions of every active document. A document in the inbox of Paperless, while the settings skip the inbox, stays out of the archive, and so does a document with an excluded tag. When the settings name tags to mirror, a document without any of them stays out as well. Every other document is mirrored. A document that stays out loses its copy in the archive, within the batch size.">
 </picture>
+
+**Archive version or original:** with *Prefer Paperless archive versions* on, as it is by default, the copy of a document is its archive version, the PDF that Paperless makes of it, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.
 
 ### Metadata next to the archive
 

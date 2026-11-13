@@ -188,12 +188,6 @@ description = "Protected release preparation"
 group = "release"
 
 [[label]]
-name = "skip-changelog"
-color = "ededed"
-description = "Leave out of the release notes"
-group = "release"
-
-[[label]]
 name = "dependencies"
 color = "0366d6"
 description = "Pull requests that update a dependency file"

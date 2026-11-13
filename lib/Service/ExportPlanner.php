@@ -310,7 +310,9 @@ final class ExportPlanner {
 	/**
 	 * A document in the trash of Paperless. Only a copy that is still there moves and counts, as for
 	 * missing documents. The keep policy and a copy that is gone, or was never exported, only mark
-	 * the document.
+	 * the document, and so does a copy in the deleted folder already, which missing scans moved
+	 * there before the document showed up in the trash: a second move would nest it in another
+	 * folder of a day.
 	 *
 	 * @param array<string, mixed> $document
 	 * @param array<string, int|string|null> $entry
@@ -326,7 +328,7 @@ final class ExportPlanner {
 			}
 			$deletedAt = $this->timestamp($document['deleted_at'] ?? null);
 			$values = ['state' => 'trash', 'missing_runs' => 0, 'last_seen' => $this->now(), 'trash_date' => $deletedAt, 'last_error' => null];
-			if ($this->config->trashMode === 'move' && $exists) {
+			if ($this->config->trashMode === 'move' && $exists && !$this->isDeleted($oldPath)) {
 				return $this->batch->fits(SyncBatch::WRITE)
 					? [new MoveToDeleted($context, $oldPath, $this->deletedPath($oldPath, $deletedAt), SyncReport::TYPE_TRASH, $values)]
 					: [new Skipped()];
@@ -554,6 +556,11 @@ final class ExportPlanner {
 		$day = (new \DateTimeImmutable('@' . $timestamp))->setTimezone($this->timeZones->of($this->config->targetUser))->format('Y-m-d');
 
 		return Paths::join($this->archiveRoot, $this->config->deletedFolder, $day, $relative);
+	}
+
+	/** Whether a copy is below the deleted folder of the archive already. */
+	private function isDeleted(string $path): bool {
+		return str_starts_with($path, Paths::join($this->archiveRoot, $this->config->deletedFolder) . '/');
 	}
 
 	/**

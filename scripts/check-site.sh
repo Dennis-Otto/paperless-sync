@@ -85,3 +85,48 @@ fi
 expect_broken "${website}guide.html" 'has no page guide.html'
 expect_broken "${website}use.html#configuration" 'use.html has no element with the id "configuration"'
 echo "The check of the addresses finds them in Markdown links and in tags, and reports a page that the website lacks and an anchor that its page lacks."
+
+# The home page in each language describes the picture of its social preview in its own
+# language, which .github/social-cards/preview.yml chooses by the locale of the page: the
+# German home page, de/index.html, in German, and twice the same text, for Open Graph and
+# for X. A screen reader reads the text where a link to the page is shared.
+image_alt() {
+  grep -o "<meta property=\"$2\" content=\"[^\"]*\"" "$1" | sed 's/.*content="//; s/"$//' || true
+}
+social_alt_in_language() {
+  local folder="$1" english german
+  english="$(image_alt "$folder/index.html" og:image:alt)"
+  german="$(image_alt "$folder/de/index.html" og:image:alt)"
+  if [[ -z "$english" || -z "$german" ]]; then
+    echo "The home pages lack the text of their social preview picture (og:image:alt): English \"$english\", German \"$german\"."
+    return 1
+  fi
+  if [[ "$german" == "$english" || "$german" != *' für '* ]]; then
+    echo "The German home page describes its social preview picture in English: \"$german\". Give .github/social-cards/preview.yml a German text for the locale de."
+    return 1
+  fi
+  if [[ "$(image_alt "$folder/de/index.html" twitter:image:alt)" != "$german" || "$(image_alt "$folder/index.html" twitter:image:alt)" != "$english" ]]; then
+    echo "The home pages describe their social preview picture differently for X (twitter:image:alt) than for Open Graph (og:image:alt)."
+    return 1
+  fi
+}
+# The social plugin of Material draws the previews only where CI is set, as on GitHub's
+# runners, since it needs the library Cairo (.github/mkdocs-blueprint.yml): a build of
+# scripts/check.sh on a computer has none, and the check docs of the CI checks them.
+if [[ -z "${CI:-}" ]] && ! grep -q '<meta property="og:image"' "$site/index.html"; then
+  echo "The website has no social previews, which only a build with CI set draws; the check docs of the CI checks their texts."
+else
+  social_alt_in_language "$site"
+  echo "The home pages describe their social preview picture in their own language."
+fi
+
+# And the check finds a German home page that describes its picture in English.
+mkdir -p "$sample/de"
+for page in "$sample/index.html" "$sample/de/index.html"; do
+  printf '<meta property="og:image:alt" content="Paperless Sync for Nextcloud" />\n<meta property="twitter:image:alt" content="Paperless Sync for Nextcloud" />\n' >"$page"
+done
+if output="$(social_alt_in_language "$sample")" || [[ "$output" != *'in English'* ]]; then
+  echo "The check of the social preview should report a German home page in English, but says: ${output:-nothing}"
+  exit 1
+fi
+echo "The check of the social preview reports a German home page that describes its picture in English."

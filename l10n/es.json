@@ -300,6 +300,8 @@
 		"Choose one of the options of \"File conflict policy\".": "Elige una de las opciones de “Política de conflictos de ficheros”.",
 		"Prefer Paperless archive versions": "Preferir las versiones de archivo de Paperless",
 		"Skip Paperless inbox documents": "Omitir los documentos de la bandeja de entrada de Paperless",
+		"The archive version is the PDF that Paperless makes of a document, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.": "La versión de archivo es el PDF que Paperless crea de un documento, con el texto que leyó su reconocimiento como una capa que se puede buscar y copiar. Desactivado, las copias son los originales tal como llegaron a Paperless: en sus propios tipos, como imágenes o documentos de oficina, y un escaneo sin capa de texto. Un documento sin versión de archivo llega como su original en cualquier caso.",
+		"The inbox here is that of Paperless, not the Nextcloud inbox below: a document with an inbox tag of Paperless waits until it is filed there and has lost the tag, and the next run then brings its copy.": "La bandeja de entrada aquí es la de Paperless, no la bandeja de entrada de Nextcloud de más abajo: un documento con una etiqueta de bandeja de entrada de Paperless espera hasta que se archiva allí y pierde la etiqueta, y la siguiente ejecución trae entonces su copia.",
 		"Additional excluded Paperless tags": "Etiquetas de Paperless excluidas adicionales",
 		"Excluded tags": "Etiquetas excluidas",
 		"Add a tag": "Añadir una etiqueta",

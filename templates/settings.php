@@ -426,13 +426,15 @@ $active = $state === 'queued' || str_ends_with($state, 'running');
 			</div>
 			<p id="paperless-sync-follow-storage-paths-hint" class="settings-hint"><?php p($l->t('A document with a storage path goes below the archive folder to the path of its template, as Paperless files it, with the marker [P{{ id }}] and its extension; the other documents follow the archive path template.')); ?> <?php p($l->t('A storage path whose template uses logic of Jinja, a filter or a variable that the path template does not know follows the archive path template too, and the report names it. Turning the switch on or off moves the copies, as a new template does.')); ?> <?php $help('storage-paths-of-paperless', $l->t('Storage paths of Paperless')); ?></p>
 			<div class="paperless-sync-switches paperless-sync-switches--inline">
-				<label><input data-setting="prefer_archive" type="checkbox" <?php if ($config->preferArchive) {
+				<label><input data-setting="prefer_archive" type="checkbox" aria-describedby="paperless-sync-prefer-archive-hint" <?php if ($config->preferArchive) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Prefer Paperless archive versions')); ?></span></label>
-				<label><input data-setting="skip_inbox" type="checkbox" <?php if ($config->skipInbox) {
+				<label><input data-setting="skip_inbox" type="checkbox" aria-describedby="paperless-sync-skip-inbox-hint" <?php if ($config->skipInbox) {
 					print_unescaped('checked');
 				} ?>> <span><?php p($l->t('Skip Paperless inbox documents')); ?></span></label>
 			</div>
+			<p id="paperless-sync-prefer-archive-hint" class="settings-hint"><?php p($l->t('The archive version is the PDF that Paperless makes of a document, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.')); ?> <?php $help('which-documents-the-archive-mirrors', $l->t('Which documents the archive mirrors')); ?></p>
+			<p id="paperless-sync-skip-inbox-hint" class="settings-hint"><?php p($l->t('The inbox here is that of Paperless, not the Nextcloud inbox below: a document with an inbox tag of Paperless waits until it is filed there and has lost the tag, and the next run then brings its copy.')); ?> <?php $help('which-documents-the-archive-mirrors', $l->t('Which documents the archive mirrors')); ?></p>
 			<?php $tagPicker(
 				'excluded_tags',
 				$config->excludedTags,

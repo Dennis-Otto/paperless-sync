@@ -641,7 +641,7 @@ Die Vorschau und ein Testlauf nehmen den Schalter der Seite schon vor dem Speich
 
 Das Archiv spiegelt jedes Dokument, das das Konto des Tokens in Paperless sehen darf, bis auf zwei Arten, die *3 · Strukturiertes Archiv* auslässt:
 
-- **Dokumente im Posteingang von Paperless,** solange *Paperless-Posteingangsdokumente überspringen* an ist, wie es das von Anfang an ist, damit ein Dokument wartet, bis es fertig ist.
+- **Dokumente im Posteingang von Paperless,** die mit einem seiner Posteingangs-Tags, nicht die Dateien des [Nextcloud-Eingangs](#nextcloud-eingang), solange *Paperless-Posteingangsdokumente überspringen* an ist, wie es das von Anfang an ist, damit ein Dokument wartet, bis es fertig ist.
 - **Dokumente mit einem ausgeschlossenen Tag,** einem der *Zusätzlich ausgeschlossenen Paperless-Tags*, etwa `Private`.
 
 **Nur Dokumente mit diesen Tags spiegeln** dreht das um, für ein Archiv eines Teils von Paperless, etwa der Dokumente, die eine Familie teilt: Mit Tags in der Liste, etwa `Nextcloud`, spiegelt das Archiv nur die Dokumente, die mindestens einen davon haben, und lässt die anderen in Paperless in Ruhe. Ein ausgeschlossener Tag und der Posteingang gehen weiter vor, sodass ein Dokument mit den Tags `Nextcloud` und `Private` draußen bleibt. Leer, wie sie es von Anfang an ist, spiegelt die Liste jedes Dokument.
@@ -654,6 +654,8 @@ Ein Lauf vergleicht die Namen ohne Rücksicht auf Groß- und Kleinschreibung, wi
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagrams/which-documents-the-archive-mirrors.de.dark.svg">
   <img src="docs/images/diagrams/which-documents-the-archive-mirrors.de.svg" alt="Welche Dokumente das Archiv spiegelt: Ein Lauf prüft zuerst, dass Paperless jeden Tag zum Spiegeln der Einstellungen hat; fehlt einer davon, hält der Export an, bevor sich eine Datei ändert. Dann stellt er jedem aktiven Dokument drei Fragen. Ein Dokument im Posteingang von Paperless, solange die Einstellungen den Posteingang überspringen, bleibt draußen, ebenso ein Dokument mit einem ausgeschlossenen Tag. Nennen die Einstellungen Tags zum Spiegeln, bleibt auch ein Dokument ohne jeden davon draußen. Jedes andere Dokument wird gespiegelt. Ein Dokument, das draußen bleibt, verliert seine Kopie im Archiv, im Rahmen der Batchgröße.">
 </picture>
+
+**Archivversion oder Original:** Mit *Paperless-Archivversionen bevorzugen* an, wie es das von Anfang an ist, ist die Kopie eines Dokuments seine Archivversion, das PDF, das Paperless aus ihm macht, mit dem Text seiner Texterkennung als Ebene, die sich durchsuchen und kopieren lässt. Ausgeschaltet sind die Kopien die Originale, wie sie zu Paperless kamen: in ihren eigenen Dateitypen, etwa Bilder oder Office-Dokumente, und ein Scan ohne Textebene. Ein Dokument ohne Archivversion kommt in jedem Fall als sein Original.
 
 <a id="metadata-next-to-the-archive"></a>
 

@@ -344,6 +344,8 @@
 		"Paths of the newest documents in the archive folder": "最新文档在归档文件夹中的路径",
 		"Prefer Paperless archive versions": "优先使用 Paperless 的归档版本",
 		"Skip Paperless inbox documents": "跳过 Paperless 收件箱中的文档",
+		"The archive version is the PDF that Paperless makes of a document, with the text that its recognition read as a layer that can be searched and copied. Turned off, the copies are the originals as they came to Paperless: in their own types, such as images or office documents, and a scan without a layer of text. A document without an archive version comes as its original either way.": "归档版本是 Paperless 从文档生成的 PDF，带有其文字识别读出的文本层，可以搜索和复制。关闭时，副本为传入 Paperless 时的原始文件：保持其自身的类型，例如图片或办公文档，扫描件则没有文本层。没有归档版本的文档无论如何都以原始文件传来。",
+		"The inbox here is that of Paperless, not the Nextcloud inbox below: a document with an inbox tag of Paperless waits until it is filed there and has lost the tag, and the next run then brings its copy.": "这里的收件箱指 Paperless 的收件箱，而不是下方的 Nextcloud 收件箱：带有 Paperless 收件箱标签的文档会等待，直到它在那里归档并去掉该标签，之后下一次运行才会带来它的副本。",
 		"Additional excluded Paperless tags": "额外排除的 Paperless 标签",
 		"Excluded tags": "排除的标签",
 		"Pick a tag of Paperless, or type its name and press Enter; a tag that Paperless does not have yet works too.": "选择一个 Paperless 标签，或输入其名称后按回车键；Paperless 中尚不存在的标签也可以。",
