@@ -628,8 +628,8 @@ elif mode == "activity-export":
         raise AssertionError(f"activity-export: the run by hand names no author: {entry!r}")
     if entry.get("object_type") != "files" or entry.get("object_name") != "Documents/Paperless/Archive":
         raise AssertionError(f"activity-export: the entry does not belong to the archive folder: {entry!r}")
-    if not entry.get("icon", "").endswith("/img/app.svg"):
-        raise AssertionError(f"activity-export: the entry has no icon of the app: {entry!r}")
+    if not entry.get("icon", "").endswith("/img/app-dark.svg"):
+        raise AssertionError(f"activity-export: the entry has not the black icon of the app, img/app-dark.svg: {entry!r}")
 elif mode == "activity-job":
     entry = payload["ocs"]["data"][0]
     if entry.get("user") != "" or not str(entry.get("subject", "")).startswith("Paperless Sync added or updated 1 document: "):
