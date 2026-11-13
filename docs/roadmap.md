@@ -6,17 +6,13 @@ What Paperless Sync intends to do in the next twelve months, until October 2027,
 
 ## The next twelve months
 
-The app does what it was built for: a mirror of Paperless-ngx in Nextcloud and an inbox into Paperless. Two larger pieces of work are planned:
+The app does what it was built for: a mirror of Paperless-ngx in Nextcloud and an inbox into Paperless. No larger piece of work is planned: the year is about keeping it working and safe, and about the words of its languages.
 
-- **More languages** ([#316](https://github.com/Dennis-Otto/paperless-sync/issues/316)). French and Spanish after English and German, with the default names of the folders in each, and a check that keeps every language complete, so that a translation by a native speaker is easy to add. The website stays in English and German.
-- **A demo to try it.** A Docker setup that starts Nextcloud, Paperless-ngx and the app with sample documents, on ports of your own machine only, so that you can look at the app without touching your own Nextcloud or Paperless.
-
-Beyond these, the year is about keeping it working and safe:
-
-- **Every new major version of Nextcloud.** The upstream bot raises `max-version` in `appinfo/info.xml` once the end-to-end tests pass against the new version, and the app follows the changes of Nextcloud's API.
+- **Every new major version of Nextcloud,** Nextcloud 36 next. Every week, the end-to-end tests run against the coming version as well and open an issue when it breaks the app, so that the app follows the changes of Nextcloud's API before the release; the upstream bot raises `max-version` in `appinfo/info.xml` once the tests pass against the released version.
 - **Changes of the Paperless-ngx API.** A change that breaks the synchronization is fixed first, with a test that keeps it fixed.
 - **Fixes and security.** Reported bugs and vulnerabilities come before anything new; [SECURITY.md](https://github.com/Dennis-Otto/paperless-sync/blob/main/SECURITY.md) has the times.
 - **Current dependencies and tooling,** through the update bots and the [repository blueprint](https://github.com/Dennis-Otto/repo-blueprint).
+- **Translations read by native speakers.** The French, Spanish, Dutch and Chinese texts, and the formal German, were drafted with the help of an AI and wait for native speakers to read them; a correction, or a language that the app doesn't speak yet, is welcome, as [Translate Paperless Sync](development.md#translate-paperless-sync) shows. The website stays in English and German.
 
 Feature requests with the most reactions are considered next, in that order: anything that breaks for users first, then what makes the synchronization safer, then the rest.
 
@@ -31,6 +27,10 @@ The larger pieces of work of the recent releases, and those that `main` holds fo
 - **A first run that goes well:** [*Getting started*](guide.md#getting-started-in-the-settings) in the settings and [the account of the app](guide.md#the-account-of-the-app) in one step.
 - **For the people who use and run it:** [a page for those who use the archive](use.md), [a note in Files](use.md#what-edits-renames-and-deletions-do) that says what a folder of the app does, and [settings delegated to a group](guide.md#delegating-the-settings).
 - **Each user their own documents** ([#84](https://github.com/Dennis-Otto/paperless-sync/issues/84)): with [per-user ownership](guide.md#per-user-ownership), each user of Nextcloud gets the documents that their user of Paperless owns, through the one connection of the administrator ([decision 0025](decisions/0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md)), and, if the administrator chooses it, [a copy of those that Paperless shares with them](guide.md#documents-that-paperless-shares) ([decision 0033](decisions/0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md)).
+- **Seven languages** ([#316](https://github.com/Dennis-Otto/paperless-sync/issues/316)): English, German with *du* and with *Sie*, French, Spanish, Dutch, Simplified Chinese and Traditional Chinese, each with [the default names of its folders](guide.md#folder-names), and a check, `scripts/check-l10n.mjs`, that keeps every language complete, so that [a translation by a native speaker](development.md#translate-paperless-sync) is easy to add.
+- **A demo to try it:** [one command of Docker](index.md#try-it) starts Nextcloud, Paperless-ngx and the app with sample documents, on ports of your own machine only, so that you can look at the app without touching your own Nextcloud or Paperless.
+- **The archive as Paperless files it:** each document can follow [its storage path of Paperless](guide.md#storage-paths-of-paperless) instead of the path template.
+- **Tags as a key to the archive:** the administrator sets [which tags of Paperless a user may see](guide.md#tags-that-a-user-may-see), and that user gets every document with one of them in an archive of their own.
 
 ## Not planned
 

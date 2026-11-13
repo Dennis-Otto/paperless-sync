@@ -351,11 +351,13 @@ twice, another number of forms for a plural than its `pluralForm` names or a for
 differs, names a label in quotes in other words than the label, writes a dash of Chinese as one `—` or with spaces
 or a word of Simplified Chinese, such as 日誌, in Traditional Chinese, or differs from its
 copy for the browser, such as `l10n/fr.js`, a variant of a language, such as `l10n/de_DE.json`, names a folder
-otherwise than its language, `l10n/de.json`, or `appinfo/info.xml` has no summary or description in its language."""
+otherwise than its language, `l10n/de.json`, or `appinfo/info.xml` has no summary or description in its language.
+*Plans of the roadmap*: the section *The next twelve months* of `docs/roadmap.md` links an issue
+that GitHub knows as closed, so the roadmap plans what has shipped or was given up."""
 why = """These checks keep what only this app has in step: the end-to-end tests with
 their browser and their rules, the scripts free of downloads that run unchecked, which
 would fail the workflow Findings on `main`, the website, the README and its German twin
-with the versions of `appinfo/info.xml`, the labels of pull requests, the explanations of
+with the versions of `appinfo/info.xml`, the roadmap with what has shipped, the labels of pull requests, the explanations of
 the checks, the package of a release and the German words of the app."""
 fix = """The message names the file and what to change: keep the image of Playwright and
 playwright-core at one version, leave the pin of krankerl to `.github/workflows/ci.yml`,
@@ -365,7 +367,8 @@ samples (`E2E_PLAN=1` prints the runs of a shard), let `tests/e2e/packages.sh` t
 of `E2E_RELEASE_FILE` without a download of its own, save a download into a file with `curl --output` and give that file to the
 program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
 `appinfo/info.xml` rather than in the text, give the three descriptions the same
-words, follow the English outline in the German twin, give a new file an area, explain
+words, follow the English outline in the German twin, move a planned issue of `docs/roadmap.md`
+that is closed to *Done*, with its link into the guide, or drop it, give a new file an area, explain
 a new check, fix `tests/e2e/assert_upgrade.py` or its samples in
 `tests/e2e/test_assert_upgrade.py` until `python3 tests/e2e/test_assert_upgrade.py` passes,
 fix `tests/e2e/failure.py` or its samples in `tests/e2e/test_failure.py` until
