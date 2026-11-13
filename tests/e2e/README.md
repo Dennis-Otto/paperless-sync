@@ -112,7 +112,7 @@ A run without either variable runs everything, which is what the CI does: `scrip
 | `pages` | what a new installation shows: the form of the settings with its routes, the getting-started checklist, the setup check and the navigation |
 | `connection` | the setting for a Paperless in the local network, the connection checklist of accounts with too few permissions and of a URL that redirects, and the save |
 | `dry-run` | dry-runs on the settings page and with `occ`, the preview of the path template and settings that are not saved |
-| `export` | *Synchronize now* as a background job, the first export and its entry in the Activity stream |
+| `export` | *Synchronize now* as a background job, the first export and its entry in the Activity stream, and the temporary files that earlier versions left in the archive, which the first run removes |
 | `worker` | a worker of Nextcloud that keeps running, whose next run of *Synchronize now* takes the settings saved since its last one |
 | `moves` | moves of the metadata alone, with the SHA-256 and the MD5 checksums of Paperless, and a file that keeps its ID |
 | `storage-paths` | a document that follows the template of its storage path in Paperless, in a dry-run and a run, and one with logic of Jinja that keeps the path template and is named in the report |

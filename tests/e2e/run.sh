@@ -1105,10 +1105,35 @@ scenario_dry_run() {
 # "Synchronize now" queues the run as a background job and answers at once, with the status that
 # the page follows; the worker of Nextcloud runs the job here, as cron does on a server.
 scenario_export() {
+	# The app up to 1.9.0 left the temporary file of each new file that Nextcloud 33.0.11, 34.0.6,
+	# 35.0.3 and newer refused to move into place (#490), hidden and out of the file cache. The
+	# first run removes such files from the archive and leaves every other file alone. Only local
+	# storage keeps a file that Nextcloud doesn't know of.
+	local archive_dir='/var/www/html/data/sync-target/files/Documents/Paperless/Archive' leftovers
+	if [[ "${E2E_OBJECTSTORE}" == local ]]; then
+		# The shell of the container gets the folder as its argument.
+		# shellcheck disable=SC2016
+		"${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" sh -c '
+			mkdir -p "$1/Example GmbH" &&
+			printf partial > "$1/Example GmbH/.2026-08-20 - Old [P99].pdf.paperless-0123456789abcdef.part" &&
+			printf other > "$1/Example GmbH/.notes.part"' sh "${archive_dir}"
+	fi
 	synchronize_now "${TMP_DIR}/queued.json"
 	assert_dav_missing sync-target "${INITIAL_PATH}"
 	occ background-job:worker --once 'OCA\PaperlessSync\Cron\ManualSyncJob' >/dev/null
 	assert_status_soon status-export "${TMP_DIR}/export.json"
+	if [[ "${E2E_OBJECTSTORE}" == local ]]; then
+		# Neither a leftover of an earlier run nor the temporary file of the new copy stays.
+		leftovers="$("${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" find "${archive_dir}" -name '.*.paperless-*.part')"
+		if [[ -n "${leftovers}" ]]; then
+			echo "The export left temporary files in the archive: ${leftovers}" >&2
+			exit 1
+		fi
+		if ! "${DOCKER_BIN}" exec --user www-data "${NEXTCLOUD_CONTAINER}" rm "${archive_dir}/Example GmbH/.notes.part"; then
+			echo "The export removed .notes.part, a file that no run of the app wrote." >&2
+			exit 1
+		fi
+	fi
 	# The first run succeeded while the schedule is off, which a step still asks for.
 	assert_status_soon getting-started "${TMP_DIR}/getting-started-first-run.json" 'done done done next done'
 	assert_dav_file sync-target "${INITIAL_PATH}" 'Synthetic Paperless archive document P123.'
