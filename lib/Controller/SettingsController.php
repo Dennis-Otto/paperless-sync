@@ -33,6 +33,12 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IL10N;
 use OCP\IRequest;
 
+/**
+ * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
+ * the tag below makes them the entry points from which Psalm looks for unused code.
+ *
+ * @psalm-api
+ */
 final class SettingsController extends Controller {
 	/** The newest documents of Paperless whose paths the preview of the path template shows. */
 	public const PREVIEW_DOCUMENTS = 5;

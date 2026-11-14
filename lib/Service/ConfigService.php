@@ -701,7 +701,7 @@ final class ConfigService {
 			throw new InvalidSettingException('Choose one of the options of "File conflict policy".', [], 'conflict_mode');
 		}
 		foreach (['empty_correspondent', 'empty_document_type', 'empty_date', 'untitled'] as $key) {
-			$values[$key] = $this->pathTemplate->cleanComponent($values[$key] ?? '', 'Unknown');
+			$values[$key] = $this->pathTemplate->cleanComponent((string)($values[$key] ?? ''), 'Unknown');
 		}
 
 		return $values;
