@@ -151,6 +151,13 @@ final class ConfigServiceTest extends TestCase {
 		self::assertSame('dennis', $this->service->validate(['target_user' => 'DENNIS'])->targetUser, 'A check of unsaved settings takes the same ID.');
 	}
 
+	/** A name for what a document lacks is text: a number in a request is its digits, a list the default. */
+	public function testANameForWhatADocumentLacksIsText(): void {
+		$config = $this->service->validate(['empty_date' => 2026, 'untitled' => ['Untitled']] + self::validSettings(), 'secret-token');
+
+		self::assertSame(['2026', 'Unknown'], [$config->emptyDate, $config->untitled]);
+	}
+
 	/**
 	 * A save refuses a new target user that Nextcloud doesn't have, but keeps the saved one when it
 	 * is gone since, so that a schedule can always be paused; the test of the connection names it.

@@ -38,6 +38,11 @@ use OCP\Security\Bruteforce\IThrottler;
  * delays, until it refuses the address for a while, as for the webhook. It answers with the health
  * alone: no error of a run, which may name paths and documents, no counts and no user of Nextcloud.
  * docs/security.md has the whole threat model.
+ *
+ * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
+ * the tag below makes them the entry points from which Psalm looks for unused code.
+ *
+ * @psalm-api
  */
 final class HealthController extends Controller {
 	/** The action under which Nextcloud counts and delays the calls with a wrong token. */

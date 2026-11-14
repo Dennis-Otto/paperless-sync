@@ -42,6 +42,11 @@ use OCP\Security\Bruteforce\IThrottler;
  * document: what the app does with it, it reads from Paperless with its own token, by the rules
  * of a run, so that a caller with the secret can make the app mirror a document of Paperless
  * sooner, and nothing else. docs/security.md has the whole threat model.
+ *
+ * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
+ * the tag below makes them the entry points from which Psalm looks for unused code.
+ *
+ * @psalm-api
  */
 final class WebhookController extends Controller {
 	/** The action under which Nextcloud counts and delays the calls with a wrong secret. */

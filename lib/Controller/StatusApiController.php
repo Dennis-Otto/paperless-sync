@@ -22,6 +22,11 @@ use OCP\IRequest;
  * Assistant, at /ocs/v2.php/apps/paperless_sync/api/v1/status. Only administrators may read it,
  * as every route of the app that doesn't say otherwise; HealthController gives a monitor the health
  * alone, with a token of its own.
+ *
+ * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
+ * the tag below makes them the entry points from which Psalm looks for unused code.
+ *
+ * @psalm-api
  */
 final class StatusApiController extends OCSController {
 	/** @psalm-suppress PossiblyUnusedMethod */

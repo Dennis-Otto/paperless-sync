@@ -25,6 +25,11 @@ use OCP\IRequest;
  * The shares of the target user that show a user with tags more than their tags, under "Tags that
  * a user may see" of the settings page, for the saved settings: the list, and their removal, which
  * only a click of an administrator asks for, with the password confirmed, as it can't be undone.
+ *
+ * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
+ * the tag below makes them the entry points from which Psalm looks for unused code.
+ *
+ * @psalm-api
  */
 final class TagSharesController extends Controller {
 	/** @psalm-suppress PossiblyUnusedMethod */

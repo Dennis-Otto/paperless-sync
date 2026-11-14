@@ -701,7 +701,7 @@ final class ConfigService {
 			throw new InvalidSettingException('Choose one of the options of "File conflict policy".', [], 'conflict_mode');
 		}
 		foreach (['empty_correspondent', 'empty_document_type', 'empty_date', 'untitled'] as $key) {
-			$values[$key] = $this->pathTemplate->cleanComponent($values[$key] ?? '', 'Unknown');
+			$values[$key] = $this->pathTemplate->cleanComponent(self::scalarString($values[$key] ?? ''), 'Unknown');
 		}
 
 		return $values;
@@ -822,6 +822,14 @@ final class ConfigService {
 	/** The value when it is from $minimum to $maximum, or else null. */
 	private static function within(int $value, int $minimum, int $maximum): ?int {
 		return $value >= $minimum && $value <= $maximum ? $value : null;
+	}
+
+	/**
+	 * A setting from a request as text: a number as its digits, a list or an object as nothing,
+	 * which takes the default name then.
+	 */
+	private static function scalarString(mixed $value): string {
+		return is_scalar($value) ? (string)$value : '';
 	}
 
 	private function storageKey(string $key): string {
