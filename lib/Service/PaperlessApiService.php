@@ -1370,7 +1370,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if ($this->connection->url === '' || $token === '') {
 			throw new UnexpectedValueException('Paperless is not configured.');
 		}
-		$url = rtrim($this->connection->url, '/') . '/' . ltrim($path, '/');
+		$url = self::server($this->connection->url) . '/' . ltrim($path, '/');
 		$options['headers'] = $this->headersForToken($token);
 		$followsRedirects = isset($options['allow_redirects']) && $options['allow_redirects'] !== false;
 		if (!$followsRedirects) {
@@ -1482,6 +1482,25 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		if (!$this->remoteHostValidator->isValid($host)) {
 			throw new LocalServerException('Host "' . $host . '" violates local access rules');
 		}
+	}
+
+	/**
+	 * The Paperless URL of the connection without a trailing slash, before the path of a request,
+	 * which a slash keeps from changing the server.
+	 *
+	 * Psalm's taint analysis ends here the paths from a request to the HTTP client of Nextcloud:
+	 * the server that Nextcloud talks to is the one an administrator chose. Only an administrator
+	 * reaches the settings, after confirming the password; ConfigService::normalizeUrl() allows
+	 * http and https only, and no credentials, query or fragment; a stored token is only sent to
+	 * the origin that it was saved for; and Nextcloud refuses an address of the local network
+	 * unless the administrator allowed it. Psalm 7 follows the settings of a request through the
+	 * array of all of them and through new SyncConfig(...$values), so the URL looks tainted by
+	 * every setting; the escape is here, where every request takes the URL, not in normalizeUrl().
+	 *
+	 * @psalm-taint-escape ssrf
+	 */
+	private static function server(string $url): string {
+		return rtrim($url, '/');
 	}
 
 	/**
