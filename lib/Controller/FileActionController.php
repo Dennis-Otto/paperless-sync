@@ -26,11 +26,6 @@ use OCP\IUserSession;
  * the members of the group of the setting, as the upload uses the token of the app. It queues the
  * files, and the answer says how many and what happens next; SendService uploads them in the
  * background and a notification tells the sender how each import ended.
- *
- * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
- * the tag below makes them the entry points from which Psalm looks for unused code.
- *
- * @psalm-api
  */
 final class FileActionController extends Controller {
 	/** The clicks of a user in a minute at most, each of which queues up to a batch of files. */
