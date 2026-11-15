@@ -32,12 +32,6 @@ use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\Lock\LockedException;
 
-/**
- * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
- * the tag below makes them the entry points from which Psalm looks for unused code.
- *
- * @psalm-api
- */
 final class SyncController extends Controller {
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(

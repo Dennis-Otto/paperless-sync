@@ -24,11 +24,6 @@ use OCP\IUserManager;
  * groups. The provisioning API of Nextcloud answers these questions only for its administrators,
  * and tells a delegated group that a user who exists doesn't, so the page asks here. The answers
  * hold what a picker shows and no more, so no e-mail address or quota (decision 0035).
- *
- * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
- * the tag below makes them the entry points from which Psalm looks for unused code.
- *
- * @psalm-api
  */
 final class DirectoryController extends Controller {
 	/** The most users or groups that a search answers: what the list of a picker shows. */

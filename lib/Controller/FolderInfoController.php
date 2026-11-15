@@ -22,11 +22,6 @@ use OCP\IUserSession;
 /**
  * The note above the list of Files in a folder of the app, for every user of Files: which folders
  * have one for the user who asks, never for another, and which kinds of it they hid.
- *
- * Nextcloud calls the actions by the attributes of their routes, which Psalm doesn't follow, so
- * the tag below makes them the entry points from which Psalm looks for unused code.
- *
- * @psalm-api
  */
 final class FolderInfoController extends Controller {
 	/** The clicks of a user in a minute at most, on the buttons that hide a note and bring it back. */
