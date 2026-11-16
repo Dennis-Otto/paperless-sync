@@ -27,7 +27,7 @@ services:
   # Makes the password of the accounts and the key of Paperless on the first start.
   secrets:
     <<: *python
-    image: python:3.14-alpine@sha256:5862d971d1f0ae26b258cefa4e893556b1d3aba81bd2ff30888704ad378bab67
+    image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
     command: ["python", "/demo/init.py", "secrets"]
     volumes:
       # :z lets a system with SELinux share the folder with the container.
@@ -35,7 +35,7 @@ services:
       - secrets:/secrets
 
   redis:
-    image: redis:8.10.2-alpine@sha256:9f8d2d789b9a1d1e3f283f979aa9cbf393373806472e1ccd460e2f9c869b833b
+    image: redis:8.10.3-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     attach: false
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -46,7 +46,7 @@ services:
   # The tables of Nextcloud. Its cron, its worker and its web server work side by side, and
   # SQLite would answer one of them with "database is locked" now and then.
   database:
-    image: postgres:17.11-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    image: postgres:17.12-alpine@sha256:a77aa70e641402a21411b92b721c58d10f23b50ae5fdd2333efd22d166e1e5f7
     attach: false
     depends_on:
       secrets:
@@ -107,7 +107,7 @@ services:
       retries: 5
 
   nextcloud:
-    image: nextcloud:35.0.2-apache@sha256:786c102155d2717ba0f53a62b3fdd7a1354edc48e800b94dbe32294d9a5752a2
+    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
     attach: false
     network_mode: service:paperless
     depends_on:
@@ -137,7 +137,7 @@ services:
 
   # The system cron of Nextcloud, which starts the scheduled runs of the app.
   cron:
-    image: nextcloud:35.0.2-apache@sha256:786c102155d2717ba0f53a62b3fdd7a1354edc48e800b94dbe32294d9a5752a2
+    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
     attach: false
     init: true
     network_mode: service:paperless
@@ -151,7 +151,7 @@ services:
   # Runs "Synchronize now" of the settings within seconds, instead of within five minutes of the
   # cron. It keeps running and reads the settings anew for each job, since 1.5.1 (#323).
   worker:
-    image: nextcloud:35.0.2-apache@sha256:786c102155d2717ba0f53a62b3fdd7a1354edc48e800b94dbe32294d9a5752a2
+    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
     attach: false
     init: true
     network_mode: service:paperless
@@ -171,7 +171,7 @@ services:
   # Fills Paperless, connects the app and prints where everything is. It says each step.
   init:
     <<: *python
-    image: python:3.14-alpine@sha256:5862d971d1f0ae26b258cefa4e893556b1d3aba81bd2ff30888704ad378bab67
+    image: python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
     network_mode: service:paperless
     command: ["python", "/demo/init.py", "run"]
     depends_on:
