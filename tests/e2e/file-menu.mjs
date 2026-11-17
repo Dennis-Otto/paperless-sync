@@ -23,9 +23,15 @@ export const LAST = 30_000
 // Opens a menu with open(), a click that opens it, and waits for its first item. A click that
 // opens nothing within settle ms is made again, up to attempts times; the last one has last ms,
 // and its timeout is the error of a menu that never opens. Any other error ends it at once.
+// A menu that opened late, after its wait ran out, is left open: the button of a row toggles
+// its menu, so one more click would close it again.
 export async function openMenu(page, open, { attempts = ATTEMPTS, settle = SETTLE, last = LAST } = {}) {
 	const item = page.getByRole('menuitem').first()
+	const opened = () => item.isVisible().catch(() => false)
 	for (let attempt = 1; attempt < attempts; attempt++) {
+		if (attempt > 1 && (await opened())) {
+			return
+		}
 		await open()
 		try {
 			await item.waitFor({ timeout: settle })
@@ -35,6 +41,9 @@ export async function openMenu(page, open, { attempts = ATTEMPTS, settle = SETTL
 				throw error
 			}
 		}
+	}
+	if (attempts > 1 && (await opened())) {
+		return
 	}
 	await open()
 	await item.waitFor({ timeout: last })

@@ -3,8 +3,8 @@
 
 // The menu of the actions of a file in the checks in the browser, which scripts/check-project.sh
 // runs with node --test: a click that Files of Nextcloud 36 drops right after Escape closed a
-// menu fails the check no more (#515), a menu that never opens still does, and no check opens
-// or closes the menu of a file on its own.
+// menu fails the check no more (#515), a menu that never opens still does, and no check but
+// screenshots.mjs waits for an item of a menu on its own.
 
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -17,9 +17,17 @@ class TimeoutError extends Error {
 
 // Files with a menu that the first `dropped` clicks don't open, as Nextcloud 36 at times does
 // right after Escape, and that a click on its button closes when it is open.
-function files({ dropped = 0, error } = {}) {
-	const state = { open: false, clicks: 0, escapes: 0, waits: [] }
+// With `late`, a click opens the menu only after the wait for it ran out, as on a slow runner.
+function files({ dropped = 0, error, late = false } = {}) {
+	const state = { open: false, clicks: 0, escapes: 0, waits: [], pending: false }
 	const item = {
+		async isVisible() {
+			if (state.pending) {
+				state.pending = false
+				state.open = true
+			}
+			return state.open
+		},
 		async waitFor({ timeout, state: wanted = 'visible' } = {}) {
 			state.waits.push({ timeout, wanted })
 			if (error) {
@@ -46,7 +54,11 @@ function files({ dropped = 0, error } = {}) {
 	const click = async () => {
 		state.clicks++
 		if (state.clicks > dropped) {
-			state.open = !state.open
+			if (late && !state.open) {
+				state.pending = true
+			} else {
+				state.open = !state.open
+			}
 		}
 	}
 	return { page, click, state }
@@ -72,6 +84,20 @@ test('the last click has the full time, and a menu that never opens fails the ch
 	await assert.rejects(openMenu(page, click), { name: 'TimeoutError' })
 	assert.equal(state.clicks, ATTEMPTS)
 	assert.deepEqual(state.waits.map(({ timeout }) => timeout), [...Array(ATTEMPTS - 1).fill(SETTLE), LAST])
+})
+
+test('a menu that opens after its wait ran out is not clicked shut again', async () => {
+	const { page, click, state } = files({ late: true })
+	await openMenu(page, click)
+	assert.equal(state.clicks, 1)
+	assert.equal(state.open, true)
+})
+
+test('a menu that opens late after the next to last click is not clicked shut either', async () => {
+	const { page, click, state } = files({ dropped: ATTEMPTS - 2, late: true })
+	await openMenu(page, click)
+	assert.equal(state.clicks, ATTEMPTS - 1)
+	assert.equal(state.open, true)
 })
 
 test('the menu opens on the last of the clicks', async () => {
@@ -104,10 +130,14 @@ test('Escape closes the menu, and closeMenu() waits until its items are gone', a
 	assert.deepEqual(state.waits.at(-1), { timeout: undefined, wanted: 'detached' })
 })
 
-test('no check in the browser opens or closes the menu of a file on its own', () => {
+// screenshots.mjs opens each menu once, on a page of its own and never right after Escape, which
+// is where Files drops the click, and it needs the item that it names for its picture.
+const EXEMPT = new Set(['file-menu.mjs', 'screenshots.mjs'])
+
+test('no check in the browser waits for an item of a menu on its own', () => {
 	const folder = new URL('.', import.meta.url)
-	const scripts = readdirSync(folder).filter((name) => name.endsWith('.mjs') && !name.endsWith('.test.mjs') && name !== 'file-menu.mjs')
-	const own = scripts.filter((name) => /getByRole\('menuitem'\)\.first\(\)\.waitFor\(/.test(readFileSync(new URL(name, folder), 'utf8')))
+	const scripts = readdirSync(folder).filter((name) => name.endsWith('.mjs') && !name.endsWith('.test.mjs') && !EXEMPT.has(name))
+	const own = scripts.filter((name) => /getByRole\('menuitem'[^;\n]*\.waitFor\(/.test(readFileSync(new URL(name, folder), 'utf8')))
 	assert.deepEqual(own, [], 'Wait for the menu of a file with openMenu() and closeMenu() of tests/e2e/file-menu.mjs.')
 	for (const name of ['accessibility.mjs', 'files.mjs']) {
 		assert.match(readFileSync(new URL(name, folder), 'utf8'), /from '\.\/file-menu\.mjs'/, `${name} opens the menu of a file with tests/e2e/file-menu.mjs.`)
