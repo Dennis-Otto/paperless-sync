@@ -299,7 +299,10 @@ doesn't empty the folder of `E2E_DATA_FOLDER` after its `down`, so a second run 
 would fail to install. *The health checks of the end-to-end tests*: a health
 check of a Compose file of `tests/e2e/` has no `start_interval`, an `interval` below 30 s,
 which would take the processors of the runner from the tests while its service runs, or
-fewer than two `retries`, which would fail a run on one late answer.
+fewer than two `retries`, which would fail a run on one late answer. *The database in memory
+of the end-to-end tests*: `tests/e2e/compose.pgsql.yaml` keeps another folder of its
+container than /var/lib/postgresql in memory, such as /var/lib/postgresql/data, where PostgreSQL
+18 and newer refuse to start.
 *Downloads that a script runs*: a pipe of a shell script
 hands a download to a program, such as `curl … | bash` or `curl … | docker exec
 … python`, which Scorecard reports as a download that runs without a pinned hash, or the
@@ -365,7 +368,8 @@ fix = """The message names the file and what to change: keep the image of Playwr
 playwright-core at one version, leave the pin of krankerl to `.github/workflows/ci.yml`,
 which the blueprint updates and the upgrade test reads, change a rule of `tests/e2e/affected.sh` together with
 its sample, change the split of `E2E_SHARD` in `tests/e2e/run-all.sh` together with its
-samples (`E2E_PLAN=1` prints the runs of a shard), let `tests/e2e/packages.sh` take the package
+samples (`E2E_PLAN=1` prints the runs of a shard), keep the folder /var/lib/postgresql alone under the
+`tmpfs` of `tests/e2e/compose.pgsql.yaml`, let `tests/e2e/packages.sh` take the package
 of `E2E_RELEASE_FILE` without a download of its own, save a download into a file with `curl --output` and give that file to the
 program, as `file_tags` in `tests/e2e/run.sh` does, change a version in
 `appinfo/info.xml` rather than in the text, give the three descriptions the same

@@ -714,6 +714,18 @@ if ((problems > 0)); then
 fi
 echo "The health checks of the end-to-end tests check often only while their services start, and let one late answer pass."
 
+printf '\n== %s\n' "The database in memory of the end-to-end tests"
+# From PostgreSQL 18 on, the image keeps its data in /var/lib/postgresql/<major>/docker and
+# refuses to start when /var/lib/postgresql/data, the folder of the versions before, is a
+# mount of its own: a tmpfs there failed every run on PostgreSQL with the update to 18. A
+# tmpfs of the folder of PostgreSQL itself keeps the data of every major version in memory.
+pgsql_mounts="$(sed -n '/^    tmpfs:$/,/^    [a-z_]*:$/p' tests/e2e/compose.pgsql.yaml | sed -n 's/^      - //p')"
+if [[ "$pgsql_mounts" != "/var/lib/postgresql" ]]; then
+  echo "tests/e2e/compose.pgsql.yaml keeps ${pgsql_mounts:-no folder} in memory; keep /var/lib/postgresql there alone, the folder of PostgreSQL that holds the data of every major version: tests/e2e/README.md#databases-and-object-storage."
+  exit 1
+fi
+echo "PostgreSQL keeps the data of every major version in memory."
+
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a
 # download to a program, such as curl … | bash, as a download that runs without a pinned

@@ -12,8 +12,12 @@ services:
       POSTGRES_USER: nextcloud
       POSTGRES_PASSWORD: e2e-only-password
     # The database lives as long as its container; in memory, it doesn't wait for the disk.
+    # The folder of PostgreSQL itself: from PostgreSQL 18 on, the image keeps its data in
+    # /var/lib/postgresql/<major>/docker and refuses to start when /var/lib/postgresql/data,
+    # the folder of the versions before, is a mount of its own. scripts/check-project.sh
+    # checks it.
     tmpfs:
-      - /var/lib/postgresql/data
+      - /var/lib/postgresql
     healthcheck:
       test: ["CMD", "pg_isready", "--username=nextcloud", "--dbname=nextcloud"]
       # Often while it starts, and seldom once it runs, as in compose.yaml.

@@ -250,8 +250,11 @@ final class NextcloudStorageService implements NextcloudStorageInterface {
 		$this->collectFiles($root, $path, $recursive, $files);
 		usort(
 			$files,
-			/** @param array{path: string, name: string, etag: string, id: int} $left @param array{path: string, name: string, etag: string, id: int} $right */
-			static fn (array $left, array $right): int => strcmp($left['path'], (string)$right['path']),
+			/**
+			 * @param array{path: string, name: string, etag: string, id: int} $left
+			 * @param array{path: string, name: string, etag: string, id: int} $right
+			 */
+			static fn (array $left, array $right): int => strcmp($left['path'], $right['path']),
 		);
 
 		return $files;
