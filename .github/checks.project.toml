@@ -275,8 +275,9 @@ stray file may be a secret, and a missing one a file that the app needs."""
 problem = """A check of this app alone in `scripts/check-project.sh` failed; the line
 `== NAME` above its message names it. *Browser of the end-to-end tests*: the image of
 Playwright in `tests/e2e/run.sh` and playwright-core in `tests/e2e/package.json` differ,
-or `.github/workflows/e2e.yml` pins a krankerl of its own, or `.github/workflows/ci.yml`
-doesn't pin exactly one, which the upgrade test reads. *Changes that run the end-to-end tests*: a rule of
+or `.github/workflows/e2e.yml` pins a krankerl of its own, reads less than its version,
+sha256 and package from `.github/workflows/ci.yml` or builds the name of its package from
+the version, or `.github/workflows/ci.yml` doesn't pin exactly one, which the upgrade test reads. *Changes that run the end-to-end tests*: a rule of
 `tests/e2e/affected.sh` decides otherwise than its sample. *The shards of the end-to-end tests*: the two shards of
 `tests/e2e/run-all.sh`, which the two required jobs of `.github/workflows/e2e.yml`
 run, leave out a run of the whole suite or start one twice, or split a sample of
@@ -366,7 +367,8 @@ with the versions of `appinfo/info.xml`, the roadmap with what has shipped, the 
 the checks, the package of a release and the German words of the app."""
 fix = """The message names the file and what to change: keep the image of Playwright and
 playwright-core at one version, leave the pin of krankerl to `.github/workflows/ci.yml`,
-which the blueprint updates and the upgrade test reads, change a rule of `tests/e2e/affected.sh` together with
+which the blueprint updates and the upgrade test reads, and download the package that
+its `KRANKERL_ASSET` names, change a rule of `tests/e2e/affected.sh` together with
 its sample, change the split of `E2E_SHARD` in `tests/e2e/run-all.sh` together with its
 samples (`E2E_PLAN=1` prints the runs of a shard), keep the folder /var/lib/postgresql alone under the
 `tmpfs` of `tests/e2e/compose.pgsql.yaml`, let `tests/e2e/packages.sh` take the package

@@ -48,9 +48,11 @@ echo "The image of Playwright and playwright-core are both at version $package."
 
 # The job variants of e2e.yml reads the krankerl that builds the package of the commit
 # for the upgrade test from ci.yml, the one of the CI and of the release, whose package
-# users get. It needs exactly one of each pin there, and no copy of its own that the
-# blueprint's updates of ci.yml would leave behind.
-for pin in VERSION SHA256; do
+# users get. It needs exactly one of each pin there, the name of its package included,
+# and no copy of its own that the blueprint's updates of ci.yml would leave behind. It
+# reads all three, and downloads the package by that name instead of building one from
+# the version, which krankerl 0.14.1 broke with the revision -1 of its package.
+for pin in VERSION SHA256 ASSET; do
   count="$(grep -cE "^[[:space:]]*KRANKERL_$pin:[[:space:]]*[^[:space:]]+" .github/workflows/ci.yml || true)"
   if [[ "$count" != 1 ]]; then
     echo ".github/workflows/ci.yml names KRANKERL_$pin $count times, but the upgrade test in .github/workflows/e2e.yml reads exactly one pin from it; ci.yml belongs to the blueprint, so fix it there."
@@ -60,7 +62,16 @@ for pin in VERSION SHA256; do
     echo ".github/workflows/e2e.yml pins KRANKERL_$pin itself; remove that pin, as the job variants reads the one of .github/workflows/ci.yml, which the blueprint keeps up to date."
     exit 1
   fi
+  if ! grep -qE "^[[:space:]]*sed -nE .*\(KRANKERL_\([A-Z0-9|]*\b$pin\b[A-Z0-9|]*\)\)" .github/workflows/e2e.yml; then
+    echo ".github/workflows/e2e.yml doesn't read KRANKERL_$pin from .github/workflows/ci.yml; add $pin to the names that the step 'Use the krankerl of the CI and of the release' reads."
+    exit 1
+  fi
 done
+# shellcheck disable=SC2016 # The variables are those of the workflow, which the shell must not expand.
+if grep -qE 'krankerl_\$\{?KRANKERL_VERSION' .github/workflows/e2e.yml || ! grep -qF '"$KRANKERL_ASSET"' .github/workflows/e2e.yml; then
+  echo ".github/workflows/e2e.yml builds the name of krankerl's package from the version; take \"\$KRANKERL_ASSET\" of the pin for the file and for .github/download.sh, as .github/workflows/ci.yml does, since the name carries a revision such as -1 that the version doesn't."
+  exit 1
+fi
 echo "The upgrade test builds the package of the commit with the krankerl of the CI and of the release."
 
 printf '\n== %s\n' "Changes that run the end-to-end tests"
