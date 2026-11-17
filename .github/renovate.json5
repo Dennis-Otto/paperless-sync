@@ -14,6 +14,16 @@
       groupName: "Playwright",
     },
     {
+      // The image comes without the week of waiting, as mcr.microsoft.com gives Renovate no
+      // date of its release (decision 0148 of the blueprint), while playwright-core on npm
+      // waited for it: the update to 1.65 paired the image of 1.65.1 with playwright-core
+      // 1.65.0, whose browser that image lacks, and every check in the browser failed.
+      // playwright-core comes at once too, so that both are always one release;
+      // scripts/check-project.sh checks this rule.
+      matchPackageNames: ["playwright-core"],
+      minimumReleaseAge: null,
+    },
+    {
       // tests/e2e/compose.paperless.yaml runs the contract tests against two lines of
       // Paperless-ngx: the last release of 2.x, which stays within 2.x, and the current
       // release of 3.x, which moves on to every new release.

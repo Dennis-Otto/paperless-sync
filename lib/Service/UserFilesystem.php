@@ -32,7 +32,11 @@ use OCP\IUserManager;
  *                 version of Nextcloud.
  */
 final class UserFilesystem implements UserFilesystemInterface {
-	/** @psalm-suppress PossiblyUnusedMethod */
+	/**
+	 * @psalm-suppress PossiblyUnusedMethod
+	 * @psalm-suppress UndefinedClass Psalm from 7.8 on no longer applies the suppression of the
+	 *                 class to its promoted properties, such as $setupManager.
+	 */
 	public function __construct(
 		private IUserManager $userManager,
 		private SetupManager $setupManager,

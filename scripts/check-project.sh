@@ -45,6 +45,14 @@ if [[ -z "$image" || "$image" != "$package" ]]; then
   exit 1
 fi
 echo "The image of Playwright and playwright-core are both at version $package."
+# Renovate moves both in one update only when both come at once: the image has no date of
+# its release, so it never waits a week, and playwright-core must not wait either.
+if ! tr '\n' ' ' < .github/renovate.json5 |
+  grep -qE 'matchPackageNames: \["playwright-core"\],[[:space:]]*minimumReleaseAge: null,'; then
+  echo ".github/renovate.json5 lets playwright-core wait a week for its release, while the image of Playwright comes at once, so an update would pair two versions; keep the rule that gives playwright-core minimumReleaseAge: null."
+  exit 1
+fi
+echo "Renovate brings playwright-core at once, as the image of Playwright."
 
 # The job variants of e2e.yml reads the krankerl that builds the package of the commit
 # for the upgrade test from ci.yml, the one of the CI and of the release, whose package
@@ -713,6 +721,18 @@ if ((problems > 0)); then
   exit 1
 fi
 echo "The health checks of the end-to-end tests check often only while their services start, and let one late answer pass."
+
+printf '\n== %s\n' "The database in memory of the end-to-end tests"
+# From PostgreSQL 18 on, the image keeps its data in /var/lib/postgresql/<major>/docker and
+# refuses to start when /var/lib/postgresql/data, the folder of the versions before, is a
+# mount of its own: a tmpfs there failed every run on PostgreSQL with the update to 18. A
+# tmpfs of the folder of PostgreSQL itself keeps the data of every major version in memory.
+pgsql_mounts="$(sed -n '/^    tmpfs:$/,/^    [a-z_]*:$/p' tests/e2e/compose.pgsql.yaml | sed -n 's/^      - //p')"
+if [[ "$pgsql_mounts" != "/var/lib/postgresql" ]]; then
+  echo "tests/e2e/compose.pgsql.yaml keeps ${pgsql_mounts:-no folder} in memory; keep /var/lib/postgresql there alone, the folder of PostgreSQL that holds the data of every major version: tests/e2e/README.md#databases-and-object-storage."
+  exit 1
+fi
+echo "PostgreSQL keeps the data of every major version in memory."
 
 printf '\n== %s\n' "Downloads that a script runs"
 # Scorecard, which the workflow Findings runs on main, reports a pipe that hands a
