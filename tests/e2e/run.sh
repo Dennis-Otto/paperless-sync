@@ -340,7 +340,7 @@ browser_checks() {
 	PLAYWRIGHT_PULL=""
 	mkdir -p "${BROWSER_ARTIFACTS}"
 	# Git Bash on Windows would turn the paths of the container into paths of Windows.
-	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs files-address.mjs flow.mjs languages.mjs language.mjs coverage.mjs coverage-floor.json \
+	tar -C "${SCRIPT_DIR}" -cf - package.json package-lock.json a11y.mjs browser.mjs accessibility.mjs keyboard.mjs settings.mjs files.mjs file-menu.mjs files-address.mjs flow.mjs languages.mjs language.mjs coverage.mjs coverage-floor.json \
 		-C "${REPOSITORY_ROOT}" "${catalogs[@]}" \
 		| MSYS_NO_PATHCONV=1 "${DOCKER_BIN}" run --rm --interactive \
 			--network "${PROJECT_NAME}_default" \

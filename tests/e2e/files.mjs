@@ -17,6 +17,7 @@
 // that share, and learns nothing else from the app.
 
 import { launch } from './browser.mjs'
+import { closeMenu, openMenu } from './file-menu.mjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
@@ -66,15 +67,8 @@ function row(page, name) {
 // names of its actions; the menu stays open for a click.
 async function actionsOf(page, name) {
 	await row(page, name).waitFor({ timeout: 60_000 })
-	await row(page, name).click({ button: 'right' })
-	const items = page.getByRole('menuitem')
-	await items.first().waitFor()
-	return (await items.allTextContents()).map((text) => text.trim())
-}
-
-async function closeMenu(page) {
-	await page.keyboard.press('Escape')
-	await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
+	await openMenu(page, () => row(page, name).click({ button: 'right' }))
+	return (await page.getByRole('menuitem').allTextContents()).map((text) => text.trim())
 }
 
 // A call of WebDAV or of the sharing API as the user, as run.sh makes them.
