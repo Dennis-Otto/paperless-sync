@@ -275,7 +275,6 @@ stray file may be a secret, and a missing one a file that the app needs."""
 problem = """A check of this app alone in `scripts/check-project.sh` failed; the line
 `== NAME` above its message names it. *Browser of the end-to-end tests*: the image of
 Playwright in `tests/e2e/run.sh` and playwright-core in `tests/e2e/package.json` differ,
-`.github/renovate.json5` lets playwright-core wait a week while the image comes at once,
 or `.github/workflows/e2e.yml` pins a krankerl of its own, or `.github/workflows/ci.yml`
 doesn't pin exactly one, which the upgrade test reads. *Changes that run the end-to-end tests*: a rule of
 `tests/e2e/affected.sh` decides otherwise than its sample. *The shards of the end-to-end tests*: the two shards of
@@ -364,8 +363,7 @@ would fail the workflow Findings on `main`, the website, the README and its Germ
 with the versions of `appinfo/info.xml`, the roadmap with what has shipped, the labels of pull requests, the explanations of
 the checks, the package of a release and the German words of the app."""
 fix = """The message names the file and what to change: keep the image of Playwright and
-playwright-core at one version, and the rule of `.github/renovate.json5` that brings
-playwright-core without minimumReleaseAge, leave the pin of krankerl to `.github/workflows/ci.yml`,
+playwright-core at one version, leave the pin of krankerl to `.github/workflows/ci.yml`,
 which the blueprint updates and the upgrade test reads, change a rule of `tests/e2e/affected.sh` together with
 its sample, change the split of `E2E_SHARD` in `tests/e2e/run-all.sh` together with its
 samples (`E2E_PLAN=1` prints the runs of a shard), keep the folder /var/lib/postgresql alone under the

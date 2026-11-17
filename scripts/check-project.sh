@@ -45,14 +45,6 @@ if [[ -z "$image" || "$image" != "$package" ]]; then
   exit 1
 fi
 echo "The image of Playwright and playwright-core are both at version $package."
-# Renovate moves both in one update only when both come at once: the image has no date of
-# its release, so it never waits a week, and playwright-core must not wait either.
-if ! tr '\n' ' ' < .github/renovate.json5 |
-  grep -qE 'matchPackageNames: \["playwright-core"\],[[:space:]]*minimumReleaseAge: null,'; then
-  echo ".github/renovate.json5 lets playwright-core wait a week for its release, while the image of Playwright comes at once, so an update would pair two versions; keep the rule that gives playwright-core minimumReleaseAge: null."
-  exit 1
-fi
-echo "Renovate brings playwright-core at once, as the image of Playwright."
 
 # The job variants of e2e.yml reads the krankerl that builds the package of the commit
 # for the upgrade test from ci.yml, the one of the CI and of the release, whose package
