@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { NARROW, WCAG_TAGS, WIDE, describeViolations, failing, horizontalOverflow } from './a11y.mjs'
 import { launch } from './browser.mjs'
+import { closeMenu, openMenu as openFileMenu } from './file-menu.mjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
@@ -313,16 +314,14 @@ const PAGES = [
 ]
 
 // Opens the menu of the actions of a file in Files with its button, which a phone has as well,
-// and closes the menu that is open first.
+// and closes the menu that is open first (file-menu.mjs).
 async function openMenu(page, name) {
 	const row = page.locator(`[data-cy-files-list-row-name=${JSON.stringify(name)}]`)
 	await row.waitFor({ timeout: 60_000 })
 	if (await page.getByRole('menuitem').first().isVisible().catch(() => false)) {
-		await page.keyboard.press('Escape')
-		await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
+		await closeMenu(page)
 	}
-	await row.locator('[data-cy-files-list-row-actions] button[aria-haspopup="menu"]').click()
-	await page.getByRole('menuitem').first().waitFor()
+	await openFileMenu(page, () => row.locator('[data-cy-files-list-row-actions] button[aria-haspopup="menu"]').click())
 }
 
 // Marks the message of Nextcloud with the text for axe-core, as its markup differs between the

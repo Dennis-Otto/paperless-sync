@@ -340,6 +340,8 @@ that Nextcloud picks in the browser, or says a mark of `MARKS` in the same words
 catalog, a test of `tests/e2e/screenshots.test.mjs` fails, because an animation that
 `tests/e2e/screenshots.mjs` records lacks a language or a theme, or has 1 MB or more, a test of `tests/e2e/files-address.mjs` fails, because a browser test
 opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, a test of
+`tests/e2e/file-menu.mjs` fails, which opens the menu of a file again when Files drops the click
+right after Escape, as Nextcloud 36 at times does, or a browser test other than `tests/e2e/screenshots.mjs` waits for an item of that menu on its own, a test of
 `tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, a
 test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots of a check in
 the browser that fails and records the coverage of the scripts of the app, or a check in the
@@ -386,6 +388,8 @@ render a new animation with `bash tests/e2e/screenshots.sh`, or show less of a s
 that changes as a whole, until `node --test tests/e2e/screenshots.test.mjs` passes,
 open Files at `folderAddress(await filesAddress(page), dir)` of
 `tests/e2e/files-address.mjs` until `node --test tests/e2e/files-address.test.mjs` passes,
+open and close the menu of a file with `openMenu()` and `closeMenu()` of
+`tests/e2e/file-menu.mjs` until `node --test tests/e2e/file-menu.test.mjs` passes,
 fix what ESLint names in the file and line that it prints, use the variable or remove it,
 compare with `===` and `!==`, keep a function of a script of the app inside its
 `(function() { … })()`, and turn a rule off for one line only with
