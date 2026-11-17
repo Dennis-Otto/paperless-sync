@@ -186,7 +186,7 @@
       "update_checking": {
         "backend_setting": "default"
       },
-      "version": "3.3.1"
+      "version": "3.5.0"
     },
     "user": {
       "groups": [],
@@ -199,7 +199,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.3.1"
+    "X-Version": "3.5.0"
   },
   "request": "GET /api/ui_settings/",
   "status": 200
