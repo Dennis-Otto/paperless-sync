@@ -195,11 +195,14 @@ jobs:
       # The same krankerl as the CI's and the release workflow's, for the package of the
       # commit that the upgrade installs: its pin is read from ci.yml, which the blueprint
       # updates, so there is no copy here to fall behind; scripts/check-project.sh checks
-      # that ci.yml names exactly one of each.
+      # that ci.yml names exactly one of each. The name of its package is the
+      # KRANKERL_ASSET of that pin, never one built from the version here: krankerl 0.14.1
+      # added the revision -1 to it, and a name built from the version found no package
+      # (the blueprint's decision 0170).
       - name: Use the krankerl of the CI and of the release
         if: steps.changes.outputs.upgrade != 'false'
         run: |
-          sed -nE 's/^[[:space:]]*(KRANKERL_(VERSION|SHA256)):[[:space:]]*([^[:space:]]+).*/\1=\3/p' \
+          sed -nE 's/^[[:space:]]*(KRANKERL_(VERSION|SHA256|ASSET)):[[:space:]]*([^[:space:]]+).*/\1=\3/p' \
             .github/workflows/ci.yml >> "$GITHUB_ENV"
       # krankerl comes from the cache once a run has downloaded it, as in the CI, and
       # its package is checked by its sha256 either way. Without the cache,
@@ -217,10 +220,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          deb="$RUNNER_TEMP/krankerl/krankerl_${KRANKERL_VERSION}_amd64.deb"
+          deb="$RUNNER_TEMP/krankerl/$KRANKERL_ASSET"
           if [[ ! -f "$deb" ]]; then
             bash .github/download.sh ChristophWurst/krankerl "v$KRANKERL_VERSION" \
-              "krankerl_${KRANKERL_VERSION}_amd64.deb" "$deb" "$KRANKERL_SHA256"
+              "$KRANKERL_ASSET" "$deb" "$KRANKERL_SHA256"
           fi
           # The package of the cache too.
           echo "$KRANKERL_SHA256  $deb" | sha256sum --check --strict
