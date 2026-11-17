@@ -107,7 +107,7 @@ done
 for path in tests/e2e/screenshots.sh tests/e2e/screenshots.mjs tests/e2e/frozen.mjs   tests/e2e/frozen.test.mjs tests/e2e/compare.mjs tests/e2e/compare.test.mjs; do
   expect skip "$path"
 done
-for path in tests/e2e/files-address.mjs tests/e2e/showcase.py tests/e2e/compose.yaml; do
+for path in tests/e2e/files-address.mjs tests/e2e/file-menu.mjs tests/e2e/showcase.py tests/e2e/compose.yaml; do
   expect run "$path"
 done
 
@@ -1476,6 +1476,10 @@ echo "Every animation of tests/e2e/screenshots.mjs is there in English and Germa
 # Nextcloud links it.
 node --test --test-reporter=dot tests/e2e/files-address.test.mjs
 echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud links, and no browser test opens it at an address of its own."
+# The menu of the actions of a file, whose click right after Escape Files of Nextcloud 36 at
+# times drops.
+node --test --test-reporter=dot tests/e2e/file-menu.test.mjs
+echo "tests/e2e/file-menu.mjs clicks once more when Files drops the click that opens the menu of a file, still fails a menu that never opens, and every browser test opens that menu through it."
 # What the checks of the accessibility in the browser judge by, with a seeded finding of every
 # kind that must fail them: a button without a name, a box wider than a phone, a focus that
 # can't be seen and a focus against the order of the page.
