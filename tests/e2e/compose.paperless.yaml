@@ -11,6 +11,11 @@
 # and it still keeps an archived version of each, whose checksum the app compares.
 # The administrator and the key are those of the tests alone; contract.py gets the token
 # of the API with them.
+#
+# Each line names its own address in PAPERLESS_URL, as an installation does with its public
+# one. Paperless-ngx 3.5 and newer then answer only that host name and localhost, as the
+# healthcheck asks, so that contract.py can check the answer to another host name that the
+# app recognises (#532); 2.x answers every host name all the same.
 
 x-paperless: &paperless
   environment: &paperless-environment
@@ -32,7 +37,7 @@ x-paperless: &paperless
     redis:
       condition: service_healthy
   healthcheck:
-    test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1:8000/"]
+    test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://localhost:8000/"]
     interval: 3s
     timeout: 3s
     retries: 100
@@ -54,10 +59,16 @@ services:
 
   paperless-2:
     <<: *paperless
+    environment:
+      <<: *paperless-environment
+      PAPERLESS_URL: http://paperless-2:8000
     image: ghcr.io/paperless-ngx/paperless-ngx:2.20.15@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f
     profiles: [paperless-2]
 
   paperless-3:
     <<: *paperless
+    environment:
+      <<: *paperless-environment
+      PAPERLESS_URL: http://paperless-3:8000
     image: ghcr.io/paperless-ngx/paperless-ngx:3.5.0@sha256:8c1e2c4e0abb50576c7a09f062ed581e2d955e298a302e1e196a35338639005e
     profiles: [paperless-3]

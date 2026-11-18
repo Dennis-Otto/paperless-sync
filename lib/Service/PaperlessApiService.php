@@ -113,6 +113,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const TRANSFER_TIMEOUT = 3600;
 	/** The message of cURL for a transfer that the limits above stopped; its error 28 also names a connection or a name that took too long. */
 	private const TRANSFER_TOO_LONG = '/\bcURL error 28: Operation (?:timed out|too slow)/';
+	/**
+	 * The title of Django's plain page for HTTP 400, with which Paperless answers a host name that
+	 * PAPERLESS_ALLOWED_HOSTS leaves out (PaperlessHostException). A proxy writes its own page, such
+	 * as nginx's "400 Bad Request", and Paperless its errors in JSON.
+	 */
+	private const REFUSED_HOST_PAGE = '~<title>\s*Bad Request \(400\)\s*</title>~i';
 	private IClient $client;
 
 	/**
@@ -150,6 +156,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			)];
 		} catch (PaperlessRedirectException $redirect) {
 			return [$redirect->check()];
+		} catch (PaperlessHostException $refused) {
+			return [$refused->check()];
 		} catch (PaperlessVersionException) {
 			return [ConnectionCheck::failed(
 				ConnectionCheck::PAPERLESS,
@@ -375,7 +383,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			return;
 		}
 		if ($status < 200 || $status >= 300) {
-			$reason = $this->errorReason($response->getBody());
+			$reason = $this->errorReason(self::bodyText($response));
 			throw new PaperlessOwnerException("Paperless did not make the user {$owner} the owner of the document {$documentId}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'), $status);
 		}
 	}
@@ -607,7 +615,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		);
 		$status = $response->getStatusCode();
 		if ($status < 200 || $status >= 300) {
-			$reason = $this->errorReason($response->getBody());
+			$reason = $this->errorReason(self::bodyText($response));
 			throw new RuntimeException("Paperless could not create the tag {$name}: HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'));
 		}
 		$data = $this->decodeBody($response->getBody());
@@ -691,16 +699,23 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			}
 			throw new PaperlessUploadException('Paperless could not be reached for the upload: ' . $message, false);
 		}
+		$body = self::bodyText($response);
 		$status = $response->getStatusCode();
 		if ($status < 200 || $status >= 300) {
-			$reason = $this->errorReason($response->getBody());
+			if (self::refusesHost($response, $body)) {
+				// Every other file would get the same answer, so the file waits as for an unreachable
+				// Paperless, although 400 is one of PERMANENT_UPLOAD_STATUSES.
+				$refused = new PaperlessHostException();
+				throw new PaperlessUploadException($refused->getMessage(), false, $status, $refused->runError());
+			}
+			$reason = $this->errorReason($body);
 			throw new PaperlessUploadException(
 				"Paperless answered the upload with HTTP {$status}" . ($reason !== '' ? ": {$reason}" : '.'),
 				in_array($status, self::PERMANENT_UPLOAD_STATUSES, true),
 				$status,
 			);
 		}
-		$data = $this->decodeBody($response->getBody());
+		$data = $this->decodeBody($body);
 		if (is_string($data) && $data !== '') {
 			return $data;
 		}
@@ -957,7 +972,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 *
 	 * @param array<string, int|string> $query
 	 * @return array{status: int, data: array<array-key, mixed>|null, version: string}
-	 * @throws PaperlessRequestException when no answer arrives
+	 * @throws PaperlessRequestException when no answer arrives, or a PaperlessHostException when Paperless refuses the host name
 	 */
 	private function probe(string $path, array $query = ['page' => 1, 'page_size' => 1]): array {
 		$response = $this->send(
@@ -970,12 +985,10 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				'http_errors' => false,
 			],
 		);
-		$body = $response->getBody();
-		if (is_resource($body)) {
-			$body = stream_get_contents($body);
-		}
+		$body = self::bodyText($response);
+		self::refuseHost($response, $body);
 		/** @psalm-suppress MixedAssignment */
-		$data = is_string($body) ? json_decode($body, true) : null;
+		$data = json_decode($body, true);
 
 		return [
 			'status' => $response->getStatusCode(),
@@ -992,7 +1005,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * @param 'POST'|'PATCH' $method
 	 * @param array<string, mixed> $fields
 	 * @return array{status: int, data: array<array-key, mixed>|null, reason: string}
-	 * @throws PaperlessRequestException when no answer arrives
+	 * @throws PaperlessRequestException when no answer arrives, or a PaperlessHostException when Paperless refuses the host name
 	 */
 	private function change(string $method, string $path, #[\SensitiveParameter] array $fields): array {
 		$response = $this->send(
@@ -1005,11 +1018,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				'http_errors' => false,
 			],
 		);
-		$body = $response->getBody();
-		if (is_resource($body)) {
-			$body = stream_get_contents($body);
-		}
-		$body = is_string($body) ? $body : '';
+		$body = self::bodyText($response);
+		self::refuseHost($response, $body);
 		/** @psalm-suppress MixedAssignment */
 		$data = json_decode($body, true);
 		$status = $response->getStatusCode();
@@ -1328,6 +1338,24 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	}
 
 	/**
+	 * Whether the answer is the one of a Paperless that refuses the host name of its URL: HTTP 400
+	 * with Django's plain page "Bad Request (400)" and without the header X-Version of Paperless,
+	 * as Django answers before the request reaches Paperless.
+	 */
+	private static function refusesHost(IResponse $response, string $body): bool {
+		return $response->getStatusCode() === Http::STATUS_BAD_REQUEST
+			&& $response->getHeader('X-Version') === ''
+			&& preg_match(self::REFUSED_HOST_PAGE, $body) === 1;
+	}
+
+	/** @throws PaperlessHostException when the answer is the one of a Paperless that refuses the host name of its URL */
+	private static function refuseHost(IResponse $response, string $body): void {
+		if (self::refusesHost($response, $body)) {
+			throw new PaperlessHostException();
+		}
+	}
+
+	/**
 	 * The version of Paperless-ngx that its header X-Version names, such as 3.3.0, or '' without
 	 * one: a proxy may leave the header out, and its text comes from the server, so anything that
 	 * doesn't look like a version is left out too.
@@ -1404,6 +1432,11 @@ final class PaperlessApiService implements PaperlessClientInterface {
 			// Nextcloud's HTTP client throws an answer with an error, with its status as the code.
 			if ($exception->getCode() === Http::STATUS_NOT_ACCEPTABLE) {
 				throw new PaperlessVersionException();
+			}
+			// Its message names the URL with the host name and holds the start of the page that came
+			// back, which shows the title of Django's page; the message of the error names neither.
+			if ($exception->getCode() === Http::STATUS_BAD_REQUEST && preg_match(self::REFUSED_HOST_PAGE, $exception->getMessage()) === 1) {
+				throw new PaperlessHostException();
 			}
 			$message = $this->failureMessage($exception->getMessage(), $token);
 			throw new PaperlessRequestException($message, self::explained($exception->getCode(), $path, $message));
@@ -1600,6 +1633,16 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		];
 	}
 
+	/** The body of an answer as a text, which Nextcloud's HTTP client gives as a stream or a text; '' without one. */
+	private static function bodyText(IResponse $response): string {
+		$body = $response->getBody();
+		if (is_resource($body)) {
+			$body = stream_get_contents($body);
+		}
+
+		return is_string($body) ? $body : '';
+	}
+
 	/** @param resource|string|null $body @return array<array-key, mixed>|string */
 	private function decodeBody($body): array|string {
 		if (is_resource($body)) {
@@ -1624,16 +1667,9 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * Paperless, such as {"document": ["File type text/plain not supported"]}, or the title of
 	 * the page of a proxy in front of it, such as "413 Request Entity Too Large".
 	 *
-	 * @param resource|string|null $body
 	 * @psalm-suppress MixedAssignment
 	 */
-	private function errorReason($body): string {
-		if (is_resource($body)) {
-			$body = stream_get_contents($body);
-		}
-		if (!is_string($body)) {
-			return '';
-		}
+	private function errorReason(string $body): string {
 		$decoded = json_decode($body, true);
 		if (is_array($decoded)) {
 			$parts = [];
