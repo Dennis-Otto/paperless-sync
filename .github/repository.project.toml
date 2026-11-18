@@ -11,3 +11,10 @@ required_checks = ["nextcloud", "nextcloud on PostgreSQL, MariaDB and S3"]
 # An environment of this project and the secrets it needs:
 # [environments.deploy]
 # secrets = ["DEPLOY_TOKEN"]
+
+# The maintainer decided on 2026-11-18 that the releases go once a day by themselves:
+# the release bot merges the release pull request in its daily run once every check
+# passes, and the package goes to the Nextcloud App Store with it. A release at once,
+# for a fix that can't wait, is a start of the workflow Release by hand.
+[variables]
+RELEASE_MERGE = "daily"

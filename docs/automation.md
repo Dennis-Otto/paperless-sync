@@ -55,7 +55,7 @@ Renovate, which the blueprint runs for this repository every two hours as the re
   <img src="images/diagrams/the-way-of-a-release-into-the-nextcloud-app-store.svg" alt="The way of a release into the Nextcloud App Store: A change reaches main. The release bot keeps the pull request of the next release, with the version from the titles of the merged pull requests and the notes from Unreleased. When it is merged, an isolated build makes the package, signed with the certificate of the app, its SBOMs, its VEX and its signed provenance. The release is published on GitHub and announced in the discussions, the issue lifecycle closes the issues that it fixes, and the package goes to the Nextcloud App Store. The release verification then checks the release as users can, and does so again every week. Main is orange, the bots blue, and the App Store green.">
 </picture>
 
-The version follows from the titles of the merged pull requests: `fix` a patch, `feat` a minor, `!` a major version. The maintainer merges the pull request of the release; one that only updates dependencies merges itself once its checks pass. The [release guide](releases.md) describes every step and how to verify a release.
+The version follows from the titles of the merged pull requests: `fix` a patch, `feat` a minor, `!` a major version. The release bot merges the pull request of the release by itself, once a day when every check passes, and at once with the fix of a vulnerability; for a fix that can't wait, the maintainer starts the workflow *Release* by hand. The [release guide](releases.md) describes every step and how to verify a release.
 
 ## Every night and every week
 
