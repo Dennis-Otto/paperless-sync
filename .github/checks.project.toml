@@ -344,8 +344,10 @@ that Nextcloud picks in the browser, or says a mark of `MARKS` in the same words
 catalog, a test of `tests/e2e/screenshots.test.mjs` fails, because an animation that
 `tests/e2e/screenshots.mjs` records lacks a language or a theme, or has 1 MB or more, a test of `tests/e2e/files-address.mjs` fails, because a browser test
 opens Files at an address of its own, which Files of Nextcloud 36 doesn't route, a test of
-`tests/e2e/file-menu.mjs` fails, which opens the menu of a file again when Files drops the click
-right after Escape, as Nextcloud 36 at times does, or a browser test other than `tests/e2e/screenshots.mjs` waits for an item of that menu on its own, a test of
+`tests/e2e/file-menu.mjs` fails, which counts the menu of a file as open only once Files has
+finished opening it and fails at once when Files closes it by itself, as Nextcloud 36 does when
+that menu opens again on the same page, `tests/e2e/accessibility.mjs` opens such a menu without
+loading the page again, or a browser test other than `tests/e2e/screenshots.mjs` waits for an item of that menu on its own, a test of
 `tests/e2e/a11y.mjs` fails, which judges the checks of the accessibility in the browser, a
 test of `tests/e2e/browser.mjs` fails, which keeps the trace and the screenshots of a check in
 the browser that fails and records the coverage of the scripts of the app, or a check in the
