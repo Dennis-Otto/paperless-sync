@@ -84,6 +84,9 @@ services:
       PAPERLESS_SECRET_KEY_FILE: /secrets/PAPERLESS_SECRET_KEY
       PAPERLESS_PORT: ${DEMO_PAPERLESS_PORT:-8581}
       PAPERLESS_URL: http://localhost:${DEMO_PAPERLESS_PORT:-8581}
+      # Since 3.5, Paperless answers only the host of PAPERLESS_URL once it is set, and turns away
+      # 127.0.0.1, the address of the port below and of the health check, with 400 Bad Request.
+      PAPERLESS_ALLOWED_HOSTS: localhost,127.0.0.1
       PAPERLESS_TIME_ZONE: UTC
       # The documents of the demo have their text, so no OCR, and little work on a small machine.
       PAPERLESS_OCR_MODE: skip
