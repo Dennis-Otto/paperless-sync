@@ -2,55 +2,59 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The menu of the actions of a file in Files, which accessibility.mjs and files.mjs open and
-// close again and again: with its button, which a phone has as well, or with a right click on
-// the row of the file.
+// close: with its button, which a phone has as well, or with a right click on the row of the
+// file.
 //
-// Files of Nextcloud 36 at times drops the click that comes right after Escape closed a menu:
-// the button takes the focus, but no menu opens. The canary waited 30 s for it in vain on the
-// daily build of 2026-11-15, whose same check had passed five hours before, and opened the
-// issue "The coming Nextcloud breaks the app" (#515), although the app was fine. So a click
-// after which no item of a menu shows within a few seconds is made once more, as a person
-// would, and a menu that never opens still fails the check after the last try.
+// Files of Nextcloud 36 closes the menu of a file by itself when it opens again on the same page
+// after it was closed, by Escape or by an item that ran. Its row sets the menu to closed on the
+// event "closed" of the menu, which the popover of @nextcloud/vue sends at the end of a
+// transition of the menu; when its closing ran none, the event waits for the next one, the
+// next opening: the menu opens, and when it has finished opening, Files closes it again. A
+// person sees it flash. Nextcloud 33 to 35 don't do it, and on a page that was loaded since,
+// Nextcloud 36 doesn't either. The canary failed on it twice: on 2026-11-15 a click right after Escape
+// seemed to open nothing (#515), and on 2026-11-18 the menu closed under the click on its item
+// (#540). So a check opens the menu of a file only on a page where that menu wasn't open before
+// (accessibility.mjs loads the page again), and openMenu() counts a menu as open only when Files
+// has finished opening it and its button still says that it is open, so that a menu that Files
+// closes by itself fails at once with what happened, not after 30 s under a later click.
 
-// How many times openMenu() clicks before it gives up.
-export const ATTEMPTS = 3
+// How long a click has to show its menu.
+export const TIMEOUT = 30_000
 
-// How long a click has to open its menu before openMenu() clicks once more, and how long the
-// last click has.
-export const SETTLE = 5_000
-export const LAST = 30_000
-
-// Opens a menu with open(), a click that opens it, and waits for its first item. A click that
-// opens nothing within settle ms is made again, up to attempts times; the last one has last ms,
-// and its timeout is the error of a menu that never opens. Any other error ends it at once.
-// A menu that opened late, after its wait ran out, is left open: the button of a row toggles
-// its menu, so one more click would close it again.
-export async function openMenu(page, open, { attempts = ATTEMPTS, settle = SETTLE, last = LAST } = {}) {
-	const item = page.getByRole('menuitem').first()
-	const opened = () => item.isVisible().catch(() => false)
-	for (let attempt = 1; attempt < attempts; attempt++) {
-		if (attempt > 1 && (await opened())) {
-			return
-		}
-		await open()
-		try {
-			await item.waitFor({ timeout: settle })
-			return
-		} catch (error) {
-			if (error?.name !== 'TimeoutError') {
-				throw error
-			}
-		}
-	}
-	if (attempts > 1 && (await opened())) {
-		return
-	}
+// Opens a menu with open(), a click that opens it, waits for its first item and until Files has
+// finished opening it, and fails when Files closed it again.
+export async function openMenu(page, open, { timeout = TIMEOUT } = {}) {
 	await open()
-	await item.waitFor({ timeout: last })
+	await page.getByRole('menuitem').first().waitFor({ timeout })
+	await settled(page)
+	if (!(await isOpen(page))) {
+		throw new Error('Files closed the menu of the file by itself when it had opened, as Nextcloud 36 does when the menu of a file opens again on the same page: open it on a page loaded since (tests/e2e/file-menu.mjs).')
+	}
 }
 
 // Closes the menu that is open with Escape and waits until its items are gone.
 export async function closeMenu(page) {
 	await page.keyboard.press('Escape')
 	await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
+}
+
+// Waits until every running animation of the page that ends has ended, such as the opening of a
+// menu, and two more frames are drawn, so that what Files does at their end has happened. A
+// paused animation never ends, so it isn't waited for.
+function settled(page) {
+	return page.evaluate(async () => {
+		await Promise.all(document.getAnimations()
+			.filter((animation) => animation.playState === 'running' && animation.effect?.getComputedTiming().endTime !== Infinity)
+			.map((animation) => animation.finished.catch(() => undefined)))
+		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+	})
+}
+
+// Whether the button of the menu of a file says that its menu is open, as it says to a screen
+// reader. Only the button in the row of a file counts, which a right click on the row opens as
+// well, so that another open menu of the page, such as one of the header, doesn't count.
+const EXPANDED = '[data-cy-files-list-row-actions] [aria-haspopup="menu"][aria-expanded="true"]'
+
+async function isOpen(page) {
+	return (await page.locator(EXPANDED).count()) > 0
 }

@@ -1499,10 +1499,10 @@ echo "Every animation of tests/e2e/screenshots.mjs is there in English and Germa
 # Nextcloud links it.
 node --test --test-reporter=dot tests/e2e/files-address.test.mjs
 echo "tests/e2e/files-address.mjs opens Files at the address that Nextcloud links, and no browser test opens it at an address of its own."
-# The menu of the actions of a file, whose click right after Escape Files of Nextcloud 36 at
-# times drops.
+# The menu of the actions of a file, which Files of Nextcloud 36 closes by itself when it opens
+# again on the same page.
 node --test --test-reporter=dot tests/e2e/file-menu.test.mjs
-echo "tests/e2e/file-menu.mjs clicks once more when Files drops the click that opens the menu of a file, still fails a menu that never opens, and every browser test opens that menu through it."
+echo "tests/e2e/file-menu.mjs counts the menu of a file as open once Files has finished opening it, fails a menu that Files closes by itself or that never opens, accessibility.mjs opens every such menu on the page loaded again, and every browser test opens that menu through file-menu.mjs."
 # What the checks of the accessibility in the browser judge by, with a seeded finding of every
 # kind that must fail them: a button without a name, a box wider than a phone, a focus that
 # can't be seen and a focus against the order of the page.
