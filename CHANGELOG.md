@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.2](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.1...v1.10.2) (2026-11-18)
+
+### Bug fixes
+
+- When Paperless refuses the host name under which Nextcloud reaches it, as Paperless-ngx 3.5 and newer do with `PAPERLESS_URL` set, *Test connection*, the status, the report and the notifications of a run now say so and what to do, in your language, instead of `No Paperless API answered at this URL (HTTP 400)` or the raw `400 Bad Request` of the HTTP client: add the host name of the Paperless URL to `PAPERLESS_ALLOWED_HOSTS` and restart Paperless, or use the host name of `PAPERLESS_URL`. The message names no host name, so you can share it when you ask for help. A file of the inbox or one sent with *Send to Paperless* waits for the next attempt instead of counting as refused for good.
+
 ## [1.10.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.0...v1.10.1) (2026-11-18)
 
 ### Bug fixes
