@@ -187,8 +187,11 @@ def reset_state():
                 # The document and its new owner of every change of an owner, as per-user ownership makes it.
                 "ownerChanges": [],
                 # The method and path of every request that asked to upgrade to HTTP/2 in clear
-                # text, which the mock closes without an answer (#542).
+                # text, which the mock closes without an answer (#542), and whether it answers such
+                # a request over HTTP/1.1 instead, as the image of Paperless-ngx does
+                # (/control/h2c/answer), for a release that still asks for the upgrade.
                 "h2cUpgrades": [],
+                "h2cAnswered": False,
             }
         )
 
@@ -501,6 +504,8 @@ class Handler(BaseHTTPRequestHandler):
             return True
         request = f"{self.command} {urlparse(self.path).path}"
         with LOCK:
+            if STATE["h2cAnswered"]:
+                return True
             STATE["h2cUpgrades"].append(request)
         print(f"paperless-mock: closed {request} without an answer: it asked to upgrade to h2c", flush=True)
         self.close_connection = True
@@ -773,6 +778,13 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["uploadsUnavailable"] = match.group(1) == "unavailable"
             self._json(200, {"uploads": match.group(1)})
+            return
+        if match := re.fullmatch(r"/control/h2c/(answer|close)", parsed.path):
+            # A release that still asks for HTTP/2 in clear text runs against the mock of the
+            # upgrade test: /control/h2c/answer, until /control/h2c/close (#542).
+            with LOCK:
+                STATE["h2cAnswered"] = match.group(1) == "answer"
+            self._json(200, {"h2c": match.group(1)})
             return
         if parsed.path == "/control/reset":
             reset_state()

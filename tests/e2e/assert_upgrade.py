@@ -130,6 +130,9 @@ elif mode == "mock":
     ):
         if after[key] != before[key]:
             problems.append(f"After the upgrade, the run made {name}: {before[key]!r} before, {after[key]!r} after.")
+    # The upgraded app asks Paperless at http:// for no upgrade to HTTP/2, which the mock closes (#542).
+    if after["h2cUpgrades"]:
+        problems.append(f"After the upgrade, the run asked to upgrade to HTTP/2 in clear text: {after['h2cUpgrades']!r}.")
 elif mode == "retry":
     before, after = retries(payload["before"]), retries(payload["after"])
     if not before:

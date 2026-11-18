@@ -181,6 +181,9 @@ echo "Nextcloud and the app are set up after ${SECONDS} s."
 # 2. The release in use: the documents of e2e-owner of Paperless go to e2e-mapped, those of
 # E2E-Other to e2e-other.
 control /control/scenario/per-user >/dev/null
+# The release may still ask the mock at http:// to upgrade to HTTP/2, which the mock then answers
+# over HTTP/1.1, as the image of Paperless-ngx does; the commit's runs below get it closed (#542).
+control /control/h2c/answer >/dev/null
 curl --fail-with-body --silent --show-error \
 	--user "e2e-admin:${PASSWORD}" \
 	--header 'Accept: application/json' \
@@ -236,6 +239,7 @@ echo "The release ${RELEASE_VERSION} is in use after ${SECONDS} s."
 
 # 3. The package of the commit, and occ upgrade.
 install_package "${E2E_PACKAGE}"
+control /control/h2c/close >/dev/null
 if [[ "${UPGRADE_VERSION}" != "${COMMIT_VERSION}" ]]; then
 	# The versions reach the shell of the container as its arguments $1 and $2.
 	# shellcheck disable=SC2016

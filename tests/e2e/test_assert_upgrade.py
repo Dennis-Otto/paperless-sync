@@ -41,7 +41,7 @@ STATE = {
     },
 }
 SETTINGS = {"config": {"basePath": "Documents/Paperless", "ownership": "per-user", "tokenConfigured": True}, "webhook": {"configured": True}}
-MOCK = {"downloads": 2, "uploads": [{"filename": "letter.pdf"}], "unavailableUploads": ["later.pdf"], "invalidAuth": 0}
+MOCK = {"downloads": 2, "uploads": [{"filename": "letter.pdf"}], "unavailableUploads": ["later.pdf"], "invalidAuth": 0, "h2cUpgrades": []}
 
 
 def run(mode: str, payload: object, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -183,6 +183,12 @@ def test_the_run_after_the_upgrade_downloads_and_uploads_nothing() -> None:
         after = copy.deepcopy(MOCK)
         after[key] = 3 if isinstance(after[key], int) else [*after[key], {"filename": "again.pdf"}]
         fails("mock", {"before": MOCK, "after": after}, message)
+
+
+def test_the_run_after_the_upgrade_asks_for_no_upgrade_to_h2c() -> None:
+    after = copy.deepcopy(MOCK)
+    after["h2cUpgrades"] = ["GET /api/documents/123/download/"]
+    fails("mock", {"before": MOCK, "after": after}, "asked to upgrade to HTTP/2 in clear text")
 
 
 def test_the_retry_still_waits_after_the_run() -> None:
