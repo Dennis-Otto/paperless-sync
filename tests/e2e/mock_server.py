@@ -186,6 +186,9 @@ def reset_state():
                 "apiVersions": {},
                 # The document and its new owner of every change of an owner, as per-user ownership makes it.
                 "ownerChanges": [],
+                # The method and path of every request that asked to upgrade to HTTP/2 in clear
+                # text, which the mock closes without an answer (#542).
+                "h2cUpgrades": [],
             }
         )
 
@@ -483,6 +486,26 @@ def scenario_documents():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def parse_request(self):
+        """
+        Closes a request that asks to upgrade to HTTP/2 in clear text (Upgrade: h2c) without an
+        answer, as some servers and proxies in front of Paperless do, which cURL reports as its
+        error 52, Empty reply from server. Nextcloud's HTTP client asks for HTTP/2 over TLS alone,
+        and a request of the app that loses that default asks for the upgrade over http:// (#542).
+        The server of the image of Paperless-ngx answers such a request over HTTP/1.1 all the same,
+        which hid the loss from the contract tests.
+        """
+        if not super().parse_request():
+            return False
+        if "h2c" not in self.headers.get("Upgrade", "").lower():
+            return True
+        request = f"{self.command} {urlparse(self.path).path}"
+        with LOCK:
+            STATE["h2cUpgrades"].append(request)
+        print(f"paperless-mock: closed {request} without an answer: it asked to upgrade to h2c", flush=True)
+        self.close_connection = True
+        return False
+
     def do_GET(self):
         self.api_headers = {}
         parsed = urlparse(self.path)
