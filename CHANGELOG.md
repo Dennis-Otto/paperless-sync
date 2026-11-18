@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.0...v1.10.1) (2026-11-18)
+
+
+### Bug fixes
+
+* **demo:** let Paperless-ngx 3.5 answer the demo at 127.0.0.1 ([#529](https://github.com/Dennis-Otto/paperless-sync/issues/529)) ([7775ecd](https://github.com/Dennis-Otto/paperless-sync/commit/7775ecd417bf242cabd29278f74906e70b5b6408))
+
 ## [1.10.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.9.0...v1.10.0) (2026-11-13)
 
 ### Features
