@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { NARROW, WCAG_TAGS, WIDE, describeViolations, failing, horizontalOverflow } from './a11y.mjs'
 import { launch } from './browser.mjs'
-import { closeMenu, openMenu as openFileMenu } from './file-menu.mjs'
+import { openMenu as openFileMenu } from './file-menu.mjs'
 import { filesAddress, folderAddress } from './files-address.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://nextcloud'
@@ -259,7 +259,8 @@ const PAGES = [
 		// The actions of the app in the menu of Files, in the folder that run.sh uploaded the
 		// files to, and the messages after sending. Files closes its menu when the window changes
 		// its size, and a message goes after a few seconds, so each part is prepared again for
-		// every width, and the page stays open for all of them.
+		// every width, on the page loaded again, where the menu of the file wasn't open yet
+		// (openMenu()).
 		name: 'Files',
 		files: '/',
 		parts: [
@@ -281,21 +282,20 @@ const PAGES = [
 				},
 			},
 			{
-				// The message that the file is on its way and the one of an error, which the page
-				// gets as the answers to Send to Paperless, so that nothing is queued.
-				name: 'messages after sending',
+				// The message that the file is on its way, which the page gets as the answer to Send
+				// to Paperless, so that nothing is queued.
+				name: 'message after sending',
 				scope: '[data-e2e-message]',
 				async prepare(page) {
-					let sent = 0
-					await page.unroute('**/apps/paperless_sync/api/v1/send')
-					await page.route('**/apps/paperless_sync/api/v1/send', (route) => route.fulfill(++sent === 1
-						? { json: { message: 'Paperless Sync sends 1 file to Paperless.' } }
-						: { status: 429, json: { message: 'Too many files were sent in a short time. Wait a minute and try again.' } }))
-					for (const text of ['Paperless Sync sends 1 file to Paperless.', 'Too many files were sent in a short time.']) {
-						await openMenu(page, 'receipt.pdf')
-						await page.locator('[data-cy-files-list-row-action="paperless_sync-send"] button').click()
-						await markMessage(page, text)
-					}
+					await send(page, { json: { message: 'Paperless Sync sends 1 file to Paperless.' } }, 'Paperless Sync sends 1 file to Paperless.')
+				},
+			},
+			{
+				// The message of an error after sending, here that of too many files.
+				name: 'message of an error after sending',
+				scope: '[data-e2e-message]',
+				async prepare(page) {
+					await send(page, { status: 429, json: { message: 'Too many files were sent in a short time. Wait a minute and try again.' } }, 'Too many files were sent in a short time.')
 				},
 			},
 		],
@@ -314,14 +314,23 @@ const PAGES = [
 ]
 
 // Opens the menu of the actions of a file in Files with its button, which a phone has as well,
-// and closes the menu that is open first (file-menu.mjs).
+// on the page loaded again: Files of Nextcloud 36 closes the menu of a file by itself when it
+// opens again on the same page (file-menu.mjs).
 async function openMenu(page, name) {
+	await page.reload()
 	const row = page.locator(`[data-cy-files-list-row-name=${JSON.stringify(name)}]`)
 	await row.waitFor({ timeout: 60_000 })
-	if (await page.getByRole('menuitem').first().isVisible().catch(() => false)) {
-		await closeMenu(page)
-	}
 	await openFileMenu(page, () => row.locator('[data-cy-files-list-row-actions] button[aria-haspopup="menu"]').click())
+}
+
+// Sends receipt.pdf with Send to Paperless in its menu, which the page answers with the answer
+// given, and marks the message with the text for axe-core.
+async function send(page, answer, text) {
+	await page.unroute('**/apps/paperless_sync/api/v1/send')
+	await page.route('**/apps/paperless_sync/api/v1/send', (route) => route.fulfill(answer))
+	await openMenu(page, 'receipt.pdf')
+	await page.locator('[data-cy-files-list-row-action="paperless_sync-send"] button').click()
+	await markMessage(page, text)
 }
 
 // Marks the message of Nextcloud with the text for axe-core, as its markup differs between the
