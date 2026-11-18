@@ -138,6 +138,7 @@
           - lib/Service/PaperlessRequestException.php
           - lib/Service/PaperlessVersionException.php
           - lib/Service/PaperlessRedirectException.php
+          - lib/Service/PaperlessHostException.php
           - lib/Service/StatusService.php
           - lib/Service/WebhookService.php
           - lib/Service/HashedSecrets.php
