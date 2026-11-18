@@ -186,6 +186,12 @@ def reset_state():
                 "apiVersions": {},
                 # The document and its new owner of every change of an owner, as per-user ownership makes it.
                 "ownerChanges": [],
+                # The method and path of every request that asked to upgrade to HTTP/2 in clear
+                # text, which the mock closes without an answer (#542), and whether it answers such
+                # a request over HTTP/1.1 instead, as the image of Paperless-ngx does
+                # (/control/h2c/answer), for a release that still asks for the upgrade.
+                "h2cUpgrades": [],
+                "h2cAnswered": False,
             }
         )
 
@@ -483,6 +489,28 @@ def scenario_documents():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def parse_request(self):
+        """
+        Closes a request that asks to upgrade to HTTP/2 in clear text (Upgrade: h2c) without an
+        answer, as some servers and proxies in front of Paperless do, which cURL reports as its
+        error 52, Empty reply from server. Nextcloud's HTTP client asks for HTTP/2 over TLS alone,
+        and a request of the app that loses that default asks for the upgrade over http:// (#542).
+        The server of the image of Paperless-ngx answers such a request over HTTP/1.1 all the same,
+        which hid the loss from the contract tests.
+        """
+        if not super().parse_request():
+            return False
+        if "h2c" not in self.headers.get("Upgrade", "").lower():
+            return True
+        request = f"{self.command} {urlparse(self.path).path}"
+        with LOCK:
+            if STATE["h2cAnswered"]:
+                return True
+            STATE["h2cUpgrades"].append(request)
+        print(f"paperless-mock: closed {request} without an answer: it asked to upgrade to h2c", flush=True)
+        self.close_connection = True
+        return False
+
     def do_GET(self):
         self.api_headers = {}
         parsed = urlparse(self.path)
@@ -750,6 +778,13 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["uploadsUnavailable"] = match.group(1) == "unavailable"
             self._json(200, {"uploads": match.group(1)})
+            return
+        if match := re.fullmatch(r"/control/h2c/(answer|close)", parsed.path):
+            # A release that still asks for HTTP/2 in clear text runs against the mock of the
+            # upgrade test: /control/h2c/answer, until /control/h2c/close (#542).
+            with LOCK:
+                STATE["h2cAnswered"] = match.group(1) == "answer"
+            self._json(200, {"h2c": match.group(1)})
             return
         if parsed.path == "/control/reset":
             reset_state()

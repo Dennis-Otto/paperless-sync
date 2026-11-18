@@ -111,6 +111,18 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	private const STALL_BYTES = 1024;
 	private const STALL_SECONDS = 60;
 	private const TRANSFER_TIMEOUT = 3600;
+	/**
+	 * The options of cURL that Nextcloud's HTTP client sets for every request, which the transfer of
+	 * a document keeps beside its own. Nextcloud merges its defaults with the options of a request
+	 * key by key, so the options of cURL of a request replace all of its own. Without its
+	 * CURLOPT_HTTP_VERSION, Guzzle takes the HTTP/2 of Nextcloud's default version for every URL,
+	 * and cURL asks a Paperless at http:// to upgrade to HTTP/2 in clear text, which some servers
+	 * close without an answer: cURL error 52 (#542). CURL_HTTP_VERSION_2TLS speaks HTTP/2 over
+	 * https:// where the server agrees, and HTTP/1.1 over http://. Nextcloud 33 to 35 set exactly
+	 * these; the end-to-end tests compare them with the defaults of each version that they run
+	 * (tests/e2e/client_defaults.php), so that a new default of Nextcloud fails them.
+	 */
+	private const NEXTCLOUD_CURL_DEFAULTS = [\CURLOPT_HTTP_VERSION => \CURL_HTTP_VERSION_2TLS];
 	/** The message of cURL for a transfer that the limits above stopped; its error 28 also names a connection or a name that took too long. */
 	private const TRANSFER_TOO_LONG = '/\bcURL error 28: Operation (?:timed out|too slow)/';
 	/**
@@ -1588,7 +1600,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 	 * STALL_BYTES. A transfer may last longer than StatusService::HEARTBEAT_GRACE, after which a
 	 * run without a sign of life counts as ended and another may start beside it, so the progress
 	 * of the transfer gives the sign of life of a run, which StatusService::heartbeat() writes once
-	 * a minute at most.
+	 * a minute at most. The options of cURL keep those of Nextcloud: see NEXTCLOUD_CURL_DEFAULTS.
 	 *
 	 * @return array{connect_timeout: int, timeout: int, curl: array<int, int>, progress?: \Closure}
 	 */
@@ -1596,7 +1608,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		$limits = [
 			'connect_timeout' => 10,
 			'timeout' => self::TRANSFER_TIMEOUT,
-			'curl' => [\CURLOPT_LOW_SPEED_LIMIT => self::STALL_BYTES, \CURLOPT_LOW_SPEED_TIME => self::STALL_SECONDS],
+			'curl' => self::NEXTCLOUD_CURL_DEFAULTS + [\CURLOPT_LOW_SPEED_LIMIT => self::STALL_BYTES, \CURLOPT_LOW_SPEED_TIME => self::STALL_SECONDS],
 		];
 		$signOfLife = $this->signOfLife;
 		if ($signOfLife !== null) {

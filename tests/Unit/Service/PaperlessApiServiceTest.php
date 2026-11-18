@@ -1644,7 +1644,7 @@ final class PaperlessApiServiceTest extends TestCase {
 	private static function assertTransferLimits(array $options): void {
 		self::assertSame(10, $options['connect_timeout']);
 		self::assertSame(3600, $options['timeout'], 'An hour is the upper bound of a transfer.');
-		self::assertSame([\CURLOPT_LOW_SPEED_LIMIT => 1024, \CURLOPT_LOW_SPEED_TIME => 60], $options['curl'], 'A transfer stops after a minute below 1 KB a second.');
+		self::assertSame([\CURLOPT_HTTP_VERSION => \CURL_HTTP_VERSION_2TLS, \CURLOPT_LOW_SPEED_LIMIT => 1024, \CURLOPT_LOW_SPEED_TIME => 60], $options['curl'], 'A transfer stops after a minute below 1 KB a second, and keeps the HTTP version of Nextcloud (#542).');
 		self::assertArrayNotHasKey('progress', $options, 'A client without a run gives no sign of life.');
 	}
 
@@ -1933,6 +1933,47 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		self::assertCount(1, $this->requests);
 		self::assertSame('application/json; version=9', $this->requests[0]['options']['headers']['Accept']);
+	}
+
+	/**
+	 * Nextcloud's HTTP client asks for HTTP/2 over TLS alone, with its default of cURL, and merges
+	 * its defaults with the options of a request key by key. A request that hands it options of
+	 * cURL of its own, as the transfer of a document does, keeps that default, or cURL asks a
+	 * Paperless at http:// to upgrade to HTTP/2 in clear text, which some servers close without an
+	 * answer: cURL error 52 for every download and upload (#542).
+	 */
+	#[DataProvider('requestsWithTheToken')]
+	public function testEveryRequestKeepsTheHttpVersionOfNextcloud(string $operation): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('cURL error 7: Failed to connect to paperless.example.test');
+		};
+
+		try {
+			$this->call($operation);
+		} catch (\Throwable) {
+			// The options of the request are what counts, not its failure.
+		}
+
+		self::assertCount(1, $this->requests);
+		$options = self::asNextcloudSendsThem($this->requests[0]['options']);
+		self::assertSame('2.0', $options['version'], 'Nextcloud prefers HTTP/2, which Guzzle gives cURL unless the options of cURL say otherwise.');
+		self::assertIsArray($options['curl']);
+		self::assertSame(\CURL_HTTP_VERSION_2TLS, $options['curl'][\CURLOPT_HTTP_VERSION] ?? null, 'HTTP/2 over TLS alone, and HTTP/1.1 over http://.');
+	}
+
+	/**
+	 * The options of a request as Nextcloud 33 to 35 hand them to Guzzle: its defaults, merged
+	 * with those of the request key by key (OC\Http\Client\Client::buildRequestOptions()).
+	 *
+	 * @param array<array-key, mixed> $options
+	 * @return array<array-key, mixed>
+	 */
+	private static function asNextcloudSendsThem(array $options): array {
+		return array_merge([
+			'timeout' => 30,
+			'version' => '2.0',
+			'curl' => [\CURLOPT_HTTP_VERSION => \CURL_HTTP_VERSION_2TLS],
+		], $options);
 	}
 
 	/**

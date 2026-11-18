@@ -1110,6 +1110,9 @@ scenario_export() {
 	# first run removes such files from the archive and leaves every other file alone. Only local
 	# storage keeps a file that Nextcloud doesn't know of.
 	local archive_dir='/var/www/html/data/sync-target/files/Documents/Paperless/Archive' leftovers
+	# The transfer of a document keeps the options of cURL of this Nextcloud, without which it asks
+	# the mock at http:// to upgrade to HTTP/2, and the mock closes it as some servers do (#542).
+	"${DOCKER_BIN}" exec -i --user www-data "${NEXTCLOUD_CONTAINER}" php <"${SCRIPT_DIR}/client_defaults.php"
 	if [[ "${E2E_OBJECTSTORE}" == local ]]; then
 		# The shell of the container gets the folder as its argument.
 		# shellcheck disable=SC2016

@@ -602,6 +602,8 @@ elif mode == "mock-final":
     # Every request of the app asks for version 9 of the API of Paperless.
     if set(payload.get("apiVersions", {})) != {"9"}:
         raise AssertionError(f"Requests asked for other API versions of Paperless than 9: {payload.get('apiVersions')!r}")
+    # No request asks for HTTP/2 over http://, which a Paperless may close without an answer (#542).
+    expect("h2cUpgrades", [])
 elif mode == "activity-none":
     entries = payload["ocs"]["data"]
     if entries:
