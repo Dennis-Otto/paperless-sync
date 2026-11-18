@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.2](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.1...v1.10.2) (2026-11-18)
+
+
+### Bug fixes
+
+* name a host name that Paperless refuses, and what to do ([#534](https://github.com/Dennis-Otto/paperless-sync/issues/534)) ([23908a3](https://github.com/Dennis-Otto/paperless-sync/commit/23908a340a1de30f375171358733bfd7ce94b25b))
+
 ## [1.10.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.0...v1.10.1) (2026-11-18)
 
 ### Bug fixes
