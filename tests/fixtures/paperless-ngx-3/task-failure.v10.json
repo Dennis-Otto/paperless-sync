@@ -26,7 +26,7 @@
         "result_data": {
           "error_message": "broken.pdf: Error occurred while consuming document broken.pdf: RuntimeError: /tmp/contract/origin: seek before beginning of buffer",
           "error_type": "ConsumerError",
-          "traceback": "  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 585, in trace_task\n    R = retval = fun(*args, **kwargs)\n                 ~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 858, in __protected_call__\n    return self.run(*args, **kwargs)\n           ~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/asgiref/sync.py\", line 361, in main_wrap\n    raise exc_info[1]\n  File \"/usr/src/paperless/src/documents/tasks.py\", line 247, in consume_file\n    msg = plugin.run()\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 576, in run\n    self._fail(\n    ~~~~~~~~~~^\n        str(e),\n        ^^^^^^^\n    ...<2 lines>...\n        exception=e,\n        ^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 239, in _fail\n    raise ConsumerError(f\"{self.filename}: {log_message or message}\") from exception\n"
+          "traceback": "  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 585, in trace_task\n    R = retval = fun(*args, **kwargs)\n                 ~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/celery/app/trace.py\", line 858, in __protected_call__\n    return self.run(*args, **kwargs)\n           ~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.14/site-packages/asgiref/sync.py\", line 361, in main_wrap\n    raise exc_info[1]\n  File \"/usr/src/paperless/src/documents/tasks.py\", line 246, in consume_file\n    msg = plugin.run()\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 577, in run\n    self._fail(\n    ~~~~~~~~~~^\n        str(e),\n        ^^^^^^^\n    ...<2 lines>...\n        exception=e,\n        ^^^^^^^^^^^^\n    )\n    ^\n  File \"/usr/src/paperless/src/documents/consumer.py\", line 240, in _fail\n    raise ConsumerError(f\"{self.filename}: {log_message or message}\") from exception\n"
         },
         "status": "failure",
         "status_display": "Failure",
@@ -42,7 +42,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.3.1"
+    "X-Version": "3.5.0"
   },
   "request": "GET /api/tasks/?task_id=00000000-0000-4000-8000-000000000003&page_size=10",
   "status": 200
