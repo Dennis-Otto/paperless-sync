@@ -410,7 +410,8 @@ async function seeded(browser) {
 
 // Opens a page as a fresh window of the signed-in session, prepares it and checks it at each
 // width in each theme, which the page switches without loading again. A page with parts
-// prepares each part again for every width, on the same page.
+// prepares each part again for every width; a part that opens the menu of a file loads the page
+// again first (openMenu()).
 async function check(browser, { session, files }, target) {
 	const context = await browser.newContext({ storageState: session, colorScheme: 'light', viewport: WIDE })
 	const results = []

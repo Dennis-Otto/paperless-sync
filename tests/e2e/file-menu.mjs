@@ -38,18 +38,23 @@ export async function closeMenu(page) {
 	await page.getByRole('menuitem').first().waitFor({ state: 'detached' })
 }
 
-// Waits until every animation of the page that ends has ended, such as the opening of a menu,
-// and two more frames are drawn, so that what Files does at their end has happened.
+// Waits until every running animation of the page that ends has ended, such as the opening of a
+// menu, and two more frames are drawn, so that what Files does at their end has happened. A
+// paused animation never ends, so it isn't waited for.
 function settled(page) {
 	return page.evaluate(async () => {
 		await Promise.all(document.getAnimations()
-			.filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+			.filter((animation) => animation.playState === 'running' && animation.effect?.getComputedTiming().endTime !== Infinity)
 			.map((animation) => animation.finished.catch(() => undefined)))
 		await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
 	})
 }
 
-// Whether the button of a menu says that its menu is open, as it says to a screen reader.
+// Whether the button of the menu of a file says that its menu is open, as it says to a screen
+// reader. Only the button in the row of a file counts, which a right click on the row opens as
+// well, so that another open menu of the page, such as one of the header, doesn't count.
+const EXPANDED = '[data-cy-files-list-row-actions] [aria-haspopup="menu"][aria-expanded="true"]'
+
 async function isOpen(page) {
-	return (await page.locator('[aria-haspopup="menu"][aria-expanded="true"]').count()) > 0
+	return (await page.locator(EXPANDED).count()) > 0
 }

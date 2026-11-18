@@ -48,7 +48,8 @@ function files({ closesItself = false, opens = true, error } = {}) {
 			}
 		},
 		locator: (selector) => {
-			assert.equal(selector, '[aria-haspopup="menu"][aria-expanded="true"]')
+			// Only the button in the row of a file counts, not another open menu of the page.
+			assert.equal(selector, '[data-cy-files-list-row-actions] [aria-haspopup="menu"][aria-expanded="true"]')
 			return {
 				async count() {
 					state.steps.push('expanded?')
