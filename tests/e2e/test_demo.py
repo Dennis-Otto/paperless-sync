@@ -264,6 +264,26 @@ def test_every_port_stays_on_this_machine() -> None:
         assert line.strip().startswith("- 127.0.0.1:"), line
 
 
+def test_paperless_answers_every_address_that_reaches_it() -> None:
+    # With PAPERLESS_URL, Paperless-ngx 3.5 answers only its host and localhost, and Django turns
+    # away every other one with 400 Bad Request: a person on 127.0.0.1, the address of the
+    # published port, and the health check. PAPERLESS_ALLOWED_HOSTS names each of them.
+    paperless = services()["paperless"]
+    allowed = re.search(r"^      PAPERLESS_ALLOWED_HOSTS: (\S+)$", paperless, re.MULTILINE)
+    assert allowed, "the service paperless names no PAPERLESS_ALLOWED_HOSTS"
+    hosts = set(allowed[1].split(","))
+    url = re.search(r"^      PAPERLESS_URL: https?://([^:/]+)", paperless, re.MULTILINE)
+    assert url, "the service paperless has no PAPERLESS_URL"
+    published = set(re.findall(r"^      - ([\d.]+):", paperless, re.MULTILINE))
+    checked = set(re.findall(r"curl [^\]]*https?://([^:/]+)", paperless))
+    smoke = set(re.findall(r"http://([^:/]+):\$\{DEMO_PAPERLESS_PORT\}", SMOKE))
+    assert published == {"127.0.0.1"}, published
+    assert checked, "the health check of Paperless calls no address"
+    assert smoke, "tests/e2e/demo.sh calls Paperless at no address"
+    missing = ({url[1]} | published | checked | smoke) - hosts
+    assert not missing, f"Paperless turns away {sorted(missing)}: PAPERLESS_ALLOWED_HOSTS is {allowed[1]}"
+
+
 def test_no_password_is_written_in_the_compose_file() -> None:
     for line in COMPOSE.splitlines():
         match = re.match(r"\s*(\w*(?:PASSWORD|SECRET|TOKEN|KEY)\w*):\s*(.*)$", line)
