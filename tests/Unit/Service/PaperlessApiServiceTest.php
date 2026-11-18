@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Service\InvalidSettingException;
 use OCA\PaperlessSync\Service\PaperlessApiService;
 use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
+use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
@@ -68,6 +69,12 @@ final class PaperlessApiServiceTest extends TestCase {
 	private const NO_API_HINT = 'Check the URL: when Paperless runs under a path, such as https://example.com/paperless, the URL needs that path, and a proxy in front of Paperless may answer with its login page.';
 	/** What the checklist says when Paperless answers with an error of its own. */
 	private const STATUS_HINT = 'Check that Paperless runs, and the log of Paperless or of the proxy in front of it.';
+	/** Django's plain page for HTTP 400, with which Paperless-ngx 3.5.0 answers a host name that it doesn't allow: 143 bytes. */
+	private const REFUSED_HOST_PAGE = "\n<!doctype html>\n<html lang=\"en\">\n<head>\n  <title>Bad Request (400)</title>\n</head>\n<body>\n  <h1>Bad Request (400)</h1><p></p>\n</body>\n</html>\n";
+	/** What the checklist says to do when Paperless refuses the host name of its URL. */
+	private const REFUSED_HOST_HINT = 'Add the host name of the Paperless URL to PAPERLESS_ALLOWED_HOSTS of Paperless and restart Paperless, or enter the URL with the host name of PAPERLESS_URL when the Nextcloud server reaches Paperless under it. The log of Paperless names the host name that it refused.';
+	/** What a run says when Paperless refuses the host name of its URL. */
+	private const REFUSED_HOST_RUN = 'Paperless does not accept the host name of its URL (HTTP 400). Add it to PAPERLESS_ALLOWED_HOSTS of Paperless and restart it, or use the host name of PAPERLESS_URL. The log of Paperless names it.';
 	/** What the checklist says of a certificate that Nextcloud doesn't trust. */
 	private const CERTIFICATE_HINT = 'Nextcloud does not trust the certificate of Paperless. Use a certificate of a public certificate authority, or import your own with occ security:certificates:import.';
 	/** What a Paperless that doesn't serve version 9 of its API answers to every request. */
@@ -1467,6 +1474,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			'unsupported type' => [400, ['document' => ['File type application/octet-stream not supported']], 'Paperless answered the upload with HTTP 400: document: File type application/octet-stream not supported', true],
 			'several fields' => [400, ['document' => ['a', ['b' => 'c']], 'title' => 'd', 'code' => [5, null]], 'Paperless answered the upload with HTTP 400: document: a c; title: d; code: 5', true],
 			'errors of the whole form' => [400, ['non_field_errors' => ['Invalid data.']], 'Paperless answered the upload with HTTP 400: Invalid data.', true],
+			'the 400 page of a proxy' => [400, "<html>\n<head><title>400 Bad Request</title></head>\n<body><center><h1>400 Bad Request</h1></center><hr><center>nginx</center></body>\n</html>", 'Paperless answered the upload with HTTP 400: 400 Bad Request', true],
 			'too large for the proxy' => [413, "<html>\n<head><title>413 Request Entity Too Large</title></head>\n<body><center><h1>413</h1></center><hr><center>cloudflare</center></body>\n</html>", 'Paperless answered the upload with HTTP 413: 413 Request Entity Too Large', true],
 			'unsupported media type' => [415, ['detail' => 'Unsupported media type.'], 'Paperless answered the upload with HTTP 415: Unsupported media type.', true],
 			'unprocessable' => [422, '"Cannot process"', 'Paperless answered the upload with HTTP 422: Cannot process', true],
@@ -2568,6 +2576,136 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertEquals([$line], $checks);
 		self::assertTrue($checks[0]->blocks());
 		self::assertCount(1, $this->requests);
+	}
+
+	/**
+	 * Paperless-ngx 3.5 and newer with PAPERLESS_URL answer only its host name and localhost, and
+	 * Django answers any other with its plain page, without the header X-Version, as measured with
+	 * ghcr.io/paperless-ngx/paperless-ngx:3.5.0 (#532). The checklist names the cause and the fix,
+	 * and no host name.
+	 */
+	public function testAPaperlessThatRefusesTheHostNameEndsTheChecklistWithTheCause(): void {
+		$this->responses[] = [400, self::REFUSED_HOST_PAGE, ['Content-Type' => 'text/html; charset=utf-8']];
+
+		$checks = $this->preflight();
+
+		self::assertEquals([new ConnectionCheck(
+			'paperless',
+			ConnectionCheck::FAILED,
+			'Paperless does not accept the host name of its URL (HTTP 400).',
+			[],
+			self::REFUSED_HOST_HINT,
+			[],
+			true,
+			'paperless_url',
+		)], $checks);
+		self::assertTrue($checks[0]->blocks());
+		self::assertCount(1, $this->requests);
+		$german = $this->germanL10n();
+		self::assertSame('Paperless akzeptiert den Hostnamen seiner Adresse nicht (HTTP 400).', $german->t($checks[0]->message));
+		self::assertStringStartsWith('Trage den Hostnamen der Adresse von Paperless in PAPERLESS_ALLOWED_HOSTS', $german->t($checks[0]->hint));
+	}
+
+	/**
+	 * Only Django's page without the header of Paperless means a refused host name: a value that
+	 * Paperless refuses comes in JSON, a proxy writes a page of its own, and any other status or an
+	 * answer with X-Version keeps the line that it had.
+	 *
+	 * @return array<string, array{int, mixed, array<string, string>, ConnectionCheck}>
+	 */
+	public static function answersLikeARefusedHostName(): array {
+		$noApi = static fn (string $status): ConnectionCheck => ConnectionCheck::failed('paperless', 'No Paperless API answered at this URL (HTTP %s).', [$status], self::NO_API_HINT, true);
+
+		return [
+			'a value that Paperless refuses' => [400, ['detail' => 'Invalid query.'], ['X-Version' => '3.5.0'], ConnectionCheck::failed('paperless', 'Paperless answered with HTTP %s.', ['400'], self::STATUS_HINT, true)],
+			'the 400 page of a proxy' => [400, "<html>\n<head><title>400 Bad Request</title></head>\n<body><center><h1>400 Bad Request</h1></center><hr><center>nginx</center></body>\n</html>", [], $noApi('400')],
+			'the page of Django with the version of Paperless' => [400, self::REFUSED_HOST_PAGE, ['X-Version' => '3.5.0'], $noApi('400')],
+			'the page of Django with another status' => [200, self::REFUSED_HOST_PAGE, [], $noApi('200')],
+		];
+	}
+
+	#[DataProvider('answersLikeARefusedHostName')]
+	public function testOnlyTheAnswerToARefusedHostNameNamesTheHostName(int $status, mixed $body, array $headers, ConnectionCheck $line): void {
+		$this->responses[] = [$status, $body, $headers];
+
+		self::assertEquals([$line], $this->preflight());
+	}
+
+	/**
+	 * A run stops at its first request with the cause and the fix, in the language of the reader,
+	 * and no host name, in the status, the report, the notifications and the log, which people
+	 * share when they ask for help. Nextcloud's HTTP client throws the answer with the start of its
+	 * page in its message.
+	 */
+	public function testARunThatPaperlessRefusesTheHostNameNamesTheCause(): void {
+		$this->responses[] = static function (): array {
+			throw new RuntimeException('Client error: `GET ' . self::URL . '/api/documents/?page=1&page_size=1000` resulted in a `400 Bad Request` response:' . substr(self::REFUSED_HOST_PAGE, 0, 120) . ' (truncated...)', 400);
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A refused host name must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			$error = RunError::of($exception);
+			self::assertSame(self::REFUSED_HOST_RUN, $error->message());
+			self::assertSame(self::REFUSED_HOST_RUN, $exception->getMessage());
+			self::assertSame('paperless_url', $error->setting);
+			self::assertLessThanOrEqual(NotificationPublisher::ERROR_LIMIT, mb_strlen($error->message()), 'The notification of a failing row keeps the whole explanation.');
+			self::assertStringStartsWith('Paperless akzeptiert den Hostnamen seiner Adresse nicht (HTTP 400). Trage ihn in PAPERLESS_ALLOWED_HOSTS', $error->translated($this->germanL10n()));
+			self::assertStringNotContainsString('paperless.example.test', self::logged($exception));
+		}
+	}
+
+	/** A 400 of a run without Django's page, or Django's page without its status, stays as it came. */
+	#[DataProvider('failuresLikeARefusedHostName')]
+	public function testARunFailureLikeARefusedHostNameStaysAsItCame(int $code, string $failure): void {
+		$this->responses[] = static function () use ($failure, $code): array {
+			throw new RuntimeException($failure, $code);
+		};
+
+		try {
+			$this->service->documents();
+			self::fail('A request that failed must be reported.');
+		} catch (PaperlessRequestException $exception) {
+			self::assertSame($failure, RunError::of($exception)->message());
+		}
+	}
+
+	/** @return array<string, array{int, string}> */
+	public static function failuresLikeARefusedHostName(): array {
+		return [
+			'the 400 page of a proxy' => [400, 'Client error: `GET https://paperless.example.test/api/documents/` resulted in a `400 Bad Request` response: <html><head><title>400 Bad Request</title></head>'],
+			'the page of Django without the status' => [0, 'Client error: `GET https://paperless.example.test/api/documents/` resulted in a response: <title>Bad Request (400)</title>'],
+		];
+	}
+
+	/**
+	 * Every other file would get the same answer, so the file waits as for an unreachable
+	 * Paperless and is not refused for good, although Paperless answers 400.
+	 */
+	public function testAnUploadThatPaperlessRefusesTheHostNameWaits(): void {
+		$this->responses[] = [400, self::REFUSED_HOST_PAGE, ['Content-Type' => 'text/html; charset=utf-8']];
+
+		try {
+			$this->service->uploadDocument($this->source('%PDF-inbox'), 'police.pdf');
+			self::fail('A refused host name must be reported.');
+		} catch (PaperlessUploadException $exception) {
+			self::assertFalse($exception->permanent, 'Every other file would get the same answer: the file is not to blame.');
+			self::assertSame(400, $exception->statusCode);
+			self::assertSame(self::REFUSED_HOST_RUN, $exception->getMessage());
+			self::assertSame('paperless_url', RunError::of($exception)->setting);
+			self::assertStringStartsWith('Paperless akzeptiert den Hostnamen', RunError::of($exception)->translated($this->germanL10n()));
+		}
+		self::assertSame([], array_filter($this->temporaryFiles, 'file_exists'));
+	}
+
+	/** A request that reads the error in the answer itself, such as the one for the token of a user, names the cause too. */
+	public function testAChangeThatPaperlessRefusesTheHostNameNamesTheCause(): void {
+		$this->responses[] = [400, self::REFUSED_HOST_PAGE];
+
+		$this->expectException(PaperlessHostException::class);
+		$this->expectExceptionMessage(self::REFUSED_HOST_RUN);
+		$this->service->userToken('alice', 'password-of-alice');
 	}
 
 	/** An account that may not view documents can't mirror any: a save refuses it, and the other lines say what else it lacks. */

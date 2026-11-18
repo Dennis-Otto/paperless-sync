@@ -25,6 +25,7 @@ use OCA\PaperlessSync\Model\Plan\Upload;
 use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ImportExecutor;
+use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
@@ -346,6 +347,25 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame(['ERROR: Import ' . self::FILE . ': Paperless is busy (attempt 1, the next in 15 minutes)'], $this->report->actions);
 		self::assertSame(['status' => 'retry', 'attempts' => 1, 'retry_at' => $this->clock->time + 900, 'file_id' => self::FILE_ID], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts', 'retry_at', 'file_id'])));
 		self::assertTrue($this->batch->stopped());
+	}
+
+	/**
+	 * A Paperless that refuses the host name of its URL refuses every upload: the file waits instead
+	 * of being refused for good, and the report keeps the words of the app with their setting, so
+	 * that the reader gets them in their language.
+	 */
+	public function testAnUploadThatPaperlessRefusesTheHostNameWaitsWithTheWordsOfTheApp(): void {
+		$refused = new PaperlessHostException();
+		$this->paperless->uploadFailures['a.pdf'] = new PaperlessUploadException($refused->getMessage(), false, 400, $refused->runError());
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame('retry', $this->state->imports[self::FILE]['status'], 'The file waits, although 400 is a permanent status of an upload.');
+		self::assertSame($refused->getMessage(), $this->state->imports[self::FILE]['last_error']);
+		self::assertEquals([new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [self::FILE, $refused->runError(), '1', '15'])], $this->report->errorRecords);
+		$record = $this->report->errorRecords[0]->parameters[1];
+		self::assertTrue($record instanceof RunError && $record->translatable && $record->setting === PaperlessHostException::SETTING);
+		self::assertTrue($this->batch->stopped(), 'Every other upload would get the same answer.');
 	}
 
 	/** A file that keeps failing waits twice as long after each failure, and only its first failure is a warning. */

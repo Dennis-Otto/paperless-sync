@@ -173,8 +173,10 @@ class Paperless:
         self.url = url.rstrip("/")
         self.token = token
 
-    def request(self, method, path, body=None, *, version=API_VERSION, expect=200, raw=False, record=None, **form):
+    def request(self, method, path, body=None, *, version=API_VERSION, expect=200, raw=False, record=None, host=None, **form):
         headers = {"Accept": f"application/json; version={version}"}
+        if host:
+            headers["Host"] = host
         if self.token:
             headers["Authorization"] = f"Token {self.token}"
         data = None
@@ -240,6 +242,21 @@ class Paperless:
         # Without a match, Paperless doesn't assign them to documents on its own.
         body = {"name": name, "matching_algorithm": 0, **fields}
         return self.request("POST", f"/api/{kind}/", body, expect=201)[2]["id"]
+
+
+def refused_host(paperless, line, version):
+    """A host name that PAPERLESS_URL leaves out, such as that of the container under which Nextcloud
+    reaches Paperless: Paperless-ngx 3.5 and newer refuse it once PAPERLESS_URL is set, with Django's
+    plain page and without the header X-Version, which the app recognises by REFUSED_HOST_PAGE of
+    lib/Service/PaperlessApiService.php (#532); 2.x answers it as any other."""
+    status, headers, body = paperless.request("GET", "/api/documents/?page=1&page_size=1", expect=None, host="paperless:8000")
+    if line == "2":
+        check(status == 200, f"Another host name answered HTTP {status} instead of 200 on {version}.")
+        return
+    check(
+        status == 400 and not headers["X-Version"] and re.search(r"<title>\s*Bad Request \(400\)\s*</title>", str(body), re.IGNORECASE),
+        f"Another host name answered HTTP {status} with X-Version {headers['X-Version']!r} on {version}, not the page that the app recognises: {str(body)[:200]!r}",
+    )
 
 
 def is_id(value):
@@ -381,6 +398,7 @@ def api(url, line):
     check(status == (406 if line == "2" else 200), f"Version 10 of the API answered HTTP {status} on {version}.")
     status = paperless.request("GET", "/api/documents/?page=1&page_size=1", version="99", expect=None)[0]
     check(status == 406, f"Version 99 of the API answered HTTP {status} instead of 406 on {version}.")
+    refused_host(paperless, line, version)
 
     inbox_tag = paperless.create("tags", "Inbox", is_inbox_tag=True)
     contract_tag = paperless.create("tags", "Contract")
