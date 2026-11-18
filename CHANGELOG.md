@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.3](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.2...v1.10.3) (2026-11-18)
+
+### Bug fixes
+
+- Every download and upload of a document works again with a Paperless at `http://`, as most run it in their own network. Since Paperless Sync 1.10.0, they asked for HTTP/2 without encryption, which some servers close without an answer, so the run reported `cURL error 52: Empty reply from server` for each document while every other request passed. The transfer of a document now keeps the settings of Nextcloud's HTTP client: HTTP/2 over `https://` where the server agrees, and HTTP/1.1 over `http://`.
+
 ## [1.10.2](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.1...v1.10.2) (2026-11-18)
 
 ### Bug fixes
