@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.3](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.2...v1.10.3) (2026-11-18)
+
+
+### Bug fixes
+
+* downloads and uploads over plain HTTP no longer fail with cURL error 52 ([#543](https://github.com/Dennis-Otto/paperless-sync/issues/543)) ([42597bf](https://github.com/Dennis-Otto/paperless-sync/commit/42597bff5ce105a715ca1c963631e78d70aec029))
+
 ## [1.10.2](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.1...v1.10.2) (2026-11-18)
 
 ### Bug fixes
