@@ -45,7 +45,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.3.1"
+    "X-Version": "3.5.0"
   },
   "request": "PATCH /api/documents/5/",
   "status": 200
