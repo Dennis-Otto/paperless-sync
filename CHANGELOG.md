@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.1](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.0...v1.10.1) (2026-11-18)
+
+### Bug fixes
+
+- Your own Paperless-ngx 3.5 or newer with `PAPERLESS_URL` set answers only the host name of that URL, so Paperless Sync gets `400 Bad Request` when Nextcloud reaches it under another name, such as `http://paperless:8000`. The troubleshooting page now names this message and the fix: add the host name that Nextcloud uses to `PAPERLESS_ALLOWED_HOSTS`.
+- The demo of `demo/compose.yaml` works with Paperless-ngx 3.5 and newer: Paperless also answers at `http://127.0.0.1`, the address of its port, where it turned away every request with `400 Bad Request`.
+
 ## [1.10.0](https://github.com/Dennis-Otto/paperless-sync/compare/v1.9.0...v1.10.0) (2026-11-13)
 
 ### Features
