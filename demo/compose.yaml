@@ -46,7 +46,7 @@ services:
   # The tables of Nextcloud. Its cron, its worker and its web server work side by side, and
   # SQLite would answer one of them with "database is locked" now and then.
   database:
-    image: postgres:17.12-alpine@sha256:a77aa70e641402a21411b92b721c58d10f23b50ae5fdd2333efd22d166e1e5f7
+    image: postgres:17.12-alpine@sha256:f9cf3e1f0066f0eb0c48707d864f0ac5941e9ff454a072077d97a4d278d07d73
     attach: false
     depends_on:
       secrets:
@@ -110,7 +110,7 @@ services:
       retries: 5
 
   nextcloud:
-    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
+    image: nextcloud:35.0.3-apache@sha256:f22d1dd63844bd15bbf6c2019149653c3d1c775ba48b173b56c3c6ad5f386196
     attach: false
     network_mode: service:paperless
     depends_on:
@@ -140,7 +140,7 @@ services:
 
   # The system cron of Nextcloud, which starts the scheduled runs of the app.
   cron:
-    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
+    image: nextcloud:35.0.3-apache@sha256:f22d1dd63844bd15bbf6c2019149653c3d1c775ba48b173b56c3c6ad5f386196
     attach: false
     init: true
     network_mode: service:paperless
@@ -154,7 +154,7 @@ services:
   # Runs "Synchronize now" of the settings within seconds, instead of within five minutes of the
   # cron. It keeps running and reads the settings anew for each job, since 1.5.1 (#323).
   worker:
-    image: nextcloud:35.0.3-apache@sha256:8a7a65b8bae82a79568fec2ed9cf3e374a1944eda2a22ebe130d79463336fee3
+    image: nextcloud:35.0.3-apache@sha256:f22d1dd63844bd15bbf6c2019149653c3d1c775ba48b173b56c3c6ad5f386196
     attach: false
     init: true
     network_mode: service:paperless
