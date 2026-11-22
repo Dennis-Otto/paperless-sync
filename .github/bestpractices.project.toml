@@ -25,3 +25,15 @@
 # bestpractices.dev" of scripts/check.sh checks this file with
 # python3 .github/blueprint.py best-practices --verify.
 # https://github.com/Dennis-Otto/repo-blueprint/blob/main/docs/features/bots.md#the-entry-on-bestpracticesdev
+
+[test]
+justification = "An automated test suite: PHPUnit, which scripts/check.sh runs with its coverage, on a computer and in the CI, and which fails when a line of lib/ runs in no test; and the end-to-end tests in Docker, which run the app in every Nextcloud version that appinfo/info.xml supports, from min-version to max-version, against a mock of Paperless-ngx, in the newest of them on PostgreSQL and on MariaDB with an S3 object store as well, and upgrade an installation in use from the last release to the package of the commit: https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md"
+
+[test_invocation]
+justification = "bash scripts/check.sh runs the tests with every other check, the same on a computer and in the CI, and composer test runs PHPUnit alone; bash tests/e2e/run-all.sh runs the end-to-end tests in Docker against every supported Nextcloud version side by side, and bash tests/e2e/run.sh against one version: https://github.com/Dennis-Otto/paperless-sync/blob/main/CONTRIBUTING.md#checks"
+
+[test_continuous_integration]
+justification = "The CI runs scripts/check.sh with the tests, Psalm and php-cs-fixer on every pull request and after every change of main, as a required check; the workflow Docker E2E runs the end-to-end tests against every supported Nextcloud version, and against the newest on PostgreSQL and on MariaDB with S3, as two more required checks, after every change of main, every night and in each pull request whose change can affect what they test; every Monday they run against the coming Nextcloud and the contract tests against a real Paperless-ngx: https://github.com/Dennis-Otto/paperless-sync/blob/main/.github/workflows/e2e.yml"
+
+[automated_integration_testing]
+justification = "The CI runs scripts/check.sh with the whole test suite, which fails when a line of lib/ runs in no test, on every pull request and after every change of main, and reports its success or failure as a required check; the workflow Docker E2E runs the app in Docker in every Nextcloud version that appinfo/info.xml supports and in the newest on PostgreSQL and on MariaDB with S3, against a mock of Paperless-ngx, and upgrades an installation in use from the last release, after every change of main, every night and in each pull request whose change can affect what they test, and reports both of its jobs as required checks: https://github.com/Dennis-Otto/paperless-sync/blob/main/tests/e2e/README.md#in-the-ci"
