@@ -16,6 +16,7 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\DocumentPermissions;
 use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\PaperlessScan;
+use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Model\RunError;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
@@ -445,8 +446,16 @@ final class SyncService {
 				}
 			}
 			if ($document === null && $config->inboxEnabled) {
+				// The uploads that wait hold the documents of the account for the files of every other
+				// user, also those that an inbox of this run sent before.
+				$waiting = $config->perUser() ? WaitingUploads::owners($this->state, $config, $owners) : [];
 				foreach (array_intersect_key($archives, array_flip($getting)) as $user => $archive) {
-					$this->syncInbox($paperless, $archive, $reports[$user], $owners->paperlessUserOf((string)$user));
+					$own = $owners->paperlessUserOf((string)$user);
+					$scope = $config->perUser() ? new PerUserScope($owners, (string)$user, WaitingUploads::held($waiting, $paperless, $own)) : null;
+					$this->syncInbox($paperless, $archive, $reports[$user], $scope);
+					if ($own !== null && $reports[$user]->importsSubmitted > 0) {
+						$waiting[$own] = true;
+					}
 				}
 			}
 			if ($config->exportEnabled) {
@@ -481,7 +490,7 @@ final class SyncService {
 	 * the user gets, and the others, of which those that another archive takes leave it.
 	 *
 	 * The documents of the user of Paperless $held, the account of the app while an upload waits
-	 * for its owner, stay where their copies are, as heldOwner() explains. Those whose permissions
+	 * for its owner, stay where their copies are, as WaitingUploads explains. Those whose permissions
 	 * the run can't read go to their owner and stay in every archive that has them, and the report
 	 * says how many there are.
 	 *
@@ -546,41 +555,13 @@ final class SyncService {
 	}
 
 	/**
-	 * The user of Paperless whose documents a run of per-user ownership holds: the account of the
-	 * app, while an upload of the inbox or of Send to Paperless waits for its owner. Paperless
-	 * makes the account that uploads a file the owner of its document, and the app gives the
-	 * document the owner of its file only once the task of the upload has ended, or in a later run
-	 * when Paperless refused the change. Until then, the document of Alice's upload looks like a
-	 * document of the account, which would go to the target user, or to the user of the account,
-	 * so the runs hold every document of the account while an upload waits, and their copies stay
-	 * where they are. Null holds nothing, as when no upload waits or each would keep the account as
-	 * its owner; false holds every document, when Paperless doesn't name its account.
+	 * The user of Paperless whose documents the export of a run of per-user ownership holds, while
+	 * an upload of the inbox or of Send to Paperless waits for its owner, as WaitingUploads explains:
+	 * their copies stay where they are. Null holds nothing; false holds every document, when
+	 * Paperless doesn't name its account.
 	 */
 	private function heldOwner(PaperlessClientInterface $paperless, SyncConfig $config, Owners $owners): int|false|null {
-		$waiting = [];
-		if ($config->inboxEnabled) {
-			foreach ($owners->users() as $user) {
-				$owner = $owners->paperlessUserOf($user);
-				if ($owner !== null && in_array('pending', array_map(static fn (array $import): string => (string)($import['status'] ?? ''), $this->state->allImports($user)), true)) {
-					$waiting[$owner] = true;
-				}
-			}
-		}
-		foreach ($this->state->allSends() as $send) {
-			$owner = $owners->paperlessUserOf((string)($send['user_id'] ?? ''));
-			if ($owner !== null && ($send['status'] ?? '') === SendService::PENDING) {
-				$waiting[$owner] = true;
-			}
-		}
-		if ($waiting === []) {
-			return null;
-		}
-		$account = $paperless->accountId();
-		if ($account === null) {
-			return false;
-		}
-
-		return array_diff_key($waiting, [$account => true]) === [] ? null : $account;
+		return WaitingUploads::held(WaitingUploads::owners($this->state, $config, $owners), $paperless);
 	}
 
 	/**
@@ -905,10 +886,11 @@ final class SyncService {
 	/**
 	 * The inbox of a run: how the uploads of earlier runs ended, then the uploads of its new and
 	 * changed files. ImportPlanner plans them, and ImportExecutor applies them, or reports them in
-	 * a dry-run. In per-user ownership, $owner is the user of Paperless who gets the documents of
-	 * its uploads, the one of the user of Nextcloud whose inbox it is.
+	 * a dry-run. In per-user ownership, $scope names the user of Nextcloud whose inbox it is, whose
+	 * user of Paperless gets the documents of its uploads, and for whom alone a document that
+	 * Paperless has with the content of a file counts.
 	 */
-	private function syncInbox(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, ?int $owner = null): void {
+	private function syncInbox(PaperlessClientInterface $paperless, SyncConfig $config, SyncReport $report, ?PerUserScope $scope = null): void {
 		$inboxRoot = Paths::join($config->basePath, $config->inboxFolder);
 		$batch = new SyncBatch($config->batchSize);
 		$planner = new ImportPlanner(
@@ -921,8 +903,9 @@ final class SyncService {
 			$inboxRoot,
 			Paths::join($config->basePath, $config->errorFolder),
 			$this->status->heartbeat(...),
+			$scope,
 		);
-		$executor = new ImportExecutor($config, $report, $this->state, $batch, $this->storage, $paperless, $this->logger, $this->timeFactory, $inboxRoot, $owner);
+		$executor = new ImportExecutor($config, $report, $this->state, $batch, $this->storage, $paperless, $this->logger, $this->timeFactory, $inboxRoot, $scope);
 		foreach ($planner->plan() as $action) {
 			$executor->apply($action);
 		}

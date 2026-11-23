@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-11-23
+- Amended by [0568](0568-a-document-of-the-account-counts-only-as-the-users-own-upload.md): in per-user ownership, a document of the account counts only as the user's own lost upload, proven by the time of its first upload
 
 ## Context
 

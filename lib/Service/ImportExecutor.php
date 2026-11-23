@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Service;
 
 use LogicException;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Model\Plan\ForgetImport;
 use OCA\PaperlessSync\Model\Plan\ImportAction;
 use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
@@ -37,7 +38,9 @@ use Psr\Log\LogLevel;
  * uploads no file and moves none.
  *
  * In per-user ownership, the inbox of a user of Nextcloud with a user of Paperless gives each
- * document that its uploads created that user as the owner, once Paperless imported it.
+ * document that its uploads created that user as the owner, once Paperless imported it, and a file
+ * ends on a document that Paperless has already only when that document is the user's, as
+ * KnownContent decides.
  */
 final class ImportExecutor {
 	/** The wait after the first failed upload of a file whose failure may pass, in seconds; it doubles with each further one. */
@@ -50,6 +53,8 @@ final class ImportExecutor {
 	private bool $dryRun;
 	private InboxTags $tags;
 	private KnownContent $knownContent;
+	/** The user of Paperless who owns the documents of the files of this inbox, in per-user ownership, or null to leave them to the account of the app. */
+	private ?int $owner;
 	/** @var list<string> the names of the first files that the run set aside */
 	private array $setAsideNames = [];
 
@@ -63,12 +68,13 @@ final class ImportExecutor {
 		private LoggerInterface $logger,
 		private ITimeFactory $clock,
 		private string $inboxRoot,
-		/** The user of Paperless who owns the documents of the files of this inbox, in per-user ownership, or null to leave them to the account of the app. */
-		private ?int $owner = null,
+		/** Whose inbox it is in per-user ownership, or null in single ownership, in which every document is the account's. */
+		private ?PerUserScope $scope = null,
 	) {
 		$this->dryRun = $report->dryRun;
 		$this->tags = new InboxTags($paperless, $config, $report);
 		$this->knownContent = new KnownContent($paperless);
+		$this->owner = $scope !== null ? $scope->owners->paperlessUserOf($scope->user) : null;
 	}
 
 	/** @throws LogicException for an action that this executor doesn't know, or that doesn't fit the batch */
@@ -162,14 +168,14 @@ final class ImportExecutor {
 	 * Paperless received although its answer never came, or one that came back to the inbox, or
 	 * whose state an earlier version couldn't follow to a new path, ends as imported instead of
 	 * becoming a second document. A document that the MD5 alone found counts only once the
-	 * SHA-256 of its original is the file's; in per-user ownership its owner is read before, so
-	 * that a document of another user costs no download, and changes only after.
+	 * SHA-256 of its original is the file's; in per-user ownership only a document of the inbox's
+	 * user counts, whose owner is read before, so that any other document costs no download.
 	 */
 	private function upload(Upload $action): void {
 		$this->batch->take(SyncBatch::WRITE);
 		$path = $action->path;
 		try {
-			$known = $this->knownDocument($this->fingerprint($path));
+			$known = $this->knownDocument($this->fingerprint($path), $action->firstAttempt);
 		} catch (\Throwable $exception) {
 			// Without the answer, the upload might create the document a second time, so the file
 			// waits, as for a failed upload.
@@ -196,8 +202,12 @@ final class ImportExecutor {
 			return;
 		}
 		$stream = null;
+		// The first upload of the file that may have reached Paperless, kept across the attempts:
+		// a document of the account that Paperless added since then may be this file's.
+		$firstAttempt = null;
 		try {
 			$stream = $this->storage->openRead($this->config->targetUser, $path);
+			$firstAttempt = $action->firstAttempt > 0 ? $action->firstAttempt : $this->now();
 			$taskId = $this->paperless->uploadDocument($stream, $action->name, $tags['ids']);
 			$this->state->saveImport($this->config->targetUser, $path, [
 				'etag' => $action->etag,
@@ -205,6 +215,7 @@ final class ImportExecutor {
 				'task_id' => $taskId,
 				'status' => 'pending',
 				'submitted_at' => $this->now(),
+				'first_attempt_at' => $firstAttempt,
 				'attempts' => 0,
 				'retry_at' => 0,
 				'last_error' => null,
@@ -215,11 +226,11 @@ final class ImportExecutor {
 			if ($exception->permanent) {
 				$this->reject($action, $exception);
 			} else {
-				$this->retryUploadLater($action, $exception);
+				$this->retryUploadLater($action, $exception, $firstAttempt ?? $action->firstAttempt);
 				$this->batch->stop();
 			}
 		} catch (\Throwable $exception) {
-			$this->retryUploadLater($action, $exception);
+			$this->retryUploadLater($action, $exception, $firstAttempt ?? $action->firstAttempt);
 		} finally {
 			if (is_resource($stream)) {
 				fclose($stream);
@@ -246,7 +257,7 @@ final class ImportExecutor {
 		if ($this->dryRun) {
 			$this->report->error(new RunError('Import %1$s: %2$s', [$action->path, RunError::of($exception)]));
 		} else {
-			$this->retryUploadLater($action, $exception);
+			$this->retryUploadLater($action, $exception, $action->firstAttempt);
 		}
 		if ($this->tags->unavailable() || $exception instanceof PaperlessRequestException) {
 			$this->batch->stop();
@@ -254,52 +265,29 @@ final class ImportExecutor {
 	}
 
 	/**
-	 * The document of Paperless that has the content of a file of the inbox, or null when the file
-	 * goes up. In per-user ownership, the document is this inbox's, and one of the account of the
-	 * app gets the inbox's user as its owner, once its content is confirmed.
+	 * The document of Paperless that counts as that of a file of the inbox, or null when the file
+	 * goes up. In per-user ownership, only a document of the inbox's user counts, and one that is
+	 * provably the user's own upload whose answer never came, which the account of the app still
+	 * owns, gets that user as its owner here, once its content is confirmed; a dry-run gives none.
 	 */
-	private function knownDocument(DocumentFingerprint $content): ?int {
-		$match = $this->knownContent->find($content);
-		if ($match === null) {
+	private function knownDocument(DocumentFingerprint $content, int $firstAttempt): ?int {
+		$known = $this->knownContent->own($content, $this->scope, $firstAttempt);
+		if ($known === null) {
 			return null;
 		}
-		$owner = $this->owner !== null ? $this->ownerOf($match->id) : null;
-		if ($this->owner !== null && $owner === null) {
-			return null;
-		}
-		if (!$this->knownContent->confirms($match, $content)) {
-			return null;
-		}
-		if ($owner !== null && $owner !== $this->owner && !$this->dryRun) {
-			$this->paperless->setOwner($match->id, (int)$this->owner);
+		if ($known->lostUpload && $this->owner !== null && !$this->dryRun) {
+			$this->paperless->setOwner($known->id, $this->owner);
 		}
 
-		return $match->id;
-	}
-
-	/**
-	 * In per-user ownership, the owner of a document with the content of a file of the inbox, when
-	 * the document is this inbox's: owned by its user of Paperless, or by the account of the app,
-	 * which owns an upload until a run gives it its owner, as after an upload whose answer never
-	 * came. The account sees the documents of every user, so a document of another user, or one
-	 * that it doesn't show, is not, and the answer is null: the file goes up as its own document,
-	 * and never leaves the inbox for a document that its user can't see.
-	 */
-	private function ownerOf(int $document): ?int {
-		$found = $this->paperless->document($document);
-		if ($found === null || !is_numeric($found['owner'] ?? null)) {
-			return null;
-		}
-		$owner = (int)$found['owner'];
-
-		return $owner === $this->owner || $owner === $this->paperless->accountId() ? $owner : null;
+		return $known->id;
 	}
 
 	/**
 	 * Paperless has a document with the content of a file of the inbox, so the file ends as one
 	 * that it imported, without an upload: it leaves the inbox, or stays there as imported, as the
 	 * settings say. The document stays as it is: in per-user ownership knownDocument() made sure
-	 * that it is this inbox's, and otherwise every document is the account's.
+	 * that it is this inbox's, and gave a lost upload its owner, and otherwise every document is
+	 * the account's.
 	 */
 	private function imported(Upload $action, int $document): void {
 		$path = $action->path;
@@ -322,7 +310,7 @@ final class ImportExecutor {
 					]);
 				}
 			} catch (\Throwable $exception) {
-				$this->retryUploadLater($action, $exception);
+				$this->retryUploadLater($action, $exception, $action->firstAttempt);
 				return;
 			}
 			$this->logger->info('Paperless already has the content of the inbox file {path} as document {document}, so it was not uploaded again', [
@@ -362,12 +350,17 @@ final class ImportExecutor {
 		]);
 	}
 
-	/** The upload failed for a reason that may pass, so the file waits longer after each failure. */
-	private function retryUploadLater(Upload $action, \Throwable $exception): void {
+	/**
+	 * The upload failed for a reason that may pass, so the file waits longer after each failure.
+	 * $firstAttempt is the time of the first upload of the file's content that may have reached
+	 * Paperless; an attempt that failed before its upload passes the time of its action, which is
+	 * 0 for a file that changed, so that the state never keeps the time of an older content.
+	 */
+	private function retryUploadLater(Upload $action, \Throwable $exception, int $firstAttempt): void {
 		$error = SyncErrors::message($exception);
 		$attempts = $action->attempts + 1;
 		// The report translates the text that the app wrote, as in a dry-run; the state and the log keep it in English.
-		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error, RunError::of($exception), $action->fileId);
+		$minutes = $this->retryLater($action->path, $action->etag, $attempts, $error, RunError::of($exception), $firstAttempt, $action->fileId);
 		// The first failure of a file is a warning, the ones after it only information.
 		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of the inbox file {path} failed; the next attempt follows in {minutes} minutes: {error}', [
 			'path' => $action->path,
@@ -405,9 +398,10 @@ final class ImportExecutor {
 	/**
 	 * Gives the document of an upload its owner, the user of Paperless of the user of Nextcloud whose
 	 * inbox held the file, as Paperless makes the account that uploads a file its owner. Only the
-	 * document that the task of the upload names is the upload's: another document with the content
-	 * of the file, which a search found, may be someone else's, so it stays as it is, and so does a
-	 * document that Paperless didn't name, which the report names as an error. When Paperless
+	 * document that the task of the upload names is the upload's, and one that KnownContent showed
+	 * to be the user's own upload whose answer never came: another document with the content of the
+	 * file, which a search found, keeps its owner, and so does a document that Paperless didn't
+	 * name, which the report names as an error. When Paperless
 	 * refuses the owner for a reason that may pass, the upload stays pending, so that the next run
 	 * asks again; a refusal that repeats for good, or one that lasts as long as a task may take,
 	 * ends the import as imported, as the document is in Paperless, with its owner as Paperless has
@@ -415,7 +409,7 @@ final class ImportExecutor {
 	 */
 	private function giveOwner(ImportSucceeded $action): void {
 		$path = $action->context->path;
-		if ($action->document === null || !$action->uploaded) {
+		if ($action->document === null || (!$action->uploaded && !$action->lostUpload)) {
 			$this->report->error(new RunError('Import %s: Paperless did not name the document that the upload created, so its owner stays as Paperless has it', [$path]), null, $path);
 			return;
 		}
@@ -476,7 +470,7 @@ final class ImportExecutor {
 			$this->report->error(new RunError('Import %1$s: %2$s; a run uploads it again', [$path, $action->error]), null, $path);
 			return;
 		}
-		$minutes = $this->retryLater($path, $action->etag, $action->attempts, $action->error, RunError::plain($action->error));
+		$minutes = $this->retryLater($path, $action->etag, $action->attempts, $action->error, RunError::plain($action->error), $action->firstAttempt);
 		$this->logger->warning('Paperless has not finished the import of the inbox file {path} a day after its upload; it is uploaded again in {minutes} minutes: {error}', [
 			'path' => $path,
 			'error' => $action->error,
@@ -488,10 +482,12 @@ final class ImportExecutor {
 	/**
 	 * Saves that a file of the inbox waits for its next upload, twice as long after each failure up
 	 * to a day, and reports why: the state keeps the English error, the report its record. The answer
-	 * is the wait in minutes. The ID of the file, when it is known, lets the state follow the file to
-	 * a new path; without one, the state keeps the ID that it has.
+	 * is the wait in minutes. The time of the first upload of the content that may have reached
+	 * Paperless stays with the state for the next attempt, and 0 for a content that never went up
+	 * clears the time of an older one. The ID of the file, when it is known, lets the state follow the file to a new
+	 * path; without one, the state keeps the ID that it has.
 	 */
-	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record, int $fileId = 0): int {
+	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record, int $firstAttempt, int $fileId = 0): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
 		$now = $this->now();
@@ -503,6 +499,7 @@ final class ImportExecutor {
 			'attempts' => $attempts,
 			'retry_at' => $now + $delay,
 			'last_error' => SyncErrors::stored($error),
+			'first_attempt_at' => $firstAttempt,
 		] + ($fileId > 0 ? ['file_id' => $fileId] : []));
 		$this->report->error(new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [$path, $record, (string)$attempts, (string)$minutes]), null, $path);
 

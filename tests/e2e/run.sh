@@ -2294,7 +2294,8 @@ scenario_per_user() {
 	# inbox of e2e-other, whose document it is, ends as imported as P124 once the original of P124
 	# has the SHA-256 of the file; the same copy in the inbox of e2e-owner, for whom P124 is the
 	# document of another user, goes up without a download of the original, and the refusal of
-	# Paperless moves it to the error folder of e2e-owner, with its reason.
+	# Paperless moves it to the error folder of e2e-owner, with its reason, which names the document
+	# of the other user by its ID alone.
 	control /control/paperless/2.20.15
 	control /control/checksum/md5
 	mock_state > "${TMP_DIR}/mock-before-known.json"
@@ -2314,7 +2315,7 @@ scenario_per_user() {
 	control /control/checksum/sha256
 	control /control/paperless/3.3.0
 	assert_dav_file e2e-owner 'Documents/Paperless/Errors/copy-of-P124.pdf' 'Synthetic Paperless archive document P124.'
-	assert_dav_file e2e-owner 'Documents/Paperless/Errors/copy-of-P124.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
+	assert_dav_file e2e-owner 'Documents/Paperless/Errors/copy-of-P124.pdf.error.txt' 'It is a duplicate of document #123'
 }
 
 # The documents that Paperless shares: a document of e2e-owner that the group of the household may

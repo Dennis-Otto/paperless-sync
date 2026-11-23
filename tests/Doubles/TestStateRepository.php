@@ -142,6 +142,7 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,
+			'first_attempt_at' => 0,
 			'attempts' => 0,
 			'retry_at' => 0,
 			'last_error' => null,

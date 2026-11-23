@@ -10,6 +10,8 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
 use LogicException;
+use OCA\PaperlessSync\Model\Owners;
+use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Model\Plan\ForgetImport;
 use OCA\PaperlessSync\Model\Plan\ImportAction;
 use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
@@ -214,17 +216,17 @@ final class ImportExecutorTest extends TestCase {
 	}
 
 	/**
-	 * In per-user ownership, a document of the account of the app, as after an upload whose answer
-	 * never came, is the inbox's: the file ends as imported, and the document gets its owner; a
-	 * dry-run gives none.
+	 * In per-user ownership, a document of the account of the app that Paperless added after the
+	 * first upload of the file is that upload, whose answer never came: the file ends as imported,
+	 * and the document gets its owner; a dry-run gives none.
 	 */
 	public function testAFileWhoseUploadTheAccountOwnsEndsAsImportedAndItsDocumentGetsItsOwner(): void {
 		$this->arrange(false, [], 3);
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 
-		$this->executor->apply(self::upload(attempts: 1));
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([], $this->paperless->uploadAttempts);
 		self::assertSame([[9, 3]], $this->paperless->ownerChanges);
@@ -234,12 +236,201 @@ final class ImportExecutorTest extends TestCase {
 		$this->arrange(true, [], 3);
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([], $this->paperless->ownerChanges);
 		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+	}
+
+	/**
+	 * A document of the account of the app is the file's own upload only when Paperless added it at
+	 * or after the first upload of the file: otherwise it is the target user's, such as an upload
+	 * of the target user or a document that the account owns, and the file goes up as a document of
+	 * its own, without a download of the original, and the document keeps its owner.
+	 *
+	 * @return array<string, array{Upload, array<string, mixed>}>
+	 */
+	public static function documentsOfTheAccountWithoutProof(): array {
+		return [
+			'a file that never went up' => [self::upload(), self::accountDocument()],
+			'a file whose upload failed before it reached Paperless' => [self::upload(attempts: 1), self::accountDocument()],
+			'a document that Paperless added before the first upload' => [self::upload(attempts: 1, firstAttempt: TestClock::START + 301), self::accountDocument()],
+			'a document without the time it was added' => [self::upload(attempts: 1, firstAttempt: TestClock::START), ['id' => 9, 'owner' => 1]],
+		];
+	}
+
+	/** @param array<string, mixed> $document */
+	#[DataProvider('documentsOfTheAccountWithoutProof')]
+	public function testAFileWithTheContentOfADocumentOfTheAccountGoesUpWithoutProofOfItsUpload(Upload $upload, array $document): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+		$this->paperless->documents[] = $document;
+
+		$this->executor->apply($upload);
+
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame([], $this->paperless->downloadRequests, 'A document that does not count costs no download.');
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+	}
+
+	/** A document that Paperless added in the same second as the first upload may be that upload. */
+	public function testADocumentOfTheAccountAddedAtTheFirstUploadIsTheFilesOwn(): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = self::accountDocument();
+
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START + 300));
+
+		self::assertSame([[9, 3]], $this->paperless->ownerChanges);
+		self::assertSame([], $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * A document of the user's own user of Paperless counts, with its owner as a number or as a
+	 * string of digits, and so does one of a user of Paperless whose documents go to the inbox's
+	 * user; it keeps its owner.
+	 *
+	 * @return array<string, array{mixed}>
+	 */
+	public static function ownersOfTheInboxsDocuments(): array {
+		return [
+			'the user of Paperless of the inbox' => [3],
+			'the same as digits' => ['3'],
+		];
+	}
+
+	#[DataProvider('ownersOfTheInboxsDocuments')]
+	public function testADocumentOfTheInboxsUserCountsAndKeepsItsOwner(mixed $owner): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => $owner];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+		self::assertSame(0, $this->paperless->accountReads, 'A document of the inbox\'s user needs no account.');
+	}
+
+	/**
+	 * While an upload of another user waits for its owner, a document of the account may be that
+	 * upload's, so it counts for nobody: the file waits, neither uploaded nor deleted, also as its
+	 * own lost upload; without the ID of the account, every document of another owner does.
+	 *
+	 * @return array<string, array{int|false, array<string, mixed>}>
+	 */
+	public static function heldDocuments(): array {
+		return [
+			'a document of the account' => [1, self::accountDocument()],
+			'any other owner while Paperless does not name its account' => [false, ['id' => 9, 'owner' => 4]],
+		];
+	}
+
+	/** @param array<string, mixed> $document */
+	#[DataProvider('heldDocuments')]
+	public function testAFileWithTheContentOfAHeldDocumentWaits(int|false $held, array $document): void {
+		$this->arrange(false, [], 3, $held);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+		$this->paperless->documents[] = $document;
+
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
+
+		self::assertSame([[], [], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges, $this->paperless->downloadRequests]);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+		self::assertSame(['status' => 'retry', 'attempts' => 2], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts'])));
+		self::assertSame(TestClock::START, $this->state->imports[self::FILE]['first_attempt_at'], 'The wait keeps the time of the upload before it.');
+		self::assertSame(['Import ' . self::FILE . ': Paperless has the content of the file as the document 9, which may be that of an upload that waits for its owner, so the file waits until that upload ends (attempt 2, the next in 30 minutes)'], $this->report->errorMessages);
+		self::assertFalse($this->batch->stopped(), 'The other files go on.');
+	}
+
+	/** A document of the user's own user of Paperless is never held, also while Paperless does not name its account. */
+	public function testADocumentOfTheInboxsUserIsNeverHeld(): void {
+		$this->arrange(false, [], 3, false);
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 3];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+	}
+
+	/**
+	 * In single ownership, every document is the account's, so a document with the content of the
+	 * file counts without a look at its owner.
+	 */
+	public function testSingleOwnershipReadsNoOwner(): void {
+		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 4];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[], 0], [$this->paperless->documentReads, $this->paperless->accountReads]);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+	}
+
+	/**
+	 * An upload that may have reached Paperless keeps the time of the first one in the state of the
+	 * file, across its attempts, so that a document of the account that Paperless added since then
+	 * can be shown to be the file's; a failure before the upload and a refusal of Paperless don't.
+	 */
+	public function testTheStateKeepsTheTimeOfTheFirstUploadThatMayHaveReachedPaperless(): void {
+		$this->paperless->uploadException = new RuntimeException('Paperless did not answer in time');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['status' => 'retry', 'first_attempt_at' => TestClock::START], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'first_attempt_at'])));
+
+		$this->arrange(false);
+		$this->clock->advance(900);
+
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
+
+		self::assertSame(['status' => 'pending', 'first_attempt_at' => TestClock::START], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'first_attempt_at'])), 'A later upload keeps the time of the first.');
+
+		$this->arrange(false);
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless is overloaded: HTTP 503', false, 503);
+
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START - 60));
+
+		self::assertSame(TestClock::START - 60, $this->state->imports[self::FILE]['first_attempt_at']);
+
+		$this->arrange(false);
+		$this->storage->readException = new RuntimeException('The file is locked');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(0, $this->state->imports[self::FILE]['first_attempt_at'], 'A file that could not be read never reached Paperless.');
+
+		$this->arrange(false);
+		$this->paperless->uploadException = new PaperlessUploadException('Paperless refused the file: HTTP 400', true, 400);
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame('rejected', $this->state->imports[self::FILE]['status']);
+		self::assertArrayNotHasKey('first_attempt_at', $this->state->imports[self::FILE], 'A refusal created no document.');
+	}
+
+	/** Without the owner of the document, the run can't tell whose it is, so the file waits. */
+	public function testAFileWaitsWhenPaperlessDoesNotNameTheOwnerOfItsDocument(): void {
+		foreach ([['id' => 9], ['id' => 9, 'owner' => 'alice']] as $document) {
+			$this->arrange(false, [], 3);
+			$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
+			$this->paperless->documents[] = $document;
+
+			$this->executor->apply(self::upload());
+
+			self::assertSame([], $this->paperless->uploadAttempts);
+			self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+			self::assertSame(['Import ' . self::FILE . ': Paperless did not name the owner of the document 9. (attempt 1, the next in 15 minutes)'], $this->report->errorMessages);
+		}
 	}
 
 	/** Without the owner of the document that Paperless has, or without the new owner, the file waits, as for a failed upload. */
@@ -257,10 +448,10 @@ final class ImportExecutorTest extends TestCase {
 		$this->arrange(false, [], 3);
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('sha256', self::CONTENT)] = 9;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 		$this->paperless->ownerException = new RuntimeException('Paperless did not make the user 3 the owner of the document 9: HTTP 403.');
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([], $this->paperless->uploadAttempts);
 		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
@@ -369,9 +560,9 @@ final class ImportExecutorTest extends TestCase {
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
 		$this->paperless->contents[9] = '%PDF-other';
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([], $this->paperless->ownerChanges, 'Another content keeps the account as the owner.');
 		self::assertSame([[9, true]], $this->paperless->downloadRequests);
@@ -382,10 +573,10 @@ final class ImportExecutorTest extends TestCase {
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
 		$this->paperless->contents[9] = self::CONTENT;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([], $this->paperless->ownerChanges, 'Without the original, the owner stays.');
 		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
@@ -394,9 +585,9 @@ final class ImportExecutorTest extends TestCase {
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
 		$this->paperless->contents[9] = self::CONTENT;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
 		self::assertSame([[9, 3]], $this->paperless->ownerChanges);
 		self::assertSame([], $this->paperless->uploadAttempts);
@@ -460,13 +651,28 @@ final class ImportExecutorTest extends TestCase {
 		$this->arrange(false, [], 3);
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
-		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->documents[] = self::accountDocument();
 		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
 
-		$this->executor->apply(self::upload());
+		$this->executor->apply(self::upload(attempts: 1, firstAttempt: TestClock::START));
 
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
 		self::assertSame([], $this->paperless->ownerChanges);
 		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * A file that changed carries no time of a first upload, so an attempt that fails before its
+	 * upload clears the time of the old content: otherwise the next run would take a document of
+	 * the account added after the old upload for the new content's own.
+	 */
+	public function testAFailureBeforeTheUploadOfAChangedFileClearsTheTimeOfTheOldContent(): void {
+		$this->state->imports[self::FILE] = ['path' => self::FILE, 'etag' => 'old', 'status' => 'retry', 'attempts' => 1, 'first_attempt_at' => TestClock::START - 3600];
+		$this->paperless->findException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload(attempts: 1));
+
+		self::assertSame(['etag' => self::upload()->etag, 'status' => 'retry', 'first_attempt_at' => 0], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'status', 'first_attempt_at'])));
 	}
 
 	/** Without the answer whether Paperless has the content, the file waits, and without Paperless, so do the others. */
@@ -658,6 +864,16 @@ final class ImportExecutorTest extends TestCase {
 		];
 	}
 
+	/** The user's own upload whose answer never came, which the end of an unfinished upload found by its content, gets its owner. */
+	public function testTheLostUploadOfAnUnfinishedImportGetsTheOwnerOfTheInbox(): void {
+		$this->arrange(false, [], 5);
+
+		$this->executor->apply(new ImportSucceeded(new ImportContext(self::FILE, []), 'etag', true, 7, false, true));
+
+		self::assertSame([[7, 5]], $this->paperless->ownerChanges);
+		self::assertSame([], $this->report->errorMessages);
+	}
+
 	#[DataProvider('documentsOfOthers')]
 	public function testOnlyTheDocumentOfTheUploadGetsAnOwner(ImportSucceeded $action): void {
 		$this->arrange(false, [], 5);
@@ -799,6 +1015,13 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
 	}
 
+	/** The upload of the task that Paperless lost reached Paperless, so the state keeps the time of the first upload for the next attempt. */
+	public function testAFileWhoseTaskPaperlessLostKeepsTheTimeOfItsFirstUpload(): void {
+		$this->executor->apply(new RetryUnfinished(new ImportContext(self::FILE, []), 'etag', 1, 'task-1', 'Paperless lost the task', TestClock::START - 86400));
+
+		self::assertSame(TestClock::START - 86400, $this->state->imports[self::FILE]['first_attempt_at']);
+	}
+
 	/** An end of an upload that fails, such as the move to the error folder, keeps it pending, and a lasting failure is logged once. */
 	public function testAFailedEndOfAnUploadKeepsItPending(): void {
 		$this->storage->moveException = new RuntimeException('The error folder is read-only');
@@ -916,8 +1139,18 @@ final class ImportExecutorTest extends TestCase {
 	}
 
 	/** The upload of the file of the tests, in the folder Steuern. */
-	private static function upload(int $attempts = 0): Upload {
-		return new Upload(self::FILE, 'a.pdf', hash('sha256', self::CONTENT), $attempts, 'Steuern', self::FILE_ID);
+	private static function upload(int $attempts = 0, int $firstAttempt = 0): Upload {
+		return new Upload(self::FILE, 'a.pdf', hash('sha256', self::CONTENT), $attempts, 'Steuern', self::FILE_ID, $firstAttempt);
+	}
+
+	/**
+	 * A document of the account of the app, the user 1, that Paperless added five minutes after the
+	 * start of the clock.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private static function accountDocument(): array {
+		return ['id' => 9, 'owner' => 1, 'added' => '2026-08-28T10:05:00+00:00'];
 	}
 
 	/**
@@ -926,7 +1159,7 @@ final class ImportExecutorTest extends TestCase {
 	 *
 	 * @param array<string, bool|int|string> $settings
 	 */
-	private function arrange(bool $dryRun, array $settings = [], ?int $owner = null): void {
+	private function arrange(bool $dryRun, array $settings = [], ?int $owner = null, int|false|null $held = null): void {
 		$this->storage = new TestStorage();
 		$this->storage->files[self::FILE] = self::CONTENT;
 		$this->state = new TestStateRepository();
@@ -935,7 +1168,19 @@ final class ImportExecutorTest extends TestCase {
 		$this->clock = new TestClock();
 		$this->report = new SyncReport($dryRun);
 		$this->batch = new SyncBatch(1);
-		$this->executor = new ImportExecutor(TestConfig::of($settings + ['batchSize' => 1]), $this->report, $this->state, $this->batch, $this->storage, $this->paperless, $this->logger, $this->clock, TestConfig::INBOX, $owner);
+		$this->executor = new ImportExecutor(TestConfig::of($settings + ['batchSize' => 1]), $this->report, $this->state, $this->batch, $this->storage, $this->paperless, $this->logger, $this->clock, TestConfig::INBOX, $owner !== null ? self::scope($owner, $held) : null);
+	}
+
+	/**
+	 * Per-user ownership, in which the inbox is that of a user other than the target user, whose
+	 * user of Paperless is $owner; bob is the user 4 of Paperless, and the account of the app,
+	 * which the tests make the user 1, has no user of Nextcloud, so its documents go to the target
+	 * user, as do those without an owner.
+	 */
+	private static function scope(int $owner, int|false|null $held = null): PerUserScope {
+		$route = static fn (int $id, string $name, ?string $user): array => ['id' => $id, 'name' => $name, 'user' => $user, 'reason' => $user !== null ? Owners::NAME : Owners::NONE, 'detail' => ''];
+
+		return new PerUserScope(new Owners('target', [$owner => $route($owner, TestStorage::USER, TestStorage::USER), 4 => $route(4, 'bob', 'bob'), 1 => $route(1, 'paperless-sync', null)]), TestStorage::USER, $held);
 	}
 
 	/** @return array<string, bool|int> the counts of the report, without those of the kind of run and the pruned folders, which a dry-run doesn't prune */

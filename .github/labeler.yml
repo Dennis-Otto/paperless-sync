@@ -89,6 +89,10 @@
           - lib/Service/ImportExecutor.php
           - lib/Service/KnownContent.php
           - lib/Model/DocumentMatch.php
+          - lib/Model/OwnDocument.php
+          - lib/Model/PerUserScope.php
+          - lib/Service/HeldDocumentException.php
+          - lib/Service/WaitingUploads.php
           - tests/Unit/Service/InboxFileTypesTest.php
           - tests/Unit/Service/InboxTagsTest.php
           - tests/Unit/Service/ImportPlannerTest.php
@@ -97,6 +101,8 @@
           - tests/Unit/Migration/Version000110*
           - lib/Migration/Version000170Date20261112000000.php
           - tests/Unit/Migration/Version000170*
+          - lib/Migration/Version000190Date20261123000000.php
+          - tests/Unit/Migration/Version000190*
           - lib/Service/FileActions.php
           - lib/Service/SendService.php
           - lib/Controller/FileActionController.php
