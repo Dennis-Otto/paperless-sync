@@ -340,11 +340,11 @@ final class SendServiceTest extends TestCase {
 		$this->queue('Scans/receipt.pdf');
 		$this->service->process();
 		$this->paperless->uploadException = new PaperlessUploadException('File type application/octet-stream not supported', true, 400);
-		$this->clock->advance(900);
+		$this->clock->advance(86400);
 
 		$this->service->process();
 
-		self::assertSame(['known_id' => 0, 'last_attempt_at' => TestClock::START + 900, 'created_at' => TestClock::START], array_intersect_key($this->record('Scans/receipt.pdf'), array_flip(['known_id', 'last_attempt_at', 'created_at'])));
+		self::assertSame(['known_id' => 0, 'last_attempt_at' => TestClock::START + 86400, 'created_at' => TestClock::START], array_intersect_key($this->record('Scans/receipt.pdf'), array_flip(['known_id', 'last_attempt_at', 'created_at'])));
 	}
 
 	/**

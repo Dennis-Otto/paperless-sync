@@ -188,11 +188,13 @@ final class SendService {
 				$stream = $this->storage->openRead($userId, $path);
 				// The record comes first: also an upload whose answer never comes may create the document.
 				$recorded = UploadRecords::owner($scope, $paperless) !== null;
+				// After an answer that never came, the file waits for a day, and then the record follows its content.
+				$lost = $recorded && UploadRecords::lostAnswer($this->state->findUpload($userId, $content->sha256), $now);
 				if ($recorded) {
 					$newRecord = UploadRecords::begin($this->state, $userId, UploadRecords::SEND, $path, $content, $knownContent->found, $now) ? $content->sha256 : null;
 				}
 				$taskId = $paperless->uploadDocument($stream, $node['name'], $tagsOfFile['ids']);
-				if ($recorded) {
+				if ($recorded && !$lost) {
 					UploadRecords::started($this->state, $userId, $content, $taskId);
 				}
 			} finally {
@@ -234,7 +236,7 @@ final class SendService {
 			$this->retryLater($config, $send, $path, $exception, $now);
 
 			return false;
-		} catch (HeldDocumentException $exception) {
+		} catch (HeldDocumentException|LostAnswerException $exception) {
 			$this->waitForHold($send, $path, $exception, $now);
 
 			return true;
@@ -270,20 +272,22 @@ final class SendService {
 	}
 
 	/**
-	 * Another user's upload holds the document that has the content of the file, so the file waits
-	 * for the next round, as long as the hold lasts: nothing failed, so the wait uses up none of its
-	 * attempts, and a hold that lasts longer than they would never ends the send as failed.
+	 * Another user's upload holds the document that has the content of the file, or an earlier
+	 * upload of the content may still create its document after an answer that never came, so the
+	 * file waits for the next round, as long as the hold lasts: nothing failed, so the wait uses up
+	 * none of its attempts, and a hold that lasts longer than they would never ends the send as
+	 * failed.
 	 *
 	 * @param array<string, int|string|null> $send
 	 */
-	private function waitForHold(array $send, string $path, HeldDocumentException $exception, int $now): void {
+	private function waitForHold(array $send, string $path, HeldDocumentException|LostAnswerException $exception, int $now): void {
 		$this->state->saveSend((string)$send['user_id'], (int)$send['file_id'], [
 			'path' => $path,
 			'status' => self::RETRY,
 			'retry_at' => $now + ImportExecutor::RETRY_DELAY,
 			'last_error' => $exception->getMessage(),
 		]);
-		$this->logger->info('{path} of {user} waits for an upload of another user before it goes to Paperless: {error}', [
+		$this->logger->info('{path} of {user} waits for an earlier upload before it goes to Paperless: {error}', [
 			'path' => $path,
 			'user' => (string)$send['user_id'],
 			'error' => $exception->getMessage(),

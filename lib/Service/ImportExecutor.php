@@ -210,11 +210,13 @@ final class ImportExecutor {
 			$stream = $this->storage->openRead($this->config->targetUser, $path);
 			// The record comes first: also an upload whose answer never comes may create the document.
 			$recorded = UploadRecords::owner($this->scope, $this->paperless) !== null;
+			// After an answer that never came, the file waits for a day, and then the record follows its content.
+			$lost = $recorded && UploadRecords::lostAnswer($this->state->findUpload($this->config->targetUser, $content->sha256), $this->now());
 			if ($recorded) {
 				$newRecord = UploadRecords::begin($this->state, $this->config->targetUser, UploadRecords::INBOX, $path, $content, $this->knownContent->found, $this->now()) ? $content->sha256 : null;
 			}
 			$taskId = $this->paperless->uploadDocument($stream, $action->name, $tags['ids']);
-			if ($recorded) {
+			if ($recorded && !$lost) {
 				UploadRecords::started($this->state, $this->config->targetUser, $content, $taskId);
 			}
 			$this->state->saveImport($this->config->targetUser, $path, [

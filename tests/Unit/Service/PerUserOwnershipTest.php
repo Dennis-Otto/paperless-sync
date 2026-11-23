@@ -683,7 +683,8 @@ final class PerUserOwnershipTest extends TestCase {
 			$this->sync([]);
 			$this->paperless->uploadFailures = [];
 			$this->paperless->uploadAttempts = [];
-			$this->clock->advance(900);
+			// The file waits for a day after the lost answer before it goes up again.
+			$this->clock->advance(86400);
 		}
 
 		$this->sync([$this->document(77, self::ACCOUNT)]);
@@ -1061,6 +1062,124 @@ final class PerUserOwnershipTest extends TestCase {
 		$error = 'Paperless created the document 77 with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner';
 		self::assertContains('Import ' . self::INBOX . "/scan.pdf: {$error}", $this->errorsOf($report, 'alice'));
 		self::assertContains('Import ' . self::INBOX . "/scan.pdf: {$error}", $this->errorsOf($report, 'bob'));
+		$this->clock->advance(300);
+
+		// Someone in Paperless gives the document to alice: both records end, and nothing waits any more.
+		$report = $this->sync([$this->document(77, self::ALICE), $this->document(5, self::ACCOUNT)]);
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame([], $this->state->uploads, 'Both records ended.');
+		self::assertSame([], [...$this->errorsOf($report, 'alice'), ...$this->errorsOf($report, 'bob')]);
+		self::assertContains('[paperless] EXPORT P5: ' . $this->path(5), $report->actions);
+		self::assertContains('[alice] EXPORT P77: ' . $this->path(77), $report->actions);
+	}
+
+	/** Paperless can't name the owner of a document that two records found: the run holds the documents of the account, and says why. */
+	public function testTwoUploadsOfTheSameContentHoldWhileTheOwnerIsUnknown(): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-same';
+		$this->storage->filesOfOthers['bob'][self::INBOX . '/scan.pdf'] = '%PDF-same';
+		$this->paperless->uploadFailures['scan.pdf'] = new RuntimeException('Paperless did not answer in time');
+		$this->sync([]);
+		$this->paperless->uploadFailures = [];
+		$this->paperless->originals[hash('sha256', '%PDF-same')] = 77;
+		$this->clock->advance(2 * 86400);
+		unset($this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'], $this->storage->filesOfOthers['bob'][self::INBOX . '/scan.pdf']);
+		$this->paperless->documentException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$report = $this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertNotContains('[paperless] EXPORT P5: ' . $this->path(5), $report->actions);
+		self::assertContains('Import ' . self::INBOX . '/scan.pdf: Paperless answered with HTTP 500', $this->errorsOf($report, 'alice'));
+		self::assertCount(2, $this->state->uploads, 'Both records stay.');
+	}
+
+	/**
+	 * The task of alice's upload names the document that bob's record without a task finds by
+	 * its content: alice gets it, and bob's record looks on for its own document, without an error.
+	 */
+	public function testADocumentThatATaskNamesStaysThatTasks(): void {
+		$sha256 = hash('sha256', '%PDF-same');
+		$record = ['source' => 'inbox', 'path' => self::INBOX . '/scan.pdf', 'md5' => md5('%PDF-same'), 'created_at' => TestClock::START, 'last_attempt_at' => TestClock::START];
+		$this->state->saveUpload('alice', $sha256, ['task_id' => 'task-1'] + $record);
+		$this->state->saveUpload('bob', $sha256, ['task_id' => ''] + $record);
+		$this->paperless->tasks['task-1'] = ['status' => 'SUCCESS', 'message' => '', 'documentId' => 77];
+		$this->paperless->originals[$sha256] = 77;
+		$this->clock->advance(300);
+
+		$report = $this->sync([$this->document(77, self::ACCOUNT)]);
+
+		$this->assertTheDocumentIsAlices($report);
+		self::assertSame([], $this->errorsOf($report, 'bob'));
+		self::assertNotNull($this->state->findUpload('bob', $sha256), 'Bob\'s record looks on.');
+		self::assertNull($this->state->findUpload('alice', $sha256));
+	}
+
+	/**
+	 * Alice's upload lost its answer: for a day her file waits instead of going up again, so that
+	 * a second upload can't fail as a duplicate of the first one's document, or create a second
+	 * one, while the first leaves its document with the account. The document that the first
+	 * upload creates gets her as its owner.
+	 */
+	public function testAFileWaitsForADayAfterALostAnswer(): void {
+		$this->lostAnswer();
+		$this->clock->advance(900);
+
+		$report = $this->sync([]);
+
+		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts, 'The file did not go up again.');
+		self::assertContains('Import ' . self::INBOX . '/scan.pdf: An earlier upload of this content got no answer from Paperless, which may still create its document, so the file waits up to a day before it goes up again (attempt 2, the next in 30 minutes)', $this->errorsOf($report, 'alice'));
+		$this->paperless->originals[hash('sha256', '%PDF-alice')] = 77;
+		$this->clock->advance(3600);
+
+		$this->assertTheDocumentIsAlices($this->sync([$this->document(77, self::ACCOUNT)]));
+		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * A day after a lost answer, alice's file goes up again, and the record follows its content
+	 * instead of the new task: when the first upload then creates its document and Paperless-ngx
+	 * 2.x refuses the second as its duplicate, the document still gets her as its owner, and the
+	 * target user never gets it.
+	 */
+	public function testARetryAfterALostAnswerThatFailsAsADuplicateStillGivesTheDocumentItsOwner(): void {
+		$this->lostAnswer();
+		$this->clock->advance(86400);
+
+		$this->sync([]);
+
+		self::assertSame(['scan.pdf', 'scan.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame('', $this->state->findUpload('alice', hash('sha256', '%PDF-alice'))['task_id'] ?? null, 'The record follows the content.');
+		$this->paperless->originals[hash('sha256', '%PDF-alice')] = 77;
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'scan.pdf: Not consuming scan.pdf: It is a duplicate of Strom August (#77).'];
+		$this->clock->advance(300);
+
+		$this->assertTheDocumentIsAlices($this->sync([$this->document(77, self::ACCOUNT)]));
+	}
+
+	/**
+	 * A sent file whose upload lost its answer waits for a day too, without using up its attempts,
+	 * and then goes up again.
+	 */
+	public function testASentFileWaitsForADayAfterALostAnswer(): void {
+		$send = $this->sendService();
+		$this->queueSend('Scans/receipt.pdf', '%PDF-alice');
+		$this->paperless->uploadException = new RuntimeException('Paperless did not answer in time');
+		$send->process();
+		$this->paperless->uploadException = null;
+		$this->clock->advance(900);
+
+		$send->process();
+
+		self::assertSame(['receipt.pdf'], $this->paperless->uploadAttempts);
+		$sent = $this->state->allSends()[0] ?? [];
+		self::assertSame([SendService::RETRY, 1], [$sent['status'] ?? null, $sent['attempts'] ?? null]);
+		self::assertStringContainsString('got no answer from Paperless', (string)($sent['last_error'] ?? ''));
+		$this->clock->advance(86400);
+
+		$send->process();
+
+		self::assertSame(['receipt.pdf', 'receipt.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame('', $this->state->findUpload('alice', hash('sha256', '%PDF-alice'))['task_id'] ?? null);
 	}
 
 	/** Paperless can't answer the search of a record: the run holds the documents of the account, and says why. */

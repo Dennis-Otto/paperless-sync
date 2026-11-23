@@ -92,6 +92,7 @@
           - lib/Model/OwnDocument.php
           - lib/Model/PerUserScope.php
           - lib/Service/HeldDocumentException.php
+          - lib/Service/LostAnswerException.php
           - lib/Service/WaitingUploads.php
           - lib/Service/UploadRecords.php
           - lib/Service/UploadSettlement.php

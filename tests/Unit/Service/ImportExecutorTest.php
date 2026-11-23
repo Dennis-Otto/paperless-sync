@@ -396,7 +396,7 @@ final class ImportExecutorTest extends TestCase {
 	 * its record, right before the upload: with the highest ID of a document with the content from
 	 * the search before it, 0 for none, and the task once Paperless names it. A further upload of
 	 * the content keeps the first ID and the start; an answer that never came leaves the record
-	 * without a task.
+	 * without a task, and the upload that goes again a day later leaves it to its content.
 	 */
 	public function testAnUploadStartsWithItsRecord(): void {
 		$this->arrange(false, [], 3);
@@ -424,15 +424,15 @@ final class ImportExecutorTest extends TestCase {
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[$sha256] = [5, 12];
 		$this->paperless->documents[] = ['id' => 12, 'owner' => 4];
-		$this->clock->advance(900);
+		$this->clock->advance(86400);
 
 		$this->executor->apply(self::upload(attempts: 1));
 
 		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
 		self::assertSame(
-			['known_id' => 0, 'task_id' => 'task-1', 'last_attempt_at' => TestClock::START + 900, 'created_at' => TestClock::START],
+			['known_id' => 0, 'task_id' => '', 'last_attempt_at' => TestClock::START + 86400, 'created_at' => TestClock::START],
 			array_intersect_key($this->state->uploads[TestStorage::USER . '/' . $sha256], array_flip(['known_id', 'task_id', 'last_attempt_at', 'created_at'])),
-			'A later upload keeps the first ID and the start, and follows its task.',
+			'A later upload, a day after the lost answer, keeps the first ID and the start, and leaves the record to its content.',
 		);
 	}
 
@@ -496,7 +496,7 @@ final class ImportExecutorTest extends TestCase {
 		$this->executor->apply(self::upload(attempts: 1));
 
 		self::assertSame('rejected', $this->state->imports[self::FILE]['status']);
-		self::assertSame([TestClock::START, TestClock::START - 900], [$this->state->uploads[TestStorage::USER . '/' . hash('sha256', self::CONTENT)]['last_attempt_at'], $this->state->uploads[TestStorage::USER . '/' . hash('sha256', self::CONTENT)]['created_at']]);
+		self::assertSame([TestClock::START, TestClock::START - 86400], [$this->state->uploads[TestStorage::USER . '/' . hash('sha256', self::CONTENT)]['last_attempt_at'], $this->state->uploads[TestStorage::USER . '/' . hash('sha256', self::CONTENT)]['created_at']]);
 	}
 
 	/** Without the owner of the document, the run can't tell whose it is, so the file waits. */
@@ -1225,9 +1225,9 @@ final class ImportExecutorTest extends TestCase {
 		return new Upload(self::FILE, 'a.pdf', hash('sha256', self::CONTENT), $attempts, 'Steuern', self::FILE_ID);
 	}
 
-	/** The record of an earlier upload of the content of the file by $user, which keeps $knownId from the search before it. */
+	/** The record of an earlier upload of the content of the file by $user a day ago, which keeps $knownId from the search before it, and which no longer holds the file. */
 	private function recorded(int $knownId = 0, string $user = TestStorage::USER): void {
-		$this->state->saveUpload($user, hash('sha256', self::CONTENT), ['path' => self::FILE, 'md5' => hash('md5', self::CONTENT), 'known_id' => $knownId, 'last_attempt_at' => TestClock::START - 900, 'created_at' => TestClock::START - 900]);
+		$this->state->saveUpload($user, hash('sha256', self::CONTENT), ['path' => self::FILE, 'md5' => hash('md5', self::CONTENT), 'known_id' => $knownId, 'last_attempt_at' => TestClock::START - 86400, 'created_at' => TestClock::START - 86400]);
 	}
 
 	/**

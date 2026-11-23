@@ -84,6 +84,27 @@ final class UploadRecords {
 		return $new;
 	}
 
+	/**
+	 * Whether the record of an earlier upload of this content has no task, after an answer that
+	 * never came or a task that Paperless no longer lists. While such a record holds, the content
+	 * waits, as LostAnswerException explains. After that, the upload that goes again leaves the
+	 * record to its content: started() isn't called, so that a document that the earlier upload
+	 * still creates gets its owner, also when Paperless refuses the new upload as a duplicate of it.
+	 *
+	 * @param array<string, int|string|null>|null $record
+	 * @throws LostAnswerException while the record holds
+	 */
+	public static function lostAnswer(?array $record, int $now): bool {
+		if ($record === null || ($record['task_id'] ?? '') !== '') {
+			return false;
+		}
+		if (self::holds($record, $now)) {
+			throw new LostAnswerException();
+		}
+
+		return true;
+	}
+
 	/** Paperless named the task of the upload, which the record follows from now on. */
 	public static function started(SyncStateRepositoryInterface $state, string $user, DocumentFingerprint $content, string $taskId): void {
 		$state->saveUpload($user, $content->sha256, ['task_id' => $taskId]);

@@ -26,7 +26,7 @@ use Psr\Log\LoggerInterface;
  *   lists, looks for its content: a document of the account with that content and a higher ID
  *   than the record's is the upload's, as Paperless numbers its documents in ascending order.
  * - A document that no task names, which the records of two users find, gets neither owner, and
- *   both reports name it.
+ *   both reports name it, until someone in Paperless gives it its owner, which ends both records.
  * - A record ends when its document has its owner, and after UploadRecords::FOLLOW, which the
  *   report names when no document appeared.
  *
@@ -107,6 +107,22 @@ final class UploadSettlement {
 			$user = (string)($record['user_id'] ?? '');
 			$path = (string)($record['path'] ?? '');
 			if (!$byTask && (isset($named[$document]) || $finders[$document] > 1)) {
+				try {
+					$current = $this->ownerOf($document, $documents);
+				} catch (\Throwable $exception) {
+					$hold = true;
+					($reports[$user] ?? $report)->error(new RunError('Import %1$s: %2$s', [$path, RunError::of($exception)]), $document, $path);
+					continue;
+				}
+				// The account no longer owns the document, as someone in Paperless gave it its owner: it holds
+				// nothing more. The records that found it end, unless a task named it, which makes it that
+				// task's document, and the record looks on for its own.
+				if ($account !== null && $current !== $account) {
+					if ($finders[$document] > 1 || $current === $owner) {
+						$this->end($record);
+					}
+					continue;
+				}
 				$hold = true;
 				($reports[$user] ?? $report)->error(new RunError('Import %1$s: Paperless created the document %2$s with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner', [$path, (string)$document]), $document, $path);
 				continue;

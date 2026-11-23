@@ -13,6 +13,7 @@ use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\Owners;
 use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Service\ImportPlanner;
+use OCA\PaperlessSync\Service\LostAnswerException;
 use OCA\PaperlessSync\Service\UploadRecords;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
 use OCA\PaperlessSync\Tests\Doubles\TestPaperlessClient;
@@ -55,6 +56,22 @@ final class UploadRecordsTest extends TestCase {
 	#[DataProvider('records')]
 	public function testHowLongARecordHoldsAndFollowsItsUpload(array $record, int $now, bool $holds, bool $ended): void {
 		self::assertSame([$holds, $ended], [UploadRecords::holds($record, $now), UploadRecords::ended($record, $now)]);
+	}
+
+	/**
+	 * Only a record without a task tells of an answer that never came: while it holds, the content
+	 * waits, and after that its next upload leaves the record to its content.
+	 */
+	public function testAnUploadAfterALostAnswerWaitsForADay(): void {
+		$lost = ['task_id' => '', 'created_at' => self::START, 'last_attempt_at' => self::START];
+
+		self::assertFalse(UploadRecords::lostAnswer(null, self::START));
+		self::assertFalse(UploadRecords::lostAnswer(['task_id' => 'task-1'] + $lost, self::START));
+		self::assertTrue(UploadRecords::lostAnswer($lost, self::START + self::DAY));
+		$this->expectException(LostAnswerException::class);
+		$this->expectExceptionMessage('An earlier upload of this content got no answer from Paperless, which may still create its document, so the file waits up to a day before it goes up again');
+
+		UploadRecords::lostAnswer($lost, self::START + self::DAY - 1);
 	}
 
 	/** The checksums of a record are those of the content that it follows. */
