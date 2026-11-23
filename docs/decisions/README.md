@@ -7,12 +7,12 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | Record | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-record-decisions.md) | Record the decisions that shape the project | accepted |
-| [0002](0002-the-filesystem-api-of-nextcloud.md) | Write the archive through the filesystem API of Nextcloud | accepted, amended by [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) and [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) |
+| [0002](0002-the-filesystem-api-of-nextcloud.md) | Write the archive through the filesystem API of Nextcloud | accepted |
 | [0003](0003-paperless-is-the-source.md) | Paperless is the source of the archive | accepted |
 | [0004](0004-delete-only-what-is-confirmed.md) | Delete only what Paperless has confirmed gone, and only what fits into a run | accepted |
-| [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted, amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) |
+| [0005](0005-end-to-end-tests-where-they-can-fail.md) | Run the end-to-end tests where a change can make them fail | accepted |
 | [0006](0006-every-file-name-keeps-its-marker.md) | Every file name keeps its marker and its extension, within the bytes of Nextcloud | accepted |
-| [0007](0007-end-to-end-tests-on-real-databases-and-storage.md) | Run the end-to-end tests on the databases and the storage of real installations | accepted, amended by [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) |
+| [0007](0007-end-to-end-tests-on-real-databases-and-storage.md) | Run the end-to-end tests on the databases and the storage of real installations | accepted |
 | [0008](0008-local-network-per-request.md) | Reach a Paperless in the local network per request, never for the whole server | accepted |
 | [0009](0009-checksums-of-paperless-2-and-3.md) | Keep the SHA-256 and the MD5 of every download, for Paperless-ngx 2 and 3 | accepted |
 | [0010](0010-mirrored-files-keep-their-identity.md) | Mirrored files keep their identity: moved, and updated in place | accepted |
@@ -30,11 +30,11 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0022](0022-a-dry-run-takes-the-plan-of-a-run.md) | A dry-run takes the plan of a run: planners decide, executors apply or only report | accepted |
 | [0023](0023-file-actions-in-files-without-a-build.md) | Actions in the menu of Files, without a build, and uploads in the background | accepted |
 | [0024](0024-the-tags-of-paperless-as-tags-of-nextcloud-that-the-app-alone-changes.md) | The tags of Paperless become tags of Nextcloud that the app alone changes | accepted |
-| [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted, amended by [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md) |
+| [0025](0025-each-user-gets-the-documents-they-own-through-one-account-of-the-app.md) | Each user gets the documents that they own in Paperless, through one account of the app | accepted |
 | [0026](0026-every-change-of-files-in-the-filesystem-of-their-user.md) | Every change of files runs in the filesystem of their user, through the setup manager of Nextcloud | accepted |
 | [0027](0027-the-account-of-the-app-from-one-token-of-a-superuser.md) | The settings create the account of the app in Paperless with a token of a superuser that they use once | accepted |
 | [0028](0028-test-the-upgrade-users-run.md) | Test the upgrade that users run: from the last release, on PostgreSQL and MariaDB, with the packages they install | accepted |
-| [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) | Share the end-to-end runs between both required jobs, and make each call of the suite quick | accepted, amended by [0032](0032-spend-the-runners-of-the-end-to-end-tests-on-the-tests.md) |
+| [0029](0029-share-the-end-to-end-runs-between-both-required-jobs.md) | Share the end-to-end runs between both required jobs, and make each call of the suite quick | accepted |
 | [0030](0030-lint-the-javascript-and-measure-it-in-the-browser.md) | Lint the JavaScript with ESLint, and measure its coverage in the checks in the browser | accepted |
 | [0031](0031-the-inbox-sets-aside-videos-programs-and-archives.md) | The inbox sets aside videos, programs and archives by their extensions, and leaves every other file to Paperless | accepted |
 | [0032](0032-spend-the-runners-of-the-end-to-end-tests-on-the-tests.md) | Spend the runners of the end-to-end tests on the tests: health checks that check often only while a service starts, traces without snapshots in a first attempt, no more runs than processors, the data in memory, and a split by what a run costs | accepted |
@@ -45,3 +45,5 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0037](0037-name-the-scenarios-of-the-end-to-end-tests.md) | Name the scenarios of the end-to-end tests, each with what it needs | accepted |
 | [0038](0038-each-user-may-see-the-documents-with-their-tags.md) | Each user may see the documents with their tags, as the administrator sets them | accepted |
 | [0039](0039-a-file-of-the-inbox-goes-to-paperless-once.md) | A file of the inbox goes to Paperless once, whatever its path | accepted |
+| [0564](0564-a-document-found-by-the-md5-alone-is-confirmed-by-its-original.md) | A document that the MD5 alone found counts only with the SHA-256 of its original | accepted |
+| [0568](0568-a-document-of-the-account-counts-only-as-the-users-own-upload.md) | In per-user ownership, a document of the account counts only as the user's own upload | accepted |
