@@ -97,6 +97,7 @@
           - lib/Service/UploadSettlement.php
           - tests/Unit/Service/InboxFileTypesTest.php
           - tests/Unit/Service/InboxTagsTest.php
+          - tests/Unit/Service/UploadRecordsTest.php
           - tests/Unit/Service/ImportPlannerTest.php
           - tests/Unit/Service/ImportExecutorTest.php
           - lib/Migration/Version000110Date20261008000000.php
