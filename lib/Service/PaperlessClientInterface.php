@@ -209,10 +209,12 @@ interface PaperlessClientInterface {
 	public function documentFile(int $documentId): DocumentFile;
 
 	/**
-	 * A document whose original has one of these checksums, and which of them found it, or null
-	 * when Paperless has none: Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5
-	 * before, so both are asked for, the SHA-256 first. KnownContent confirms a document that the
-	 * MD5 alone found.
+	 * The document with the highest ID whose original has one of these checksums, and which of them
+	 * found it, or null when Paperless has none: Paperless-ngx keeps the SHA-256 of an original
+	 * since 3.0 and its MD5 before, so both are asked for, the SHA-256 first. Paperless-ngx 3.x may
+	 * keep several documents of one content, and the record of an upload keeps the highest ID
+	 * before the upload, so that a document with a higher one is newer. KnownContent confirms a
+	 * document that the MD5 alone found.
 	 */
 	public function findDocument(DocumentFingerprint $content): ?DocumentMatch;
 

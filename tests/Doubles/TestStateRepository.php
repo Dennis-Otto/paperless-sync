@@ -41,6 +41,13 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 	 */
 	public array $sends = [];
 	/**
+	 * The records of the uploads, by "user/SHA-256", in the order of their first save, with the
+	 * defaults of a new one as SyncStateRepository writes them.
+	 *
+	 * @var array<string, array<string, int|string|null>>
+	 */
+	public array $uploads = [];
+	/**
 	 * Called with the values of each save of an export before it, to fail it as a database that
 	 * goes away, or a run that is killed, would.
 	 *
@@ -142,7 +149,6 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,
-			'first_attempt_at' => 0,
 			'attempts' => 0,
 			'retry_at' => 0,
 			'last_error' => null,
@@ -153,14 +159,47 @@ final class TestStateRepository implements SyncStateRepositoryInterface {
 		unset($this->sends[$userId . '/' . $fileId]);
 	}
 
+	public function allUploads(): array {
+		return array_values($this->uploads);
+	}
+
+	public function findUpload(string $userId, string $sha256): ?array {
+		return $this->uploads[$userId . '/' . $sha256] ?? null;
+	}
+
+	public function saveUpload(string $userId, string $sha256, array $values): void {
+		$existing = $this->uploads[$userId . '/' . $sha256] ?? null;
+		if ($existing !== null) {
+			// The start of a record stays.
+			unset($values['created_at']);
+		}
+		$this->uploads[$userId . '/' . $sha256] = array_merge($existing ?? [
+			'user_id' => $userId,
+			'sha256' => $sha256,
+			'source' => 'inbox',
+			'path' => '',
+			'md5' => '',
+			'known_id' => 0,
+			'task_id' => '',
+			'last_attempt_at' => 0,
+			'created_at' => 0,
+		], $values);
+	}
+
+	public function deleteUpload(string $userId, string $sha256): void {
+		unset($this->uploads[$userId . '/' . $sha256]);
+	}
+
 	public function deleteOwner(string $userId): int {
 		$exports = &$this->exportsOf($userId);
 		$imports = &$this->importsOf($userId);
 		$sends = array_filter($this->sends, static fn (array $send): bool => $send['user_id'] === $userId);
-		$deleted = count($exports) + count($imports) + count($sends);
+		$uploads = array_filter($this->uploads, static fn (array $upload): bool => $upload['user_id'] === $userId);
+		$deleted = count($exports) + count($imports) + count($sends) + count($uploads);
 		$exports = [];
 		$imports = [];
 		$this->sends = array_diff_key($this->sends, $sends);
+		$this->uploads = array_diff_key($this->uploads, $uploads);
 
 		return $deleted;
 	}

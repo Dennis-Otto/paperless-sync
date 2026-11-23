@@ -43,6 +43,9 @@ use Psr\Log\LogLevel;
  * - In per-user ownership, a document whose owner Paperless refuses to change waits for it while
  *   the refusal may pass, up to a day after the upload; then, or at once for a refusal that
  *   repeats, such as 403, the import ends as imported, and the document keeps its owner.
+ * - In per-user ownership, each upload of a sender with a user of Paperless starts with its
+ *   record, which follows it also after the send has ended, as UploadRecords explains: a document
+ *   that Paperless creates after a send that gave up, or a day late, still gets its owner.
  *
  * A round uploads at most a batch of files; while the app is not connected to Paperless, the files
  * wait.
@@ -147,10 +150,8 @@ final class SendService {
 		$userId = (string)$send['user_id'];
 		$fileId = (int)$send['file_id'];
 		$path = (string)$send['path'];
-		// The first upload of the file that may have reached Paperless, kept across the attempts:
-		// a document of the account that Paperless added since then may be this file's.
-		$firstAttempt = null;
-		$previousAttempt = (int)($send['first_attempt_at'] ?? 0);
+		// The SHA-256 of the record that this upload started, which a refusal ends again.
+		$newRecord = null;
 		try {
 			// A file or a user that is gone ends the import; a lookup that fails, such as while the
 			// user backend of the sender can't answer, waits for the next attempt, as an upload does.
@@ -166,7 +167,9 @@ final class SendService {
 			// file goes up, and Paperless decides.
 			$scope = $config->perUser() ? $this->scope($paperless, $config, $userId, $owners, $waiting) : null;
 			$own = $scope?->owners->paperlessUserOf($userId);
-			$known = (new KnownContent($paperless))->own($this->fingerprint($userId, $path), $scope, $previousAttempt);
+			$content = $this->fingerprint($userId, $path);
+			$knownContent = new KnownContent($paperless, $this->state);
+			$known = $knownContent->own($content, $scope);
 			if ($known !== null) {
 				if ($known->lostUpload) {
 					// The sender's own upload whose answer never came: it gets its owner, as the
@@ -183,8 +186,15 @@ final class SendService {
 			$stream = null;
 			try {
 				$stream = $this->storage->openRead($userId, $path);
-				$firstAttempt = $previousAttempt > 0 ? $previousAttempt : $now;
+				// The record comes first: also an upload whose answer never comes may create the document.
+				$recorded = UploadRecords::owner($scope, $paperless) !== null;
+				if ($recorded) {
+					$newRecord = UploadRecords::begin($this->state, $userId, UploadRecords::SEND, $path, $content, $knownContent->found, $now) ? $content->sha256 : null;
+				}
 				$taskId = $paperless->uploadDocument($stream, $node['name'], $tagsOfFile['ids']);
+				if ($recorded) {
+					UploadRecords::started($this->state, $userId, $content, $taskId);
+				}
 			} finally {
 				// The client of Paperless may have closed it.
 				if (is_resource($stream)) {
@@ -196,7 +206,6 @@ final class SendService {
 				'task_id' => $taskId,
 				'status' => self::PENDING,
 				'submitted_at' => $now,
-				'first_attempt_at' => $firstAttempt,
 				'last_error' => null,
 			]);
 			if ($own !== null) {
@@ -215,10 +224,14 @@ final class SendService {
 			return true;
 		} catch (PaperlessUploadException $exception) {
 			if ($exception->permanent) {
+				// Paperless refused the file, so this upload created nothing.
+				if ($newRecord !== null) {
+					$this->state->deleteUpload($userId, $newRecord);
+				}
 				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_REFUSED, null, $exception->getMessage());
 				return true;
 			}
-			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
+			$this->retryLater($config, $send, $path, $exception, $now);
 
 			return false;
 		} catch (HeldDocumentException $exception) {
@@ -226,7 +239,7 @@ final class SendService {
 
 			return true;
 		} catch (\Throwable $exception) {
-			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
+			$this->retryLater($config, $send, $path, $exception, $now);
 
 			return !$tags->unavailable() && !$exception instanceof PaperlessRequestException;
 		}
@@ -241,7 +254,7 @@ final class SendService {
 	 */
 	private function scope(PaperlessClientInterface $paperless, SyncConfig $config, string $userId, ?Owners &$owners, ?array &$waiting): PerUserScope {
 		$owners ??= $this->ownerMapping->owners($config, $paperless->users());
-		$waiting ??= WaitingUploads::owners($this->state, $config, $owners);
+		$waiting ??= WaitingUploads::owners($this->state, $config, $owners, $this->timeFactory->getTime(), false);
 
 		return new PerUserScope($owners, $userId, WaitingUploads::held($waiting, $paperless, $owners->paperlessUserOf($userId)));
 	}
@@ -279,13 +292,11 @@ final class SendService {
 
 	/**
 	 * The upload failed for a reason that may pass, so the file waits twice as long after each
-	 * failure, up to a day, until its last attempt failed as well. $firstAttempt is the time of
-	 * the first upload of the file that may have reached Paperless, or null when this attempt
-	 * failed before its upload, so that the state keeps what it has.
+	 * failure, up to a day, until its last attempt failed as well.
 	 *
 	 * @param array<string, int|string|null> $send
 	 */
-	private function retryLater(SyncConfig $config, array $send, string $path, \Throwable $exception, int $now, ?int $firstAttempt): void {
+	private function retryLater(SyncConfig $config, array $send, string $path, \Throwable $exception, int $now): void {
 		$error = $exception->getMessage();
 		$attempts = (int)$send['attempts'] + 1;
 		if ($attempts >= self::MAX_ATTEMPTS) {
@@ -305,7 +316,7 @@ final class SendService {
 			'attempts' => $attempts,
 			'retry_at' => $now + $delay,
 			'last_error' => mb_substr($error, 0, 4000),
-		] + ($firstAttempt !== null ? ['first_attempt_at' => $firstAttempt] : []));
+		]);
 		// The first failure of a file is a warning, the ones after it only information.
 		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of {path} of {user} to Paperless failed; the next attempt follows in {minutes} minutes: {error}', [
 			'path' => $path,

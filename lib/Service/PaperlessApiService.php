@@ -793,7 +793,7 @@ final class PaperlessApiService implements PaperlessClientInterface {
 
 	public function findDocument(DocumentFingerprint $content): ?DocumentMatch {
 		foreach ([$content->sha256, $content->md5] as $checksum) {
-			$page = $this->requestPage('/api/documents/', ['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1]);
+			$page = $this->requestPage('/api/documents/', ['checksum__iexact' => $checksum, 'fields' => 'id', 'ordering' => '-id', 'page_size' => 1]);
 			$documentId = self::id($page['results'][0]['id'] ?? null);
 			if ($documentId !== null) {
 				return new DocumentMatch($documentId, $checksum === $content->sha256);

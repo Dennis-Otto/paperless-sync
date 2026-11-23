@@ -17,6 +17,7 @@ use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
 use OCA\PaperlessSync\Service\SendService;
+use OCA\PaperlessSync\Service\UploadRecords;
 use OCA\PaperlessSync\Tests\Doubles\InMemoryConfiguration;
 use OCA\PaperlessSync\Tests\Doubles\RecordedNotifications;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -289,20 +290,24 @@ final class SendServiceTest extends TestCase {
 
 	/**
 	 * A document of the account of the app counts for the sender only as their own upload whose
-	 * answer never came: without an upload of the file before Paperless added it, the file goes up.
+	 * answer never came: without a record of an upload of the file, the file goes up, and its
+	 * record keeps the ID of that document, which is no newer document of the upload.
 	 */
-	public function testASentFileWithTheContentOfADocumentOfTheAccountGoesUpWithoutAnEarlierAttempt(): void {
+	public function testASentFileWithTheContentOfADocumentOfTheAccountGoesUpWithoutARecord(): void {
 		$this->perUser();
 		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T09:00:00+00:00'];
 		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
 		$id = $this->queue('Scans/receipt.pdf');
-		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1, 'first_attempt_at' => TestClock::START - 60]);
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1]);
 
 		$this->service->process();
 
 		self::assertSame(['receipt.pdf'], $this->paperless->uploadAttempts);
 		self::assertSame([[], []], [$this->notifications, $this->paperless->ownerChanges]);
-		self::assertSame(TestClock::START - 60, $this->send($id)['first_attempt_at'], 'The time of the first upload stays.');
+		self::assertSame(
+			['source' => UploadRecords::SEND, 'path' => 'Scans/receipt.pdf', 'known_id' => 77, 'task_id' => 'task-1'],
+			array_intersect_key($this->record('Scans/receipt.pdf'), array_flip(['source', 'path', 'known_id', 'task_id'])),
+		);
 	}
 
 	/** A document of the sender's own user of Paperless is one that Paperless has: the file ends as known, and the document keeps its owner. */
@@ -319,8 +324,32 @@ final class SendServiceTest extends TestCase {
 	}
 
 	/**
-	 * An upload whose answer never came keeps the time of its first attempt; Paperless added its
-	 * document after it, so the next round ends the file as imported, and the document gets the
+	 * Paperless refuses a sent file, so its upload created nothing: the record that the upload
+	 * started ends with it, and the record of an earlier upload whose answer never came stays.
+	 */
+	public function testARefusedSendEndsOnlyTheRecordThatItStarted(): void {
+		$this->perUser();
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->uploadException = new PaperlessUploadException('File type application/octet-stream not supported', true, 400);
+
+		$this->service->process();
+
+		self::assertSame([], $this->state->uploads);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_REFUSED, $id, 'Scans/receipt.pdf', null, 'File type application/octet-stream not supported');
+		$this->paperless->uploadException = new RuntimeException('Paperless did not answer in time');
+		$this->queue('Scans/receipt.pdf');
+		$this->service->process();
+		$this->paperless->uploadException = new PaperlessUploadException('File type application/octet-stream not supported', true, 400);
+		$this->clock->advance(900);
+
+		$this->service->process();
+
+		self::assertSame(['known_id' => 0, 'last_attempt_at' => TestClock::START + 900, 'created_at' => TestClock::START], array_intersect_key($this->record('Scans/receipt.pdf'), array_flip(['known_id', 'last_attempt_at', 'created_at'])));
+	}
+
+	/**
+	 * An upload whose answer never came keeps its record; Paperless gave its document a higher ID
+	 * than the record's, so the next round ends the file as imported, and the document gets the
 	 * sender's user of Paperless as its owner, as the document of a task does.
 	 */
 	public function testASentFileWhoseUploadsAnswerNeverCameEndsAsImported(): void {
@@ -330,7 +359,8 @@ final class SendServiceTest extends TestCase {
 
 		$this->service->process();
 
-		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => TestClock::START], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0]));
+		self::assertSame(SendService::RETRY, $this->send($id)['status']);
+		self::assertSame(['known_id' => 0, 'task_id' => '', 'last_attempt_at' => TestClock::START], array_intersect_key($this->record('Scans/receipt.pdf'), array_flip(['known_id', 'task_id', 'last_attempt_at'])));
 		$this->paperless->uploadException = null;
 		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T10:00:30+00:00'];
 		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
@@ -343,19 +373,23 @@ final class SendServiceTest extends TestCase {
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 77);
 	}
 
-	/** A sender without a user of Paperless leaves the document of their lost upload to the account of the app. */
-	public function testTheLostUploadOfASenderWithoutAUserOfPaperlessKeepsItsOwner(): void {
+	/**
+	 * A sender without a user of Paperless saves no record, as the documents of their uploads stay
+	 * with the account of the app anyway: nothing proves a lost upload of theirs, so the file goes
+	 * up again, and the document of the account keeps its owner.
+	 */
+	public function testASenderWithoutAUserOfPaperlessSavesNoRecord(): void {
 		$this->perUser();
 		$this->paperless->users = ['4' => 'bob', '9' => 'paperless-sync'];
 		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T10:00:30+00:00'];
 		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
 		$id = $this->queue('Scans/receipt.pdf');
-		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1, 'first_attempt_at' => TestClock::START]);
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1]);
 
 		$this->service->process();
 
-		self::assertSame([[], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
-		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 77);
+		self::assertSame([['receipt.pdf'], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
+		self::assertSame([], $this->state->uploads);
 	}
 
 	/**
@@ -375,7 +409,7 @@ final class SendServiceTest extends TestCase {
 		$this->service->process();
 
 		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts, 'Only the file of bob goes up.');
-		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => 0, 'attempts' => 0], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0, 'attempts' => 0]), 'The wait uses up no attempt.');
+		self::assertSame(['status' => SendService::RETRY, 'attempts' => 0], array_intersect_key($this->send($id), ['status' => 0, 'attempts' => 0]), 'The wait uses up no attempt.');
 		self::assertSame([[], []], [$this->notifications, $this->paperless->ownerChanges]);
 	}
 
@@ -1016,6 +1050,18 @@ final class SendServiceTest extends TestCase {
 		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::PENDING, 'task_id' => 'task-1', 'submitted_at' => TestClock::START]);
 
 		return $id;
+	}
+
+	/**
+	 * The record of the sender's upload of the file at $path, with its synthetic content.
+	 *
+	 * @return array<string, int|string|null>
+	 */
+	private function record(string $path): array {
+		$record = $this->state->findUpload(self::SENDER, hash('sha256', 'Synthetic content of ' . $path));
+		self::assertNotNull($record, "The upload of {$path} has no record.");
+
+		return $record;
 	}
 
 	/** @return array<string, int|string|null> */

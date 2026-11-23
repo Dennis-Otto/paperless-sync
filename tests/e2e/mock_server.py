@@ -561,8 +561,12 @@ class Handler(BaseHTTPRequestHandler):
             # Files: Paperless-ngx keeps only the MD5 up to 2.x and only the SHA-256 since 3.0, so
             # with /control/checksum/md5 the SHA-256 of a file finds nothing, and the app confirms
             # what the MD5 alone found with a download of the original.
+            # The app asks for the highest ID first, ordering=-id.
             checksum = query["checksum__iexact"][0].lower()
-            self._page([{"id": item["id"]} for item in documents if checksum == paperless_checksum(document_content(item["id"]))])
+            found = [{"id": item["id"]} for item in documents if checksum == paperless_checksum(document_content(item["id"]))]
+            if query.get("ordering", [""])[0] == "-id":
+                found.sort(key=lambda item: item["id"], reverse=True)
+            self._page(found)
         elif parsed.path == "/api/documents/":
             # Paperless-ngx sends only the fields that a request names, and the scan of a run names them.
             if "ordering" in query:

@@ -20,17 +20,27 @@ use OCA\PaperlessSync\Model\SyncConfig;
  * like a document of the account, which would go to the target user, or to the user of the
  * account, so the runs hold every document of the account while an upload waits: the export
  * leaves its copies where they are, and no file of the inbox or of Send to Paperless takes such a
- * document for its own.
+ * document for its own. An upload waits while the state of its file waits for its task, and while
+ * its record is open, as UploadRecords explains, also after its file has left the inbox, after an
+ * answer that never came, and with the inbox turned off.
  */
 final class WaitingUploads {
 	/**
-	 * The users of Paperless whose uploads of the inbox or of Send to Paperless wait for the end of
-	 * their task, which gives their documents their owner.
+	 * The users of Paperless whose uploads of the inbox or of Send to Paperless wait for their
+	 * document, which then gets them as its owner. $watched counts every record that has not
+	 * ended, also one that only the look of the scheduled runs follows: the run of one document
+	 * leaves a document of the account to the scheduled runs while any upload may have created it.
 	 *
 	 * @return array<int, true>
 	 */
-	public static function owners(SyncStateRepositoryInterface $state, SyncConfig $config, Owners $owners): array {
+	public static function owners(SyncStateRepositoryInterface $state, SyncConfig $config, Owners $owners, int $now, bool $watched): array {
 		$waiting = [];
+		foreach ($state->allUploads() as $record) {
+			$owner = $owners->paperlessUserOf((string)($record['user_id'] ?? ''));
+			if ($owner !== null && ($watched ? !UploadRecords::ended($record, $now) : UploadRecords::holds($record, $now))) {
+				$waiting[$owner] = true;
+			}
+		}
 		if ($config->inboxEnabled) {
 			foreach ($owners->users() as $user) {
 				$owner = $owners->paperlessUserOf($user);

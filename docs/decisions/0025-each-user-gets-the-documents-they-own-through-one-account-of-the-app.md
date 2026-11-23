@@ -5,6 +5,7 @@
 - Amends [0002](0002-the-filesystem-api-of-nextcloud.md): besides the one target user who owns the archive, per-user ownership gives each user of Nextcloud the documents of their user of Paperless
 - Amended by [0033](0033-each-user-also-gets-a-copy-of-what-paperless-shares-with-them.md): a new option also gives a document to every mapped user who may view it in Paperless
 - Amended by [0038](0038-each-user-may-see-the-documents-with-their-tags.md): for a user with tags, the tags decide which documents they get
+- Amended by [0571](0571-follow-every-upload-until-its-document-has-its-owner.md): a record of each upload holds the documents of the account while the upload may still create its document, also after the state of its file has ended
 
 ## Context
 

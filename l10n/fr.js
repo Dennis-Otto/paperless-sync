@@ -862,7 +862,14 @@ OC.L10N.register(
 		"Paperless Sync has no copy to write again.": "Paperless Sync n’a aucune copie à réécrire.",
 		"Write all copies again": "Réécrire toutes les copies",
 		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "Réécrire chaque copie depuis Paperless ? Les prochaines exécutions téléchargent à nouveau chaque document, lot par lot, et l’écrivent à la place de sa copie. Une copie que quelqu’un a modifiée dans Nextcloud reprend le contenu de Paperless, et la modification reste comme version antérieure sous Versions.",
-		"Could not write the copies again.": "Impossible de réécrire les copies."
+		"Could not write the copies again.": "Impossible de réécrire les copies.",
+		"Import %s: Paperless created no document of its upload within 30 days, so Paperless Sync no longer follows it": "Import %s : Paperless n'a créé aucun document de son envoi en 30 jours, donc Paperless Sync ne le suit plus",
+		"Import %1$s: Paperless created the document %2$s with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner": "Import %1$s : Paperless a créé le document %2$s avec son contenu après les envois de plusieurs utilisateurs, donc il reste au compte de l'application jusqu'à ce que quelqu'un dans Paperless lui donne son propriétaire",
+		"_The documents of the account of the app stay where they are while an upload of {uploads} may still create its document._::_The documents of the account of the app stay where they are while uploads of {uploads} may still create their documents._": [
+			"Les documents du compte de l'application restent où ils sont tant qu'un envoi de {uploads} peut encore créer son document.",
+			"Les documents du compte de l'application restent où ils sont tant que des envois de {uploads} peuvent encore créer leurs documents.",
+			"Les documents du compte de l'application restent où ils sont tant que des envois de {uploads} peuvent encore créer leurs documents."
+		]
 	},
 	"nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

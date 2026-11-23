@@ -26,9 +26,10 @@ final class SyncStateRepositoryTest extends TestCase {
 	private const EXPORTS = 'paperless_sync_export';
 	private const IMPORTS = 'paperless_sync_import';
 	private const SENDS = 'paperless_sync_send';
+	private const UPLOADS = 'paperless_sync_upload';
 
 	/** @var array<string, list<array<string, string|null>>> the rows of each table, as the database driver returns them */
-	private array $tables = [self::EXPORTS => [], self::IMPORTS => [], self::SENDS => []];
+	private array $tables = [self::EXPORTS => [], self::IMPORTS => [], self::SENDS => [], self::UPLOADS => []];
 	/** @var list<string> the kind of every statement that changed a table, in order */
 	private array $statements = [];
 	/** The queries that read a table. */
@@ -164,7 +165,6 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(0, $import['attempts']);
 		self::assertSame(0, $import['retry_at']);
 		self::assertSame(0, $import['file_id'], 'A file without an ID has none.');
-		self::assertSame(0, $import['first_attempt_at'], 'A file that was never uploaded has no first attempt.');
 		self::assertNull($import['last_error']);
 		self::assertNull($this->repository->findImport('paperless', 'Eingang/other.pdf'));
 	}
@@ -187,14 +187,13 @@ final class SyncStateRepositoryTest extends TestCase {
 	}
 
 	public function testFailedUploadRecordsItsAttemptsAndTheTimeOfTheNext(): void {
-		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'status' => 'retry', 'attempts' => 3, 'retry_at' => 1791460800, 'first_attempt_at' => 1791450000, 'last_error' => 'HTTP 502']);
+		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'status' => 'retry', 'attempts' => 3, 'retry_at' => 1791460800, 'last_error' => 'HTTP 502']);
 
 		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
 		self::assertNotNull($import);
 		self::assertSame('retry', $import['status']);
 		self::assertSame(3, $import['attempts']);
 		self::assertSame(1791460800, $import['retry_at']);
-		self::assertSame(1791450000, $import['first_attempt_at'], 'The time of the first upload stays for the next attempt.');
 
 		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['status' => 'pending', 'attempts' => 0, 'retry_at' => 0]);
 
@@ -290,7 +289,6 @@ final class SyncStateRepositoryTest extends TestCase {
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,
-			'first_attempt_at' => 0,
 			'attempts' => 0,
 			'retry_at' => 0,
 			'last_error' => null,
@@ -312,12 +310,12 @@ final class SyncStateRepositoryTest extends TestCase {
 		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf']);
 		$this->clock->advance(60);
 
-		$this->repository->saveSend('alice', 42, ['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START + 60, 'first_attempt_at' => TestClock::START + 30]);
+		$this->repository->saveSend('alice', 42, ['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START + 60]);
 
 		self::assertSame(['insert', 'update'], $this->statements);
 		self::assertSame(
-			['path' => 'Scans/receipt.pdf', 'task_id' => 'task-1', 'status' => 'pending', 'submitted_at' => TestClock::START + 60, 'first_attempt_at' => TestClock::START + 30, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
-			array_intersect_key($this->repository->findSend('alice', 42) ?? [], array_flip(['path', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'created_at', 'updated_at'])),
+			['path' => 'Scans/receipt.pdf', 'task_id' => 'task-1', 'status' => 'pending', 'submitted_at' => TestClock::START + 60, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
+			array_intersect_key($this->repository->findSend('alice', 42) ?? [], array_flip(['path', 'task_id', 'status', 'submitted_at', 'created_at', 'updated_at'])),
 		);
 	}
 
@@ -354,6 +352,55 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(['b.pdf', 'c.pdf'], array_column($this->repository->allSends(), 'path'));
 	}
 
+	/** A new record of an upload starts with the defaults, at the time that its caller gives, and only its own columns count. */
+	public function testANewRecordOfAnUploadStartsWithItsDefaults(): void {
+		$this->repository->saveUpload('alice', 'sha-a', ['path' => 'Eingang/scan.pdf', 'md5' => 'md5-a', 'known_id' => 12, 'created_at' => TestClock::START - 60, 'user_id' => 'intruder', 'not_a_column' => 'x']);
+
+		self::assertSame(['insert'], $this->statements);
+		self::assertSame([
+			'id' => 1,
+			'user_id' => 'alice',
+			'sha256' => 'sha-a',
+			'source' => 'inbox',
+			'path' => 'Eingang/scan.pdf',
+			'md5' => 'md5-a',
+			'known_id' => 12,
+			'task_id' => '',
+			'last_attempt_at' => 0,
+			'created_at' => TestClock::START - 60,
+			'updated_at' => TestClock::START,
+		], $this->repository->findUpload('alice', 'sha-a'));
+		self::assertNull($this->repository->findUpload('bob', 'sha-a'));
+		self::assertNull($this->repository->findUpload('alice', 'sha-b'));
+	}
+
+	/** Without a time of its start, a record starts now. */
+	public function testARecordWithoutATimeOfItsStartStartsNow(): void {
+		$this->repository->saveUpload('alice', 'sha-a', []);
+
+		self::assertSame(TestClock::START, $this->repository->findUpload('alice', 'sha-a')['created_at'] ?? null);
+	}
+
+	/** A further attempt changes the record and keeps its start; records are listed in the order of their start, and one ends alone. */
+	public function testARecordOfAnUploadKeepsItsStartAndEndsAlone(): void {
+		$this->repository->saveUpload('alice', 'sha-a', ['path' => 'Eingang/a.pdf', 'created_at' => TestClock::START]);
+		$this->repository->saveUpload('bob', 'sha-a', ['path' => 'Eingang/b.pdf', 'created_at' => TestClock::START]);
+		$this->clock->advance(60);
+
+		$this->repository->saveUpload('alice', 'sha-a', ['source' => 'send', 'task_id' => 'task-1', 'last_attempt_at' => TestClock::START + 60, 'created_at' => TestClock::START + 60]);
+
+		self::assertSame(['insert', 'insert', 'update'], $this->statements);
+		self::assertSame(
+			['source' => 'send', 'path' => 'Eingang/a.pdf', 'task_id' => 'task-1', 'last_attempt_at' => TestClock::START + 60, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
+			array_intersect_key($this->repository->findUpload('alice', 'sha-a') ?? [], array_flip(['source', 'path', 'task_id', 'last_attempt_at', 'created_at', 'updated_at'])),
+		);
+		self::assertSame(['Eingang/a.pdf', 'Eingang/b.pdf'], array_column($this->repository->allUploads(), 'path'));
+
+		$this->repository->deleteUpload('alice', 'sha-a');
+
+		self::assertSame(['bob'], array_column($this->repository->allUploads(), 'user_id'));
+	}
+
 	/** A user whom Nextcloud deleted leaves no state behind for a new account with the same ID, and the others keep theirs. */
 	public function testEveryStateOfADeletedUserGoesAndThatOfOthersStays(): void {
 		$this->repository->saveExport('alice', 1, ['path' => 'Archiv/a.pdf']);
@@ -363,8 +410,10 @@ final class SyncStateRepositoryTest extends TestCase {
 		$this->repository->saveImport('bob', 'Eingang/scan.pdf', ['etag' => 'e2']);
 		$this->repository->saveSend('alice', 42, ['path' => 'Steuer/beleg.pdf']);
 		$this->repository->saveSend('bob', 42, ['path' => 'Steuer/beleg.pdf']);
+		$this->repository->saveUpload('alice', 'sha-a', ['path' => 'Eingang/scan.pdf']);
+		$this->repository->saveUpload('bob', 'sha-a', ['path' => 'Eingang/scan.pdf']);
 
-		self::assertSame(4, $this->repository->deleteOwner('alice'));
+		self::assertSame(5, $this->repository->deleteOwner('alice'));
 
 		self::assertSame([], $this->repository->allExports('alice'));
 		self::assertSame([], $this->repository->allImports('alice'));
@@ -373,6 +422,7 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(['Archiv/c.pdf'], array_column($this->repository->allExports('bob'), 'path'));
 		self::assertSame(['Eingang/scan.pdf'], array_column($this->repository->allImports('bob'), 'path'));
 		self::assertSame(['bob'], array_column($this->repository->allSends(), 'user_id'));
+		self::assertSame(['bob'], array_column($this->repository->allUploads(), 'user_id'), 'The records of the uploads of a deleted user go as well.');
 		self::assertSame(0, $this->repository->deleteOwner('alice'), 'A user without state deletes nothing.');
 	}
 

@@ -824,7 +824,13 @@
 		"Paperless Sync has no copy to write again.": "Paperless Sync heeft geen kopie om opnieuw te schrijven.",
 		"Write all copies again": "Alle kopieën opnieuw schrijven",
 		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "Elke kopie opnieuw schrijven vanuit Paperless? De volgende runs downloaden elk document opnieuw, batch voor batch, en schrijven het op de plaats van zijn kopie. Een kopie die iemand in Nextcloud heeft bewerkt, krijgt weer de inhoud van Paperless, en de bewerking blijft bewaard als eerdere versie onder Versies.",
-		"Could not write the copies again.": "De kopieën konden niet opnieuw worden geschreven."
+		"Could not write the copies again.": "De kopieën konden niet opnieuw worden geschreven.",
+		"Import %s: Paperless created no document of its upload within 30 days, so Paperless Sync no longer follows it": "Import %s: Paperless heeft binnen 30 dagen geen document van de upload gemaakt, dus Paperless Sync volgt die niet meer",
+		"Import %1$s: Paperless created the document %2$s with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner": "Import %1$s: Paperless maakte het document %2$s met de inhoud ervan na de uploads van meer dan één gebruiker, dus het blijft bij het account van de app tot iemand in Paperless het zijn eigenaar geeft",
+		"_The documents of the account of the app stay where they are while an upload of {uploads} may still create its document._::_The documents of the account of the app stay where they are while uploads of {uploads} may still create their documents._": [
+			"De documenten van het account van de app blijven waar ze zijn zolang een upload van {uploads} nog zijn document kan maken.",
+			"De documenten van het account van de app blijven waar ze zijn zolang uploads van {uploads} nog hun documenten kunnen maken."
+		]
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }
