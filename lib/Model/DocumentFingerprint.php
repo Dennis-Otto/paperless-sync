@@ -45,6 +45,8 @@ final class DocumentFingerprint {
 	 */
 	public static function of($stream): self {
 		$sha256 = hash_init('sha256');
+		// Paperless-ngx 2.x stores and searches documents by the MD5 of their file.
+		/** @psalm-suppress WeakHash */
 		$md5 = hash_init('md5');
 		while (($chunk = fread($stream, self::CHUNK_SIZE)) !== false && $chunk !== '') {
 			hash_update($sha256, $chunk);

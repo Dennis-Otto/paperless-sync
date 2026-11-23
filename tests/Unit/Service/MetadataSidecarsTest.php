@@ -269,6 +269,36 @@ final class MetadataSidecarsTest extends TestCase {
 	}
 
 	/**
+	 * The index is read as CSV after RFC 4180, whatever its lines end with: an empty line is a row
+	 * without values, which leaves out every row after it when it is the first, only a line feed
+	 * ends a line outside quotes, and a backslash is a character like any other.
+	 */
+	#[DataProvider('indexTexts')]
+	public function testTheIndexIsReadLineByLine(string $text, string $rows): void {
+		$this->storage->files[self::INDEX] = $text;
+		$this->exports([1 => ['path' => '', 'state' => null], 2 => ['path' => '', 'state' => null]]);
+
+		$this->sidecars()->finish($this->states());
+
+		self::assertSame(self::HEADER . $rows, $this->storage->files[self::INDEX]);
+	}
+
+	/** @return array<string, array{string, string}> */
+	public static function indexTexts(): array {
+		return [
+			'an empty first line' => ["\r\nid,title,path,state\r\n1,A,a.pdf,active\r\n", ''],
+			'empty lines in the middle' => ["id,title,path,state\r\n\r\n1,A,a.pdf,active\n\n\r\n2,B,b.pdf,trash\r\n", "1,A,,,,,,,,a.pdf,active,,,\r\n2,B,,,,,,,,b.pdf,trash,,,\r\n"],
+			'a lone carriage return' => ["id,title,path,state\r\n1,A\rB,a.pdf,active\r\n2,B,b.pdf,trash\r", "1,\"A\rB\",,,,,,,,a.pdf,active,,,\r\n2,B,,,,,,,,b.pdf,trash,,,\r\n"],
+			'a lone carriage return after the first line' => ["id,title,path,state\r1,A,a.pdf,active\r\n", ''],
+			'a carriage return and a line feed in quotes' => ["id,title,path,state\r\n1,\"Line\rone\",a.pdf,active\r\n2,\"Line\r\ntwo\",b.pdf,active\r\n", "1,\"Line\rone\",,,,,,,,a.pdf,active,,,\r\n2,\"Line\r\ntwo\",,,,,,,,b.pdf,active,,,\r\n"],
+			'a backslash before a quote' => ["id,title,path,state\r\n1,\"Back\\\",a.pdf,active\r\n2,\"Say \\\"\"hi\\\"\"\",b.pdf,active\r\n", "1,Back\\,,,,,,,,a.pdf,active,,,\r\n2,\"Say \\\"\"hi\\\"\"\",,,,,,,,b.pdf,active,,,\r\n"],
+			'no line break at the end' => ["id,title,path,state\r\n1,A,a.pdf,active", "1,A,,,,,,,,a.pdf,active,,,\r\n"],
+			'a byte order mark only' => ["\u{FEFF}", ''],
+			'an empty text' => ['', ''],
+		];
+	}
+
+	/**
 	 * Nextcloud refuses the writes of a run against a full quota, and those of the metadata as
 	 * well: the first one is an error of its document, and the run writes no further sidecar,
 	 * which the next run catches up.
