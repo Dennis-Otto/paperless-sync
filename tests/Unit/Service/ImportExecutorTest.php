@@ -346,7 +346,7 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame([[], [], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges, $this->paperless->downloadRequests]);
 		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
 		self::assertSame(['status' => 'retry', 'attempts' => 2], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts'])));
-		self::assertArrayNotHasKey('first_attempt_at', $this->state->imports[self::FILE], 'The wait was no upload.');
+		self::assertSame(TestClock::START, $this->state->imports[self::FILE]['first_attempt_at'], 'The wait keeps the time of the upload before it.');
 		self::assertSame(['Import ' . self::FILE . ': Paperless has the content of the file as the document 9, which may be that of an upload that waits for its owner, so the file waits until that upload ends (attempt 2, the next in 30 minutes)'], $this->report->errorMessages);
 		self::assertFalse($this->batch->stopped(), 'The other files go on.');
 	}
@@ -407,7 +407,7 @@ final class ImportExecutorTest extends TestCase {
 
 		$this->executor->apply(self::upload());
 
-		self::assertArrayNotHasKey('first_attempt_at', $this->state->imports[self::FILE], 'A file that could not be read never reached Paperless.');
+		self::assertSame(0, $this->state->imports[self::FILE]['first_attempt_at'], 'A file that could not be read never reached Paperless.');
 
 		$this->arrange(false);
 		$this->paperless->uploadException = new PaperlessUploadException('Paperless refused the file: HTTP 400', true, 400);
@@ -659,6 +659,20 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame([[9, true]], $this->paperless->downloadRequests);
 		self::assertSame([], $this->paperless->ownerChanges);
 		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * A file that changed carries no time of a first upload, so an attempt that fails before its
+	 * upload clears the time of the old content: otherwise the next run would take a document of
+	 * the account added after the old upload for the new content's own.
+	 */
+	public function testAFailureBeforeTheUploadOfAChangedFileClearsTheTimeOfTheOldContent(): void {
+		$this->state->imports[self::FILE] = ['path' => self::FILE, 'etag' => 'old', 'status' => 'retry', 'attempts' => 1, 'first_attempt_at' => TestClock::START - 3600];
+		$this->paperless->findException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload(attempts: 1));
+
+		self::assertSame(['etag' => self::upload()->etag, 'status' => 'retry', 'first_attempt_at' => 0], array_intersect_key($this->state->imports[self::FILE], array_flip(['etag', 'status', 'first_attempt_at'])));
 	}
 
 	/** Without the answer whether Paperless has the content, the file waits, and without Paperless, so do the others. */

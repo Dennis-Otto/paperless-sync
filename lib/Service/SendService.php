@@ -221,6 +221,10 @@ final class SendService {
 			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
 
 			return false;
+		} catch (HeldDocumentException $exception) {
+			$this->waitForHold($send, $path, $exception, $now);
+
+			return true;
 		} catch (\Throwable $exception) {
 			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
 
@@ -250,6 +254,27 @@ final class SendService {
 		} finally {
 			fclose($stream);
 		}
+	}
+
+	/**
+	 * Another user's upload holds the document that has the content of the file, so the file waits
+	 * for the next round, as long as the hold lasts: nothing failed, so the wait uses up none of its
+	 * attempts, and a hold that lasts longer than they would never ends the send as failed.
+	 *
+	 * @param array<string, int|string|null> $send
+	 */
+	private function waitForHold(array $send, string $path, HeldDocumentException $exception, int $now): void {
+		$this->state->saveSend((string)$send['user_id'], (int)$send['file_id'], [
+			'path' => $path,
+			'status' => self::RETRY,
+			'retry_at' => $now + ImportExecutor::RETRY_DELAY,
+			'last_error' => $exception->getMessage(),
+		]);
+		$this->logger->info('{path} of {user} waits for an upload of another user before it goes to Paperless: {error}', [
+			'path' => $path,
+			'user' => (string)$send['user_id'],
+			'error' => $exception->getMessage(),
+		]);
 	}
 
 	/**

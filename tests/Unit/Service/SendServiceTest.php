@@ -375,8 +375,25 @@ final class SendServiceTest extends TestCase {
 		$this->service->process();
 
 		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts, 'Only the file of bob goes up.');
-		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => 0, 'attempts' => 1], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0, 'attempts' => 0]));
+		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => 0, 'attempts' => 0], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0, 'attempts' => 0]), 'The wait uses up no attempt.');
 		self::assertSame([[], []], [$this->notifications, $this->paperless->ownerChanges]);
+	}
+
+	/** A hold that lasts longer than the attempts of a send never ends the send as failed: nothing failed. */
+	public function testAHoldLongerThanTheAttemptsOfASendDoesNotEndItAsFailed(): void {
+		$this->perUser();
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T09:00:00+00:00'];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->storage->filesOfOthers['bob']['Scans/scan.pdf'] = 'Synthetic content of Scans/scan.pdf';
+		$bobs = $this->storage->fileId('Scans/scan.pdf', 'bob');
+		$this->state->saveSend('bob', $bobs, ['path' => 'Scans/scan.pdf', 'status' => SendService::QUEUED]);
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->state->saveSend(self::SENDER, $id, ['attempts' => SendService::MAX_ATTEMPTS - 1]);
+
+		$this->service->process();
+
+		self::assertSame(['status' => SendService::RETRY, 'attempts' => SendService::MAX_ATTEMPTS - 1], array_intersect_key($this->send($id), ['status' => 0, 'attempts' => 0]));
+		self::assertSame([], $this->notifications);
 	}
 
 	/** Without the original, the app can't tell whether Paperless has the content of the file, so it tries again later. */

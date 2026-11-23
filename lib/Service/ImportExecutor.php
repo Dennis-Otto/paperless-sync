@@ -226,11 +226,11 @@ final class ImportExecutor {
 			if ($exception->permanent) {
 				$this->reject($action, $exception);
 			} else {
-				$this->retryUploadLater($action, $exception, $firstAttempt);
+				$this->retryUploadLater($action, $exception, $firstAttempt ?? $action->firstAttempt);
 				$this->batch->stop();
 			}
 		} catch (\Throwable $exception) {
-			$this->retryUploadLater($action, $exception, $firstAttempt);
+			$this->retryUploadLater($action, $exception, $firstAttempt ?? $action->firstAttempt);
 		} finally {
 			if (is_resource($stream)) {
 				fclose($stream);
@@ -257,7 +257,7 @@ final class ImportExecutor {
 		if ($this->dryRun) {
 			$this->report->error(new RunError('Import %1$s: %2$s', [$action->path, RunError::of($exception)]));
 		} else {
-			$this->retryUploadLater($action, $exception, null);
+			$this->retryUploadLater($action, $exception, $action->firstAttempt);
 		}
 		if ($this->tags->unavailable() || $exception instanceof PaperlessRequestException) {
 			$this->batch->stop();
@@ -310,7 +310,7 @@ final class ImportExecutor {
 					]);
 				}
 			} catch (\Throwable $exception) {
-				$this->retryUploadLater($action, $exception, null);
+				$this->retryUploadLater($action, $exception, $action->firstAttempt);
 				return;
 			}
 			$this->logger->info('Paperless already has the content of the inbox file {path} as document {document}, so it was not uploaded again', [
@@ -352,10 +352,11 @@ final class ImportExecutor {
 
 	/**
 	 * The upload failed for a reason that may pass, so the file waits longer after each failure.
-	 * $firstAttempt is the time of the first upload of the file that may have reached Paperless,
-	 * or null when this attempt failed before its upload, so that the state keeps what it has.
+	 * $firstAttempt is the time of the first upload of the file's content that may have reached
+	 * Paperless; an attempt that failed before its upload passes the time of its action, which is
+	 * 0 for a file that changed, so that the state never keeps the time of an older content.
 	 */
-	private function retryUploadLater(Upload $action, \Throwable $exception, ?int $firstAttempt): void {
+	private function retryUploadLater(Upload $action, \Throwable $exception, int $firstAttempt): void {
 		$error = SyncErrors::message($exception);
 		$attempts = $action->attempts + 1;
 		// The report translates the text that the app wrote, as in a dry-run; the state and the log keep it in English.
@@ -481,12 +482,12 @@ final class ImportExecutor {
 	/**
 	 * Saves that a file of the inbox waits for its next upload, twice as long after each failure up
 	 * to a day, and reports why: the state keeps the English error, the report its record. The answer
-	 * is the wait in minutes. The time of the first upload that may have reached Paperless, when it
-	 * is known, stays with the state for the next attempt; without one, the state keeps the time
-	 * that it has. The ID of the file, when it is known, lets the state follow the file to a new
+	 * is the wait in minutes. The time of the first upload of the content that may have reached
+	 * Paperless stays with the state for the next attempt, and 0 for a content that never went up
+	 * clears the time of an older one. The ID of the file, when it is known, lets the state follow the file to a new
 	 * path; without one, the state keeps the ID that it has.
 	 */
-	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record, ?int $firstAttempt, int $fileId = 0): int {
+	private function retryLater(string $path, string $etag, int $attempts, string $error, RunError $record, int $firstAttempt, int $fileId = 0): int {
 		$delay = min(self::RETRY_DELAY << min($attempts - 1, 10), self::MAX_RETRY_DELAY);
 		$minutes = intdiv($delay, 60);
 		$now = $this->now();
@@ -498,7 +499,8 @@ final class ImportExecutor {
 			'attempts' => $attempts,
 			'retry_at' => $now + $delay,
 			'last_error' => SyncErrors::stored($error),
-		] + ($firstAttempt !== null ? ['first_attempt_at' => $firstAttempt] : []) + ($fileId > 0 ? ['file_id' => $fileId] : []));
+			'first_attempt_at' => $firstAttempt,
+		] + ($fileId > 0 ? ['file_id' => $fileId] : []));
 		$this->report->error(new RunError('Import %1$s: %2$s (attempt %3$s, the next in %4$s minutes)', [$path, $record, (string)$attempts, (string)$minutes]), null, $path);
 
 		return $minutes;
