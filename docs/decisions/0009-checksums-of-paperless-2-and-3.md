@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-13
+- Amended by [0564](0564-a-document-found-by-the-md5-alone-is-confirmed-by-its-original.md): before an upload, a document that the MD5 alone found counts as the file's only with the SHA-256 of its original
 
 ## Context
 
@@ -21,4 +22,4 @@ Option 3. The Paperless client downloads to a temporary file as before, computes
 
 ## Consequences
 
-Paperless Sync supports Paperless-ngx from 2.10, the first version with a trash, through 3.x, and a change of the metadata moves the file on both. MD5 serves only to recognize a file that Paperless already identifies with it, never as a protection against an attacker, who could write the content of Paperless directly. The test double of Paperless and the mock of the end-to-end tests answer with MD5 in a mode of their own, so that both kinds of checksum stay tested. When Paperless-ngx 2 is no longer supported, a later change may drop the MD5 again.
+Paperless Sync supports Paperless-ngx from 2.10, the first version with a trash, through 3.x, and a change of the metadata moves the file on both. MD5 serves only to recognize a file that Paperless already identifies with it. For the export, the MD5 that Paperless reports for a revision tells only whether the content of its document has changed. Before an upload, a match decides more: whether the file counts as one that Paperless has, which then never goes up and may leave the inbox. A file of the inbox, of *Send to Paperless* or of a rule of Flow comes from people who need no access to Paperless, and whoever makes two different files can give them the same MD5 with little effort. So a document that the MD5 alone found counts as the file's only when one download of its original has the SHA-256 of the file ([0564](0564-a-document-found-by-the-md5-alone-is-confirmed-by-its-original.md)); otherwise the file goes up, and Paperless decides. The test double of Paperless and the mock of the end-to-end tests answer with MD5 in a mode of their own, so that both kinds of checksum stay tested. When Paperless-ngx 2 is no longer supported, a later change may drop the MD5 again.
