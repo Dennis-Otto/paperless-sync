@@ -24,6 +24,7 @@ use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -1820,6 +1821,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			self::fail('A request that failed must be reported.');
 		} catch (PaperlessRequestException $exception) {
 			$detail = $exception->getMessage();
+			self::assertSame($code === 404, $exception instanceof PaperlessNotFoundException, 'A 404 is an answer that KnownContent tells from a failure.');
 			self::assertStringNotContainsString('?', $detail, 'The detail leaves out the query of the URL.');
 			$error = RunError::of($exception);
 			self::assertSame("{$explanation} Details: {$detail}", $error->message());
@@ -1844,6 +1846,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			$this->service->documents();
 			self::fail('A request that failed must be reported.');
 		} catch (PaperlessRequestException $exception) {
+			self::assertNotInstanceOf(PaperlessNotFoundException::class, $exception);
 			self::assertStringStartsWith('Paperless refused the API token (HTTP 401).', RunError::of($exception)->message());
 		}
 	}
@@ -2282,33 +2285,38 @@ final class PaperlessApiServiceTest extends TestCase {
 	/**
 	 * A file of the inbox whose task Paperless has not finished a day after the upload may be in
 	 * Paperless already. Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5 before,
-	 * so the SHA-256 is asked for first, then the MD5.
+	 * so the SHA-256 is asked for first, then the MD5, and the answer says which of them found the
+	 * document: one that the MD5 alone found needs the SHA-256 of its original.
 	 *
-	 * @return array<string, array{list<mixed>, int|null, int}>
+	 * @return array<string, array{list<mixed>, array{int, bool}|null, int}>
 	 */
 	public static function documentsByChecksum(): array {
 		$none = ['count' => 0, 'next' => null, 'previous' => null, 'results' => []];
 		$found = static fn (mixed $id): array => ['count' => 1, 'next' => null, 'previous' => null, 'results' => [['id' => $id]]];
 
 		return [
-			'3.x, by its SHA-256' => [[$found(456)], 456, 1],
-			'2.x, by its MD5' => [[$none, $found(457)], 457, 2],
-			'an ID as a text' => [[$found('458')], 458, 1],
+			'3.x, by its SHA-256' => [[$found(456)], [456, true], 1],
+			'2.x, by its MD5' => [[$none, $found(457)], [457, false], 2],
+			'an ID as a text' => [[$found('458')], [458, true], 1],
 			'not in Paperless' => [[$none, $none], null, 2],
 			'an answer without an ID' => [[$found(null), $found('none')], null, 2],
 		];
 	}
 
-	/** @param list<mixed> $bodies */
+	/**
+	 * @param list<mixed> $bodies
+	 * @param array{int, bool}|null $expected
+	 */
 	#[DataProvider('documentsByChecksum')]
-	public function testDocumentIsFoundByTheChecksumsOfItsOriginal(array $bodies, ?int $expected, int $requests): void {
+	public function testDocumentIsFoundByTheChecksumsOfItsOriginal(array $bodies, ?array $expected, int $requests): void {
 		foreach ($bodies as $body) {
 			$this->responses[] = [200, $body];
 		}
 		$content = new DocumentFingerprint(hash('sha256', '%PDF-inbox'), hash('md5', '%PDF-inbox'));
 
-		self::assertSame($expected, $this->service->findDocument($content));
+		$match = $this->service->findDocument($content);
 
+		self::assertSame($expected, $match !== null ? [$match->id, $match->bySha256] : null);
 		self::assertCount($requests, $this->requests);
 		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
 		self::assertSame(['checksum__iexact' => $content->sha256, 'fields' => 'id', 'page_size' => 1], $this->requests[0]['options']['query']);
@@ -3364,7 +3372,10 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertFalse(DocumentFingerprint::matches($fingerprint->value(), $archive), 'The archived version is another file than the original.');
 	}
 
-	/** A file of the inbox whose task got lost is found by the checksum of its original. */
+	/**
+	 * A file of the inbox whose task got lost is found by the checksum of its original: the MD5 on
+	 * Paperless-ngx 2.x, the SHA-256 on 3.x.
+	 */
 	#[DataProvider('paperlessLines')]
 	public function testPaperlessFindsADocumentByTheChecksumOfItsOriginal(string $line): void {
 		// Paperless-ngx 3.x finds the SHA-256 at once, 2.x the MD5 after it.
@@ -3376,7 +3387,8 @@ final class PaperlessApiServiceTest extends TestCase {
 
 		$found = $this->service->findDocument(new DocumentFingerprint((string)$downloads['true']['sha256'], (string)$downloads['true']['md5']));
 
-		self::assertSame(1, $found);
+		self::assertNotNull($found);
+		self::assertSame([1, $line !== '2'], [$found->id, $found->bySha256]);
 		self::assertCount(count($checksums), $this->requests);
 		foreach ($checksums as $index => $checksum) {
 			self::assertSame(self::recordedQuery($line, "lookup-{$checksum}"), self::sentQuery($this->requests[$index]));

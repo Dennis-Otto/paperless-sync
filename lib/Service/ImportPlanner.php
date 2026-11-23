@@ -201,7 +201,9 @@ final class ImportPlanner {
 	 * the file would wait in the inbox for good, so the run ends it:
 	 *
 	 * - Paperless has a document with the content of the file, as when the task was removed after
-	 *   it finished: the import succeeded.
+	 *   it finished: the import succeeded. A document that the MD5 alone found has it only when
+	 *   the SHA-256 of its original is the file's; a failed download of the original fails the
+	 *   check, and the next run asks again.
 	 * - Paperless still lists the task, as pending or started: its worker may be down, or the task
 	 *   may wait in a long queue. Paperless-ngx 3.x imports a duplicate as a second document unless
 	 *   PAPERLESS_CONSUMER_DELETE_DUPLICATES is on, so a new upload could create the document
@@ -215,7 +217,7 @@ final class ImportPlanner {
 	 */
 	private function endUnfinished(ImportContext $context, string $etag, bool $unchangedFile, int $attempts, string $taskId, array $task): ImportAction {
 		$content = $this->files->fingerprint($context->path);
-		$documentId = $content !== null ? $this->paperless->findDocument($content) : null;
+		$documentId = $content !== null ? (new KnownContent($this->paperless))->document($content) : null;
 		if ($documentId !== null) {
 			return new ImportSucceeded($context, $etag, true, $documentId, false);
 		}

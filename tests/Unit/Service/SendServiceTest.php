@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -198,6 +199,83 @@ final class SendServiceTest extends TestCase {
 		self::assertSame([], $this->paperless->uploads);
 		self::assertNull($this->state->findSend(self::SENDER, $id));
 		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_KNOWN, $id, 'Scans/receipt.pdf', 77);
+		self::assertSame([], $this->paperless->downloadRequests, 'A document that the SHA-256 found has the content of the file.');
+	}
+
+	/** On Paperless-ngx 2.x, the MD5 alone finds the document, whose original then has the SHA-256 of the file. */
+	public function testASentFileWhoseContentADocumentFoundByTheMd5AloneHasEndsAsKnown(): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->paperless->contents[77] = 'Synthetic content of Scans/receipt.pdf';
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->uploads);
+		self::assertSame([[77, true]], $this->paperless->downloadRequests);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_KNOWN, $id, 'Scans/receipt.pdf', 77);
+	}
+
+	/**
+	 * A document that only shares the MD5 of a sent file is another document, whoever owns it, so
+	 * the file goes up, and Paperless decides; a file of a rule of Flow too, whose owner then hears
+	 * of a refusal as of any other.
+	 *
+	 * @return array<string, array{\Closure(self): int}>
+	 */
+	public static function filesWhoseMd5AloneMatches(): array {
+		return [
+			'a file sent from Files' => [static fn (self $test): int => $test->queue('Scans/receipt.pdf')],
+			'a file of a rule of Flow' => [static fn (self $test): int => $test->queueByRule('Scans/receipt.pdf', '')],
+			'a file of a sender whose document belongs to another user' => [static function (self $test): int {
+				$test->usersOfNextcloud = ['paperless', 'alice'];
+				$test->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+				$test->paperless->users = ['5' => 'alice'];
+				$test->paperless->documents[] = ['id' => 77, 'owner' => 4];
+
+				return $test->queue('Scans/receipt.pdf');
+			}],
+		];
+	}
+
+	/** @param \Closure(self): int $queue */
+	#[DataProvider('filesWhoseMd5AloneMatches')]
+	public function testASentFileWhoseMd5AloneMatchesIsUploaded(\Closure $queue): void {
+		$id = $queue($this);
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->paperless->contents[77] = '%PDF-other';
+
+		$this->service->process();
+
+		self::assertSame([[77, true]], $this->paperless->downloadRequests);
+		self::assertSame(['receipt.pdf' => 'Synthetic content of Scans/receipt.pdf'], $this->paperless->uploads);
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
+		self::assertSame([], $this->notifications, 'The sender hears of the end of the import, not of a document of other content.');
+	}
+
+	/** Without the original, the app can't tell whether Paperless has the content of the file, so it tries again later. */
+	public function testASentFileWaitsWhenTheOriginalCannotBeDownloadedToConfirmIt(): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->uploads);
+		self::assertSame(SendService::RETRY, $this->send($id)['status']);
+		self::assertSame([], $this->notifications);
+	}
+
+	/** An original that Paperless doesn't have (HTTP 404) confirms nothing: the file goes up and Paperless decides, rather than retrying for good. */
+	public function testASentFileIsUploadedWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->service->process();
+
+		self::assertSame([[77, true]], $this->paperless->downloadRequests);
+		self::assertSame(['receipt.pdf' => 'Synthetic content of Scans/receipt.pdf'], $this->paperless->uploads);
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
 	}
 
 	/** @return array<string, array{\Closure(TestStorage, int): void}> */

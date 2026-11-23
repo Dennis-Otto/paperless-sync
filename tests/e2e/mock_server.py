@@ -158,6 +158,8 @@ def reset_state():
                 # Paperless-ngx reports MD5 checksums up to 2.x and SHA-256 since 3.0.
                 "checksum": "sha256",
                 "downloads": 0,
+                # The IDs of the documents whose original a request downloaded, in their order.
+                "originalDownloads": [],
                 "metadataRequests": 0,
                 # The ordering and the fields that each scan of the documents asked for.
                 "documentScans": [],
@@ -555,14 +557,12 @@ class Handler(BaseHTTPRequestHandler):
             owner = int(query["owner__id"][0]) if "owner__id" in query else None
             self._page([item for item in documents if item.get("owner") == owner])
         elif parsed.path == "/api/documents/" and "checksum__iexact" in query:
-            # The lookup of a document by the checksum of its original, MD5 up to Paperless-ngx 2.x
-            # and SHA-256 since 3.0, as before an upload from Files.
+            # The lookup of a document by the checksum of its original, as before an upload from
+            # Files: Paperless-ngx keeps only the MD5 up to 2.x and only the SHA-256 since 3.0, so
+            # with /control/checksum/md5 the SHA-256 of a file finds nothing, and the app confirms
+            # what the MD5 alone found with a download of the original.
             checksum = query["checksum__iexact"][0].lower()
-            self._page([
-                {"id": item["id"]}
-                for item in documents
-                if checksum in (hashlib.md5(document_content(item["id"])).hexdigest(), hashlib.sha256(document_content(item["id"])).hexdigest())
-            ])
+            self._page([{"id": item["id"]} for item in documents if checksum == paperless_checksum(document_content(item["id"]))])
         elif parsed.path == "/api/documents/":
             # Paperless-ngx sends only the fields that a request names, and the scan of a run names them.
             if "ordering" in query:
@@ -661,6 +661,8 @@ class Handler(BaseHTTPRequestHandler):
             if match.group(2) == "download":
                 with LOCK:
                     STATE["downloads"] += 1
+                    if query.get("original") == ["true"]:
+                        STATE["originalDownloads"].append(int(match.group(1)))
                 self._bytes(200, data, "application/pdf")
             else:
                 checksum = paperless_checksum(data)

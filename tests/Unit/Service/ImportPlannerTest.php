@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ImportPlanner;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\SyncBatch;
 use OCA\PaperlessSync\Service\TargetFiles;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -190,6 +191,18 @@ final class ImportPlannerTest extends TestCase {
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'originals' => ['a.pdf' => 9]],
 				['succeeded a.pdf as P9'],
 			],
+			'a task unfinished a day after the upload succeeded when the document that the MD5 alone found has the content' => [
+				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'md5Originals' => ['a.pdf' => 9], 'contents' => [9 => '%PDF-a.pdf']],
+				['succeeded a.pdf as P9'],
+			],
+			'a task lost a day after the upload goes to Paperless again when the document that the MD5 alone found has other content' => [
+				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'md5Originals' => ['a.pdf' => 9], 'contents' => [9 => '%PDF-other'], 'tasks' => ['task-1' => ['status' => 'PENDING', 'message' => '', 'listed' => false]]],
+				['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'],
+			],
+			'a task still listed a day after the upload moves the file to the error folder when the document that the MD5 alone found has other content' => [
+				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'md5Originals' => ['a.pdf' => 9], 'contents' => [9 => '%PDF-other'], 'tasks' => ['task-1' => ['status' => 'STARTED', 'message' => '']]],
+				['failed a.pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (STARTED), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (STARTED))'],
+			],
 			'a task that Paperless still lists a day after the upload moves the file to the error folder' => [
 				['files' => ['a.pdf'], 'imports' => ['a.pdf' => ['status' => 'pending', 'submitted_at' => TestClock::START - self::DAY]], 'tasks' => ['task-1' => ['status' => 'STARTED', 'message' => 'Running OCR']]],
 				['failed a.pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (STARTED: Running OCR), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (STARTED: Running OCR))'],
@@ -280,6 +293,14 @@ final class ImportPlannerTest extends TestCase {
 		foreach ($originals as $file => $document) {
 			$this->paperless->originals[hash('sha256', "%PDF-{$file}")] = $document;
 		}
+		/** @var array<string, int> $md5Originals */
+		$md5Originals = $case['md5Originals'] ?? [];
+		foreach ($md5Originals as $file => $document) {
+			$this->paperless->originals[hash('md5', "%PDF-{$file}")] = $document;
+		}
+		/** @var array<int, string> $contents */
+		$contents = $case['contents'] ?? [];
+		$this->paperless->contents = $contents;
 
 		self::assertSame($expected, $this->plan($case['settings'] ?? []));
 	}
@@ -330,6 +351,38 @@ final class ImportPlannerTest extends TestCase {
 		$this->storage->existsFailures[TestConfig::ERRORS . '/a.pdf'] = new RuntimeException('Nextcloud is busy');
 
 		self::assertSame(['check failed a [P999].pdf: Nextcloud is busy'], $this->plan());
+	}
+
+	/**
+	 * Without the original of a document that the MD5 alone found, the end of an unfinished upload
+	 * can't be told: the check fails, the file stays where it is, and the next run asks again.
+	 */
+	public function testAnUnfinishedUploadWaitsWhenTheOriginalCannotBeDownloadedToConfirmIt(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->originals[hash('md5', '%PDF-a')] = 9;
+		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
+
+		self::assertSame(['check failed a.pdf: Paperless answered with HTTP 500'], $this->plan());
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+	}
+
+	/**
+	 * An original that Paperless doesn't have (HTTP 404) confirms nothing, so the unfinished upload
+	 * goes on to its other ends, as for a document of other content, instead of failing its check
+	 * in every run.
+	 */
+	public function testAnUnfinishedUploadGoesOnWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->originals[hash('md5', '%PDF-a')] = 9;
+		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => '', 'listed' => false];
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		self::assertSame(['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'], $this->plan());
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
 	}
 
 	/** A check of a task that fails keeps the upload pending, and the other uploads go on. */

@@ -87,6 +87,8 @@
           - lib/Service/InboxTags.php
           - lib/Service/ImportPlanner.php
           - lib/Service/ImportExecutor.php
+          - lib/Service/KnownContent.php
+          - lib/Model/DocumentMatch.php
           - tests/Unit/Service/InboxFileTypesTest.php
           - tests/Unit/Service/InboxTagsTest.php
           - tests/Unit/Service/ImportPlannerTest.php
@@ -136,6 +138,7 @@
           - lib/Service/PaperlessClientFactory*.php
           - lib/Model/PaperlessConnection.php
           - lib/Service/PaperlessRequestException.php
+          - lib/Service/PaperlessNotFoundException.php
           - lib/Service/PaperlessVersionException.php
           - lib/Service/PaperlessRedirectException.php
           - lib/Service/PaperlessHostException.php

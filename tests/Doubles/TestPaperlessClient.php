@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Doubles;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\DocumentMatch;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
@@ -51,7 +52,11 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	public array $uploads = [];
 	/** @var array<string, array{status: string, message: string, documentId?: int|null, listed?: bool}> the tasks that Paperless lists, by default pending */
 	public array $tasks = [];
-	/** @var array<string, int> the ID of a document by a checksum of its original, SHA-256 or MD5 */
+	/**
+	 * @var array<string, int> the ID of a document by a checksum of its original, SHA-256 or MD5;
+	 *                         an entry under the MD5 alone is a match by the MD5, as on
+	 *                         Paperless-ngx 2.x, whatever the content of the document
+	 */
 	public array $originals = [];
 	/** @var list<string> the SHA-256 of every content that a run looked for */
 	public array $searches = [];
@@ -410,12 +415,16 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		);
 	}
 
-	public function findDocument(DocumentFingerprint $content): ?int {
+	public function findDocument(DocumentFingerprint $content): ?DocumentMatch {
 		$this->searches[] = $content->sha256;
 		if ($this->findException !== null) {
 			throw $this->findException;
 		}
-		return $this->originals[$content->sha256] ?? $this->originals[$content->md5] ?? null;
+		if (isset($this->originals[$content->sha256])) {
+			return new DocumentMatch($this->originals[$content->sha256], true);
+		}
+
+		return isset($this->originals[$content->md5]) ? new DocumentMatch($this->originals[$content->md5], false) : null;
 	}
 
 	public function uploadDocument($source, string $filename, array $tags = []): string {

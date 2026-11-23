@@ -27,6 +27,7 @@ use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ImportExecutor;
 use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -154,6 +155,7 @@ final class ImportExecutorTest extends TestCase {
 		$this->executor->apply(self::upload(attempts: 1));
 
 		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame([], $this->paperless->downloadRequests, 'A document that the SHA-256 found has the content of the file.');
 		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
 		self::assertSame([['outcome' => SyncReport::IMPORTED, 'path' => self::FILE, 'document' => 9, 'reason' => '']], $this->report->importResults());
 		self::assertSame([0, 1], [$this->report->importsSubmitted, $this->report->importsSucceeded]);
@@ -276,6 +278,195 @@ final class ImportExecutorTest extends TestCase {
 		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
 		self::assertSame([self::FILE => ['path' => self::FILE, 'status' => 'pending']], $this->state->imports);
 		self::assertSame([], $this->report->importResults());
+	}
+
+	/**
+	 * Paperless-ngx 2.x knows a document only by the MD5 of its original, so a document that the
+	 * MD5 alone found has the content of the file only when its original has the SHA-256 of the
+	 * file, which one download of the original tells, in a dry-run too.
+	 */
+	public function testADocumentFoundByTheMd5AloneCountsOnlyWithTheSameSha256(): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
+
+		$this->arrange(true);
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests, 'The download only reads, so a dry-run makes it too.');
+		self::assertSame(['IMPORT SUCCESS: ' . self::FILE . ' -> P9'], $this->report->actions);
+	}
+
+	/**
+	 * A document that only shares the MD5 of the file is another document: the file goes up as its
+	 * own, stays in the inbox until Paperless has answered, and isn't reported as imported.
+	 */
+	public function testAFileWhoseMd5AloneADocumentWithOtherContentHasIsUploaded(): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = '%PDF-other';
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame(['a.pdf' => self::CONTENT], $this->paperless->uploads);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE], 'The file stays until Paperless has imported it.');
+		self::assertSame(['IMPORT: ' . self::FILE], $this->report->actions);
+		self::assertSame([], $this->report->importResults());
+		self::assertSame([1, 0], [$this->report->importsSubmitted, $this->report->importsSucceeded]);
+		self::assertSame('pending', $this->state->imports[self::FILE]['status']);
+
+		$this->arrange(true);
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = '%PDF-other';
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame(['IMPORT: ' . self::FILE], $this->report->actions, 'A dry-run reports the upload of the run.');
+	}
+
+	/**
+	 * The original decides, not the archived version that Paperless made of it: the original has
+	 * the bytes of the file that went up.
+	 *
+	 * @return array<string, array{string, string, list<string>}>
+	 */
+	public static function originalsAndArchivedVersions(): array {
+		return [
+			'the original has the content of the file' => [self::CONTENT, '%PDF-archive', []],
+			'only the archived version has it' => ['%PDF-other', self::CONTENT, ['a.pdf']],
+		];
+	}
+
+	/** @param list<string> $uploads */
+	#[DataProvider('originalsAndArchivedVersions')]
+	public function testTheOriginalNotTheArchivedVersionConfirmsAMatchByTheMd5(string $original, string $archive, array $uploads): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->originalContents[9] = $original;
+		$this->paperless->contents[9] = $archive;
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame($uploads, $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * In per-user ownership, the owner of a document that the MD5 alone found is read first: a
+	 * document of another user costs no download, and a document of the account of the app gets
+	 * the inbox's user only once its original has the content of the file.
+	 */
+	public function testADocumentOfTheAccountFoundByTheMd5AloneKeepsItsOwnerUntilConfirmed(): void {
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = '%PDF-other';
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->ownerChanges, 'Another content keeps the account as the owner.');
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->ownerChanges, 'Without the original, the owner stays.');
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, 3]], $this->paperless->ownerChanges);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertArrayNotHasKey(self::FILE, $this->storage->files);
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->contents[9] = self::CONTENT;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 4];
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->downloadRequests, 'A document of another user is no reason for a download.');
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+	}
+
+	/**
+	 * Without the original, the app can't tell whether Paperless has the content of the file, so
+	 * the file waits, as when Paperless can't answer the search: nothing goes up and nothing leaves
+	 * the inbox, and without Paperless the other files wait as well.
+	 */
+	public function testAFileWaitsWhenTheOriginalCannotBeDownloadedToConfirmIt(): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame(self::CONTENT, $this->storage->files[self::FILE]);
+		self::assertSame(['status' => 'retry', 'attempts' => 1], array_intersect_key($this->state->imports[self::FILE], array_flip(['status', 'attempts'])));
+		self::assertSame(0, $this->report->importsSucceeded);
+		self::assertFalse($this->batch->stopped());
+
+		$this->arrange(false);
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->downloadException = new PaperlessRequestException('Paperless could not be reached');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
+		self::assertTrue($this->batch->stopped());
+	}
+
+	/**
+	 * An original that Paperless doesn't have (HTTP 404), such as one that was missing at the
+	 * migration of its checksums, confirms nothing: the file goes up and Paperless decides, rather
+	 * than waiting in every run. In per-user ownership, the document of the account keeps its owner.
+	 */
+	public function testAFileGoesUpWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertFalse($this->batch->stopped());
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
 	}
 
 	/** Without the answer whether Paperless has the content, the file waits, and without Paperless, so do the others. */

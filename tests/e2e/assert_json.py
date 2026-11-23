@@ -843,6 +843,22 @@ elif mode == "mock-owner-changes":
     changes = payload.get("ownerChanges")
     if not isinstance(changes, list) or len(changes) != 1 or changes[0].get("owner") != 3 or changes[0].get("document", 0) <= 500:
         raise AssertionError(f"mock-owner-changes: the owners changed as {changes!r}")
+elif mode == "per-user-known":
+    # Paperless-ngx 2.x found P124 by the MD5 of both copies: e2e-other, whose document it is, has
+    # its copy imported as P124, and e2e-owner uploads theirs as a document of its own.
+    users = payload.get("users") or {}
+    other, owner = users.get("e2e-other") or {}, users.get("e2e-owner") or {}
+    if payload.get("errors") != 0 or other.get("importsSucceeded") != 1 or other.get("importsSubmitted") != 0 or owner.get("importsSubmitted") != 1:
+        raise AssertionError(f"per-user-known: the inboxes ended as {users!r}")
+elif mode == "mock-known":
+    # One download of an original confirmed the copy of e2e-other; a document of another user
+    # needs none, and the copy of e2e-owner reached Paperless once.
+    downloads = payload.get("originalDownloads", [])[int(argument):]
+    if downloads != [124]:
+        raise AssertionError(f"mock-known: the run downloaded the originals {downloads!r} instead of P124 once")
+    copies = [upload for upload in payload.get("uploads", []) if upload.get("filename") == "copy-of-P124.pdf"]
+    if len(copies) != 1:
+        raise AssertionError(f"mock-known: the copy of e2e-owner reached Paperless {len(copies)} times: {payload.get('uploads')!r}")
 elif mode == "recovered":
     if payload.get("errors") != 0 or payload.get("dryRun") is not False:
         raise AssertionError(f"recovered: the run after the failures did not succeed: {payload!r}")

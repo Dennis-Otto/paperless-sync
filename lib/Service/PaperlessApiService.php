@@ -14,6 +14,7 @@ use OCA\PaperlessSync\AppInfo\AppConstants;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\DocumentMatch;
 use OCA\PaperlessSync\Model\PaperlessConnection;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\RunError;
@@ -790,12 +791,12 @@ final class PaperlessApiService implements PaperlessClientInterface {
 		];
 	}
 
-	public function findDocument(DocumentFingerprint $content): ?int {
+	public function findDocument(DocumentFingerprint $content): ?DocumentMatch {
 		foreach ([$content->sha256, $content->md5] as $checksum) {
 			$page = $this->requestPage('/api/documents/', ['checksum__iexact' => $checksum, 'fields' => 'id', 'page_size' => 1]);
 			$documentId = self::id($page['results'][0]['id'] ?? null);
 			if ($documentId !== null) {
-				return $documentId;
+				return new DocumentMatch($documentId, $checksum === $content->sha256);
 			}
 		}
 
@@ -1451,7 +1452,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				throw new PaperlessHostException();
 			}
 			$message = $this->failureMessage($exception->getMessage(), $token);
-			throw new PaperlessRequestException($message, self::explained($exception->getCode(), $path, $message));
+			$error = self::explained($exception->getCode(), $path, $message);
+			throw (int)$exception->getCode() === Http::STATUS_NOT_FOUND ? new PaperlessNotFoundException($message, $error) : new PaperlessRequestException($message, $error);
 		}
 		if ($response->getStatusCode() === Http::STATUS_NOT_ACCEPTABLE) {
 			throw new PaperlessVersionException();
