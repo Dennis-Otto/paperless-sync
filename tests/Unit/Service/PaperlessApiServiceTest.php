@@ -2319,9 +2319,9 @@ final class PaperlessApiServiceTest extends TestCase {
 		self::assertSame($expected, $match !== null ? [$match->id, $match->bySha256] : null);
 		self::assertCount($requests, $this->requests);
 		self::assertSame(self::URL . '/api/documents/', $this->requests[0]['url']);
-		self::assertSame(['checksum__iexact' => $content->sha256, 'fields' => 'id', 'page_size' => 1], $this->requests[0]['options']['query']);
+		self::assertSame(['checksum__iexact' => $content->sha256, 'fields' => 'id', 'ordering' => '-id', 'page_size' => 1], $this->requests[0]['options']['query']);
 		if ($requests === 2) {
-			self::assertSame(['checksum__iexact' => $content->md5, 'fields' => 'id', 'page_size' => 1], $this->requests[1]['options']['query']);
+			self::assertSame(['checksum__iexact' => $content->md5, 'fields' => 'id', 'ordering' => '-id', 'page_size' => 1], $this->requests[1]['options']['query']);
 		}
 	}
 

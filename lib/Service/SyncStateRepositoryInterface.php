@@ -89,9 +89,34 @@ interface SyncStateRepositoryInterface {
 	public function deleteSend(string $userId, int $fileId): void;
 
 	/**
+	 * Every record of an upload of per-user ownership that has not ended, the oldest first: its
+	 * user, its source, inbox or send, the path of its file, the SHA-256 and the MD5 of its content,
+	 * the highest ID of a document with that content before its first upload, the ID of its task
+	 * once Paperless names it, '' until then or after a lost answer, and the times of its last
+	 * attempt and of its start, created_at, as UploadRecords explains.
+	 *
+	 * @return list<array<string, int|string|null>>
+	 */
+	public function allUploads(): array;
+
+	/** @return array<string, int|string|null>|null the record of an upload of this content by this user */
+	public function findUpload(string $userId, string $sha256): ?array;
+
+	/**
+	 * Saves the values of the record of an upload, a new one with the defaults for the others. The
+	 * time of its start, created_at, is that of the first save: a later one keeps it.
+	 *
+	 * @param array<string, int|string|null> $values
+	 */
+	public function saveUpload(string $userId, string $sha256, array $values): void;
+
+	public function deleteUpload(string $userId, string $sha256): void;
+
+	/**
 	 * Deletes every state of a user whom Nextcloud deleted: the exports of their archive, the
-	 * imports of their inbox and the files that they sent from Files, so that a new account with
-	 * the same ID starts without them. Returns how many it deleted.
+	 * imports of their inbox, the files that they sent from Files and the records of their
+	 * uploads, so that a new account with the same ID starts without them. Returns how many it
+	 * deleted.
 	 */
 	public function deleteOwner(string $userId): int;
 }

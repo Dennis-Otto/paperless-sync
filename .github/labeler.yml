@@ -92,9 +92,13 @@
           - lib/Model/OwnDocument.php
           - lib/Model/PerUserScope.php
           - lib/Service/HeldDocumentException.php
+          - lib/Service/LostAnswerException.php
           - lib/Service/WaitingUploads.php
+          - lib/Service/UploadRecords.php
+          - lib/Service/UploadSettlement.php
           - tests/Unit/Service/InboxFileTypesTest.php
           - tests/Unit/Service/InboxTagsTest.php
+          - tests/Unit/Service/UploadRecordsTest.php
           - tests/Unit/Service/ImportPlannerTest.php
           - tests/Unit/Service/ImportExecutorTest.php
           - lib/Migration/Version000110Date20261008000000.php
@@ -103,6 +107,8 @@
           - tests/Unit/Migration/Version000170*
           - lib/Migration/Version000190Date20261123000000.php
           - tests/Unit/Migration/Version000190*
+          - lib/Migration/Version000200Date20261124000000.php
+          - tests/Unit/Migration/Version000200*
           - lib/Service/FileActions.php
           - lib/Service/SendService.php
           - lib/Controller/FileActionController.php

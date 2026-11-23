@@ -788,7 +788,12 @@ OC.L10N.register(
 		"Paperless Sync has no copy to write again.": "Paperless Sync 没有需要重新写入的副本。",
 		"Write all copies again": "重新写入所有副本",
 		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "要从 Paperless 重新写入每个副本吗？接下来的运行会逐批重新下载每个文档，并将其写入其副本的位置。有人在 Nextcloud 中编辑过的副本会重新获得 Paperless 的内容，编辑内容会作为早期版本保留在“版本”中。",
-		"Could not write the copies again.": "无法重新写入副本。"
+		"Could not write the copies again.": "无法重新写入副本。",
+		"Import %s: Paperless created no document of its upload within 30 days, so Paperless Sync no longer follows it": "导入 %s：Paperless 在 30 天内没有根据此次上传创建文档，因此 Paperless Sync 不再跟踪它",
+		"Import %1$s: Paperless created the document %2$s with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner": "导入 %1$s：Paperless 在多个用户上传之后创建了内容相同的文档 %2$s，因此它保留在本应用的账号下，直到有人在 Paperless 中为它设置所有者",
+		"_The documents of the account of the app stay where they are while an upload of {uploads} may still create its document._::_The documents of the account of the app stay where they are while uploads of {uploads} may still create their documents._": [
+			"只要 {uploads} 的上传仍可能创建其文档，本应用账号的文档就保持原位。"
+		]
 	},
 	"nplurals=1; plural=0;"
 )

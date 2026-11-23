@@ -24,14 +24,23 @@ use UnexpectedValueException;
  *
  * In per-user ownership, the account of the app sees the documents of every user, so a document
  * with the content of a file counts only when it is the file's user's: by its owner, whose
- * documents go to that user, or as that user's own upload whose answer never came. Every other
+ * documents go to that user, or as that user's own upload whose answer never came, which the
+ * record of the upload proves by the ID of the document, as UploadRecords explains. Every other
  * document doesn't count, and the file goes up as a document of its own. The owner is read before
  * the download, so that a document that doesn't count costs none. KnownContent only reads: the
  * caller gives a lost upload its owner.
  */
 final class KnownContent {
+	/**
+	 * The highest ID of a document with the content that the last search found, or 0 for none,
+	 * which the record of an upload keeps from the search before its first upload.
+	 */
+	public int $found = 0;
+
+	/** @param SyncStateRepositoryInterface $state the records of the uploads, which prove a lost upload in per-user ownership */
 	public function __construct(
 		private PaperlessClientInterface $paperless,
+		private SyncStateRepositoryInterface $state,
 	) {
 	}
 
@@ -40,16 +49,17 @@ final class KnownContent {
 	 * when there is none, so that the file goes up. Without a scope, as in single ownership, every
 	 * document with the content counts, and no owner is read.
 	 *
-	 * @param int $firstAttempt the time of the first upload of the file that may have reached Paperless, or 0 when there was none
 	 * @throws HeldDocumentException when the document may be that of an upload of another user that waits for its owner, so that the file waits
 	 * @throws \Throwable when Paperless can't answer the search or name the owner, or the original can't be downloaded
 	 */
-	public function own(DocumentFingerprint $content, ?PerUserScope $scope = null, int $firstAttempt = 0): ?OwnDocument {
+	public function own(DocumentFingerprint $content, ?PerUserScope $scope = null): ?OwnDocument {
+		$this->found = 0;
 		$match = $this->paperless->findDocument($content);
 		if ($match === null) {
 			return null;
 		}
-		$lostUpload = $scope === null || $scope->owners->single ? false : $this->claim($match->id, $scope, $firstAttempt);
+		$this->found = $match->id;
+		$lostUpload = $scope === null || $scope->owners->single ? false : $this->claim($match->id, $content, $scope);
 		if ($lostUpload === null || !$this->confirms($match, $content)) {
 			return null;
 		}
@@ -58,18 +68,34 @@ final class KnownContent {
 	}
 
 	/**
+	 * The document with this content and an ID above $knownId, the highest ID of a document with
+	 * the content before the first upload of a file, once its content is confirmed: the document
+	 * that the upload created, or null when Paperless has none. The record of an upload whose
+	 * answer never came, or whose task Paperless no longer names, looks for its document with it.
+	 *
+	 * @throws \Throwable when Paperless can't answer the search, or the original can't be downloaded
+	 */
+	public function newer(DocumentFingerprint $content, int $knownId): ?int {
+		$match = $this->paperless->findDocument($content);
+
+		return $match !== null && $match->id > $knownId && $this->confirms($match, $content) ? $match->id : null;
+	}
+
+	/**
 	 * Whether a document counts for the user of the scope: null when it doesn't, as for a document
 	 * of another user or one that Paperless doesn't show the account; false when it is the user's
 	 * by its owner, as Owners::userOf() of the owner is that user; true when it is provably the
-	 * user's own upload whose answer never came: the account of the app owns it, and Paperless
-	 * added it at or after the first upload of the file that may have reached it. Paperless makes
-	 * the account the owner of every upload, so a document of the account that the run holds may
-	 * be that of an upload of another user, which waits for its owner, and counts for nobody.
+	 * user's own upload whose answer never came: the account of the app owns it, and its ID is
+	 * higher than the highest one with this content before the user's first upload of it, which the
+	 * record of that upload keeps. Paperless numbers its documents in ascending order and gives no
+	 * number twice, so such a document came after the search, with no clock involved. Paperless
+	 * makes the account the owner of every upload, so a document of the account that the run holds
+	 * may be that of an upload of another user, which waits for its owner, and counts for nobody.
 	 *
 	 * @throws HeldDocumentException for a document that the run holds
 	 * @throws UnexpectedValueException when Paperless doesn't name the owner
 	 */
-	private function claim(int $id, PerUserScope $scope, int $firstAttempt): ?bool {
+	private function claim(int $id, DocumentFingerprint $content, PerUserScope $scope): ?bool {
 		$document = $this->paperless->document($id);
 		if ($document === null) {
 			return null;
@@ -78,7 +104,8 @@ final class KnownContent {
 		if ($owner !== null && self::held($owner, $scope)) {
 			throw new HeldDocumentException($id);
 		}
-		if ($owner !== null && $firstAttempt > 0 && $firstAttempt <= self::added($document) && $owner === $this->paperless->accountId()) {
+		// The record comes first: without one, no account needs to be read.
+		if ($owner !== null && $this->newerThanItsRecord($id, $content, $scope->user) && $owner === $this->paperless->accountId()) {
 			return true;
 		}
 
@@ -113,17 +140,11 @@ final class KnownContent {
 		throw new UnexpectedValueException("Paperless did not name the owner of the document {$id}.");
 	}
 
-	/**
-	 * When Paperless added a document, or 0 when it doesn't say.
-	 *
-	 * @param array<string, mixed> $document
-	 */
-	private static function added(array $document): int {
-		/** @psalm-suppress MixedAssignment */
-		$added = $document['added'] ?? null;
-		$time = is_string($added) ? strtotime($added) : false;
+	/** Whether the user's record of an upload of this content keeps a lower ID than that of the document: without a record, nothing proves an upload. */
+	private function newerThanItsRecord(int $id, DocumentFingerprint $content, string $user): bool {
+		$record = $this->state->findUpload($user, $content->sha256);
 
-		return $time === false ? 0 : $time;
+		return $record !== null && $id > (int)($record['known_id'] ?? 0);
 	}
 
 	/**

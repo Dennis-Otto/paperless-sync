@@ -2707,7 +2707,7 @@ final class SyncServiceTest extends TestCase {
 		self::assertSame(
 			"Paperless import not finished\n\n"
 			. "Paperless has not finished the import task a day after the upload ({$state}). Its worker may be down, or the task may still wait in its queue, so Paperless may still create the document. The file was not uploaded again, because Paperless-ngx 3.x imports a duplicate as a second document.\n\n"
-			. "Should the document not appear in Paperless, check that the worker of Paperless runs, then move the file back into the inbox.\n\n"
+			. "Once the document appears in Paperless, this file can go. Should the document not appear, check that the worker of Paperless runs, then move the file back into the inbox.\n\n"
 			. "Paperless task: task-1\n",
 			$this->storage->files[$errorPath . '.error.txt'],
 		);

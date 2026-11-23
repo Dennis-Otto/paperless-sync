@@ -17,6 +17,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private const EXPORT_TABLE = 'paperless_sync_export';
 	private const IMPORT_TABLE = 'paperless_sync_import';
 	private const SEND_TABLE = 'paperless_sync_send';
+	private const UPLOAD_TABLE = 'paperless_sync_upload';
 
 	/** @psalm-suppress PossiblyUnusedMethod */
 	public function __construct(
@@ -113,7 +114,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findImport($ownerUid, $path);
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
-			'etag', 'file_id', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'last_error',
+			'etag', 'file_id', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -126,7 +127,6 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'task_id' => '',
 				'status' => 'pending',
 				'submitted_at' => $now,
-				'first_attempt_at' => 0,
 				'attempts' => 0,
 				'retry_at' => 0,
 				'last_error' => null,
@@ -189,7 +189,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findSend($userId, $fileId);
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
-			'path', 'folder', 'tags', 'rule_id', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'last_error',
+			'path', 'folder', 'tags', 'rule_id', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -203,7 +203,6 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'task_id' => '',
 				'status' => 'queued',
 				'submitted_at' => 0,
-				'first_attempt_at' => 0,
 				'attempts' => 0,
 				'retry_at' => 0,
 				'last_error' => null,
@@ -228,10 +227,69 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$this->delete(self::SEND_TABLE, ['user_id' => $userId, 'file_id' => $fileId]);
 	}
 
+	/** @psalm-suppress MixedReturnTypeCoercion */
+	public function allUploads(): array {
+		$query = $this->connection->getQueryBuilder();
+		$query->select('*')
+			->from(self::UPLOAD_TABLE)
+			->orderBy('id');
+		$result = $query->executeQuery();
+		$rows = [];
+		while (($row = $result->fetchAssociative()) !== false) {
+			$rows[] = $this->normalizeRow($row);
+		}
+		$result->closeCursor();
+
+		return $rows;
+	}
+
+	/** @psalm-suppress MixedReturnTypeCoercion */
+	public function findUpload(string $userId, string $sha256): ?array {
+		$query = $this->connection->getQueryBuilder();
+		$query->select('*')
+			->from(self::UPLOAD_TABLE)
+			->where($query->expr()->eq('user_id', $query->createNamedParameter($userId)))
+			->andWhere($query->expr()->eq('sha256', $query->createNamedParameter($sha256)));
+		$result = $query->executeQuery();
+		$row = $result->fetchAssociative();
+		$result->closeCursor();
+
+		return is_array($row) ? $this->normalizeRow($row) : null;
+	}
+
+	public function saveUpload(string $userId, string $sha256, array $values): void {
+		$now = $this->timeFactory->getTime();
+		$values = array_intersect_key($values, array_flip(['source', 'path', 'md5', 'known_id', 'task_id', 'last_attempt_at', 'created_at']));
+		$values['updated_at'] = $now;
+		if ($this->findUpload($userId, $sha256) === null) {
+			$this->insert(self::UPLOAD_TABLE, array_merge([
+				'user_id' => $userId,
+				'sha256' => $sha256,
+				'source' => 'inbox',
+				'path' => '',
+				'md5' => '',
+				'known_id' => 0,
+				'task_id' => '',
+				'last_attempt_at' => 0,
+				'created_at' => $now,
+			], $values));
+			return;
+		}
+		// The start of a record stays.
+		unset($values['created_at']);
+
+		$this->update(self::UPLOAD_TABLE, $values, ['user_id' => $userId, 'sha256' => $sha256]);
+	}
+
+	public function deleteUpload(string $userId, string $sha256): void {
+		$this->delete(self::UPLOAD_TABLE, ['user_id' => $userId, 'sha256' => $sha256]);
+	}
+
 	public function deleteOwner(string $userId): int {
 		return $this->delete(self::EXPORT_TABLE, ['owner_uid' => $userId])
 			+ $this->delete(self::IMPORT_TABLE, ['owner_uid' => $userId])
-			+ $this->delete(self::SEND_TABLE, ['user_id' => $userId]);
+			+ $this->delete(self::SEND_TABLE, ['user_id' => $userId])
+			+ $this->delete(self::UPLOAD_TABLE, ['user_id' => $userId]);
 	}
 
 	/**
@@ -297,7 +355,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private function normalizeRow(array $row): array {
 		/** @var array<string, int|string|null> $result */
 		$result = [];
-		$integerColumns = ['id', 'document_id', 'file_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'rule_id', 'created_at', 'updated_at'];
+		$integerColumns = ['id', 'document_id', 'file_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'attempts', 'retry_at', 'rule_id', 'known_id', 'last_attempt_at', 'created_at', 'updated_at'];
 		/** @psalm-suppress MixedAssignment */
 		foreach ($row as $key => $value) {
 			if ($value === null) {

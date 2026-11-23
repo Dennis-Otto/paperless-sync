@@ -52,6 +52,7 @@ final class UserDeletedListenerTest extends TestCase {
 			$this->state->saveExport($user, 1, ['path' => "Documents/Paperless/{$user}.pdf"]);
 			$this->state->saveImport($user, "Documents/Paperless/Inbox/{$user}.pdf", ['etag' => 'e1']);
 			$this->state->saveSend($user, 42, ['path' => "Scans/{$user}.pdf"]);
+			$this->state->saveUpload($user, 'sha-1', ['path' => "Scans/{$user}.pdf"]);
 		}
 	}
 
@@ -67,11 +68,12 @@ final class UserDeletedListenerTest extends TestCase {
 
 		self::assertSame(['bob = Bob', 'Max Muster = bob'], [$this->settings['user_tags'], $this->settings['user_map']]);
 		self::assertSame(['bob'], $this->config->tagArchives());
-		self::assertSame([[], [], null], [$this->state->allExports('Katja'), $this->state->allImports('Katja'), $this->state->findSend('Katja', 42)]);
+		self::assertSame([[], [], null, null], [$this->state->allExports('Katja'), $this->state->allImports('Katja'), $this->state->findSend('Katja', 42), $this->state->findUpload('Katja', 'sha-1')]);
+		self::assertNotNull($this->state->findUpload('bob', 'sha-1'), 'The records of the uploads of the others stay.');
 		self::assertSame(['bob', TestStateRepository::OWNER], $this->state->exportOwners());
 		self::assertNotNull($this->state->findSend('bob', 42));
 		self::assertSame([], $this->notifications);
-		self::assertSame(['info: Paperless Sync forgot the deleted user Katja: user_tags, user_map, tag_archives of its settings and 3 states.'], $this->log);
+		self::assertSame(['info: Paperless Sync forgot the deleted user Katja: user_tags, user_map, tag_archives of its settings and 4 states.'], $this->log);
 	}
 
 	/**
@@ -86,7 +88,7 @@ final class UserDeletedListenerTest extends TestCase {
 		self::assertSame(['Katja', 'bob'], $this->state->exportOwners());
 		self::assertSame(['e2e-admin', 'second-admin'], $this->notifiedUsers(NotificationPublisher::SUBJECT_TARGET_USER_DELETED));
 		self::assertSame(['user' => 'paperless'], $this->notifications[0]->getSubjectParameters());
-		self::assertSame(['info: Paperless Sync forgot the deleted user paperless: none of its settings and 3 states.'], $this->log);
+		self::assertSame(['info: Paperless Sync forgot the deleted user paperless: none of its settings and 4 states.'], $this->log);
 	}
 
 	/** A user that the app never knew changes nothing and leaves no entry in the log. */

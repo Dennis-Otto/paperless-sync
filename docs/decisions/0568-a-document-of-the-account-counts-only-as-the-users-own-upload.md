@@ -4,6 +4,7 @@
 - Date: 2026-11-23
 - Amends [0039](0039-a-file-of-the-inbox-goes-to-paperless-once.md): in per-user ownership, a document of the account counts only as the user's own upload whose answer never came
 - Amends [0564](0564-a-document-found-by-the-md5-alone-is-confirmed-by-its-original.md): in per-user ownership, the unfinished upload, *Send to Paperless* and a rule of Flow count only a document of the user, or their own lost upload
+- Amended by [0571](0571-follow-every-upload-until-its-document-has-its-owner.md): a lost upload is proven by the ID of its document, which the record of the upload keeps, not by the time when Paperless added it
 
 ## Context
 

@@ -76,8 +76,6 @@ final class ImportPlanner {
 		}
 		/** @var array<string, int> $attempts the failed uploads of each file whose next attempt is due */
 		$attempts = [];
-		/** @var array<string, int> $firstAttempts the time of the first upload of each such file that may have reached Paperless */
-		$firstAttempts = [];
 		$now = $this->clock->getTime();
 		$imports = $this->state->allImports($this->config->targetUser);
 		$moved = $this->movedFiles($byPath, $imports);
@@ -117,7 +115,6 @@ final class ImportPlanner {
 			// for a reason that may pass waits until its next attempt is due.
 			if ($status === 'retry' && $unchangedFile && (int)($pending['retry_at'] ?? 0) <= $now) {
 				$attempts[$path] = (int)($pending['attempts'] ?? 0);
-				$firstAttempts[$path] = (int)($pending['first_attempt_at'] ?? 0);
 				continue;
 			}
 			if (($status === 'rejected' || $status === 'retry') && $unchangedFile) {
@@ -146,7 +143,7 @@ final class ImportPlanner {
 				yield new Skipped();
 				continue;
 			}
-			yield new Upload($path, $file['name'], $file['etag'], $attempts[$path] ?? 0, $this->folderBelow($path), $file['id'], $firstAttempts[$path] ?? 0);
+			yield new Upload($path, $file['name'], $file['etag'], $attempts[$path] ?? 0, $this->folderBelow($path), $file['id']);
 		}
 	}
 
@@ -212,14 +209,16 @@ final class ImportPlanner {
 	 *   it finished: the import succeeded. A document that the MD5 alone found has it only when
 	 *   the SHA-256 of its original is the file's; a failed download of the original fails the
 	 *   check, and the next run asks again. In per-user ownership, only a document of the inbox's
-	 *   user counts, or the account's document of this upload, which Paperless added at or after
-	 *   its first attempt and which then gets its owner; a document that the run holds for an
-	 *   upload of another user fails the check, and any other goes on to the ends below.
+	 *   user counts, or the account's document of this upload, whose ID is higher than the one that
+	 *   the record of the upload keeps, and which then gets its owner; a document that the run
+	 *   holds for an upload of another user fails the check, and any other goes on to the ends
+	 *   below.
 	 * - Paperless still lists the task, as pending or started: its worker may be down, or the task
 	 *   may wait in a long queue. Paperless-ngx 3.x imports a duplicate as a second document unless
 	 *   PAPERLESS_CONSUMER_DELETE_DUPLICATES is on, so a new upload could create the document
 	 *   twice. The file moves to the error folder instead, with a note that the document may still
-	 *   appear in Paperless.
+	 *   appear in Paperless: in per-user ownership, the record of the upload follows the task for
+	 *   FOLLOW of UploadRecords, and gives the document its owner once it appears.
 	 * - Paperless doesn't list the task at all, so its queue lost it, as after a restart of Redis,
 	 *   or the file changed since its upload, so Paperless doesn't have its content: the file is
 	 *   uploaded again after the wait of a failed upload.
@@ -227,23 +226,18 @@ final class ImportPlanner {
 	 * @param array{status: string, message: string, documentId: int|null, listed: bool} $task
 	 */
 	private function endUnfinished(ImportContext $context, string $etag, bool $unchangedFile, int $attempts, string $taskId, array $task): ImportAction {
-		$pending = $context->pending;
-		// The upload of the task reached Paperless; a state of an earlier version has no time of the
-		// first attempt, but the time of this upload.
-		$firstAttempt = (int)($pending['first_attempt_at'] ?? 0);
-		$firstAttempt = $firstAttempt > 0 ? $firstAttempt : (int)($pending['submitted_at'] ?? 0);
 		$content = $this->files->fingerprint($context->path);
-		$known = $content !== null ? (new KnownContent($this->paperless))->own($content, $this->scope, $firstAttempt) : null;
+		$known = $content !== null ? (new KnownContent($this->paperless, $this->state))->own($content, $this->scope) : null;
 		if ($known !== null) {
 			return new ImportSucceeded($context, $etag, true, $known->id, false, $known->lostUpload);
 		}
 		$state = $task['status'] . ($task['message'] !== '' ? ": {$task['message']}" : '');
 		$error = "Paperless has not finished the import task {$taskId} a day after the upload ({$state})";
 		if (!$task['listed'] || !$unchangedFile) {
-			return new RetryUnfinished($context, $etag, $attempts, $taskId, $error, $unchangedFile ? $firstAttempt : 0);
+			return new RetryUnfinished($context, $etag, $attempts, $taskId, $error);
 		}
 
-		return new ImportFailed($context, $this->errorPath($context->path), "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.", $this->unfinishedDiagnostic($taskId, $state) . $this->formerName($context->path), $taskId, $error);
+		return new ImportFailed($context, $this->errorPath($context->path), "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.", $this->unfinishedDiagnostic($taskId, $state, UploadRecords::owner($this->scope, $this->paperless) !== null) . $this->formerName($context->path), $taskId, $error);
 	}
 
 	/**
@@ -290,11 +284,18 @@ final class ImportPlanner {
 		return "Paperless import failed\n\n{$reason}\n\nPaperless task: {$taskId}\n";
 	}
 
-	/** The text of the .error.txt next to a file whose task Paperless still lists, unfinished, a day after the upload. */
-	private function unfinishedDiagnostic(string $taskId, string $state): string {
+	/**
+	 * The text of the .error.txt next to a file whose task Paperless still lists, unfinished, a day
+	 * after the upload. $followed says whether the record of the upload follows the task further,
+	 * in per-user ownership.
+	 */
+	private function unfinishedDiagnostic(string $taskId, string $state, bool $followed): string {
 		return "Paperless import not finished\n\n"
 			. "Paperless has not finished the import task a day after the upload ({$state}). Its worker may be down, or the task may still wait in its queue, so Paperless may still create the document. The file was not uploaded again, because Paperless-ngx 3.x imports a duplicate as a second document.\n\n"
-			. "Should the document not appear in Paperless, check that the worker of Paperless runs, then move the file back into the inbox.\n\n"
+			. ($followed
+				? 'Paperless Sync follows the task for 30 days after the upload: once Paperless creates the document, a run gives it its owner and names it in the report, and this file can go. '
+				: 'Once the document appears in Paperless, this file can go. ')
+			. "Should the document not appear, check that the worker of Paperless runs, then move the file back into the inbox.\n\n"
 			. "Paperless task: {$taskId}\n";
 	}
 

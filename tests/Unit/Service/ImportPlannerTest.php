@@ -395,32 +395,36 @@ final class ImportPlannerTest extends TestCase {
 	 * older, costs no download, and the upload goes on to its other ends: the error folder while
 	 * Paperless lists the task, a new upload when it doesn't.
 	 *
-	 * @return array<string, array{array<string, mixed>, array<string, int>, bool, list<string>}>
+	 * @return array<string, array{array<string, mixed>, int|null, bool, list<string>}>
 	 */
 	public static function documentsOfUnfinishedUploads(): array {
 		$failed = ['failed a.pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (PENDING), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (PENDING))'];
 		$retry = ['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'];
 
 		return [
-			'a document of the inbox\'s user' => [['id' => 9, 'owner' => 3], [], true, ['succeeded a.pdf as P9']],
-			'the account\'s document, added after the upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T10:00:01+00:00'], [], true, ['succeeded a.pdf as P9, the lost upload']],
-			'the account\'s document, added after the first upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T09:00:00+00:00'], ['first_attempt_at' => TestClock::START - self::DAY - 3600], true, ['succeeded a.pdf as P9, the lost upload']],
-			'the account\'s document, added before the first upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T09:00:00+00:00'], [], true, $failed],
-			'a document of another user, while Paperless lists the task' => [['id' => 9, 'owner' => 4, 'added' => '2026-08-27T11:00:00+00:00'], [], true, $failed],
-			'a document of another user, after Paperless lost the task' => [['id' => 9, 'owner' => 4, 'added' => '2026-08-27T11:00:00+00:00'], [], false, $retry],
+			'a document of the inbox\'s user' => [['id' => 9, 'owner' => 3], null, true, ['succeeded a.pdf as P9']],
+			'the account\'s document, newer than the record of the upload' => [['id' => 9, 'owner' => 1], 0, true, ['succeeded a.pdf as P9, the lost upload']],
+			'the account\'s document, newer, with a clock of Paperless behind' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-26T09:00:00+00:00'], 8, true, ['succeeded a.pdf as P9, the lost upload']],
+			'the account\'s document, without a record of the upload' => [['id' => 9, 'owner' => 1], null, true, $failed],
+			'the account\'s document, which Paperless had before the upload' => [['id' => 9, 'owner' => 1], 9, true, $failed],
+			'a document of another user, while Paperless lists the task' => [['id' => 9, 'owner' => 4], 0, true, $failed],
+			'a document of another user, after Paperless lost the task' => [['id' => 9, 'owner' => 4], 0, false, $retry],
 		];
 	}
 
 	/**
 	 * @param array<string, mixed> $document
-	 * @param array<string, int> $state
+	 * @param int|null $knownId the ID that the record of the upload keeps, or null without a record
 	 * @param list<string> $expected
 	 */
 	#[DataProvider('documentsOfUnfinishedUploads')]
-	public function testAnUnfinishedUploadEndsOnlyOnADocumentOfItsUser(array $document, array $state, bool $listed, array $expected): void {
+	public function testAnUnfinishedUploadEndsOnlyOnADocumentOfItsUser(array $document, ?int $knownId, bool $listed, array $expected): void {
 		$path = self::INBOX . '/a.pdf';
 		$this->storage->files[$path] = '%PDF-a';
-		$this->state->imports[$path] = $state + ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		if ($knownId !== null) {
+			$this->state->saveUpload(TestStorage::USER, hash('sha256', '%PDF-a'), ['known_id' => $knownId, 'task_id' => 'task-1', 'created_at' => TestClock::START - self::DAY]);
+		}
 		$this->paperless->accountId = 1;
 		$this->paperless->originals[hash('md5', '%PDF-a')] = 9;
 		$this->paperless->contents[9] = '%PDF-a';
@@ -445,46 +449,30 @@ final class ImportPlannerTest extends TestCase {
 	}
 
 	/**
-	 * An upload that goes up again keeps the time of its first upload, which reached Paperless: the
-	 * one of its state, or that of the upload of the task for a state of an earlier version. A file
-	 * that changed since has none, as its new content never went up.
+	 * The text next to a file whose task Paperless still lists a day after the upload says that the
+	 * record of the upload follows the task further in per-user ownership, for a user whose
+	 * uploads get a record, and only that the file can go once the document appears otherwise.
 	 *
-	 * @return array<string, array{array<string, int|bool>, int}>
+	 * @return array<string, array{PerUserScope|null, string}>
 	 */
-	public static function uploadsThatGoUpAgain(): array {
+	public static function textsOfUnfinishedUploads(): array {
 		return [
-			'a state with the time of its first upload' => [['first_attempt_at' => TestClock::START - 2 * self::DAY], TestClock::START - 2 * self::DAY],
-			'a state of an earlier version' => [[], TestClock::START - self::DAY],
-			'a file that changed since' => [['changed' => true, 'first_attempt_at' => TestClock::START - 2 * self::DAY], 0],
+			'per-user ownership' => [self::scope(), 'Paperless Sync follows the task for 30 days after the upload: once Paperless creates the document, a run gives it its owner and names it in the report, and this file can go. '],
+			'single ownership' => [null, 'Once the document appears in Paperless, this file can go. '],
 		];
 	}
 
-	/** @param array<string, int|bool> $state */
-	#[DataProvider('uploadsThatGoUpAgain')]
-	public function testAnUploadThatGoesUpAgainKeepsTheTimeOfItsFirstUpload(array $state, int $firstAttempt): void {
+	#[DataProvider('textsOfUnfinishedUploads')]
+	public function testTheTextOfAnUnfinishedUploadSaysHowLongTheAppFollowsIt(?PerUserScope $scope, string $sentence): void {
 		$path = self::INBOX . '/a.pdf';
 		$this->storage->files[$path] = '%PDF-a';
-		$changed = (bool)($state['changed'] ?? false);
-		unset($state['changed']);
-		$this->state->imports[$path] = $state + ['path' => $path, 'etag' => hash('sha256', $changed ? 'before' : '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
-		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => '', 'listed' => false];
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->accountId = 1;
 
-		$actions = iterator_to_array($this->planner()->plan(), false);
+		$actions = iterator_to_array($this->planner(TestConfig::of([]), new SyncBatch(1), $scope)->plan(), false);
 
-		self::assertInstanceOf(RetryUnfinished::class, $actions[0]);
-		self::assertSame($firstAttempt, $actions[0]->firstAttempt);
-	}
-
-	/** A file whose next upload is due goes up with the time of its first upload, which its state keeps. */
-	public function testAnUploadThatIsDueCarriesTheTimeOfItsFirstUpload(): void {
-		$path = self::INBOX . '/a.pdf';
-		$this->storage->files[$path] = '%PDF-a';
-		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'retry', 'attempts' => 2, 'retry_at' => TestClock::START, 'first_attempt_at' => TestClock::START - 3600];
-
-		$actions = iterator_to_array($this->planner()->plan(), false);
-
-		self::assertInstanceOf(Upload::class, $actions[0]);
-		self::assertSame([2, TestClock::START - 3600], [$actions[0]->attempts, $actions[0]->firstAttempt]);
+		self::assertInstanceOf(ImportFailed::class, $actions[0]);
+		self::assertStringContainsString("so Paperless may still create the document. The file was not uploaded again, because Paperless-ngx 3.x imports a duplicate as a second document.\n\n{$sentence}Should the document not appear, check that the worker of Paperless runs, then move the file back into the inbox.\n\n", $actions[0]->diagnostic);
 	}
 
 	/**

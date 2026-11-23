@@ -53,9 +53,12 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 	/** @var array<string, array{status: string, message: string, documentId?: int|null, listed?: bool}> the tasks that Paperless lists, by default pending */
 	public array $tasks = [];
 	/**
-	 * @var array<string, int> the ID of a document by a checksum of its original, SHA-256 or MD5;
-	 *                         an entry under the MD5 alone is a match by the MD5, as on
-	 *                         Paperless-ngx 2.x, whatever the content of the document
+	 * @var array<string, int|list<int>> the ID of a document by a checksum of its original,
+	 *                                   SHA-256 or MD5, or the IDs of several documents with one
+	 *                                   content, as Paperless-ngx 3.x keeps them, of which the
+	 *                                   search finds the highest, as for ordering=-id; an entry under
+	 *                                   the MD5 alone is a match by the MD5, as on Paperless-ngx 2.x,
+	 *                                   whatever the content of the document
 	 */
 	public array $originals = [];
 	/** @var list<string> the SHA-256 of every content that a run looked for */
@@ -420,11 +423,14 @@ final class TestPaperlessClient implements PaperlessClientInterface, PaperlessCl
 		if ($this->findException !== null) {
 			throw $this->findException;
 		}
-		if (isset($this->originals[$content->sha256])) {
-			return new DocumentMatch($this->originals[$content->sha256], true);
+		foreach ([$content->sha256, $content->md5] as $checksum) {
+			$ids = (array)($this->originals[$checksum] ?? []);
+			if ($ids !== []) {
+				return new DocumentMatch(max($ids), $checksum === $content->sha256);
+			}
 		}
 
-		return isset($this->originals[$content->md5]) ? new DocumentMatch($this->originals[$content->md5], false) : null;
+		return null;
 	}
 
 	public function uploadDocument($source, string $filename, array $tags = []): string {

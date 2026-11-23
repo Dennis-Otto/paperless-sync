@@ -946,6 +946,7 @@
 			'tags-not-created': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'inbox-set-aside': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			'storage-paths-unsupported': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
+			'uploads-waiting': { label: translate('Notice'), tone: 'warning', rank: 1, filter: 'notice' },
 			delete: { label: translate('Deletion'), tone: 'warning', rank: 2 },
 			'remove-excluded': { label: translate('Excluded'), tone: 'warning', rank: 2 },
 			'remove-reassigned': { label: translate('Other user'), tone: 'warning', rank: 2 },
@@ -1047,6 +1048,13 @@
 				return translate('Nextcloud cannot store files in the archive, so the run stopped its exports and moves; the other documents wait for the next run.')
 			case 'storage-paths-unsupported':
 				return unsupportedStoragePaths(Number(values.count) || 0, values.names)
+			case 'uploads-waiting':
+				return translatePlural(
+					'The documents of the account of the app stay where they are while an upload of {uploads} may still create its document.',
+					'The documents of the account of the app stay where they are while uploads of {uploads} may still create their documents.',
+					Number(values.count) || 0,
+					{ uploads: values.uploads },
+				)
 			case 'tags-unknown':
 				return translatePlural(
 					'Paperless shows the account no tag named {names}, so the files of the inbox go to Paperless without it. Create the tag in Paperless or share it with the account, or turn on "Create missing tags".',

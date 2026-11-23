@@ -10,7 +10,8 @@ declare(strict_types=1);
 namespace OCA\PaperlessSync\Model;
 
 /**
- * A document that Paperless found by the checksums of a file, and which of them found it:
+ * A document that Paperless found by the checksums of a file, the one with the highest ID of those
+ * with the content, and which of the checksums found it:
  * Paperless-ngx keeps the SHA-256 of an original since 3.0 and only its MD5 before, so on 2.x
  * the MD5 alone finds a document.
  */

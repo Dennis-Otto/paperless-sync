@@ -617,17 +617,17 @@ def api(url, line):
     (RECORDINGS / "downloads.json").write_text(fixture_text(downloads), encoding="utf-8")
 
     # The look-up of a file of the inbox whose upload's answer got lost: by its checksum, the
-    # ID alone. A filter that Paperless doesn't know would return every document instead. Only
+    # ID alone, the highest first, which the record of an upload keeps before the upload. A filter that Paperless doesn't know would return every document instead. Only
     # the checksum that the line keeps finds it, MD5 on 2.x, so that the app confirms a document
     # that the MD5 alone found with the SHA-256 of the original download, checked above.
     found = {}
     for name in ("sha256", "md5"):
         checksum = digests(content_of("invoice.pdf"))[name]
-        page = paperless.get(f"/api/documents/?checksum__iexact={checksum}&fields=id&page_size=1", record=f"lookup-{name}")
+        page = paperless.get(f"/api/documents/?checksum__iexact={checksum}&fields=id&ordering=-id&page_size=1", record=f"lookup-{name}")
         found[name] = page["results"]
     expected = {name: [{"id": invoice}] if name == kind else [] for name in ("sha256", "md5")}
     check(found == expected, f"The look-up by checksum found {found!r} instead of the invoice {invoice} by its {kind} alone.")
-    nothing = paperless.get(f"/api/documents/?checksum__iexact={'0' * 64}&fields=id&page_size=1")
+    nothing = paperless.get(f"/api/documents/?checksum__iexact={'0' * 64}&fields=id&ordering=-id&page_size=1")
     check(nothing["results"] == [], f"The look-up of an unknown checksum found {nothing!r}.")
 
     # The trash, which the app mirrors: deleted_at, and the way back.

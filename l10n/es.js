@@ -862,7 +862,14 @@ OC.L10N.register(
 		"Paperless Sync has no copy to write again.": "Paperless Sync no tiene ninguna copia que volver a escribir.",
 		"Write all copies again": "Volver a escribir todas las copias",
 		"Write every copy again from Paperless? The next runs download each document again, batch by batch, and write it in place of its copy. A copy that someone edited in Nextcloud gets the content of Paperless again, and the edit stays as an earlier version under Versions.": "¿Volver a escribir todas las copias desde Paperless? Las próximas ejecuciones descargan de nuevo cada documento, lote a lote, y lo escriben en lugar de su copia. Una copia que alguien editó en Nextcloud vuelve a tener el contenido de Paperless, y la edición se conserva como versión anterior en Versiones.",
-		"Could not write the copies again.": "No se pudieron volver a escribir las copias."
+		"Could not write the copies again.": "No se pudieron volver a escribir las copias.",
+		"Import %s: Paperless created no document of its upload within 30 days, so Paperless Sync no longer follows it": "Importación %s: Paperless no creó ningún documento de su subida en 30 días, así que Paperless Sync ya no la sigue",
+		"Import %1$s: Paperless created the document %2$s with its content after the uploads of more than one user, so it stays with the account of the app until someone in Paperless gives it its owner": "Importación %1$s: Paperless creó el documento %2$s con su contenido después de las subidas de más de un usuario, así que se queda con la cuenta de la aplicación hasta que alguien en Paperless le asigne su propietario",
+		"_The documents of the account of the app stay where they are while an upload of {uploads} may still create its document._::_The documents of the account of the app stay where they are while uploads of {uploads} may still create their documents._": [
+			"Los documentos de la cuenta de la aplicación se quedan donde están mientras una subida de {uploads} aún pueda crear su documento.",
+			"Los documentos de la cuenta de la aplicación se quedan donde están mientras subidas de {uploads} aún puedan crear sus documentos.",
+			"Los documentos de la cuenta de la aplicación se quedan donde están mientras subidas de {uploads} aún puedan crear sus documentos."
+		]
 	},
 	"nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 )

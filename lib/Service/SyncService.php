@@ -448,7 +448,7 @@ final class SyncService {
 			if ($document === null && $config->inboxEnabled) {
 				// The uploads that wait hold the documents of the account for the files of every other
 				// user, also those that an inbox of this run sent before.
-				$waiting = $config->perUser() ? WaitingUploads::owners($this->state, $config, $owners) : [];
+				$waiting = $config->perUser() ? WaitingUploads::owners($this->state, $config, $owners, $this->now(), false) : [];
 				foreach (array_intersect_key($archives, array_flip($getting)) as $user => $archive) {
 					$own = $owners->paperlessUserOf((string)$user);
 					$scope = $config->perUser() ? new PerUserScope($owners, (string)$user, WaitingUploads::held($waiting, $paperless, $own)) : null;
@@ -458,21 +458,38 @@ final class SyncService {
 					}
 				}
 			}
+			// The scheduled runs settle the records of the uploads before they route the documents,
+			// so that a document that an upload created reaches its user in the same run; the run of
+			// one document leaves that to them.
+			$settlement = $config->perUser() && $document === null ? new UploadSettlement($paperless, $this->state, $owners, $this->logger, $this->now(), $report->dryRun) : null;
 			if ($config->exportEnabled) {
-				$held = $this->heldOwner($paperless, $config, $owners);
-				if ($held === false) {
-					$report->error(new RunError('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'));
-				} else {
+				// The run of one document holds the documents of the account while any upload may have created one.
+				$held = $this->heldOwner($paperless, $config, $owners, $document !== null);
+				if ($held !== false) {
 					// The archives that the tags fill are kept before a copy moves, also by a run of one
 					// document or one that fails later, so that a later run reaches them once their line is gone.
 					if (!$report->dryRun) {
 						$this->addTagArchives($tagged);
 					}
-					$this->exportArchives($paperless, $config, $report, $this->readForExport($paperless, $config, $report, $document, $users), $owners, $archives, $reports, $held);
-					if ($document === null && !$report->dryRun) {
-						$this->keepTagArchives($config, $tagged);
+					$read = $this->readForExport($paperless, $config, $report, $document, $users);
+					if ($settlement !== null) {
+						$held = $settlement->settle($report, $reports, $read['documents']) ? $paperless->accountId() ?? false : $this->heldOwner($paperless, $config, $owners);
 					}
+					if ($held !== false) {
+						$this->exportArchives($paperless, $config, $report, $read, $owners, $archives, $reports, $held);
+						if ($document === null && !$report->dryRun) {
+							$this->keepTagArchives($config, $tagged);
+						}
+					}
+				} elseif ($settlement !== null) {
+					// The records still end, and give a document its owner that is the upload's for sure.
+					$settlement->settle($report, $reports);
 				}
+				if ($held === false) {
+					$report->error(new RunError('Paperless did not name its account, which per-user ownership needs while an upload waits for its owner, so the export waits until it has it: in Paperless, under Users & Groups, give the account the permission View for UI Settings.'));
+				}
+			} elseif ($settlement !== null) {
+				$settlement->settle($report, $reports);
 			}
 		} finally {
 			foreach ($reports as $key => $userReport) {
@@ -558,10 +575,11 @@ final class SyncService {
 	 * The user of Paperless whose documents the export of a run of per-user ownership holds, while
 	 * an upload of the inbox or of Send to Paperless waits for its owner, as WaitingUploads explains:
 	 * their copies stay where they are. Null holds nothing; false holds every document, when
-	 * Paperless doesn't name its account.
+	 * Paperless doesn't name its account. $watched holds them also for a record that only the look
+	 * of the scheduled runs follows.
 	 */
-	private function heldOwner(PaperlessClientInterface $paperless, SyncConfig $config, Owners $owners): int|false|null {
-		return WaitingUploads::held(WaitingUploads::owners($this->state, $config, $owners), $paperless);
+	private function heldOwner(PaperlessClientInterface $paperless, SyncConfig $config, Owners $owners, bool $watched = false): int|false|null {
+		return WaitingUploads::held(WaitingUploads::owners($this->state, $config, $owners, $this->now(), $watched), $paperless);
 	}
 
 	/**

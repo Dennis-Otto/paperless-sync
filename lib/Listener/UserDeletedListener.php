@@ -20,10 +20,11 @@ use Psr\Log\LoggerInterface;
 /**
  * Forgets a user whom Nextcloud deleted, as Nextcloud lets an administrator create a new account
  * with the same ID later, which must get nothing of theirs: their lines of the settings, which a
- * save would refuse from then on, and every state of their archive, their inbox and the files that
- * they sent from Files, which holds the paths and the names of documents. When the user was the
- * target user, every run fails until the settings name another, and the administrators hear of
- * it. A failure is logged, never thrown: the user is deleted all the same.
+ * save would refuse from then on, and every state of their archive, their inbox, the files that
+ * they sent from Files and the records of their uploads, which hold the paths and the names of
+ * documents. When the user was the target user, every run fails until the settings name another,
+ * and the administrators hear of it. A failure is logged, never thrown: the user is deleted all
+ * the same.
  *
  * @template-implements IEventListener<Event>
  */
