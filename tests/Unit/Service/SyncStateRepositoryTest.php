@@ -164,6 +164,7 @@ final class SyncStateRepositoryTest extends TestCase {
 		self::assertSame(0, $import['attempts']);
 		self::assertSame(0, $import['retry_at']);
 		self::assertSame(0, $import['file_id'], 'A file without an ID has none.');
+		self::assertSame(0, $import['first_attempt_at'], 'A file that was never uploaded has no first attempt.');
 		self::assertNull($import['last_error']);
 		self::assertNull($this->repository->findImport('paperless', 'Eingang/other.pdf'));
 	}
@@ -186,13 +187,14 @@ final class SyncStateRepositoryTest extends TestCase {
 	}
 
 	public function testFailedUploadRecordsItsAttemptsAndTheTimeOfTheNext(): void {
-		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'status' => 'retry', 'attempts' => 3, 'retry_at' => 1791460800, 'last_error' => 'HTTP 502']);
+		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['etag' => 'e1', 'status' => 'retry', 'attempts' => 3, 'retry_at' => 1791460800, 'first_attempt_at' => 1791450000, 'last_error' => 'HTTP 502']);
 
 		$import = $this->repository->findImport('paperless', 'Eingang/police.pdf');
 		self::assertNotNull($import);
 		self::assertSame('retry', $import['status']);
 		self::assertSame(3, $import['attempts']);
 		self::assertSame(1791460800, $import['retry_at']);
+		self::assertSame(1791450000, $import['first_attempt_at'], 'The time of the first upload stays for the next attempt.');
 
 		$this->repository->saveImport('paperless', 'Eingang/police.pdf', ['status' => 'pending', 'attempts' => 0, 'retry_at' => 0]);
 
@@ -288,6 +290,7 @@ final class SyncStateRepositoryTest extends TestCase {
 			'task_id' => '',
 			'status' => 'queued',
 			'submitted_at' => 0,
+			'first_attempt_at' => 0,
 			'attempts' => 0,
 			'retry_at' => 0,
 			'last_error' => null,
@@ -309,12 +312,12 @@ final class SyncStateRepositoryTest extends TestCase {
 		$this->repository->saveSend('alice', 42, ['path' => 'Scans/receipt.pdf']);
 		$this->clock->advance(60);
 
-		$this->repository->saveSend('alice', 42, ['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START + 60]);
+		$this->repository->saveSend('alice', 42, ['status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START + 60, 'first_attempt_at' => TestClock::START + 30]);
 
 		self::assertSame(['insert', 'update'], $this->statements);
 		self::assertSame(
-			['path' => 'Scans/receipt.pdf', 'task_id' => 'task-1', 'status' => 'pending', 'submitted_at' => TestClock::START + 60, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
-			array_intersect_key($this->repository->findSend('alice', 42) ?? [], array_flip(['path', 'task_id', 'status', 'submitted_at', 'created_at', 'updated_at'])),
+			['path' => 'Scans/receipt.pdf', 'task_id' => 'task-1', 'status' => 'pending', 'submitted_at' => TestClock::START + 60, 'first_attempt_at' => TestClock::START + 30, 'created_at' => TestClock::START, 'updated_at' => TestClock::START + 60],
+			array_intersect_key($this->repository->findSend('alice', 42) ?? [], array_flip(['path', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'created_at', 'updated_at'])),
 		);
 	}
 

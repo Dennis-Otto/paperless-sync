@@ -15,12 +15,14 @@ namespace OCA\PaperlessSync\Model\Plan;
  * its upload. The file goes up again after the wait of a failed upload.
  */
 final class RetryUnfinished implements ImportAction {
+	/** @param int $firstAttempt the time of the first upload of the file that reached Paperless, which the state keeps for the next attempt, or 0 for a file that changed since */
 	public function __construct(
 		public readonly ImportContext $context,
 		public readonly string $etag,
 		public readonly int $attempts,
 		public readonly string $taskId,
 		public readonly string $error,
+		public readonly int $firstAttempt = 0,
 	) {
 	}
 }

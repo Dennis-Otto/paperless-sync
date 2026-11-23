@@ -9,6 +9,8 @@ declare(strict_types=1);
 
 namespace OCA\PaperlessSync\Tests\Unit\Service;
 
+use OCA\PaperlessSync\Model\Owners;
+use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Model\Plan\ForgetImport;
 use OCA\PaperlessSync\Model\Plan\ImportAction;
 use OCA\PaperlessSync\Model\Plan\ImportCheckFailed;
@@ -385,6 +387,147 @@ final class ImportPlannerTest extends TestCase {
 		self::assertSame([[9, true]], $this->paperless->downloadRequests);
 	}
 
+	/**
+	 * In per-user ownership, an upload that Paperless has not finished a day later ends as imported
+	 * only on a document of the inbox's user, or on the account's document that Paperless added at
+	 * or after its first upload, which is the upload itself and gets its owner; a state of an
+	 * earlier version has the time of the upload alone. Any other document, of another user or
+	 * older, costs no download, and the upload goes on to its other ends: the error folder while
+	 * Paperless lists the task, a new upload when it doesn't.
+	 *
+	 * @return array<string, array{array<string, mixed>, array<string, int>, bool, list<string>}>
+	 */
+	public static function documentsOfUnfinishedUploads(): array {
+		$failed = ['failed a.pdf -> Fehler/a.pdf: Paperless has not finished the import a day after the upload (PENDING), so it may still create the document. (Paperless has not finished the import task task-1 a day after the upload (PENDING))'];
+		$retry = ['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'];
+
+		return [
+			'a document of the inbox\'s user' => [['id' => 9, 'owner' => 3], [], true, ['succeeded a.pdf as P9']],
+			'the account\'s document, added after the upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T10:00:01+00:00'], [], true, ['succeeded a.pdf as P9, the lost upload']],
+			'the account\'s document, added after the first upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T09:00:00+00:00'], ['first_attempt_at' => TestClock::START - self::DAY - 3600], true, ['succeeded a.pdf as P9, the lost upload']],
+			'the account\'s document, added before the first upload' => [['id' => 9, 'owner' => 1, 'added' => '2026-08-27T09:00:00+00:00'], [], true, $failed],
+			'a document of another user, while Paperless lists the task' => [['id' => 9, 'owner' => 4, 'added' => '2026-08-27T11:00:00+00:00'], [], true, $failed],
+			'a document of another user, after Paperless lost the task' => [['id' => 9, 'owner' => 4, 'added' => '2026-08-27T11:00:00+00:00'], [], false, $retry],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $document
+	 * @param array<string, int> $state
+	 * @param list<string> $expected
+	 */
+	#[DataProvider('documentsOfUnfinishedUploads')]
+	public function testAnUnfinishedUploadEndsOnlyOnADocumentOfItsUser(array $document, array $state, bool $listed, array $expected): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = $state + ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', '%PDF-a')] = 9;
+		$this->paperless->contents[9] = '%PDF-a';
+		$this->paperless->documents[] = $document;
+		if (!$listed) {
+			$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => '', 'listed' => false];
+		}
+
+		self::assertSame($expected, $this->plan(scope: self::scope()));
+		self::assertSame(str_starts_with($expected[0], 'succeeded') ? [[9, true]] : [], $this->paperless->downloadRequests, 'The owner is read before the download.');
+	}
+
+	/** A document of the account that the run holds for an upload of another user counts for nobody: the check fails, and the upload stays pending. */
+	public function testAnUnfinishedUploadWaitsForADocumentThatTheRunHolds(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->originals[hash('sha256', '%PDF-a')] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1, 'added' => '2026-08-27T11:00:00+00:00'];
+
+		self::assertSame(['check failed a.pdf: Paperless has the content of the file as the document 9, which may be that of an upload that waits for its owner, so the file waits until that upload ends'], $this->plan(scope: self::scope(1)));
+	}
+
+	/**
+	 * An upload that goes up again keeps the time of its first upload, which reached Paperless: the
+	 * one of its state, or that of the upload of the task for a state of an earlier version. A file
+	 * that changed since has none, as its new content never went up.
+	 *
+	 * @return array<string, array{array<string, int|bool>, int}>
+	 */
+	public static function uploadsThatGoUpAgain(): array {
+		return [
+			'a state with the time of its first upload' => [['first_attempt_at' => TestClock::START - 2 * self::DAY], TestClock::START - 2 * self::DAY],
+			'a state of an earlier version' => [[], TestClock::START - self::DAY],
+			'a file that changed since' => [['changed' => true, 'first_attempt_at' => TestClock::START - 2 * self::DAY], 0],
+		];
+	}
+
+	/** @param array<string, int|bool> $state */
+	#[DataProvider('uploadsThatGoUpAgain')]
+	public function testAnUploadThatGoesUpAgainKeepsTheTimeOfItsFirstUpload(array $state, int $firstAttempt): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$changed = (bool)($state['changed'] ?? false);
+		unset($state['changed']);
+		$this->state->imports[$path] = $state + ['path' => $path, 'etag' => hash('sha256', $changed ? 'before' : '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => '', 'listed' => false];
+
+		$actions = iterator_to_array($this->planner()->plan(), false);
+
+		self::assertInstanceOf(RetryUnfinished::class, $actions[0]);
+		self::assertSame($firstAttempt, $actions[0]->firstAttempt);
+	}
+
+	/** A file whose next upload is due goes up with the time of its first upload, which its state keeps. */
+	public function testAnUploadThatIsDueCarriesTheTimeOfItsFirstUpload(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'retry', 'attempts' => 2, 'retry_at' => TestClock::START, 'first_attempt_at' => TestClock::START - 3600];
+
+		$actions = iterator_to_array($this->planner()->plan(), false);
+
+		self::assertInstanceOf(Upload::class, $actions[0]);
+		self::assertSame([2, TestClock::START - 3600], [$actions[0]->attempts, $actions[0]->firstAttempt]);
+	}
+
+	/**
+	 * Paperless-ngx 2.x names the title of the document that a duplicate has the content of,
+	 * whoever owns it. In per-user ownership the reason names it by its ID alone, in the words of
+	 * Paperless-ngx 3.x; with one target user for every document, it keeps the words of Paperless.
+	 *
+	 * @return array<string, array{string, bool, string}>
+	 */
+	public static function reasonsOfDuplicates(): array {
+		$fixture = json_decode((string)file_get_contents(dirname(__DIR__, 2) . '/fixtures/paperless-ngx-2/task-duplicate.json'), true, 512, JSON_THROW_ON_ERROR);
+		$recorded = (string)$fixture['body'][0]['result'];
+
+		return [
+			'the answer of Paperless-ngx 2.x' => [$recorded, true, 'copy.pdf: Not consuming copy.pdf: It is a duplicate of document #1'],
+			'a title with a number of its own' => ['Not consuming a.pdf: It is a duplicate of Bill (#5) of May (#77).', true, 'Not consuming a.pdf: It is a duplicate of document #77'],
+			'a reason that Paperless cut short' => ['Not consuming a.pdf: It is a duplicate of A very long tit', true, 'Not consuming a.pdf: It is a duplicate of a document of Paperless'],
+			'the words of Paperless-ngx 3.x' => ['Not consuming: It is a duplicate of document #123, which is in the trash of Paperless', true, 'Not consuming: It is a duplicate of document #123, which is in the trash of Paperless'],
+			'another reason' => ['Unsupported mime type text/plain', true, 'Unsupported mime type text/plain'],
+			'one target user for every document' => [$recorded, false, $recorded],
+		];
+	}
+
+	#[DataProvider('reasonsOfDuplicates')]
+	public function testTheReasonOfADuplicateNamesTheDocumentByItsIdInPerUserOwnership(string $message, bool $perUser, string $reason): void {
+		self::assertSame($reason, ImportPlanner::failureReason(['status' => 'FAILURE', 'message' => $message, 'documentId' => null, 'listed' => true], $perUser));
+	}
+
+	/** A cancelled task keeps the reason of Paperless, without a title in per-user ownership as well. */
+	public function testTheReasonOfACancelledDuplicateNamesTheDocumentByItsId(): void {
+		self::assertSame('Paperless cancelled the task before it finished (REVOKED), so it created no document: It is a duplicate of document #3', ImportPlanner::failureReason(['status' => 'REVOKED', 'message' => 'It is a duplicate of Secret (#3).', 'documentId' => null, 'listed' => true], true));
+	}
+
+	/** The error folder of an inbox in per-user ownership gets the reason without the title, too. */
+	public function testAFailedDuplicateOfPerUserOwnershipNamesTheDocumentByItsId(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START];
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Not consuming a.pdf: It is a duplicate of Secret (#3).'];
+
+		self::assertSame(['failed a.pdf -> Fehler/a.pdf: Not consuming a.pdf: It is a duplicate of document #3'], $this->plan(['ownership' => SyncConfig::PER_USER]));
+	}
+
 	/** A check of a task that fails keeps the upload pending, and the other uploads go on. */
 	public function testATaskThatCannotBeCheckedFailsOnlyItsFile(): void {
 		$this->storage->files[self::INBOX . '/a.pdf'] = '%PDF-a';
@@ -454,11 +597,11 @@ final class ImportPlannerTest extends TestCase {
 	 * @param array<string, bool|int|string> $settings
 	 * @return list<string>
 	 */
-	private function plan(array $settings = []): array {
+	private function plan(array $settings = [], ?PerUserScope $scope = null): array {
 		$config = TestConfig::of($settings);
 		$batch = new SyncBatch($config->batchSize);
 		$lines = [];
-		foreach ($this->planner($config, $batch)->plan() as $action) {
+		foreach ($this->planner($config, $batch, $scope)->plan() as $action) {
 			$lines[] = self::describe($action);
 			if ($action instanceof Upload) {
 				$batch->take(SyncBatch::WRITE);
@@ -469,7 +612,18 @@ final class ImportPlannerTest extends TestCase {
 	}
 
 	/** The planner of the inbox, with the settings and the batch of a test, or those of the tests. */
-	private function planner(?SyncConfig $config = null, ?SyncBatch $batch = null): ImportPlanner {
+	/**
+	 * Per-user ownership, in which the inbox is that of a user other than the target user, with the
+	 * user 3 of Paperless; bob is the user 4, and the account of the app, the user 1, has no user of
+	 * Nextcloud.
+	 */
+	private static function scope(int|false|null $held = null): PerUserScope {
+		$route = static fn (int $id, string $name, ?string $user): array => ['id' => $id, 'name' => $name, 'user' => $user, 'reason' => $user !== null ? Owners::NAME : Owners::NONE, 'detail' => ''];
+
+		return new PerUserScope(new Owners('target', [3 => $route(3, TestStorage::USER, TestStorage::USER), 4 => $route(4, 'bob', 'bob'), 1 => $route(1, 'paperless-sync', null)]), TestStorage::USER, $held);
+	}
+
+	private function planner(?SyncConfig $config = null, ?SyncBatch $batch = null, ?PerUserScope $scope = null): ImportPlanner {
 		$config ??= TestConfig::of([]);
 
 		return new ImportPlanner(
@@ -484,6 +638,7 @@ final class ImportPlannerTest extends TestCase {
 			function (): void {
 				++$this->heartbeats;
 			},
+			$scope,
 		);
 	}
 
@@ -499,7 +654,8 @@ final class ImportPlannerTest extends TestCase {
 			$action instanceof MoveImport => 'move ' . self::below($action->from) . ' -> ' . self::below($action->to),
 			$action instanceof ImportSucceeded => 'succeeded ' . self::below($action->context->path)
 				. ($action->sameContent ? '' : ', changed since')
-				. ($action->document !== null ? " as P{$action->document}" : ''),
+				. ($action->document !== null ? " as P{$action->document}" : '')
+				. ($action->lostUpload ? ', the lost upload' : ''),
 			$action instanceof ImportFailed => 'failed ' . self::below($action->context->path) . ' -> '
 				. substr($action->destination, strlen('Dokumente/Paperless/')) . ": {$action->reason}"
 				. ($action->unfinished !== '' ? " ({$action->unfinished})" : '')

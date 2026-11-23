@@ -11,6 +11,7 @@ namespace OCA\PaperlessSync\Service;
 
 use OCA\PaperlessSync\Model\DocumentFingerprint;
 use OCA\PaperlessSync\Model\Owners;
+use OCA\PaperlessSync\Model\PerUserScope;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
@@ -28,7 +29,9 @@ use Psr\Log\LogLevel;
  * The files stay where they are.
  *
  * - A file whose content Paperless has already isn't uploaded again, as Paperless-ngx 3.x would
- *   import it a second time: the sender learns the document that has it.
+ *   import it a second time: the sender learns the document that has it. In per-user ownership,
+ *   only a document of the sender counts, as KnownContent decides; any other goes up as a
+ *   document of its own, and Paperless decides.
  * - A file that Paperless refuses isn't uploaded again either; the sender learns why.
  * - A file or a user that is gone ends the import. A lookup of the file that fails otherwise, such
  *   as while the user backend of the sender can't answer, waits as a failed upload does.
@@ -94,6 +97,8 @@ final class SendService {
 		$paperlessFailed = false;
 		/** @var Owners|null $owners the owners of per-user ownership, once a document of the round needs them */
 		$owners = null;
+		/** @var array<int, true>|null $waiting the users of Paperless whose uploads wait for their owner, once a file of the round looks for its content */
+		$waiting = null;
 		foreach ($sends as $send) {
 			$status = (string)($send['status'] ?? '');
 			if ($status === self::PENDING) {
@@ -104,7 +109,7 @@ final class SendService {
 				continue;
 			}
 			++$uploads;
-			$paperlessFailed = !$this->upload($paperless, $tags, $config, $send, $now);
+			$paperlessFailed = !$this->upload($paperless, $tags, $config, $send, $now, $owners, $waiting);
 		}
 		$this->noticeOfUnknownTags();
 	}
@@ -136,11 +141,16 @@ final class SendService {
 	 * failure that every other upload of the round would meet as well, such as Paperless being down.
 	 *
 	 * @param array<string, int|string|null> $send
+	 * @param array<int, true>|null $waiting
 	 */
-	private function upload(PaperlessClientInterface $paperless, InboxTags $tags, SyncConfig $config, array $send, int $now): bool {
+	private function upload(PaperlessClientInterface $paperless, InboxTags $tags, SyncConfig $config, array $send, int $now, ?Owners &$owners, ?array &$waiting): bool {
 		$userId = (string)$send['user_id'];
 		$fileId = (int)$send['file_id'];
 		$path = (string)$send['path'];
+		// The first upload of the file that may have reached Paperless, kept across the attempts:
+		// a document of the account that Paperless added since then may be this file's.
+		$firstAttempt = null;
+		$previousAttempt = (int)($send['first_attempt_at'] ?? 0);
 		try {
 			// A file or a user that is gone ends the import; a lookup that fails, such as while the
 			// user backend of the sender can't answer, waits for the next attempt, as an upload does.
@@ -152,15 +162,28 @@ final class SendService {
 			$path = $node['path'];
 			$tagsOfFile = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')));
 			// A document that the MD5 alone found counts only with the SHA-256 of the file, in every
-			// ownership: otherwise the file goes up, and Paperless decides.
-			$known = (new KnownContent($paperless))->document($this->fingerprint($userId, $path));
+			// ownership, and in per-user ownership only a document of the sender: otherwise the
+			// file goes up, and Paperless decides.
+			$scope = $config->perUser() ? $this->scope($paperless, $config, $userId, $owners, $waiting) : null;
+			$own = $scope?->owners->paperlessUserOf($userId);
+			$known = (new KnownContent($paperless))->own($this->fingerprint($userId, $path), $scope, $previousAttempt);
 			if ($known !== null) {
-				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_KNOWN, $known);
+				if ($known->lostUpload) {
+					// The sender's own upload whose answer never came: it gets its owner, as the
+					// document of the task of an upload does.
+					if ($own !== null) {
+						$paperless->setOwner($known->id, $own);
+					}
+					$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_IMPORTED, $known->id);
+					return true;
+				}
+				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_KNOWN, $known->id);
 				return true;
 			}
 			$stream = null;
 			try {
 				$stream = $this->storage->openRead($userId, $path);
+				$firstAttempt = $previousAttempt > 0 ? $previousAttempt : $now;
 				$taskId = $paperless->uploadDocument($stream, $node['name'], $tagsOfFile['ids']);
 			} finally {
 				// The client of Paperless may have closed it.
@@ -173,8 +196,13 @@ final class SendService {
 				'task_id' => $taskId,
 				'status' => self::PENDING,
 				'submitted_at' => $now,
+				'first_attempt_at' => $firstAttempt,
 				'last_error' => null,
 			]);
+			if ($own !== null) {
+				// The upload holds the documents of the account for the other files of the round.
+				$waiting[$own] = true;
+			}
 			if ($tagsOfFile['missing'] !== []) {
 				$sent = $this->leftOut[$userId] ?? ['user' => $userId, 'files' => [], 'tags' => []];
 				$sent['files'][] = $node['name'];
@@ -190,14 +218,28 @@ final class SendService {
 				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_REFUSED, null, $exception->getMessage());
 				return true;
 			}
-			$this->retryLater($config, $send, $path, $exception, $now);
+			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
 
 			return false;
 		} catch (\Throwable $exception) {
-			$this->retryLater($config, $send, $path, $exception, $now);
+			$this->retryLater($config, $send, $path, $exception, $now, $firstAttempt);
 
 			return !$tags->unavailable() && !$exception instanceof PaperlessRequestException;
 		}
+	}
+
+	/**
+	 * Whose a sent file is in per-user ownership: its sender, with the owners of the round and the
+	 * documents that the uploads that wait for their owner hold, as WaitingUploads explains. The
+	 * round reads both once.
+	 *
+	 * @param array<int, true>|null $waiting
+	 */
+	private function scope(PaperlessClientInterface $paperless, SyncConfig $config, string $userId, ?Owners &$owners, ?array &$waiting): PerUserScope {
+		$owners ??= $this->ownerMapping->owners($config, $paperless->users());
+		$waiting ??= WaitingUploads::owners($this->state, $config, $owners);
+
+		return new PerUserScope($owners, $userId, WaitingUploads::held($waiting, $paperless, $owners->paperlessUserOf($userId)));
 	}
 
 	/** The checksums of the content of a file, by which Paperless finds a document that has it. */
@@ -212,11 +254,13 @@ final class SendService {
 
 	/**
 	 * The upload failed for a reason that may pass, so the file waits twice as long after each
-	 * failure, up to a day, until its last attempt failed as well.
+	 * failure, up to a day, until its last attempt failed as well. $firstAttempt is the time of
+	 * the first upload of the file that may have reached Paperless, or null when this attempt
+	 * failed before its upload, so that the state keeps what it has.
 	 *
 	 * @param array<string, int|string|null> $send
 	 */
-	private function retryLater(SyncConfig $config, array $send, string $path, \Throwable $exception, int $now): void {
+	private function retryLater(SyncConfig $config, array $send, string $path, \Throwable $exception, int $now, ?int $firstAttempt): void {
 		$error = $exception->getMessage();
 		$attempts = (int)$send['attempts'] + 1;
 		if ($attempts >= self::MAX_ATTEMPTS) {
@@ -236,7 +280,7 @@ final class SendService {
 			'attempts' => $attempts,
 			'retry_at' => $now + $delay,
 			'last_error' => mb_substr($error, 0, 4000),
-		]);
+		] + ($firstAttempt !== null ? ['first_attempt_at' => $firstAttempt] : []));
 		// The first failure of a file is a warning, the ones after it only information.
 		$this->logger->log($attempts === 1 ? LogLevel::WARNING : LogLevel::INFO, 'The upload of {path} of {user} to Paperless failed; the next attempt follows in {minutes} minutes: {error}', [
 			'path' => $path,
@@ -284,7 +328,7 @@ final class SendService {
 			}
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_IMPORTED, $task['documentId'], $reason);
 		} elseif (in_array($task['status'], ImportPlanner::TASK_FAILED, true)) {
-			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, ImportPlanner::failureReason($task));
+			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, ImportPlanner::failureReason($task, $config->perUser()));
 		} elseif ($now - (int)($send['submitted_at'] ?? 0) >= ImportPlanner::TASK_TIMEOUT) {
 			$state = $task['status'] . ($task['message'] !== '' ? ": {$task['message']}" : '');
 			$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_FAILED, null, "Paperless has not finished the import a day after the upload ({$state}), so it may still create the document.");

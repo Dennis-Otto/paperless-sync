@@ -17,6 +17,7 @@ final class ImportSucceeded implements ImportAction {
 	/**
 	 * @param int|null $document the new document, when Paperless names it
 	 * @param bool $uploaded whether the task of the upload named the document, which the upload created, rather than a search found a document with the content of the file, which may be another one's
+	 * @param bool $lostUpload whether the search found the user's own upload whose answer never came, which the account of the app still owns, so that it gets its owner as the upload's document does
 	 */
 	public function __construct(
 		public readonly ImportContext $context,
@@ -24,6 +25,7 @@ final class ImportSucceeded implements ImportAction {
 		public readonly bool $sameContent,
 		public readonly ?int $document,
 		public readonly bool $uploaded,
+		public readonly bool $lostUpload = false,
 	) {
 	}
 }

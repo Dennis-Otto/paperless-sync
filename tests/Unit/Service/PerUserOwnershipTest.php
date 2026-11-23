@@ -617,6 +617,180 @@ final class PerUserOwnershipTest extends TestCase {
 	}
 
 	/**
+	 * A file in alice's inbox with the content of a document of the target user, which the account
+	 * of the app owns, leaves that document as it is: it keeps its owner, its copy stays in the
+	 * archive of the target user, and alice's file goes up as a document of her own.
+	 */
+	public function testAFileWithTheContentOfADocumentOfTheTargetUserLeavesItsOwnerAsItIs(): void {
+		$this->sync([$this->document(5, self::ACCOUNT)]);
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/same.pdf'] = '%PDF-content';
+		$this->paperless->originals[hash('sha256', '%PDF-content')] = 5;
+
+		$report = $this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['same.pdf'], array_keys($this->paperless->uploads));
+		self::assertSame([$this->path(5)], array_keys($this->storage->files), 'The copy stays with the target user.');
+		self::assertSame([self::INBOX . '/same.pdf'], array_keys($this->filesOf('alice')), 'The file stays until Paperless has imported it.');
+		self::assertSame([], $this->archiveDeletions());
+		self::assertSame([1, 0], [$report->users['alice']['importsSubmitted'], $report->users['alice']['importsSucceeded']]);
+	}
+
+	/**
+	 * An upload of alice whose answer never came, which Paperless imported all the same, ends as
+	 * imported in the next run without a second upload, and its document, which the account of
+	 * the app owns, becomes hers.
+	 */
+	public function testAnUploadWhoseAnswerNeverCameStillEndsAsImported(): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->paperless->uploadFailures['scan.pdf'] = new RuntimeException('Paperless did not answer in time');
+		$this->sync([]);
+		$this->paperless->uploadFailures = [];
+		$this->paperless->originals[hash('sha256', '%PDF-alice')] = 77;
+		$this->clock->advance(900);
+
+		$report = $this->sync([['added' => '2026-08-28T12:05:00+02:00'] + $this->document(77, self::ACCOUNT)]);
+
+		self::assertSame([[77, self::ALICE]], $this->paperless->ownerChanges);
+		self::assertSame([], $this->paperless->uploads);
+		self::assertSame([$this->path(77)], array_keys($this->filesOf('alice')), 'The file left the inbox, and the copy of its document is hers.');
+		self::assertSame(1, $report->users['alice']['importsSucceeded']);
+	}
+
+	/**
+	 * A document of the account of the app counts as alice's own upload only when Paperless added
+	 * it at or after an upload of her file that may have reached it: without one, or with a
+	 * document that is older, her file goes up, and the document keeps its owner.
+	 *
+	 * @return array<string, array{bool, string}>
+	 */
+	public static function documentsOfTheAccountThatAreNoUploadOfTheFile(): array {
+		return [
+			'a file without an earlier upload' => [false, '2026-08-28T12:05:00+02:00'],
+			'a document added before the first upload' => [true, '2026-08-26T10:00:00+02:00'],
+		];
+	}
+
+	#[DataProvider('documentsOfTheAccountThatAreNoUploadOfTheFile')]
+	public function testAFileWithTheContentOfADocumentOfTheAccountGoesUpWithoutProofOfItsUpload(bool $failedBefore, string $added): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		if ($failedBefore) {
+			$this->paperless->uploadFailures['scan.pdf'] = new RuntimeException('Paperless did not answer in time');
+			$this->sync([]);
+			$this->paperless->uploadFailures = [];
+			$this->clock->advance(900);
+		}
+		$this->paperless->originals[hash('sha256', '%PDF-alice')] = 77;
+
+		$this->sync([['added' => $added] + $this->document(77, self::ACCOUNT)]);
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['scan.pdf'], array_keys($this->paperless->uploads));
+		self::assertArrayHasKey(self::INBOX . '/scan.pdf', $this->filesOf('alice'));
+	}
+
+	/**
+	 * While an upload of bob waits for its owner, a document of the account may be his: alice's
+	 * file with its content waits, neither uploaded nor deleted.
+	 */
+	public function testAFileWithTheContentOfAHeldDocumentWaits(): void {
+		$this->state->saveSend('bob', 12, ['path' => 'Scans/receipt.pdf', 'status' => 'pending', 'task_id' => 'task-9']);
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/same.pdf'] = '%PDF-content';
+		$this->paperless->originals[hash('sha256', '%PDF-content')] = 5;
+
+		$report = $this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertSame([[], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
+		self::assertSame([self::INBOX . '/same.pdf'], array_keys($this->filesOf('alice')));
+		self::assertSame('retry', $this->state->importsOfOthers['alice'][self::INBOX . '/same.pdf']['status']);
+		self::assertSame(0, $report->users['alice']['importsSucceeded']);
+	}
+
+	/** An upload of alice in a run holds the documents of the account for the inboxes after hers in the same run. */
+	public function testAnUploadOfTheRunHoldsTheDocumentsOfTheAccountForTheInboxesAfterIt(): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->storage->filesOfOthers['bob'][self::INBOX . '/same.pdf'] = '%PDF-content';
+		$this->paperless->originals[hash('sha256', '%PDF-content')] = 5;
+
+		$this->sync([$this->document(5, self::ACCOUNT)]);
+
+		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame('retry', $this->state->importsOfOthers['bob'][self::INBOX . '/same.pdf']['status']);
+		self::assertSame([self::INBOX . '/same.pdf'], array_keys($this->filesOf('bob')));
+	}
+
+	/**
+	 * A task that Paperless still lists a day after the upload, and one that its queue lost.
+	 *
+	 * @return array<string, array{bool}>
+	 */
+	public static function listedTasks(): array {
+		return ['a task that Paperless lists' => [true], 'a task that Paperless lost' => [false]];
+	}
+
+	/**
+	 * Paperless has not finished alice's upload a day later, and bob has a document with its
+	 * content: the upload doesn't end on bob's document. While Paperless lists the task, the file
+	 * goes to the error folder, as Paperless may still import it; otherwise it goes up again. No
+	 * owner changes, and alice's activity names no document of bob.
+	 */
+	#[DataProvider('listedTasks')]
+	public function testAnUnfinishedUploadDoesNotEndOnADocumentOfAnotherUser(bool $listed): void {
+		$this->storage->filesOfOthers['alice'][self::INBOX . '/scan.pdf'] = '%PDF-alice';
+		$this->sync([]);
+		$this->clock->advance(86400);
+		$this->paperless->originals[hash('sha256', '%PDF-alice')] = 2;
+		if (!$listed) {
+			$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => 'Paperless does not list the task.', 'listed' => false];
+		}
+
+		$report = $this->sync([$this->document(2, self::BOB)]);
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame([], array_filter($this->storage->calls, static fn (array $call): bool => $call[0] === 'delete' && $call[1] === 'alice'), 'Nothing of alice is deleted.');
+		self::assertSame(0, $report->users['alice']['importsSucceeded']);
+		self::assertSame([], array_filter($this->activities, static fn (TestActivityEvent $event): bool => str_contains(json_encode($event->getSubjectParameters(), JSON_THROW_ON_ERROR), '"document":2')), 'No activity names the document of bob.');
+		$import = $this->state->importsOfOthers['alice'][self::INBOX . '/scan.pdf'] ?? null;
+		if ($listed) {
+			self::assertNull($import);
+			self::assertSame(1, $report->users['alice']['importsFailed']);
+			self::assertNotContains(self::INBOX . '/scan.pdf', array_keys($this->filesOf('alice')), 'The file went to the error folder.');
+		} else {
+			self::assertSame(['status' => 'retry', 'first_attempt_at' => TestClock::START], array_intersect_key($import ?? [], ['status' => 0, 'first_attempt_at' => 0]), 'The file goes up again, and keeps the time of its upload.');
+			self::assertArrayHasKey(self::INBOX . '/scan.pdf', $this->filesOf('alice'));
+		}
+	}
+
+	/**
+	 * The target user has no user of Paperless, so their inbox counts the documents that go to
+	 * their archive: those without an owner, of the account of the app while nothing is held, and
+	 * of an owner without a user of Nextcloud. A file with the content of bob's document goes up.
+	 *
+	 * @return array<string, array{int|null, bool}>
+	 */
+	public static function documentsForTheInboxOfTheTargetUser(): array {
+		return [
+			'a document of bob' => [self::BOB, false],
+			'a document without an owner' => [null, true],
+			'a document of the account' => [self::ACCOUNT, true],
+			'a document of dave, whom Nextcloud does not know' => [self::DAVE, true],
+		];
+	}
+
+	#[DataProvider('documentsForTheInboxOfTheTargetUser')]
+	public function testTheInboxOfTheTargetUserCountsOnlyTheDocumentsOfTheTargetUser(?int $owner, bool $imported): void {
+		$this->storage->files[self::INBOX . '/brief.pdf'] = '%PDF-content';
+		$this->paperless->originals[hash('sha256', '%PDF-content')] = 2;
+
+		$report = $this->sync([$this->document(2, $owner)]);
+
+		self::assertSame($imported ? [] : ['brief.pdf'], array_keys($this->paperless->uploads));
+		self::assertSame(!$imported, array_key_exists(self::INBOX . '/brief.pdf', $this->storage->files));
+		self::assertSame($imported ? 1 : 0, $report->users['paperless']['importsSucceeded']);
+		self::assertSame([], $this->paperless->ownerChanges);
+	}
+
+	/**
 	 * @param list<array<string, mixed>> $documents
 	 */
 	private function sync(array $documents): SyncReport {

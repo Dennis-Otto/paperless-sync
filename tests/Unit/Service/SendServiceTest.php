@@ -226,11 +226,9 @@ final class SendServiceTest extends TestCase {
 		return [
 			'a file sent from Files' => [static fn (self $test): int => $test->queue('Scans/receipt.pdf')],
 			'a file of a rule of Flow' => [static fn (self $test): int => $test->queueByRule('Scans/receipt.pdf', '')],
-			'a file of a sender whose document belongs to another user' => [static function (self $test): int {
-				$test->usersOfNextcloud = ['paperless', 'alice'];
-				$test->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
-				$test->paperless->users = ['5' => 'alice'];
-				$test->paperless->documents[] = ['id' => 77, 'owner' => 4];
+			'a file of a sender whose own document has other content' => [static function (self $test): int {
+				$test->perUser();
+				$test->paperless->documents[] = ['id' => 77, 'owner' => 5];
 
 				return $test->queue('Scans/receipt.pdf');
 			}],
@@ -250,6 +248,135 @@ final class SendServiceTest extends TestCase {
 		self::assertSame(['receipt.pdf' => 'Synthetic content of Scans/receipt.pdf'], $this->paperless->uploads);
 		self::assertSame(SendService::PENDING, $this->send($id)['status']);
 		self::assertSame([], $this->notifications, 'The sender hears of the end of the import, not of a document of other content.');
+	}
+
+	/**
+	 * In per-user ownership, the account of the app sees the documents of every user, so a sent
+	 * file counts as one that Paperless has only for a document of its sender: with the content of
+	 * another user's document, a file from Files or of a rule of Flow goes up, without a download,
+	 * and Paperless decides. When Paperless-ngx 2.x refuses it as a duplicate, the sender hears the
+	 * reason with the document named by its ID alone.
+	 *
+	 * @return array<string, array{\Closure(self): int}>
+	 */
+	public static function sentFiles(): array {
+		return [
+			'a file sent from Files' => [static fn (self $test): int => $test->queue('Scans/receipt.pdf')],
+			'a file of a rule of Flow' => [static fn (self $test): int => $test->queueByRule('Scans/receipt.pdf', '')],
+		];
+	}
+
+	/** @param \Closure(self): int $queue */
+	#[DataProvider('sentFiles')]
+	public function testASentFileWithTheContentOfAnotherUsersDocumentGoesUp(\Closure $queue): void {
+		$this->perUser();
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 4, 'added' => '2026-08-28T11:00:00+00:00'];
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$id = $queue($this);
+
+		$this->service->process();
+
+		self::assertSame(['receipt.pdf' => 'Synthetic content of Scans/receipt.pdf'], $this->paperless->uploads);
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
+		self::assertSame([[], [], []], [$this->notifications, $this->paperless->ownerChanges, $this->paperless->downloadRequests]);
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'Not consuming receipt.pdf: It is a duplicate of Vertrag (#77).'];
+
+		$this->service->process();
+
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_FAILED, $id, 'Scans/receipt.pdf', null, 'Not consuming receipt.pdf: It is a duplicate of document #77');
+		self::assertSame([], $this->paperless->ownerChanges);
+	}
+
+	/**
+	 * A document of the account of the app counts for the sender only as their own upload whose
+	 * answer never came: without an upload of the file before Paperless added it, the file goes up.
+	 */
+	public function testASentFileWithTheContentOfADocumentOfTheAccountGoesUpWithoutAnEarlierAttempt(): void {
+		$this->perUser();
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T09:00:00+00:00'];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1, 'first_attempt_at' => TestClock::START - 60]);
+
+		$this->service->process();
+
+		self::assertSame(['receipt.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([[], []], [$this->notifications, $this->paperless->ownerChanges]);
+		self::assertSame(TestClock::START - 60, $this->send($id)['first_attempt_at'], 'The time of the first upload stays.');
+	}
+
+	/** A document of the sender's own user of Paperless is one that Paperless has: the file ends as known, and the document keeps its owner. */
+	public function testASentFileWithTheContentOfItsSendersDocumentEndsAsKnown(): void {
+		$this->perUser();
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 5];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$id = $this->queue('Scans/receipt.pdf');
+
+		$this->service->process();
+
+		self::assertSame([[], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_KNOWN, $id, 'Scans/receipt.pdf', 77);
+	}
+
+	/**
+	 * An upload whose answer never came keeps the time of its first attempt; Paperless added its
+	 * document after it, so the next round ends the file as imported, and the document gets the
+	 * sender's user of Paperless as its owner, as the document of a task does.
+	 */
+	public function testASentFileWhoseUploadsAnswerNeverCameEndsAsImported(): void {
+		$this->perUser();
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->uploadException = new RuntimeException('Paperless did not answer in time');
+
+		$this->service->process();
+
+		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => TestClock::START], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0]));
+		$this->paperless->uploadException = null;
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T10:00:30+00:00'];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->clock->advance(900);
+
+		$this->service->process();
+
+		self::assertSame([], $this->paperless->uploads);
+		self::assertSame([[77, 5]], $this->paperless->ownerChanges);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 77);
+	}
+
+	/** A sender without a user of Paperless leaves the document of their lost upload to the account of the app. */
+	public function testTheLostUploadOfASenderWithoutAUserOfPaperlessKeepsItsOwner(): void {
+		$this->perUser();
+		$this->paperless->users = ['4' => 'bob', '9' => 'paperless-sync'];
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T10:00:30+00:00'];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->state->saveSend(self::SENDER, $id, ['status' => SendService::RETRY, 'attempts' => 1, 'first_attempt_at' => TestClock::START]);
+
+		$this->service->process();
+
+		self::assertSame([[], []], [$this->paperless->uploadAttempts, $this->paperless->ownerChanges]);
+		$this->assertNotified(NotificationPublisher::SUBJECT_SEND_IMPORTED, $id, 'Scans/receipt.pdf', 77);
+	}
+
+	/**
+	 * While an upload of another user waits for its owner, a document of the account may be that
+	 * upload's: the file waits, and is neither uploaded nor ended. An upload of the round holds the
+	 * documents of the account for the files after it as well.
+	 */
+	public function testASentFileWithTheContentOfAHeldDocumentWaits(): void {
+		$this->perUser();
+		$this->paperless->documents[] = ['id' => 77, 'owner' => 9, 'added' => '2026-08-28T09:00:00+00:00'];
+		$this->paperless->originals[hash('sha256', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->storage->filesOfOthers['bob']['Scans/scan.pdf'] = 'Synthetic content of Scans/scan.pdf';
+		$bobs = $this->storage->fileId('Scans/scan.pdf', 'bob');
+		$this->state->saveSend('bob', $bobs, ['path' => 'Scans/scan.pdf', 'status' => SendService::QUEUED]);
+		$id = $this->queue('Scans/receipt.pdf');
+
+		$this->service->process();
+
+		self::assertSame(['scan.pdf'], $this->paperless->uploadAttempts, 'Only the file of bob goes up.');
+		self::assertSame(['status' => SendService::RETRY, 'first_attempt_at' => 0, 'attempts' => 1], array_intersect_key($this->send($id), ['status' => 0, 'first_attempt_at' => 0, 'attempts' => 0]));
+		self::assertSame([[], []], [$this->notifications, $this->paperless->ownerChanges]);
 	}
 
 	/** Without the original, the app can't tell whether Paperless has the content of the file, so it tries again later. */
@@ -836,6 +963,17 @@ final class SendServiceTest extends TestCase {
 
 		self::assertSame(['status' => SendService::PENDING, 'last_error' => 'cURL error 7: Failed to connect to paperless.example.test'], array_intersect_key($this->send($id), ['status' => 0, 'last_error' => 0]));
 		self::assertSame([], $this->notifications);
+	}
+
+	/**
+	 * Per-user ownership, with alice as the user 5 of Paperless, bob as the user 4, and the account
+	 * of the app, the user 9, which Nextcloud doesn't know.
+	 */
+	private function perUser(): void {
+		$this->usersOfNextcloud = ['paperless', 'alice', 'bob'];
+		$this->configService->save(['send_group' => 'scanners', 'ownership' => 'per-user'] + self::validSettings());
+		$this->paperless->users = ['5' => 'alice', '4' => 'bob', '9' => 'paperless-sync'];
+		$this->paperless->accountId = 9;
 	}
 
 	/** A file of the sender, queued as a click queues it, and its ID. */

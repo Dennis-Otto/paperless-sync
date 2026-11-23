@@ -113,7 +113,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findImport($ownerUid, $path);
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
-			'etag', 'file_id', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
+			'etag', 'file_id', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -126,6 +126,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'task_id' => '',
 				'status' => 'pending',
 				'submitted_at' => $now,
+				'first_attempt_at' => 0,
 				'attempts' => 0,
 				'retry_at' => 0,
 				'last_error' => null,
@@ -188,7 +189,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 		$existing = $this->findSend($userId, $fileId);
 		$now = $this->timeFactory->getTime();
 		$values = array_intersect_key($values, array_flip([
-			'path', 'folder', 'tags', 'rule_id', 'task_id', 'status', 'submitted_at', 'attempts', 'retry_at', 'last_error',
+			'path', 'folder', 'tags', 'rule_id', 'task_id', 'status', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'last_error',
 		]));
 		$values['updated_at'] = $now;
 		if ($existing === null) {
@@ -202,6 +203,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 				'task_id' => '',
 				'status' => 'queued',
 				'submitted_at' => 0,
+				'first_attempt_at' => 0,
 				'attempts' => 0,
 				'retry_at' => 0,
 				'last_error' => null,
@@ -295,7 +297,7 @@ final class SyncStateRepository implements SyncStateRepositoryInterface {
 	private function normalizeRow(array $row): array {
 		/** @var array<string, int|string|null> $result */
 		$result = [];
-		$integerColumns = ['id', 'document_id', 'file_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'attempts', 'retry_at', 'rule_id', 'created_at', 'updated_at'];
+		$integerColumns = ['id', 'document_id', 'file_id', 'missing_runs', 'last_seen', 'trash_date', 'submitted_at', 'first_attempt_at', 'attempts', 'retry_at', 'rule_id', 'created_at', 'updated_at'];
 		/** @psalm-suppress MixedAssignment */
 		foreach ($row as $key => $value) {
 			if ($value === null) {
