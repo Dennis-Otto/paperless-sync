@@ -200,7 +200,8 @@ final class NotificationPublisherTest extends TestCase {
 		self::assertSame(NotificationPublisher::ERROR_LIMIT, mb_strlen($failed->getSubjectParameters()['reason']));
 		self::assertSame(NotificationPublisher::SUBJECT_IMPORT_REJECTED, $rejected->getSubject());
 		self::assertSame('File type not supported', $rejected->getSubjectParameters()['reason']);
-		self::assertSame(md5('Documents/Paperless/Errors/gone.pdf'), $gone->getObjectId(), 'A file that is gone has the hash of its path as its object.');
+		self::assertSame(hash('sha256', 'Documents/Paperless/Errors/gone.pdf'), $gone->getObjectId(), 'A file that is gone has the SHA-256 of its path as its object.');
+		self::assertSame(64, strlen($gone->getObjectId()), 'The SHA-256 fills the 64 characters of the column of the ID.');
 		self::assertSame(0, $gone->getSubjectParameters()['file']['id']);
 	}
 
