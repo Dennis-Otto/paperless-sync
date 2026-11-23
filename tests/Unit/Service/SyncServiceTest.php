@@ -2739,12 +2739,14 @@ final class SyncServiceTest extends TestCase {
 		$this->service->run();
 		$this->paperless->tasks['task-1'] = $task;
 		$this->paperless->originals[hash($algorithm, '%PDF-inbox')] = 456;
+		$this->paperless->contents[456] = '%PDF-inbox';
 		$this->clock->advance(86400);
 		$this->logger->expects(self::never())->method('warning');
 
 		$report = $this->service->run();
 
 		self::assertSame(['IMPORT SUCCESS: ' . $path . ' -> P456'], $report->actions);
+		self::assertSame($algorithm === 'md5' ? [[456, true]] : [], $this->paperless->downloadRequests, 'Only a document that the MD5 alone found needs the SHA-256 of its original.');
 		self::assertSame(1, $report->importsSucceeded);
 		self::assertSame(0, $report->errors);
 		self::assertSame(['police.pdf'], $this->paperless->uploadAttempts);
@@ -2756,6 +2758,54 @@ final class SyncServiceTest extends TestCase {
 			self::assertSame(hash('sha256', '%PDF-inbox'), $this->state->imports[$path]['etag']);
 			self::assertSame(0, $this->service->run()->importsSubmitted, 'The kept file stays imported.');
 		}
+	}
+
+	/**
+	 * On Paperless-ngx 2.x, which knows a document only by the MD5 of its original, a file of the
+	 * inbox whose content a document has ends as imported, after one download of its original.
+	 */
+	public function testAFileOfTheInboxWhoseContentADocumentOfPaperless2HasEndsAsImported(): void {
+		$this->paperless->md5Checksums = true;
+		$path = 'Dokumente/Paperless/Eingang/copy.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->paperless->originals[hash('md5', '%PDF-inbox')] = 9;
+		$this->paperless->contents[9] = '%PDF-inbox';
+
+		$report = $this->service->run();
+
+		self::assertSame(['IMPORT SUCCESS: ' . $path . ' -> P9'], $report->actions);
+		self::assertSame([], $this->paperless->uploadAttempts);
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertArrayNotHasKey($path, $this->storage->files);
+	}
+
+	/**
+	 * A file of the inbox that only shares the MD5 of a document of Paperless-ngx 2.x goes up as
+	 * its own, and the answer of Paperless decides: its refusal of a duplicate moves the file to
+	 * the error folder, with the reason of Paperless, and the file is never deleted.
+	 */
+	public function testAFileOfTheInboxWhoseMd5AloneADocumentOfPaperless2HasEndsWithTheAnswerOfPaperless(): void {
+		$this->paperless->md5Checksums = true;
+		$path = 'Dokumente/Paperless/Eingang/copy.pdf';
+		$this->storage->files[$path] = '%PDF-inbox';
+		$this->paperless->originals[hash('md5', '%PDF-inbox')] = 9;
+		$this->paperless->contents[9] = '%PDF-other';
+
+		$submitted = $this->service->run();
+
+		self::assertSame(['IMPORT: ' . $path], $submitted->actions);
+		self::assertSame(['copy.pdf'], $this->paperless->uploadAttempts);
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame('%PDF-inbox', $this->storage->files[$path]);
+
+		$this->paperless->tasks['task-1'] = ['status' => 'FAILURE', 'message' => 'copy.pdf: Not consuming copy.pdf: It is a duplicate of invoice (#9).'];
+		$report = $this->service->run();
+
+		$errorPath = 'Dokumente/Paperless/Fehler/copy.pdf';
+		self::assertSame(['IMPORT ERROR: ' . $path . ' -> ' . $errorPath], $report->actions);
+		self::assertSame('%PDF-inbox', $this->storage->files[$errorPath], 'The file moved and was not deleted.');
+		self::assertSame("Paperless import failed\n\ncopy.pdf: Not consuming copy.pdf: It is a duplicate of invoice (#9).\n\nPaperless task: task-1\n", $this->storage->files[$errorPath . '.error.txt']);
+		self::assertArrayNotHasKey($path, $this->storage->files);
 	}
 
 	/** A file that can't be read can't be looked for in Paperless; it ends as if Paperless didn't have it. */

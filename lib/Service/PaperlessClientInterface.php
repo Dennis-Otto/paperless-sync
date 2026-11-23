@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Service;
 use OCA\PaperlessSync\Model\ConnectionCheck;
 use OCA\PaperlessSync\Model\DocumentFile;
 use OCA\PaperlessSync\Model\DocumentFingerprint;
+use OCA\PaperlessSync\Model\DocumentMatch;
 use OCA\PaperlessSync\Model\PaperlessScan;
 use OCA\PaperlessSync\Model\SyncConfig;
 
@@ -208,11 +209,12 @@ interface PaperlessClientInterface {
 	public function documentFile(int $documentId): DocumentFile;
 
 	/**
-	 * The ID of a document whose original has the content of these checksums, or null when
-	 * Paperless has none: Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5
-	 * before, so both are asked for.
+	 * A document whose original has one of these checksums, and which of them found it, or null
+	 * when Paperless has none: Paperless-ngx keeps the SHA-256 of an original since 3.0 and its MD5
+	 * before, so both are asked for, the SHA-256 first. KnownContent confirms a document that the
+	 * MD5 alone found.
 	 */
-	public function findDocument(DocumentFingerprint $content): ?int;
+	public function findDocument(DocumentFingerprint $content): ?DocumentMatch;
 
 	/**
 	 * Creates a tag in Paperless that it assigns to no document on its own, and returns its ID.

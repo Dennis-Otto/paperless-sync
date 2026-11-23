@@ -49,6 +49,7 @@ final class ImportExecutor {
 
 	private bool $dryRun;
 	private InboxTags $tags;
+	private KnownContent $knownContent;
 	/** @var list<string> the names of the first files that the run set aside */
 	private array $setAsideNames = [];
 
@@ -67,6 +68,7 @@ final class ImportExecutor {
 	) {
 		$this->dryRun = $report->dryRun;
 		$this->tags = new InboxTags($paperless, $config, $report);
+		$this->knownContent = new KnownContent($paperless);
 	}
 
 	/** @throws LogicException for an action that this executor doesn't know, or that doesn't fit the batch */
@@ -159,16 +161,15 @@ final class ImportExecutor {
 	 * Uploads a file of the inbox, unless Paperless has its content already: a file whose upload
 	 * Paperless received although its answer never came, or one that came back to the inbox, or
 	 * whose state an earlier version couldn't follow to a new path, ends as imported instead of
-	 * becoming a second document.
+	 * becoming a second document. A document that the MD5 alone found counts only once the
+	 * SHA-256 of its original is the file's; in per-user ownership its owner is read before, so
+	 * that a document of another user costs no download, and changes only after.
 	 */
 	private function upload(Upload $action): void {
 		$this->batch->take(SyncBatch::WRITE);
 		$path = $action->path;
 		try {
-			$known = $this->paperless->findDocument($this->fingerprint($path));
-			if ($known !== null && $this->owner !== null && !$this->ours($known)) {
-				$known = null;
-			}
+			$known = $this->knownDocument($this->fingerprint($path));
 		} catch (\Throwable $exception) {
 			// Without the answer, the upload might create the document a second time, so the file
 			// waits, as for a failed upload.
@@ -176,7 +177,7 @@ final class ImportExecutor {
 			return;
 		}
 		if ($known !== null) {
-			$this->known($action, $known);
+			$this->imported($action, $known);
 			return;
 		}
 		$tags = ['ids' => [], 'names' => [], 'missing' => []];
@@ -253,39 +254,54 @@ final class ImportExecutor {
 	}
 
 	/**
-	 * In per-user ownership, whether a document with the content of a file of the inbox is this
-	 * inbox's: owned by its user of Paperless, or by the account of the app, which owns an upload
-	 * until a run gives it its owner, as after an upload whose answer never came; such a document
-	 * gets its owner now. The account sees the documents of every user, so a document of another
-	 * user, or one that it doesn't show, is not: the file goes up as its own document, and never
-	 * leaves the inbox for a document that its user can't see.
+	 * The document of Paperless that has the content of a file of the inbox, or null when the file
+	 * goes up. In per-user ownership, the document is this inbox's, and one of the account of the
+	 * app gets the inbox's user as its owner, once its content is confirmed.
 	 */
-	private function ours(int $document): bool {
-		$found = $this->paperless->document($document);
-		if ($found === null || !is_numeric($found['owner'] ?? null)) {
-			return false;
+	private function knownDocument(DocumentFingerprint $content): ?int {
+		$match = $this->knownContent->find($content);
+		if ($match === null) {
+			return null;
 		}
-		$owner = (int)$found['owner'];
-		if ($owner === $this->owner) {
-			return true;
+		$owner = $this->owner !== null ? $this->ownerOf($match->id) : null;
+		if ($this->owner !== null && $owner === null) {
+			return null;
 		}
-		if ($owner !== $this->paperless->accountId()) {
-			return false;
+		if (!$this->knownContent->confirms($match, $content)) {
+			return null;
 		}
-		if (!$this->dryRun) {
-			$this->paperless->setOwner($document, (int)$this->owner);
+		if ($owner !== null && $owner !== $this->owner && !$this->dryRun) {
+			$this->paperless->setOwner($match->id, (int)$this->owner);
 		}
 
-		return true;
+		return $match->id;
+	}
+
+	/**
+	 * In per-user ownership, the owner of a document with the content of a file of the inbox, when
+	 * the document is this inbox's: owned by its user of Paperless, or by the account of the app,
+	 * which owns an upload until a run gives it its owner, as after an upload whose answer never
+	 * came. The account sees the documents of every user, so a document of another user, or one
+	 * that it doesn't show, is not, and the answer is null: the file goes up as its own document,
+	 * and never leaves the inbox for a document that its user can't see.
+	 */
+	private function ownerOf(int $document): ?int {
+		$found = $this->paperless->document($document);
+		if ($found === null || !is_numeric($found['owner'] ?? null)) {
+			return null;
+		}
+		$owner = (int)$found['owner'];
+
+		return $owner === $this->owner || $owner === $this->paperless->accountId() ? $owner : null;
 	}
 
 	/**
 	 * Paperless has a document with the content of a file of the inbox, so the file ends as one
 	 * that it imported, without an upload: it leaves the inbox, or stays there as imported, as the
-	 * settings say. The document stays as it is: in per-user ownership ours() made sure that it is
-	 * this inbox's, and otherwise every document is the account's.
+	 * settings say. The document stays as it is: in per-user ownership knownDocument() made sure
+	 * that it is this inbox's, and otherwise every document is the account's.
 	 */
-	private function known(Upload $action, int $document): void {
+	private function imported(Upload $action, int $document): void {
 		$path = $action->path;
 		if (!$this->dryRun) {
 			try {

@@ -151,7 +151,9 @@ final class SendService {
 			}
 			$path = $node['path'];
 			$tagsOfFile = $tags->forFolder((string)$send['folder'], InboxTags::names((string)($send['tags'] ?? '')));
-			$known = $paperless->findDocument($this->fingerprint($userId, $path));
+			// A document that the MD5 alone found counts only with the SHA-256 of the file, in every
+			// ownership: otherwise the file goes up, and Paperless decides.
+			$known = (new KnownContent($paperless))->document($this->fingerprint($userId, $path));
 			if ($known !== null) {
 				$this->end($config, $send, $path, NotificationPublisher::SUBJECT_SEND_KNOWN, $known);
 				return true;

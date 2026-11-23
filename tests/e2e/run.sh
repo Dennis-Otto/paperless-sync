@@ -2290,6 +2290,31 @@ scenario_per_user() {
 	assert_trashed e2e-owner 'owner-letter.pdf' "${TMP_DIR}/trash-before-per-user-sent.txt"
 	SENT_DOCUMENT="$(json_value ownerChanges 0 document < "${TMP_DIR}/mock-owner-changes.json")"
 	assert_json per-user-sent "${TMP_DIR}/per-user-sent.json" "${SENT_DOCUMENT}"
+	# Paperless-ngx 2.x knows a document only by the MD5 of its original. A copy of P124 in the
+	# inbox of e2e-other, whose document it is, ends as imported as P124 once the original of P124
+	# has the SHA-256 of the file; the same copy in the inbox of e2e-owner, for whom P124 is the
+	# document of another user, goes up without a download of the original, and the refusal of
+	# Paperless moves it to the error folder of e2e-owner, with its reason.
+	control /control/paperless/2.20.15
+	control /control/checksum/md5
+	mock_state > "${TMP_DIR}/mock-before-known.json"
+	ORIGINALS_BEFORE="$(host_python -c 'import json, sys; print(len(json.load(sys.stdin)["originalDownloads"]))' < "${TMP_DIR}/mock-before-known.json")"
+	# The original of P124 in the mock, original_content(); dav_upload adds the last line break.
+	copy_of_p124=$'%PDF-1.4\nSynthetic Paperless archive document P124.\n%%EOF'
+	dav_upload e2e-other 'Documents/Paperless/Inbox/copy-of-P124.pdf' "${copy_of_p124}"
+	dav_upload e2e-owner 'Documents/Paperless/Inbox/copy-of-P124.pdf' "${copy_of_p124}"
+	sync_run false "${TMP_DIR}/per-user-known.json"
+	assert_json per-user-known "${TMP_DIR}/per-user-known.json"
+	mock_state > "${TMP_DIR}/mock-known.json"
+	assert_json mock-known "${TMP_DIR}/mock-known.json" "${ORIGINALS_BEFORE}"
+	assert_dav_missing e2e-other 'Documents/Paperless/Inbox/copy-of-P124.pdf'
+	assert_dav_file e2e-owner 'Documents/Paperless/Inbox/copy-of-P124.pdf' 'Synthetic Paperless archive document P124.'
+	control /control/task-of/copy-of-P124.pdf/duplicate
+	sync_run false "${TMP_DIR}/per-user-duplicate.json"
+	control /control/checksum/sha256
+	control /control/paperless/3.3.0
+	assert_dav_file e2e-owner 'Documents/Paperless/Errors/copy-of-P124.pdf' 'Synthetic Paperless archive document P124.'
+	assert_dav_file e2e-owner 'Documents/Paperless/Errors/copy-of-P124.pdf.error.txt' 'It is a duplicate of Monthly invoice (#123).'
 }
 
 # The documents that Paperless shares: a document of e2e-owner that the group of the household may
