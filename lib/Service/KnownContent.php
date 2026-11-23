@@ -51,16 +51,23 @@ final class KnownContent {
 	 * Whether the original of a document that find() returned has the content of these checksums.
 	 * Paperless-ngx 2.x searches by MD5, which doesn't tell every two files apart; the SHA-256 of
 	 * the original decides. The download goes to a temporary file in reads of 1 MB, and only
-	 * reads, so a dry-run makes it too.
+	 * reads, so a dry-run makes it too. An original that Paperless answers with 404 confirms
+	 * nothing: a document whose original was missing at the migration of its checksums keeps only
+	 * its MD5 and has no original to serve, so the file goes up and Paperless decides, instead of
+	 * waiting in every run.
 	 *
-	 * @throws \Throwable when the original can't be downloaded
+	 * @throws \Throwable when the original can't be downloaded for another reason
 	 */
 	public function confirms(DocumentMatch $match, DocumentFingerprint $content): bool {
 		if ($match->bySha256) {
 			return true;
 		}
-		$original = $this->paperless->downloadDocument($match->id, true, static function (): void {
-		});
+		try {
+			$original = $this->paperless->downloadDocument($match->id, true, static function (): void {
+			});
+		} catch (PaperlessNotFoundException) {
+			return false;
+		}
 
 		return $original->sha256 === $content->sha256;
 	}

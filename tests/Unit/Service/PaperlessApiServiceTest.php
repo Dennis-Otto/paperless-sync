@@ -24,6 +24,7 @@ use OCA\PaperlessSync\Service\PaperlessClientFactory;
 use OCA\PaperlessSync\Service\PaperlessClientInterface;
 use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -1820,6 +1821,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			self::fail('A request that failed must be reported.');
 		} catch (PaperlessRequestException $exception) {
 			$detail = $exception->getMessage();
+			self::assertSame($code === 404, $exception instanceof PaperlessNotFoundException, 'A 404 is an answer that KnownContent tells from a failure.');
 			self::assertStringNotContainsString('?', $detail, 'The detail leaves out the query of the URL.');
 			$error = RunError::of($exception);
 			self::assertSame("{$explanation} Details: {$detail}", $error->message());
@@ -1844,6 +1846,7 @@ final class PaperlessApiServiceTest extends TestCase {
 			$this->service->documents();
 			self::fail('A request that failed must be reported.');
 		} catch (PaperlessRequestException $exception) {
+			self::assertNotInstanceOf(PaperlessNotFoundException::class, $exception);
 			self::assertStringStartsWith('Paperless refused the API token (HTTP 401).', RunError::of($exception)->message());
 		}
 	}

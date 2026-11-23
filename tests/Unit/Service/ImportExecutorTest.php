@@ -27,6 +27,7 @@ use OCA\PaperlessSync\Model\SyncReport;
 use OCA\PaperlessSync\Service\ImportExecutor;
 use OCA\PaperlessSync\Service\PaperlessHostException;
 use OCA\PaperlessSync\Service\PaperlessLocalNetworkException;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -439,6 +440,33 @@ final class ImportExecutorTest extends TestCase {
 
 		self::assertSame('retry', $this->state->imports[self::FILE]['status']);
 		self::assertTrue($this->batch->stopped());
+	}
+
+	/**
+	 * An original that Paperless doesn't have (HTTP 404), such as one that was missing at the
+	 * migration of its checksums, confirms nothing: the file goes up and Paperless decides, rather
+	 * than waiting in every run. In per-user ownership, the document of the account keeps its owner.
+	 */
+	public function testAFileGoesUpWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
+		self::assertFalse($this->batch->stopped());
+
+		$this->arrange(false, [], 3);
+		$this->paperless->accountId = 1;
+		$this->paperless->originals[hash('md5', self::CONTENT)] = 9;
+		$this->paperless->documents[] = ['id' => 9, 'owner' => 1];
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->executor->apply(self::upload());
+
+		self::assertSame([], $this->paperless->ownerChanges);
+		self::assertSame(['a.pdf'], $this->paperless->uploadAttempts);
 	}
 
 	/** Without the answer whether Paperless has the content, the file waits, and without Paperless, so do the others. */

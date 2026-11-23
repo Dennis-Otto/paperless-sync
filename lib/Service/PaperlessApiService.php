@@ -1452,7 +1452,8 @@ final class PaperlessApiService implements PaperlessClientInterface {
 				throw new PaperlessHostException();
 			}
 			$message = $this->failureMessage($exception->getMessage(), $token);
-			throw new PaperlessRequestException($message, self::explained($exception->getCode(), $path, $message));
+			$error = self::explained($exception->getCode(), $path, $message);
+			throw (int)$exception->getCode() === Http::STATUS_NOT_FOUND ? new PaperlessNotFoundException($message, $error) : new PaperlessRequestException($message, $error);
 		}
 		if ($response->getStatusCode() === Http::STATUS_NOT_ACCEPTABLE) {
 			throw new PaperlessVersionException();

@@ -12,6 +12,7 @@ namespace OCA\PaperlessSync\Tests\Unit\Service;
 use OCA\PaperlessSync\Notification\NotificationPublisher;
 use OCA\PaperlessSync\Service\ConfigService;
 use OCA\PaperlessSync\Service\NextcloudStorageInterface;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\PaperlessOwnerException;
 use OCA\PaperlessSync\Service\PaperlessRequestException;
 use OCA\PaperlessSync\Service\PaperlessUploadException;
@@ -262,6 +263,19 @@ final class SendServiceTest extends TestCase {
 		self::assertSame([], $this->paperless->uploads);
 		self::assertSame(SendService::RETRY, $this->send($id)['status']);
 		self::assertSame([], $this->notifications);
+	}
+
+	/** An original that Paperless doesn't have (HTTP 404) confirms nothing: the file goes up and Paperless decides, rather than retrying for good. */
+	public function testASentFileIsUploadedWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$id = $this->queue('Scans/receipt.pdf');
+		$this->paperless->originals[hash('md5', 'Synthetic content of Scans/receipt.pdf')] = 77;
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		$this->service->process();
+
+		self::assertSame([[77, true]], $this->paperless->downloadRequests);
+		self::assertSame(['receipt.pdf' => 'Synthetic content of Scans/receipt.pdf'], $this->paperless->uploads);
+		self::assertSame(SendService::PENDING, $this->send($id)['status']);
 	}
 
 	/** @return array<string, array{\Closure(TestStorage, int): void}> */

@@ -22,6 +22,7 @@ use OCA\PaperlessSync\Model\Plan\Unchanged;
 use OCA\PaperlessSync\Model\Plan\Upload;
 use OCA\PaperlessSync\Model\SyncConfig;
 use OCA\PaperlessSync\Service\ImportPlanner;
+use OCA\PaperlessSync\Service\PaperlessNotFoundException;
 use OCA\PaperlessSync\Service\SyncBatch;
 use OCA\PaperlessSync\Service\TargetFiles;
 use OCA\PaperlessSync\Tests\Doubles\TestClock;
@@ -364,6 +365,23 @@ final class ImportPlannerTest extends TestCase {
 		$this->paperless->downloadException = new RuntimeException('Paperless answered with HTTP 500');
 
 		self::assertSame(['check failed a.pdf: Paperless answered with HTTP 500'], $this->plan());
+		self::assertSame([[9, true]], $this->paperless->downloadRequests);
+	}
+
+	/**
+	 * An original that Paperless doesn't have (HTTP 404) confirms nothing, so the unfinished upload
+	 * goes on to its other ends, as for a document of other content, instead of failing its check
+	 * in every run.
+	 */
+	public function testAnUnfinishedUploadGoesOnWhenPaperlessHasNoOriginalToConfirmIt(): void {
+		$path = self::INBOX . '/a.pdf';
+		$this->storage->files[$path] = '%PDF-a';
+		$this->state->imports[$path] = ['path' => $path, 'etag' => hash('sha256', '%PDF-a'), 'status' => 'pending', 'task_id' => 'task-1', 'submitted_at' => TestClock::START - self::DAY];
+		$this->paperless->originals[hash('md5', '%PDF-a')] = 9;
+		$this->paperless->tasks['task-1'] = ['status' => 'PENDING', 'message' => '', 'listed' => false];
+		$this->paperless->downloadException = new PaperlessNotFoundException('Client error: 404 Not Found');
+
+		self::assertSame(['retry a.pdf after 1: Paperless has not finished the import task task-1 a day after the upload (PENDING)'], $this->plan());
 		self::assertSame([[9, true]], $this->paperless->downloadRequests);
 	}
 
