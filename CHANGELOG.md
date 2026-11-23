@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.4](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.3...v1.10.4) (2026-11-23)
+
+### Bug fixes
+
+- On Paperless-ngx 2.x, which knows a document only by the MD5 of its original, a file of the inbox, a file sent with *Send to Paperless* and a file of a rule of Flow count as imported only when the original of the document that Paperless found has the same SHA-256. Paperless Sync downloads that original to compare. Otherwise the file goes up as a file of its own, and Paperless decides: Paperless-ngx 2.x refuses it as a duplicate, and a file of the inbox then goes to the error folder with the reason of Paperless instead of leaving the inbox.
+- In per-user ownership, a file of the inbox, an upload that Paperless hasn't finished a day later, a file sent with *Send to Paperless* and a file of a rule of Flow count as imported, or as already in Paperless, only for a document that is their user's by its owner, or for their own upload whose answer never came, which Paperless added after the first upload of the file and which then gets their user of Paperless as its owner. A file whose content another user's document has now goes up as a file of its own: Paperless-ngx 3.x imports it, and 2.x refuses it as a duplicate, so a file of the inbox lands in the error folder, and the reason names the existing document by its number alone. A file that already waited for its next upload before this update goes up again.
+
 ## [1.10.3](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.2...v1.10.3) (2026-11-18)
 
 ### Bug fixes
