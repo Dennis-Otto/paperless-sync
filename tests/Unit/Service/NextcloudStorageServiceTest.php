@@ -40,6 +40,9 @@ final class NextcloudStorageServiceTest extends TestCase {
 
 	private const USER = 'paperless';
 	private const HOME = '/paperless/files';
+	/** A new file of each kind of write, below the folder of the user. */
+	private const NEW_FILES = ['text' => 'Fehler/a.pdf.error.txt', 'stream' => 'Archiv/2026/a.pdf'];
+	private const NEW_CONTENT = "%PDF-1.7 the whole content of the file\n";
 
 	/** @var array<string, string|null> the content of every file, or null for a folder, by absolute path */
 	private array $nodes = [self::HOME => null];
@@ -49,7 +52,7 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private array $unreadable = [];
 	/** @var array<string, bool|null> the nodes that reach the user through a share, by absolute path: whether it allows downloads, null without attributes */
 	private array $shareDownload = [];
-	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete, and of the storage operations unlink and opendir */
+	/** @var array<string, \Throwable> failures of the node operations newFile, putContent, move and delete, of the storage operations unlink and opendir, and of the close of a file of the storage */
 	private array $failures = [];
 	/** @var array<string, true> the .part files that Folder::newFile() created, which Nextcloud keeps out of its file cache, and whose nodes keep no permissions */
 	private array $withoutPermissions = [];
@@ -59,6 +62,10 @@ final class NextcloudStorageServiceTest extends TestCase {
 	private bool $storageRefusesFiles = false;
 	/** Whether the storage takes no byte of a file that it created, as a full disk. */
 	private bool $storageRefusesWrites = false;
+	/** Whether the flush of a file of the storage succeeds; the native SMB stream of icewind/smb always says false. */
+	private bool $storageFlushes = true;
+	/** Whether a file of the storage keeps only the first half of its content as it is closed, and says so at its flush. */
+	private bool $storageLosesBytesAtClose = false;
 	/** @var array<string, int> the file ID of every node, which Nextcloud keeps through moves and updates in place */
 	private array $fileIds = [];
 	private int $lastFileId = 0;
@@ -444,6 +451,75 @@ final class NextcloudStorageServiceTest extends TestCase {
 			self::assertArrayNotHasKey(self::HOME . '/Fehler/a.pdf.error.txt', $this->nodes, $kind);
 			self::assertSame([], $this->temporaryFiles(), $kind);
 		}
+		self::assertCount(2, $this->unlinked);
+	}
+
+	/**
+	 * The native SMB stream of icewind/smb, which the SMB storage of Nextcloud takes first, says
+	 * false at every flush and sends its buffer only as it is closed, so every byte arrives. PHP
+	 * before 8.6 drops what the flush says, and both kinds of write store their file. From PHP 8.6
+	 * on, fclose() reports the flush, and the write keeps refusing a file whose close the storage
+	 * doesn't confirm: it fails and removes its temporary file. So on PHP 8.6, a folder on such an
+	 * SMB mount takes no new file until icewind/smb writes its buffer in stream_flush() and says
+	 * whether that worked, as reported in https://codeberg.org/icewind/SMB/issues/141 (from issue
+	 * #565), and Nextcloud ships that version. The refusal waits for that fix; it is not how the write is meant to stay.
+	 */
+	public function testAStreamWhoseFlushAlwaysSaysFalseTakesNewFilesOnlyBeforePhp86(): void {
+		$this->storageFlushes = false;
+
+		foreach ($this->writeANewFileOfEachKind() as $kind => $error) {
+			$path = self::HOME . '/' . self::NEW_FILES[$kind];
+			if (PHP_VERSION_ID < 80600) {
+				self::assertNull($error, $kind);
+				self::assertSame(self::NEW_CONTENT, $this->nodes[$path], $kind);
+			} else {
+				self::assertInstanceOf(NotPermittedException::class, $error, $kind);
+				self::assertStringStartsWith('Could not write the whole of ', $error->getMessage(), $kind);
+				self::assertArrayNotHasKey($path, $this->nodes, $kind);
+			}
+		}
+		self::assertSame([], $this->temporaryFiles());
+	}
+
+	/**
+	 * A stream that loses bytes as it is closed and says so at its flush: from PHP 8.6 on, fclose()
+	 * reports that, and the write fails and removes its temporary file, so the half file never
+	 * reaches its place. PHP before 8.6 drops what the flush says, and fclose() reports no failure
+	 * of a stream at all, so no check of the write can see this loss there: the half file is stored.
+	 * Storing the half file below 8.6 is a known gap of fclose() before PHP 8.6, not the wanted
+	 * behaviour; issue #565 tracks it.
+	 */
+	public function testAFlushThatFailsStopsTheWriteFromPhp86On(): void {
+		$this->storageLosesBytesAtClose = true;
+
+		foreach ($this->writeANewFileOfEachKind() as $kind => $error) {
+			$path = self::HOME . '/' . self::NEW_FILES[$kind];
+			if (PHP_VERSION_ID >= 80600) {
+				self::assertInstanceOf(NotPermittedException::class, $error, $kind);
+				self::assertStringStartsWith('Could not write the whole of ', $error->getMessage(), $kind);
+				self::assertArrayNotHasKey($path, $this->nodes, $kind);
+			} else {
+				self::assertNull($error, $kind);
+				self::assertSame(substr(self::NEW_CONTENT, 0, intdiv(strlen(self::NEW_CONTENT), 2)), $this->nodes[$path], $kind);
+			}
+		}
+		self::assertSame([], $this->temporaryFiles());
+	}
+
+	/**
+	 * A storage that loses the file as it closes it, as one whose upload at the close fails with an
+	 * error, fails both kinds of write with that error on every PHP, and the temporary file is
+	 * removed, so nothing reaches its place.
+	 */
+	public function testAFileThatTheStorageLosesAsItClosesItFailsTheWrite(): void {
+		$this->failures['close'] = new RuntimeException('The upload failed');
+
+		foreach ($this->writeANewFileOfEachKind() as $kind => $error) {
+			self::assertInstanceOf(RuntimeException::class, $error, $kind);
+			self::assertSame('The upload failed', $error->getMessage(), $kind);
+			self::assertArrayNotHasKey(self::HOME . '/' . self::NEW_FILES[$kind], $this->nodes, $kind);
+		}
+		self::assertSame([], $this->temporaryFiles());
 		self::assertCount(2, $this->unlinked);
 	}
 
@@ -929,6 +1005,28 @@ final class NextcloudStorageServiceTest extends TestCase {
 	}
 
 	/**
+	 * Writes a new file as text and another one as a stream, both with NEW_CONTENT, and gives the
+	 * error of each kind of write, or null for one that went through.
+	 *
+	 * @return array{text: ?\Throwable, stream: ?\Throwable}
+	 */
+	private function writeANewFileOfEachKind(): array {
+		$errors = ['text' => null, 'stream' => null];
+		try {
+			$this->service->writeText(self::USER, self::NEW_FILES['text'], self::NEW_CONTENT);
+		} catch (\Throwable $error) {
+			$errors['text'] = $error;
+		}
+		try {
+			$this->service->writeStream(self::USER, self::NEW_FILES['stream'], $this->stream(self::NEW_CONTENT), 'replace');
+		} catch (\Throwable $error) {
+			$errors['stream'] = $error;
+		}
+
+		return $errors;
+	}
+
+	/**
 	 * The storage of a node: a share for those of $shareDownload, with or without its attribute for
 	 * downloads, and else the storage of the files of the user.
 	 */
@@ -967,8 +1065,11 @@ final class NextcloudStorageServiceTest extends TestCase {
 			$this->nodes[$target] = '';
 
 			return StorageStreams::file(function (string $content) use ($target): void {
+				if (isset($this->failures['close'])) {
+					throw $this->failures['close'];
+				}
 				$this->nodes[$target] = $content;
-			}, $this->storageRefusesWrites);
+			}, refuseWrites: $this->storageRefusesWrites, flushes: $this->storageFlushes && !$this->storageLosesBytesAtClose, losesBytesAtClose: $this->storageLosesBytesAtClose);
 		});
 		$storage->method('file_exists')->willReturnCallback(fn (string $internal): bool => array_key_exists($absolute($internal), $this->nodes));
 		$storage->method('is_file')->willReturnCallback(fn (string $internal): bool => is_string($this->nodes[$absolute($internal)] ?? null));
