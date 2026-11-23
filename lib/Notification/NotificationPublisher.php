@@ -291,8 +291,8 @@ final class NotificationPublisher {
 			->setApp(AppConstants::APP_ID)
 			->setUser($config->targetUser)
 			->setDateTime($this->timeFactory->getDateTime())
-			// The ID of the file, or a hash of its path for one that is gone: the column of the ID holds 64 characters.
-			->setObject(self::OBJECT_IMPORT, $id > 0 ? (string)$id : md5($result['path']))
+			// The ID of the file, or the SHA-256 of its path for one that is gone, which fills the 64 characters of the column of the ID.
+			->setObject(self::OBJECT_IMPORT, $id > 0 ? (string)$id : hash('sha256', $result['path']))
 			->setSubject($result['outcome'] === SyncReport::IMPORT_FAILED ? self::SUBJECT_IMPORT_FAILED : self::SUBJECT_IMPORT_REJECTED, [
 				'file' => ['id' => $id, 'path' => $result['path']],
 				'reason' => mb_substr($result['reason'], 0, self::ERROR_LIMIT),

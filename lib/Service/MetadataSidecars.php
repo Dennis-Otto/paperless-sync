@@ -373,16 +373,14 @@ final class MetadataSidecars {
 	 * @return array<int, array<string, string>>
 	 */
 	private static function parse(string $content): array {
-		$file = new \SplTempFileObject();
-		$file->fwrite(str_starts_with($content, self::BOM) ? substr($content, strlen(self::BOM)) : $content);
-		$file->rewind();
-		$file->setFlags(\SplFileObject::READ_CSV | \SplFileObject::READ_AHEAD | \SplFileObject::SKIP_EMPTY);
-		$file->setCsvControl(',', '"', '');
+		$stream = fopen('php://temp', 'r+') ?: throw new \RuntimeException('Could not open a temporary stream for the index.');
+		fwrite($stream, str_starts_with($content, self::BOM) ? substr($content, strlen(self::BOM)) : $content);
+		rewind($stream);
 		$header = null;
 		$rows = [];
-		/** @var mixed $line */
-		foreach ($file as $line) {
-			$values = array_map(static fn (mixed $value): string => is_string($value) ? self::unguard($value) : '', is_array($line) ? array_values($line) : []);
+		// Without an escape character, as RFC 4180 has none; PHP 8.6 deprecates leaving it out.
+		while (($line = fgetcsv($stream, null, ',', '"', '')) !== false) {
+			$values = array_map(static fn (mixed $value): string => is_string($value) ? self::unguard($value) : '', is_array($line) ? $line : []);
 			if ($header === null) {
 				$header = $values;
 				continue;
@@ -394,6 +392,7 @@ final class MetadataSidecars {
 			}
 			$rows[(int)$id] = array_combine(self::COLUMNS, array_map(static fn (string $column): string => $row[$column] ?? '', self::COLUMNS));
 		}
+		fclose($stream);
 
 		return $rows;
 	}
