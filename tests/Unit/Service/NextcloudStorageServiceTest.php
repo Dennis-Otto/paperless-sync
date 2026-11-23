@@ -461,8 +461,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	 * on, fclose() reports the flush, and the write keeps refusing a file whose close the storage
 	 * doesn't confirm: it fails and removes its temporary file. So on PHP 8.6, a folder on such an
 	 * SMB mount takes no new file until icewind/smb writes its buffer in stream_flush() and says
-	 * whether that worked, as reported to icewind/smb from issue #565, and Nextcloud ships that
-	 * version. The refusal waits for that fix; it is not how the write is meant to stay.
+	 * whether that worked, as reported in https://codeberg.org/icewind/SMB/issues/141 (from issue
+	 * #565), and Nextcloud ships that version. The refusal waits for that fix; it is not how the write is meant to stay.
 	 */
 	public function testAStreamWhoseFlushAlwaysSaysFalseTakesNewFilesOnlyBeforePhp86(): void {
 		$this->storageFlushes = false;
@@ -486,6 +486,8 @@ final class NextcloudStorageServiceTest extends TestCase {
 	 * reports that, and the write fails and removes its temporary file, so the half file never
 	 * reaches its place. PHP before 8.6 drops what the flush says, and fclose() reports no failure
 	 * of a stream at all, so no check of the write can see this loss there: the half file is stored.
+	 * Storing the half file below 8.6 is a known gap of fclose() before PHP 8.6, not the wanted
+	 * behaviour; issue #565 tracks it.
 	 */
 	public function testAFlushThatFailsStopsTheWriteFromPhp86On(): void {
 		$this->storageLosesBytesAtClose = true;
