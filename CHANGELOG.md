@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.4](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.3...v1.10.4) (2026-11-23)
+
+
+### Bug fixes
+
+* **inbox:** a file ends on a document that Paperless already has only when the document is its user's ([#568](https://github.com/Dennis-Otto/paperless-sync/issues/568)) ([991c2e0](https://github.com/Dennis-Otto/paperless-sync/commit/991c2e036c96508da12a0ee7d3e11dc3c71915da))
+* **inbox:** confirm a document that Paperless-ngx 2.x finds by its MD5 alone before a file counts as imported ([#564](https://github.com/Dennis-Otto/paperless-sync/issues/564)) ([32ff957](https://github.com/Dennis-Otto/paperless-sync/commit/32ff957bc34cda79e93103a596ce52e3ada81ef7))
+
 ## [1.10.3](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.2...v1.10.3) (2026-11-18)
 
 ### Bug fixes
