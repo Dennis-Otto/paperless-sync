@@ -47,3 +47,4 @@ Copy [the template](0000-template.md) to the next free number and describe the d
 | [0039](0039-a-file-of-the-inbox-goes-to-paperless-once.md) | A file of the inbox goes to Paperless once, whatever its path | accepted |
 | [0564](0564-a-document-found-by-the-md5-alone-is-confirmed-by-its-original.md) | A document that the MD5 alone found counts only with the SHA-256 of its original | accepted |
 | [0568](0568-a-document-of-the-account-counts-only-as-the-users-own-upload.md) | In per-user ownership, a document of the account counts only as the user's own upload | accepted |
+| [0571](0571-follow-every-upload-until-its-document-has-its-owner.md) | In per-user ownership, follow every upload until its document has its owner, and prove a lost upload by the ID of its document | accepted |
