@@ -9,7 +9,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.5.0"
+    "X-Version": "3.5.1"
   },
   "request": "GET /api/users/?page=1&page_size=1000&username__iexact=contract-setup",
   "status": 200

@@ -38,7 +38,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.5.0"
+    "X-Version": "3.5.1"
   },
   "request": "GET /api/documents/7/?fields=id,title,correspondent,document_type,storage_path,created,added,modified,tags,original_file_name,archived_file_name,mime_type,owner,archive_serial_number,page_count,custom_fields,versions&truncate_content=true",
   "status": 200

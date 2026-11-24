@@ -17,7 +17,7 @@
   "headers": {
     "Content-Type": "application/json",
     "X-Api-Version": "10",
-    "X-Version": "3.5.0"
+    "X-Version": "3.5.1"
   },
   "request": "GET /api/documents/7/metadata/",
   "status": 200
