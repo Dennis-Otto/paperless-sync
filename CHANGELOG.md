@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.5](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.4...v1.10.5) (2026-11-24)
+
+
+### Bug fixes
+
+* **inbox:** in per-user ownership, a late document of an upload still gets its owner ([#571](https://github.com/Dennis-Otto/paperless-sync/issues/571)) ([c91e0db](https://github.com/Dennis-Otto/paperless-sync/commit/c91e0db585d737958adac81e079e05314b62a871))
+
 ## [1.10.4](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.3...v1.10.4) (2026-11-23)
 
 ### Bug fixes
