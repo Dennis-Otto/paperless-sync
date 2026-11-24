@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+## [1.10.5](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.4...v1.10.5) (2026-11-24)
+
+### Bug fixes
+
+- In per-user ownership, a document that Paperless creates from your upload after the file has left the inbox, after its answer was lost, after a send that gave up, or more than a day late, now gets you as its owner and comes into your archive, and your report names it. Paperless Sync keeps a record of each upload until its document has its owner, for up to 30 days, and tells a lost upload by the number of its document instead of the time on the clocks of Nextcloud and Paperless. A file that you move back from the error folder after Paperless created its document ends as imported instead of becoming a second document. Meanwhile, the documents that belong to the account of the app stay where they are, and the report of the run says whose upload they wait for.
+
 ## [1.10.4](https://github.com/Dennis-Otto/paperless-sync/compare/v1.10.3...v1.10.4) (2026-11-23)
 
 ### Bug fixes
