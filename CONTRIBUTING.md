@@ -84,6 +84,8 @@ composer install
 bash scripts/check.sh
 ```
 
+`composer.json` requires the PHP extensions that Nextcloud requires of every server, and `composer install` stops while one of them is missing. Linux and the dev container of `.devcontainer/`, below, have them. A PHP for Windows loads curl, fileinfo, mbstring and openssl only once its `php.ini` turns them on with a line `extension=<name>` each, or run the checks in the dev container.
+
 The end-to-end tests run the app in Docker against every supported Nextcloud version side by side, and a mock of Paperless-ngx; `bash tests/e2e/run.sh` runs them against one version. They need Docker 25 or newer and Python 3.11 or newer, as `python3` or `python`, which checks the answers on your machine. Both run in Git Bash on Windows too:
 
 ```sh
