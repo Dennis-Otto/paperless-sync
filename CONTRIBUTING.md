@@ -90,6 +90,7 @@ The end-to-end tests run the app in Docker against every supported Nextcloud ver
 ```sh
 bash tests/e2e/run-all.sh
 ```
+
 =======
 `composer.json` requires the PHP extensions that Nextcloud requires of every server, and `composer install` stops while one of them is missing. Linux and the dev container of `.devcontainer/`, below, have them. A PHP for Windows loads curl, fileinfo, mbstring and openssl only once its `php.ini` turns them on with a line `extension=<name>` each, or run the checks in the dev container.
 >>>>>>> after updating
